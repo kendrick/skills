@@ -33,21 +33,21 @@ Match your task to a domain, then read that domain's `SKILL.md` for sub-file rou
 
 Tracks which domains have been built and their completeness.
 
-| Domain        | Status         | Files          | Notes                                     |
-| ------------- | -------------- | -------------- | ----------------------------------------- |
-| Unity Catalog | ✅ Built       | 8 REST + 8 SDK | Quality monitors added as separate bucket |
-| Marketplace   | ✅ Built       | 3 REST + 3 SDK | Consumer, provider listings, exchanges    |
-| Apps          | 🔲 Not started | —              | —                                         |
-| SQL           | 🔲 Not started | —              | —                                         |
-| Jobs          | 🔲 Not started | —              | —                                         |
-| Compute       | 🔲 Not started | —              | —                                         |
-| Serving       | 🔲 Not started | —              | —                                         |
-| Workspace     | 🔲 Not started | —              | —                                         |
-| IAM           | 🔲 Not started | —              | —                                         |
-| Secrets       | 🔲 Not started | —              | —                                         |
-| Pipelines     | 🔲 Not started | —              | —                                         |
-| Dashboards    | 🔲 Not started | —              | —                                         |
-| Genie         | ✅ Built       | 2 REST + 2 SDK | Spaces/conversations + evals              |
+| Domain        | Status         | Files          | Notes                                           |
+| ------------- | -------------- | -------------- | ----------------------------------------------- |
+| Unity Catalog | ✅ Built       | 8 REST + 8 SDK | Quality monitors added as separate bucket       |
+| Marketplace   | ✅ Built       | 3 REST + 3 SDK | Consumer, provider listings, exchanges          |
+| Apps          | 🔲 Not started | —              | —                                               |
+| SQL           | ✅ Built       | 3 REST + 3 SDK | Warehouses, statement execution, queries/alerts |
+| Jobs          | 🔲 Not started | —              | —                                               |
+| Compute       | 🔲 Not started | —              | —                                               |
+| Serving       | 🔲 Not started | —              | —                                               |
+| Workspace     | 🔲 Not started | —              | —                                               |
+| IAM           | 🔲 Not started | —              | —                                               |
+| Secrets       | 🔲 Not started | —              | —                                               |
+| Pipelines     | 🔲 Not started | —              | —                                               |
+| Dashboards    | 🔲 Not started | —              | —                                               |
+| Genie         | ✅ Built       | 2 REST + 2 SDK | Spaces/conversations + evals                    |
 
 ## Auth (all domains)
 
@@ -117,6 +117,14 @@ databricks/
 │   │   ├── mkt-consumer.md
 │   │   ├── mkt-provider-listings.md
 │   │   └── mkt-provider-exchanges.md
+│   └── python-sdk/
+│       └── (matching files)
+├── sql/
+│   ├── SKILL.md                      ← SQL domain router
+│   ├── rest/
+│   │   ├── sql-warehouses.md
+│   │   ├── sql-statement-execution.md
+│   │   └── sql-queries-alerts.md
 │   └── python-sdk/
 │       └── (matching files)
 ├── apps/
