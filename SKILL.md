@@ -19,7 +19,7 @@ Match your task to a domain, then read that domain's `SKILL.md` for sub-file rou
 | List or distribute data products, manage private exchanges          | **Marketplace**   | `marketplace/SKILL.md`     |
 | Deploy or manage Databricks Apps (Next.js, Flask, etc.)             | **Apps**          | `apps/SKILL.md`            |
 | Execute SQL, manage warehouses, query history                       | **SQL**           | `sql/SKILL.md`             |
-| Create or manage jobs, workflows, tasks                             | **Jobs**          | `jobs/SKILL.md`            |
+| Create or manage jobs, workflows, runs, compliance                  | **Jobs**          | `jobs-and-workflows/SKILL.md` |
 | Manage clusters, instance pools, policies                           | **Compute**       | `compute/SKILL.md`         |
 | Serve models, manage endpoints, AI Gateway, provisioned throughput  | **Model Serving** | `model-serving/SKILL.md`   |
 | Manage notebooks, repos, Git folders, workspace objects             | **Workspace**     | `workspace/SKILL.md`       |
@@ -40,7 +40,7 @@ Tracks which domains have been built and their completeness.
 | Marketplace   | ✅ Built       | 3 REST + 3 SDK | Consumer, provider listings, exchanges          |
 | Apps          | 🔲 Not started | —              | —                                               |
 | SQL           | ✅ Built       | 3 REST + 3 SDK | Warehouses, statement execution, queries/alerts |
-| Jobs          | 🔲 Not started | —              | —                                               |
+| Jobs          | ✅ Built       | 1 REST + 1 SDK | All 23 endpoints in single bucket               |
 | Compute       | 🔲 Not started | —              | —                                               |
 | Model Serving | ✅ Built       | 1 REST + 1 SDK | All 20 endpoints in single bucket               |
 | Workspace     | 🔲 Not started | —              | —                                               |
@@ -140,6 +140,12 @@ databricks/
 │   ├── rest/
 │   │   ├── files-api.md
 │   │   └── dbfs-api.md
+│   └── python-sdk/
+│       └── (matching files)
+├── jobs-and-workflows/
+│   ├── SKILL.md                      ← Jobs domain router
+│   ├── rest/
+│   │   └── jobs-lifecycle.md
 │   └── python-sdk/
 │       └── (matching files)
 ├── apps/
