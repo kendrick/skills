@@ -1,0 +1,65 @@
+# Databricks Delta Sharing API Skills
+
+| Property    | Value                                                        |
+| ----------- | ------------------------------------------------------------ |
+| Name        | databricks-delta-sharing                                     |
+| Description | Delta Sharing: shares, recipients, providers, and federation |
+| Version     | 1.0                                                          |
+
+## Usage
+
+1. Match your task to a file using Quick Lookup below
+2. Read the file in `rest/` (HTTP) or `python-sdk/` (SDK)
+3. For cross-domain tasks, read multiple files
+
+## Quick Lookup
+
+| Task | File |
+|------|------|
+| Create, list, update, or delete shares | `ds-shares` |
+| Add/remove tables, volumes, notebooks from a share | `ds-shares` |
+| Get or update share permissions | `ds-shares` |
+| Create, list, update, or delete recipients | `ds-recipients` |
+| Rotate recipient tokens | `ds-recipients` |
+| View what shares a recipient has access to | `ds-recipients` |
+| Create, list, update, or delete providers | `ds-providers` |
+| Browse shares and assets from a provider | `ds-providers` |
+| Activate a share (public, no auth) | `ds-recipient-auth` |
+| Retrieve access token from activation URL | `ds-recipient-auth` |
+| Manage OIDC federation policies for recipients | `ds-recipient-auth` |
+
+## REST API Skills
+
+| File | Scope | Endpoints |
+|------|-------|-----------|
+| `rest/ds-shares.md` | Share CRUD + permissions | 7 |
+| `rest/ds-recipients.md` | Recipient CRUD + token rotation + share permissions | 7 |
+| `rest/ds-providers.md` | Provider CRUD + browse shares/assets | 7 |
+| `rest/ds-recipient-auth.md` | Activation (public) + OIDC federation policies | 6 |
+
+## Python SDK Skills
+
+| File | Key Clients |
+|------|-------------|
+| `python-sdk/ds-shares.md` | `w.shares` |
+| `python-sdk/ds-recipients.md` | `w.recipients` |
+| `python-sdk/ds-providers.md` | `w.providers` |
+| `python-sdk/ds-recipient-auth.md` | `w.recipient_activation`, `w.recipient_federation_policies` |
+
+## Auth
+
+### REST
+
+```
+Authorization: Bearer <PAT-or-OAuth-token>
+Base URL: https://<workspace-host>
+```
+
+Note: Recipient activation endpoints are **public** (no auth required).
+
+### Python SDK
+
+```python
+from databricks.sdk import WorkspaceClient
+w = WorkspaceClient()  # auto-detects from env or .databrickscfg
+```

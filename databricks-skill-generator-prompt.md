@@ -45,7 +45,7 @@ mkdir -p docs/raw
 for url in "${URLS[@]}"; do
   filename=$(echo "$url" | sed 's|.*/workspace/||; s|.*/account/||; s|/|-|g').md
   curl -s "https://r.jina.ai/${url}" -o "docs/raw/${filename}"
-  sleep 1.5  # rate limit
+  sleep 3  # rate limit
 done
 ```
 

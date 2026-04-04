@@ -29,6 +29,7 @@ Match your task to a domain, then read that domain's `SKILL.md` for sub-file rou
 | Manage dashboards (Lakeview)                                        | **Dashboards**    | `dashboards/SKILL.md`      |
 | AI data assistant — Genie spaces, conversations, evals              | **Genie**         | `genie/SKILL.md`           |
 | Upload, download, manage files (Files API + DBFS)                   | **File Mgmt**     | `file-management/SKILL.md` |
+| Manage shares, recipients, providers, activation, federation        | **Delta Sharing** | `delta-sharing/SKILL.md`   |
 
 ## Domain Status
 
@@ -50,6 +51,7 @@ Tracks which domains have been built and their completeness.
 | Dashboards    | 🔲 Not started | —              | —                                               |
 | Genie         | ✅ Built       | 2 REST + 2 SDK | Spaces/conversations + evals                    |
 | File Mgmt     | ✅ Built       | 2 REST + 2 SDK | Files API (modern) + DBFS (legacy)              |
+| Delta Sharing | ✅ Built       | 4 REST + 4 SDK | Shares, recipients, providers, auth/federation  |
 
 ## Auth (all domains)
 
@@ -146,6 +148,15 @@ databricks/
 │   ├── SKILL.md                      ← Jobs domain router
 │   ├── rest/
 │   │   └── jobs-lifecycle.md
+│   └── python-sdk/
+│       └── (matching files)
+├── delta-sharing/
+│   ├── SKILL.md                      ← Delta Sharing domain router
+│   ├── rest/
+│   │   ├── ds-shares.md
+│   │   ├── ds-recipients.md
+│   │   ├── ds-providers.md
+│   │   └── ds-recipient-auth.md
 │   └── python-sdk/
 │       └── (matching files)
 ├── apps/
