@@ -1,12 +1,12 @@
 ---
-id: {{nanoid}}
+id: { { nanoid } }
 memory_type: PolicyRule
 title: '{{Title — usually imperative}}'
-status: {{proposed | accepted}}
-date: {{YYYY-MM-DD}}
+status: { { proposed | accepted } }
+date: { { YYYY-MM-DD } }
 # effective_from: YYYY-MM-DD
 # effective_to: YYYY-MM-DD | null
-source_refs: [{{note-id}}]
+source_refs: [{ { note-id } }]
 applies_to: []
 owners: []
 tags: []

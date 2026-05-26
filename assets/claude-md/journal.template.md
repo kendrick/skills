@@ -8,7 +8,7 @@ Journal entries are personal pattern-capture — methodology insights, consultin
 
 Entries are flat under `entries/`. No subdivision by theme; themes are tracked in frontmatter and queried via grep when needed.
 
-Most entries are *promoted* from `[journal candidate: ...]` flags in client notes — the skill handles that flow. Direct drops into `_inbox/` are rare but supported (e.g., a standalone reflection that didn't emerge from a client conversation).
+Most entries are _promoted_ from `[journal candidate: ...]` flags in client notes — the skill handles that flow. Direct drops into `_inbox/` are rare but supported (e.g., a standalone reflection that didn't emerge from a client conversation).
 
 ## Entry shape
 
@@ -20,14 +20,13 @@ title: '...'
 status: current | superseded | archived
 date: YYYY-MM-DD
 themes: []
-applies_to: []                # generalized patterns ("rfp-defense", "client-onboarding")
-source_refs:                   # cross-scope refs; each entry is qualified
+applies_to: [] # generalized patterns ("rfp-defense", "client-onboarding")
+source_refs: # cross-scope refs; each entry is qualified
   - scope: pursuit | project | client
     path: 11.04 NextEra/pursuits/atlas/notes/<file>.md
     note_id: <nanoid>
-related: []                    # other journal entry ids
+related: [] # other journal entry ids
 ---
-
 # <title>
 
 Free-form prose. One section. Optional `## Source moment` quoting the triggering passage with a back-link.

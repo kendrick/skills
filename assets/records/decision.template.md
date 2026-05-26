@@ -1,12 +1,12 @@
 ---
-id: {{nanoid}}
+id: { { nanoid } }
 memory_type: Decision
 title: '{{Imperative or noun-phrase title}}'
-status: {{proposed | accepted}}
-date: {{YYYY-MM-DD}}
+status: { { proposed | accepted } }
+date: { { YYYY-MM-DD } }
 # effective_from: YYYY-MM-DD
 # effective_to: YYYY-MM-DD | null
-source_refs: [{{note-id}}]
+source_refs: [{ { note-id } }]
 applies_to: []
 owners: []
 tags: []

@@ -6,40 +6,40 @@ This skill aligns with the schema published at [`kendrick-at-slalom/memory-bank`
 
 Four types live in client and project scope:
 
-| Type | Purpose |
-|---|---|
-| Decision | Captures *why* something was decided this way. Has a decision question, an outcome, alternatives considered, approver. |
-| PolicyRule | Standing guidance ("never X", "always Y"). Has a rule statement and an enforcement level. |
-| Exception | Sanctioned deviation from a PolicyRule. Has the rule it's an exception to, a justification, an approver. |
-| Context | Environmental fact. Stakeholder, system, constraint. Has a context scope and a fact statement. |
+| Type       | Purpose                                                                                                                |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Decision   | Captures _why_ something was decided this way. Has a decision question, an outcome, alternatives considered, approver. |
+| PolicyRule | Standing guidance ("never X", "always Y"). Has a rule statement and an enforcement level.                              |
+| Exception  | Sanctioned deviation from a PolicyRule. Has the rule it's an exception to, a justification, an approver.               |
+| Context    | Environmental fact. Stakeholder, system, constraint. Has a context scope and a fact statement.                         |
 
 A fifth type — `Journal` — is local to this skill's three-tier model. It lives only in cross-client journal scope and has a different frontmatter shape (qualified `source_refs`, themes, no enforcement model).
 
 ## Frontmatter — fields shared across record types
 
 ```yaml
-id: <nanoid>                          # required, nanoid -s 10
-memory_type: Decision | PolicyRule | Exception | Context   # required
-title: '...'                          # required
-status: proposed | accepted | superseded | deprecated | rejected   # required
-date: YYYY-MM-DD                      # required — when the record was first established
+id: <nanoid> # required, nanoid -s 10
+memory_type: Decision | PolicyRule | Exception | Context # required
+title: '...' # required
+status: proposed | accepted | superseded | deprecated | rejected # required
+date: YYYY-MM-DD # required — when the record was first established
 
 # Time bounds (optional)
 effective_from: YYYY-MM-DD
 effective_to: YYYY-MM-DD | null
 
 # Provenance (required)
-source_refs: [<note-id>, ...]         # ids of groomed notes that contributed to this record
+source_refs: [<note-id>, ...] # ids of groomed notes that contributed to this record
 
 # Scope and discoverability (optional)
-applies_to: []                        # what this record applies to (free vocab)
-owners: []                            # names or roles responsible for keeping this current
-tags: []                              # discoverability
+applies_to: [] # what this record applies to (free vocab)
+owners: [] # names or roles responsible for keeping this current
+tags: [] # discoverability
 
 # Relationships (optional)
-related: []                           # ids of related records
-supersedes: <id> | null               # id of an older record this replaces
-superseded_by: <id> | null            # id of a newer record that replaces this one
+related: [] # ids of related records
+supersedes: <id> | null # id of an older record this replaces
+superseded_by: <id> | null # id of a newer record that replaces this one
 ```
 
 ## Type-specific body fields
@@ -47,6 +47,7 @@ superseded_by: <id> | null            # id of a newer record that replaces this 
 These appear as `## Section` headings in the record body, not as frontmatter keys.
 
 **Decision:**
+
 - Decision question
 - Decision outcome
 - Alternatives considered
@@ -54,12 +55,14 @@ These appear as `## Section` headings in the record body, not as frontmatter key
 - (optional) Context
 
 **PolicyRule:**
+
 - Rule statement
 - Enforcement (`required | recommended | advisory`)
 - Rationale
 - (optional) Known exceptions
 
 **Exception:**
+
 - Exception scope
 - Justification
 - Approved by
@@ -67,6 +70,7 @@ These appear as `## Section` headings in the record body, not as frontmatter key
 - frontmatter: `exception_to: [[<rule-id>|<rule-short-name>]]`
 
 **Context:**
+
 - Context scope
 - Fact statement
 - Provenance

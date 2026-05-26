@@ -6,17 +6,17 @@ The proposed scope token goes into the candidate flag (`[memory candidate: proje
 
 ## Signals and their suggested scope
 
-| Signal | Suggested scope |
-|---|---|
-| Fact bound to a single project's deliverable, contract, or technical decision | **project** |
-| Subject named is a project-specific artifact (a deliverable, a contract clause, a pilot dataset) | **project** |
-| Stakeholder relationship that holds across the client's projects (org chart, reporting line, communication style) | **client** |
-| Environmental fact that applies to multiple of the client's engagements (tech platform, policy, IT environment) | **client** |
-| Subject entity has already been referenced in 2+ projects' notes at this client | **client** |
-| Comms cadence, decision-making process, or operating rhythm that applies broadly | **client** |
-| Pattern that generalizes beyond this client — methodology, consulting craft, RFP defense, hypercare risk patterns | **journal** |
-| Content uses generalizing language ("always", "every client", "we should", "this generalizes", "in general") | **journal** |
-| Speaker is reflecting on the work rather than discussing it ("looking back...", "the lesson here is...") | **journal** |
+| Signal                                                                                                            | Suggested scope |
+| ----------------------------------------------------------------------------------------------------------------- | --------------- |
+| Fact bound to a single project's deliverable, contract, or technical decision                                     | **project**     |
+| Subject named is a project-specific artifact (a deliverable, a contract clause, a pilot dataset)                  | **project**     |
+| Stakeholder relationship that holds across the client's projects (org chart, reporting line, communication style) | **client**      |
+| Environmental fact that applies to multiple of the client's engagements (tech platform, policy, IT environment)   | **client**      |
+| Subject entity has already been referenced in 2+ projects' notes at this client                                   | **client**      |
+| Comms cadence, decision-making process, or operating rhythm that applies broadly                                  | **client**      |
+| Pattern that generalizes beyond this client — methodology, consulting craft, RFP defense, hypercare risk patterns | **journal**     |
+| Content uses generalizing language ("always", "every client", "we should", "this generalizes", "in general")      | **journal**     |
+| Speaker is reflecting on the work rather than discussing it ("looking back...", "the lesson here is...")          | **journal**     |
 
 ## Conflict resolution
 
@@ -32,7 +32,7 @@ Before suggesting client scope based on "subject already referenced in 2+ projec
 grep -l -r "<subject>" "<client-root>"/{pursuits,projects}/*/notes/
 ```
 
-Two or more hits in distinct project directories triggers the heuristic. One hit is just *this* project.
+Two or more hits in distinct project directories triggers the heuristic. One hit is just _this_ project.
 
 ## What never goes to journal
 
@@ -52,10 +52,10 @@ If a project record later turns out to belong at client scope (or vice versa), m
 mv <source-path>/<record>.md <target-path>/
 ```
 
-Then re-render any inbound wiki-links. The skill explicitly does *not* offer auto-promotion in v1 — the audit cost of "did this record always live here?" outweighs the convenience. If this becomes painful, v2 can add a guarded `promote --from project --to client <record-id>` mode.
+Then re-render any inbound wiki-links. The skill explicitly does _not_ offer auto-promotion in v1 — the audit cost of "did this record always live here?" outweighs the convenience. If this becomes painful, v2 can add a guarded `promote --from project --to client <record-id>` mode.
 
 ## Cross-scope references are fine
 
-A project's notes can wiki-link to a client-scope record. A client record can list project note ids in `source_refs`. The record's *home* (which `_memory/` directory it lives in) is what defines its scope — not its references.
+A project's notes can wiki-link to a client-scope record. A client record can list project note ids in `source_refs`. The record's _home_ (which `_memory/` directory it lives in) is what defines its scope — not its references.
 
 This matters for the "client fact referenced by every project" case: the record lives at the client root once, and every project's notes link to it. No duplication.

@@ -12,10 +12,10 @@ Two modes:
 
 Decide the mode from the user's phrasing. When ambiguous, ask.
 
-| Phrasing | Mode |
-|---|---|
-| "process the inbox", "groom these notes", "drain the inbox", "crystallize this candidate", "promote to memory", "promote to journal" | process |
-| "scaffold a new project here", "set up notes substrate", "spin up a client", "set up the journal", "create a memory bank here" | scaffold |
+| Phrasing                                                                                                                             | Mode     |
+| ------------------------------------------------------------------------------------------------------------------------------------ | -------- |
+| "process the inbox", "groom these notes", "drain the inbox", "crystallize this candidate", "promote to memory", "promote to journal" | process  |
+| "scaffold a new project here", "set up notes substrate", "spin up a client", "set up the journal", "create a memory bank here"       | scaffold |
 
 ---
 
@@ -30,7 +30,7 @@ Walk up from the user's cwd to find the nearest opted-in directory. A directory 
 - `_memory/` → project or client scope.
 - `entries/` → journal scope.
 
-Distinguish project from client scope by path: a project sits under `pursuits/<name>/` or `projects/<name>/`; a client root is the directory that *contains* those (and is itself opted in). Journal scope is set by the `entries/` marker.
+Distinguish project from client scope by path: a project sits under `pursuits/<name>/` or `projects/<name>/`; a client root is the directory that _contains_ those (and is itself opted in). Journal scope is set by the `entries/` marker.
 
 State the detected scope and root path back to the user before doing anything destructive. If nothing is opted in, stop and ask whether to scaffold — do not create directories silently.
 
@@ -38,13 +38,13 @@ State the detected scope and root path back to the user before doing anything de
 
 For each file in `_inbox/`, dispatch by extension:
 
-| Extension | Tool |
-|---|---|
-| `.md`, `.txt`, `.vtt` | Read directly |
-| `.pdf` | invoke the `pdf` skill |
-| `.docx` | invoke the `docx` skill |
-| `.pptx` | invoke the `pptx` skill |
-| anything else | ask the user |
+| Extension             | Tool                    |
+| --------------------- | ----------------------- |
+| `.md`, `.txt`, `.vtt` | Read directly           |
+| `.pdf`                | invoke the `pdf` skill  |
+| `.docx`               | invoke the `docx` skill |
+| `.pptx`               | invoke the `pptx` skill |
+| anything else         | ask the user            |
 
 While reading, apply the extraction heuristics in [references/extraction-heuristics.md](references/extraction-heuristics.md). The short version: pull 6-12 surprising or contradictory quotes; flag tensions; split stated and unstated assumptions; capture action items with owner + priority; tag cross-note relationships as `confirms | contradicts | extends | introduces`.
 
@@ -69,7 +69,7 @@ Inside the extracted sections, flag candidates **inline** using the taxonomy bel
 [journal candidate: <generalized pattern>]
 ```
 
-- The scope token (`project` or `client`) is the skill's *proposal*, not a decision. The user confirms or overrides at phase 5.
+- The scope token (`project` or `client`) is the skill's _proposal_, not a decision. The user confirms or overrides at phase 5.
 - The "update existing" variant signals an amendment to an already-crystallized record. Its scope is inherited from the target.
 - Journal candidates take no scope token — their destination is always the cross-client journal.
 
@@ -197,7 +197,7 @@ Full shapes live in the templates. Quick reference for scanning:
 - **Preserve raw content as the source of truth.** Memory records cite notes; they don't replace them.
 - **One groomed note per input.** No four-file fragmentation. Sections, not separate files.
 - **Never auto-promote across scopes.** Scope is decided at flagging time, confirmed at sign-off, sticky after crystallization. If a record needs to move, the user moves it by hand. (This trades convenience for audit safety — at high enough volume, v2 may add a guarded `promote` mode.)
-- **Cross-scope references are fine.** A project note can wiki-link to a client-scope record. A client record can list project note ids in its `source_refs`. The record's *home* (which `_memory/` it lives in) defines its scope, not its references.
+- **Cross-scope references are fine.** A project note can wiki-link to a client-scope record. A client record can list project note ids in its `source_refs`. The record's _home_ (which `_memory/` it lives in) defines its scope, not its references.
 
 ---
 
