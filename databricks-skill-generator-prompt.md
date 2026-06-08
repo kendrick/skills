@@ -296,13 +296,15 @@ from databricks.sdk.errors import NotFound, PermissionDenied
 Each domain gets its own `SKILL.md` as the entry point / router. This lives at `{domain}/SKILL.md`.
 
 ````markdown
+---
+name: databricks-[domain-slug]
+description: [What the skill covers, plus concrete trigger phrases. See "Description guidance" below.]
+---
+
 # Databricks [Domain Name] API Skills
 
-| Property    | Value                                             |
-| ----------- | ------------------------------------------------- |
-| Name        | databricks-[domain-slug]                          |
-| Description | [One-line description of what this domain covers] |
-| Version     | 1.0                                               |
+> Parent: [../SKILL.md](../SKILL.md) (top-level Databricks API router with auth, account vs workspace base URLs)
+> API status: [GA | Public Preview | Private Preview]. Flag this if endpoints are pre-GA.
 
 ## Usage
 
@@ -333,20 +335,20 @@ Each domain gets its own `SKILL.md` as the entry point / router. This lives at `
 
 ## Auth
 
-### REST
+`Authorization: Bearer <PAT-or-OAuth-token>` against the workspace base URL. Python SDK: `WorkspaceClient()` auto-detects from env or `.databrickscfg`. See [../SKILL.md](../SKILL.md) for the full auth block (account-level base URL, OAuth M2M, notebook auto-auth in DBR 13.1+).
 
-```
-Authorization: Bearer <PAT-or-OAuth-token>
-Base URL: https://<workspace-host>
-```
-
-### Python SDK
-
-```python
-from databricks.sdk import WorkspaceClient
-w = WorkspaceClient()  # auto-detects from env or .databrickscfg
-```
+[Domain-specific permission notes if any (e.g., required scopes, account-vs-workspace token requirements).]
 ````
+
+### Description guidance
+
+The `description` field is the primary triggering signal. Write it so Claude reaches for the skill on realistic user phrasings, not only when the user says the exact domain name. Pattern:
+
+```
+description: <one sentence on what the skill covers>. Use when <concrete task vocabulary 1>, <task vocabulary 2>, <task vocabulary 3>, or <adjacent phrasing a user might reach for>.
+```
+
+Lean into vocabulary a real user would type: verb phrases ("query a model endpoint", "rotate a recipient token"), product nouns ("AI Gateway", "provisioned throughput", "OIDC federation"), and tasks adjacent to the domain that someone might not realize this skill handles. Mention preview status if the API is preview-only; users sometimes filter by stability.
 
 ---
 
@@ -389,27 +391,9 @@ The **top-level** `~/.local/share/skills/databricks/SKILL.md` routes to each dom
 
 ## Appendix: Top-level router pattern
 
-When multiple domains exist, the top-level SKILL.md at `~/.local/share/skills/databricks/SKILL.md` acts as a two-tier router:
+When multiple domains exist, the top-level SKILL.md at `~/.local/share/skills/databricks/SKILL.md` is a two-tier router: it points at each domain's `SKILL.md`, and the domain SKILL.md points at its sub-files. The filesystem is the source of truth for layout; don't maintain a hand-written tree.
 
-```
-databricks/
-├── SKILL.md                    ← routes to domain skills
-├── unity-catalog/
-│   └── SKILL.md                ← routes to UC sub-files
-├── marketplace/
-│   └── SKILL.md
-├── apps/
-│   └── SKILL.md
-├── sql/
-│   └── SKILL.md
-└── ...
-```
-
-After generating a domain skill, update the top-level SKILL.md (`~/.local/share/skills/databricks/SKILL.md`) in three places:
-
-1. **Quick Routing table** — add a row: `| [task description] | **[Domain]** | \`{domain}/SKILL.md\` |`
-2. **Domain Status table** — change the domain's row from `🔲 Not started` to `✅ Built` with file counts and notes
-3. **Directory Structure** — add the new domain's tree with its sub-files listed
+After generating a domain skill, update the top-level SKILL.md. Add a row to the Quick Routing table in the form `| [task description] | **[Domain]** | \`{domain}/SKILL.md\` |`. If the domain isn't built yet, mark the row inline (e.g., a `🔲 Not started` cell) so users scanning the table don't follow it to a dead path. Then update the Domain Status table: change the domain's row from `🔲 Not started` to `✅ Built` with file counts and notes.
 
 ---
 
