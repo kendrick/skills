@@ -3,6 +3,19 @@
 > Raw docs: ../docs/raw/ -- for full endpoint details, read {service}-{operation}.md
 > Package: `databricks-sdk`
 
+## Contents
+
+- [Setup](#setup)
+- [1. Job CRUD](#1-job-crud) — create, get, list, update, reset, delete
+- [2. Triggering Runs](#2-triggering-runs) — run-now, submit one-time
+- [3. Run Management](#3-run-management) — get, list, output, export, cancel, delete, repair
+- [4. Permissions](#4-permissions)
+- [5. Policy Compliance](#5-policy-compliance)
+- [Common Patterns](#common-patterns) — wait-for-completion, idempotent triggers, repair flows
+- [Run Lifecycle States](#run-lifecycle-states)
+- [Common Errors](#common-errors)
+- [Gotchas](#gotchas)
+
 ## Setup
 
 ```python

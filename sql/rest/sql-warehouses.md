@@ -5,6 +5,19 @@ SQL warehouse CRUD, start/stop lifecycle, permissions, workspace configuration, 
 > See also: sql-statement-execution (for running queries), sql-queries-alerts (for saved queries/alerts)
 > Raw docs: ../docs/raw/ — for full endpoint details, read {service}-{operation}.md
 
+## Contents
+
+- [Auth](#auth)
+- [Endpoint Summary](#endpoint-summary)
+- [1. Warehouse CRUD](#1-warehouse-crud) — create, list, get, edit, delete
+- [2. Lifecycle](#2-lifecycle) — start, stop, polling
+- [3. Permissions](#3-permissions)
+- [4. Workspace Configuration](#4-workspace-configuration)
+- [5. Default Warehouse Overrides (Beta)](#5-default-warehouse-overrides-beta)
+- [Common Errors](#common-errors)
+- [Gotchas](#gotchas)
+- [Quick Reference: Create + Start + Query Flow](#quick-reference-create--start--query-flow)
+
 ## Auth
 
 All endpoints require `Authorization: Bearer <token>` header. API scope: `sql`.

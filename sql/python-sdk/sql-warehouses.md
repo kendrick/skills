@@ -3,6 +3,20 @@
 > Raw docs: ../docs/raw/ — for full endpoint details, read {service}-{operation}.md
 > Package: `databricks-sdk`
 
+## Contents
+
+- [Setup](#setup)
+- [1. Warehouse CRUD](#1-warehouse-crud) — create, list, get, edit, delete
+- [2. Lifecycle](#2-lifecycle) — start, stop, wait-for-ready
+- [3. Permissions](#3-permissions)
+- [4. Workspace Configuration](#4-workspace-configuration)
+- [5. Default Warehouse Overrides (Beta)](#5-default-warehouse-overrides-beta)
+- [Common Patterns](#common-patterns) — wait for ready, find running, stop idle, custom polling
+- [Gotchas](#gotchas)
+- [Error Handling Example](#error-handling-example)
+- [Key Enums and Types](#key-enums-and-types)
+- [Workspace Config Details](#workspace-config-details)
+
 ## Setup
 
 ```python

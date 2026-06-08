@@ -5,6 +5,19 @@ Create, configure, query, and manage model serving endpoints — including AI Ga
 > Raw docs: ../docs/raw/ — for full endpoint details, read servingendpoints-{operation}.md
 > Package: databricks-sdk
 
+## Contents
+
+- [Setup](#setup)
+- [SDK Client Map](#sdk-client-map)
+- [1. Endpoint CRUD](#1-endpoint-crud) — create, list, get, delete
+- [2. Configuration](#2-configuration) — update config, AI Gateway, tags, notifications
+- [3. Provisioned Throughput](#3-provisioned-throughput)
+- [4. Query](#4-query) — chat/completions, dataframe, embeddings
+- [5. Observability](#5-observability) — metrics, OpenAPI schema, logs
+- [6. Permissions](#6-permissions)
+- [Common Patterns](#common-patterns) — poll-until-ready, external models
+- [Gotchas](#gotchas)
+
 ## Setup
 
 ```python
