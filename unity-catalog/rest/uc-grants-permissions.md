@@ -68,7 +68,7 @@ PATCH /api/2.1/unity-catalog/permissions/{securable_type}/{full_name}
 - Permission: caller must be owner of securable or have grant option on the privileges being modified.
 - Key privileges: `SELECT`, `MODIFY`, `USAGE`, `USE_CATALOG`, `USE_SCHEMA`, `CREATE_TABLE`, `ALL_PRIVILEGES`, `BROWSE`, `EXECUTE`, `READ_VOLUME`, `WRITE_VOLUME`, `CREATE_SCHEMA`, `CREATE_MODEL`, `CREATE_FUNCTION`, `MANAGE`, `MANAGE_ALLOWLIST`
 
-## 2. ABAC Policies (Public Preview)
+## 2. ABAC Policies
 
 Row filter and column mask policies on securables. `policy_type`: `POLICY_TYPE_ROW_FILTER` | `POLICY_TYPE_COLUMN_MASK`. `for_securable_type` only supports `TABLE`. `on_securable_type` supports `CATALOG`, `SCHEMA`, `TABLE`.
 

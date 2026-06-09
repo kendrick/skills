@@ -47,7 +47,7 @@ POST /api/2.1/unity-catalog/catalogs
 {"name": "my_catalog", "comment": "Production data"}
 ```
 - **Required:** `name` (string)
-- **Optional:** `comment`, `storage_root`, `properties` (object), `connection_name`, `provider_name`, `share_name`
+- **Optional:** `comment`, `storage_root`, `properties` (object), `connection_name`, `provider_name`, `share_name`, `custom_max_retention_hours` (Public Preview, int64), `managed_encryption_settings` (object, CMK control)
 - **Permission:** Metastore admin or CREATE_CATALOG privilege
 - **Returns:** Catalog object with `name`, `catalog_type`, `owner`, `metastore_id`, `created_at`
 
@@ -63,7 +63,7 @@ GET /api/2.1/unity-catalog/catalogs?max_results=0
 ### Get / Update / Delete Catalog
 
 - **GET** `.../{name}` -- requires USE_CATALOG or owner or metastore admin
-- **PATCH** `.../{name}` -- body: `comment`, `owner`, `properties`, `isolation_mode`, `custom_max_retention_hours` (Public Preview, int64). Requires owner or metastore admin
+- **PATCH** `.../{name}` -- body: `comment`, `owner`, `properties`, `isolation_mode`, `custom_max_retention_hours` (Public Preview, int64), `managed_encryption_settings` (object, CMK control). Requires owner or metastore admin
 - **DELETE** `.../{name}` -- query: `force` (bool) to delete non-empty. Requires owner or metastore admin
 
 ## Schemas
@@ -205,5 +205,5 @@ POST /api/2.0/online-tables
 - **Online Tables:** Use API version 2.0, not 2.1. Provisioning is async -- poll `status.detailed_state`.
 - **Delete cascade:** Catalogs and schemas require `force=true` to delete when non-empty. Table constraint delete uses `cascade` param.
 - **storage_root vs storage_location:** Set `storage_root` on create; response includes computed `storage_location`.
-- **CMK on catalogs (Public Preview):** `catalogs.get` and `catalogs.list` return `managed_encryption_settings` -- `customer_managed_key_id` on AWS/GCP, `azure_encryption_settings` (with `azure_cmk_access_connector_id`, `azure_cmk_managed_identity_id`, `azure_tenant_id`) plus `azure_key_vault_key_id` on Azure.
-- **Custom retention (Public Preview):** Catalogs and schemas can set `custom_max_retention_hours` (int64) to override the metastore default. Returned by get/list and accepted on update; schemas also accept it on create.
+- **CMK on catalogs (Public Preview):** `managed_encryption_settings` is accepted on `catalogs.create` and `catalogs.update` and returned by all four catalog ops (create/get/list/update). Shape: `customer_managed_key_id` on AWS/GCP, `azure_encryption_settings` (with `azure_cmk_access_connector_id`, `azure_cmk_managed_identity_id`, `azure_tenant_id`) plus `azure_key_vault_key_id` on Azure.
+- **Custom retention (Public Preview):** Catalogs and schemas can set `custom_max_retention_hours` (int64) to override the metastore default. Returned by get/list and accepted on create and update.
