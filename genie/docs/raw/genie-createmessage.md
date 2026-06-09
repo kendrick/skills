@@ -9,7 +9,7 @@ Markdown Content:
 
 Create new message in a [conversation](https://docs.databricks.com/api/workspace/genie/startconversation). The AI response uses all previously created messages in the conversation to respond.
 
-API scopes (preview):[`genie`](https://docs.databricks.com/api/workspace/api/scopes#genie)
+API scopes:[`genie`](https://docs.databricks.com/api/workspace/api/scopes#genie)
 
 ### Path parameters
 
@@ -92,6 +92,12 @@ Enum: `UNEXPECTED_REPLY_PROCESS_EXCEPTION | GENERIC_CHAT_COMPLETION_EXCEPTION | 
 [`feedback`](https://docs.databricks.com/api/workspace/genie/createmessage#feedback)object
 
 User feedback for the message if provided
+
+[`comment`](https://docs.databricks.com/api/workspace/genie/createmessage#feedback-comment)string
+
+Public preview
+
+Optional feedback comment text
 
 [`rating`](https://docs.databricks.com/api/workspace/genie/createmessage#feedback-rating)string
 

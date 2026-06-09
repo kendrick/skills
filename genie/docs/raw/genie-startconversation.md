@@ -9,7 +9,7 @@ Markdown Content:
 
 Start a new conversation.
 
-API scopes (preview):[`genie`](https://docs.databricks.com/api/workspace/api/scopes#genie)
+API scopes:[`genie`](https://docs.databricks.com/api/workspace/api/scopes#genie)
 
 ### Path parameters
 
@@ -172,7 +172,13 @@ Message ID
 
 Error responses are returned in the following format:
 
-{ "error_code": "Error code", "message": "Human-readable error message." }
+{
+
+"error_code":"Error code",
+
+"message":"Human-readable error message."
+
+}
 
 # Possible error codes:
 
@@ -216,10 +222,56 @@ Internal error.
 
 JSON
 
-{ "content": "Give me top sales for last month" }
+{
+
+"content":"Give me top sales for last month"
+
+}
 
 # Response samples
 
 200
 
-{ "conversation": { "created_timestamp": 1719769718, "id": "6a64adad2e664ee58de08488f986af3e", "last_updated_timestamp": 1719769718, "space_id": "3c409c00b54a44c79f79da06b82460e2", "title": "Give me top sales for last month", "user_id": 12345 }, "message": { "attachments": null, "content": "Give me top sales for last month", "conversation_id": "6a64adad2e664ee58de08488f986af3e", "created_timestamp": 1719769718, "error": null, "last_updated_timestamp": 1719769718, "message_id": "e1ef34712a29169db030324fd0e1df5f", "space_id": "3c409c00b54a44c79f79da06b82460e2", "status": "IN_PROGRESS", "user_id": 12345 } }
+{
+
+"conversation":{
+
+"created_timestamp":1719769718,
+
+"id":"6a64adad2e664ee58de08488f986af3e",
+
+"last_updated_timestamp":1719769718,
+
+"space_id":"3c409c00b54a44c79f79da06b82460e2",
+
+"title":"Give me top sales for last month",
+
+"user_id":12345
+
+},
+
+"message":{
+
+"attachments":null,
+
+"content":"Give me top sales for last month",
+
+"conversation_id":"6a64adad2e664ee58de08488f9 86af3e",
+
+"created_timestamp":1719769718,
+
+"error":null,
+
+"last_updated_timestamp":1719769718,
+
+"message_id":"e1ef34712a29169db030324fd0e1df5 f",
+
+"space_id":"3c409c00b54a44c79f79da06b82460e2",
+
+"status":"IN_PROGRESS",
+
+"user_id":12345
+
+}
+
+}

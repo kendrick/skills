@@ -9,7 +9,7 @@ Markdown Content:
 
 Get message from conversation.
 
-API scopes (preview):[`genie`](https://docs.databricks.com/api/workspace/api/scopes#genie)
+API scopes:[`genie`](https://docs.databricks.com/api/workspace/api/scopes#genie)
 
 ### Path parameters
 
@@ -91,6 +91,12 @@ Enum: `UNEXPECTED_REPLY_PROCESS_EXCEPTION | GENERIC_CHAT_COMPLETION_EXCEPTION | 
 
 User feedback for the message if provided
 
+[`comment`](https://docs.databricks.com/api/workspace/genie/getmessage#feedback-comment)string
+
+Public preview
+
+Optional feedback comment text
+
 [`rating`](https://docs.databricks.com/api/workspace/genie/getmessage#feedback-rating)string
 
 Enum: `POSITIVE | NEGATIVE | NONE`
@@ -170,7 +176,13 @@ ID of the user who created the message
 
 Error responses are returned in the following format:
 
-{ "error_code": "Error code", "message": "Human-readable error message." }
+{
+
+"error_code":"Error code",
+
+"message":"Human-readable error message."
+
+}
 
 # Possible error codes:
 
@@ -210,4 +222,26 @@ Internal error.
 
 Message created
 
-{ "attachments": null, "content": "Give me top sales for last month", "conversation_id": "6a64adad2e664ee58de08488f986af3e", "created_timestamp": 1719769718, "error": null, "last_updated_timestamp": 1719769718, "message_id": "e1ef34712a29169db030324fd0e1df5f", "space_id": "3c409c00b54a44c79f79da06b82460e2", "status": "IN_PROGRESS", "user_id": 12345 }
+{
+
+"attachments":null,
+
+"content":"Give me top sales for last month",
+
+"conversation_id":"6a64adad2e664ee58de08488f986 af3e",
+
+"created_timestamp":1719769718,
+
+"error":null,
+
+"last_updated_timestamp":1719769718,
+
+"message_id":"e1ef34712a29169db030324fd0e1df5f",
+
+"space_id":"3c409c00b54a44c79f79da06b82460e2",
+
+"status":"IN_PROGRESS",
+
+"user_id":12345
+
+}

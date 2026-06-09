@@ -9,7 +9,7 @@ Markdown Content:
 
 Send feedback for a message.
 
-API scopes (preview):[`genie`](https://docs.databricks.com/api/workspace/api/scopes#genie)
+API scopes:[`genie`](https://docs.databricks.com/api/workspace/api/scopes#genie)
 
 ### Path parameters
 
@@ -32,6 +32,14 @@ Example`"e1ef34712a29169db030324fd0e1df5f"`
 The ID associated with the message to provide feedback for.
 
 ### Request body
+
+[`comment`](https://docs.databricks.com/api/workspace/genie/sendmessagefeedback#comment)string
+
+<= 5000 characters 
+
+Public preview
+
+Optional text feedback that will be stored as a comment.
 
 [`rating`](https://docs.databricks.com/api/workspace/genie/sendmessagefeedback#rating)required string
 
@@ -100,6 +108,8 @@ Internal error.
 JSON
 
 {
+
+"comment":"string",
 
 "rating":"POSITIVE"
 

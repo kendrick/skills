@@ -9,7 +9,7 @@ Markdown Content:
 
 Creates a Genie space from a serialized payload.
 
-API scopes (preview):[`genie`](https://docs.databricks.com/api/workspace/api/scopes#genie)
+API scopes:[`genie`](https://docs.databricks.com/api/workspace/api/scopes#genie)
 
 ### Request body
 
@@ -42,6 +42,18 @@ Request completed successfully.
 [`description`](https://docs.databricks.com/api/workspace/genie/createspace#description)string
 
 Description of the Genie Space
+
+[`etag`](https://docs.databricks.com/api/workspace/genie/createspace#etag)string
+
+Public preview
+
+ETag for this space. Pass this value back in the update request to prevent overwriting concurrent changes.
+
+[`parent_path`](https://docs.databricks.com/api/workspace/genie/createspace#parent_path)string
+
+Public preview
+
+Parent folder path of the Genie Space
 
 [`serialized_space`](https://docs.databricks.com/api/workspace/genie/createspace#serialized_space)string
 
@@ -138,6 +150,10 @@ JSON
 {
 
 "description":"string",
+
+"etag":"string",
+
+"parent_path":"string",
 
 "serialized_space":"{\"version\":2,\"confi g\":{\"sample_questions\":[{\"id\":\"a1b2c3d4e5f60000000000000000000a\",\"question\":[\"What were total sales last month?\"]},{\"id\":\"b2c3d4e5f6a70000000000000000000b\",\"q uestion\":[\"Show top 10 customers by revenue\"]}]},\"data_sources\":{\"tables\":[{\"identifier\":\"sales.analytics.customers\",\"description\":[\"Customer master data\"]},{\"identifier\":\"sales.analytics.orders\",\"description\":[\"Order transactions\"]},{\"identifier\":\"sales.analytics.products\"}],\"metric_views\":[{\"identifier\":\"sales.analytics.revenue_metrics\",\"descripti on\":[\"Revenue metrics\"]}]},\"instruct ions\":{\"text_instructions\":[{\"id\":\"01f0b37c378e1c9100000000000000a1\",\"content\":[\"General instructions for the space.\"]}],\"example_question_sqls\":[{\"id\":\"01f0821116d912db00000000000000b1\",\"question\":[\"Show top 10 customers\"],\"sql\":[\"SELECT...\"]}],\"sql_functions\":[{\"i d\":\"01f0c0b4e815100000000000000000f1\",\"ident ifier\":\"sales.analytics.fiscal_quarter\"}],\"join_specs\":[{\"id\":\"01f0c0b4e8 15100000000000000000c1\",\"left\":{\"identifier\":\"sales.analytics.orders\"},\"right\":{\"i dentifier\":\"sales.analytics.customers\"},\"sq l\":[\"orders.customer_id=customers.customer_id\"]}],\"sql_snippets\":{\"filters\":[{\"id\":\"01f09972e66d100000000000000000d1\",\"sql\":[\"amount>1000\"],\"display_name\":\"high value\"}],\"expressions\":[{\"id\":\"01f09974563a100000000000000000e1\",\"alias\":\"order_year\",\"sql\":[\"YEAR(order_date)\"]}],\"measures\":[{\"id\":\"01f09972611f100 000000000000000f1\",\"alias\":\"total_revenue\",\"sql\":[\"SUM(amount)\"]}]}},\"benchma rks\":{\"questions\":[{\"id\":\"01f0 d0b4e815100000000000000000g1\",\"question\":[\"W hat is average order value?\"],\"answer\":[{\"f ormat\":\"SQL\",\"content\":[\"SELECT AVG(amoun t)...\"]}]}]}}",
 

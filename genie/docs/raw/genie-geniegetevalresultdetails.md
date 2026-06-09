@@ -11,7 +11,7 @@ Beta
 
 Get details for evaluation results.
 
-API scopes (preview):[`genie`](https://docs.databricks.com/api/workspace/api/scopes#genie)
+API scopes:[`genie`](https://docs.databricks.com/api/workspace/api/scopes#genie)
 
 ### Path parameters
 
@@ -103,6 +103,15 @@ LLM judge ratings explain the factors driving BAD results:
 *   LLM_JUDGE_MISSING_OR_INCORRECT_AGGREGATION: Genie's generated SQL is missing GROUP BY clauses or has incorrect grouping that doesn't match the requested aggregation level.
 *   LLM_JUDGE_FORMATTING_ERROR: Genie's generated SQL output has incorrect formatting, ordering (ORDER BY), or presentation issues that don't match expectations.
 *   LLM_JUDGE_OTHER: LLM judge identified an error that doesn't fall into other categories.
+
+Deprecated LLM judge values (kept for backward compatibility, do not use):
+
+*   LLM_JUDGE_MISSING_JOIN (deprecated)
+*   LLM_JUDGE_WRONG_FILTER (deprecated)
+*   LLM_JUDGE_WRONG_AGGREGATION (deprecated)
+*   LLM_JUDGE_WRONG_COLUMNS (deprecated)
+*   LLM_JUDGE_SYNTAX_ERROR (deprecated)
+*   LLM_JUDGE_SEMANTIC_ERROR (deprecated)
 
 [`benchmark_question_id`](https://docs.databricks.com/api/workspace/genie/geniegetevalresultdetails#benchmark_question_id)string
 
@@ -334,6 +343,8 @@ Internal error.
 
 },
 
+"sql_state":"string",
+
 "state":"PENDING"
 
 }
@@ -485,6 +496,8 @@ Internal error.
 "message":"string"
 
 },
+
+"sql_state":"string",
 
 "state":"PENDING"
 

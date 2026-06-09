@@ -9,7 +9,7 @@ Markdown Content:
 
 Execute the SQL for a message query attachment. Use this API when the query attachment has expired and needs to be re-executed.
 
-API scopes (preview):[`genie`](https://docs.databricks.com/api/workspace/api/scopes#genie)
+API scopes:[`genie`](https://docs.databricks.com/api/workspace/api/scopes#genie)
 
 ### Path parameters
 
@@ -112,6 +112,12 @@ NOT_FOUND - Operation was performed on a resource that does not exist. FEATURE_D
 INTERNAL_ERROR
 
 Internal error.
+
+# Request samples
+
+JSON
+
+{}
 
 # Response samples
 
@@ -240,6 +246,8 @@ Internal error.
 "message":"string"
 
 },
+
+"sql_state":"string",
 
 "state":"PENDING"
 

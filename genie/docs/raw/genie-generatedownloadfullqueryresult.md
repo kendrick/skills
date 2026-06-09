@@ -21,7 +21,7 @@ See [Execute Statement](https://docs.databricks.com/api/workspace/statementexecu
 
 * * *
 
-API scopes (preview):[`genie`](https://docs.databricks.com/api/workspace/api/scopes#genie)
+API scopes:[`genie`](https://docs.databricks.com/api/workspace/api/scopes#genie)
 
 ### Path parameters
 
@@ -114,6 +114,12 @@ NOT_FOUND - Operation was performed on a resource that does not exist. FEATURE_D
 INTERNAL_ERROR
 
 Internal error.
+
+# Request samples
+
+JSON
+
+{}
 
 # Response samples
 

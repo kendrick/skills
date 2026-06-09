@@ -9,7 +9,7 @@ Markdown Content:
 
 List messages in a conversation
 
-API scopes (preview):[`genie`](https://docs.databricks.com/api/workspace/api/scopes#genie)
+API scopes:[`genie`](https://docs.databricks.com/api/workspace/api/scopes#genie)
 
 ### Path parameters
 
@@ -240,6 +240,18 @@ Internal error.
 
 "statement_id":"string",
 
+"thoughts":[
+
+{
+
+"content":"string",
+
+"thought_type":"THOUGHT_TYPE_DESC RIPTION"
+
+}
+
+],
+
 "title":"string"
 
 },
@@ -283,6 +295,8 @@ Internal error.
 },
 
 "feedback":{
+
+"comment":"string",
 
 "rating":"POSITIVE"
 

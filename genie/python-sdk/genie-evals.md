@@ -127,4 +127,4 @@ for page in w.genie.genie_list_eval_results(space_id=sid, eval_run_id=rid):
 - **Omit `benchmark_question_ids`** (or pass `None`) to evaluate all benchmark questions. Empty list is not equivalent.
 - **FEATURE_DISABLED**: Raises `NotFound` (404) if evals are not enabled on the workspace -- not `PermissionDenied`.
 - **Pagination**: List methods return paginated responses. Default page size is 20, max 100.
-- **Assessment reasons**: Only populated for BAD results. Includes both deterministic (RESULT_MISSING_ROWS, etc.) and LLM judge reasons (LLM_JUDGE_WRONG_FILTER, etc.).
+- **Assessment reasons**: Only populated for BAD results. Includes both deterministic (RESULT_MISSING_ROWS, etc.) and LLM judge reasons (LLM_JUDGE_MISSING_OR_INCORRECT_FILTER, LLM_JUDGE_INCORRECT_METRIC_CALCULATION, LLM_JUDGE_FORMATTING_ERROR, etc.). Older names like `LLM_JUDGE_WRONG_FILTER` / `LLM_JUDGE_WRONG_AGGREGATION` / `LLM_JUDGE_WRONG_COLUMNS` are deprecated but still emitted for back-compat.

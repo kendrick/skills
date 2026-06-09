@@ -60,6 +60,13 @@ space = w.genie.get_space(space_id="<space_id>")
 # Update (serialized_space is full replacement)
 w.genie.update_space(space_id="<space_id>", title="New Title")
 
+# Update with optimistic concurrency (Public Preview) -- pass etag from a prior get_space()
+space = w.genie.get_space(space_id="<space_id>")
+w.genie.update_space(space_id="<space_id>", title="New Title", etag=space.etag)
+
+# Move space to a different workspace folder (Public Preview)
+w.genie.update_space(space_id="<space_id>", parent_path="/Workspace/Users/me/genie")
+
 # Trash
 w.genie.trash_space(space_id="<space_id>")
 ```
@@ -183,7 +190,8 @@ w.genie.send_message_feedback(
     space_id="<space_id>",
     conversation_id=conv_id,
     message_id=msg_id,
-    rating="POSITIVE"  # POSITIVE | NEGATIVE | NONE
+    rating="POSITIVE",      # POSITIVE | NEGATIVE | NONE
+    comment="Looks right"   # optional, Public Preview, <= 5000 chars
 )
 ```
 

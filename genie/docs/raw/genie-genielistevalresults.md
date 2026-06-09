@@ -11,7 +11,7 @@ Beta
 
 List evaluation results for a specific evaluation run.
 
-API scopes (preview):[`genie`](https://docs.databricks.com/api/workspace/api/scopes#genie)
+API scopes:[`genie`](https://docs.databricks.com/api/workspace/api/scopes#genie)
 
 ### Path parameters
 
@@ -101,7 +101,13 @@ The token to use for retrieving the next page of results.
 
 Error responses are returned in the following format:
 
-{ "error_code": "Error code", "message": "Human-readable error message." }
+{
+
+"error_code":"Error code",
+
+"message":"Human-readable error message."
+
+}
 
 # Possible error codes:
 
@@ -145,4 +151,30 @@ Internal error.
 
 200
 
-{ "eval_results": [ { "benchmark_answer": "string", "benchmark_question_id": "e1ef34712a29169db030324fd0e1df5f", "created_by_user": 0, "question": "string", "result_id": "e1ef34712a29169db030324fd0e1df5f", "space_id": "e1ef34712a29169db030324fd0e1df5f", "status": "RUNNING" } ], "next_page_token": "string" }
+{
+
+"eval_results":[
+
+{
+
+"benchmark_answer":"string",
+
+"benchmark_question_id":"e1ef34712a29169db0 30324fd0e1df5f",
+
+"created_by_user":0,
+
+"question":"string",
+
+"result_id":"e1ef34712a29169db030324fd0e1df 5f",
+
+"space_id":"e1ef34712a29169db030324fd0e1df5 f",
+
+"status":"RUNNING"
+
+}
+
+],
+
+"next_page_token":"string"
+
+}

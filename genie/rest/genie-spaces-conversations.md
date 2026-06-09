@@ -53,8 +53,8 @@ POST /api/2.0/genie/spaces
 }
 ```
 Required: `serialized_space` (string), `warehouse_id` (string).
-Optional: `title`, `description`, `parent_path` (all string).
-Returns: `space_id`, `title`, `description`, `serialized_space`, `warehouse_id`.
+Optional: `title`, `description`, `parent_path`, `etag` (all string; `etag` and `parent_path` are Public Preview).
+Returns: `space_id`, `title`, `description`, `serialized_space`, `warehouse_id`, `etag`, `parent_path`.
 
 ### List Spaces
 ```
@@ -77,8 +77,8 @@ PATCH /api/2.0/genie/spaces/{space_id}
 ```json
 {"title": "Updated Title", "serialized_space": "<JSON string>"}
 ```
-Required path: `space_id` (string). Body fields all optional: `title`, `description`, `serialized_space`, `warehouse_id`.
-Note: `serialized_space` is a full replacement, not a merge.
+Required path: `space_id` (string). Body fields all optional: `title`, `description`, `serialized_space`, `warehouse_id`, `etag`, `parent_path` (`etag` and `parent_path` are Public Preview).
+Note: `serialized_space` is a full replacement, not a merge. Pass `etag` (from a prior GET or UPDATE response) so the update fails if the space changed in the meantime; omit `etag` to skip the check. `parent_path` moves the space to a different workspace folder.
 
 ### Trash Space
 ```
@@ -189,9 +189,9 @@ Returns: `statement_response` with `external_links[]` containing presigned URLs.
 POST .../messages/{message_id}/feedback
 ```
 ```json
-{"rating": "POSITIVE"}
+{"rating": "POSITIVE", "comment": "Got the join wrong"}
 ```
-Required body: `rating` (enum: `POSITIVE`, `NEGATIVE`, `NONE`).
+Required body: `rating` (enum: `POSITIVE`, `NEGATIVE`, `NONE`). Optional: `comment` (string, <= 5000 chars; Public Preview) -- free-text feedback stored alongside the rating.
 Returns `{}`.
 
 ---

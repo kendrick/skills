@@ -9,7 +9,7 @@ Markdown Content:
 
 Get the result of SQL query if the message has a query attachment. This is only available if a message has a query attachment and the message status is `EXECUTING_QUERY` OR `COMPLETED`.
 
-API scopes (preview):[`genie`](https://docs.databricks.com/api/workspace/api/scopes#genie)
+API scopes:[`genie`](https://docs.databricks.com/api/workspace/api/scopes#genie)
 
 ### Path parameters
 
@@ -240,6 +240,8 @@ Internal error.
 "message":"string"
 
 },
+
+"sql_state":"string",
 
 "state":"PENDING"
 

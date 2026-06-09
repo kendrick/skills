@@ -21,7 +21,7 @@ See [Execute Statement](https://docs.databricks.com/api/workspace/statementexecu
 
 * * *
 
-API scopes (preview):[`genie`](https://docs.databricks.com/api/workspace/api/scopes#genie)
+API scopes:[`genie`](https://docs.databricks.com/api/workspace/api/scopes#genie)
 
 ### Path parameters
 
@@ -91,7 +91,13 @@ The status response includes execution state and if relevant, error information.
 
 Error responses are returned in the following format:
 
-{ "error_code": "Error code", "message": "Human-readable error message." }
+{
+
+"error_code":"Error code",
+
+"message":"Human-readable error message."
+
+}
 
 # Possible error codes:
 
@@ -135,4 +141,136 @@ Internal error.
 
 200
 
-{ "statement_response": { "manifest": { "chunks": [ { "byte_count": 0, "chunk_index": 0, "row_count": 0, "row_offset": 0 } ], "format": "JSON_ARRAY", "schema": { "column_count": 0, "columns": [ { "name": "string", "position": 0, "type_interval_type": "string", "type_name": "BOOLEAN", "type_precision": 0, "type_scale": 0, "type_text": "string" } ] }, "total_byte_count": 0, "total_chunk_count": 0, "total_row_count": 0, "truncated": true }, "result": { "byte_count": 0, "chunk_index": 0, "data_array": [ [ "string" ] ], "external_links": [ { "byte_count": 0, "chunk_index": 0, "expiration": "2019-08-24T14:15:22Z", "external_link": "string", "next_chunk_index": 0, "next_chunk_internal_link": "string", "row_count": 0, "row_offset": 0 } ], "next_chunk_index": 0, "next_chunk_internal_link": "string", "row_count": 0, "row_offset": 0 }, "statement_id": "string", "status": { "error": { "error_code": "UNKNOWN", "message": "string" }, "state": "PENDING" } } }
+{
+
+"statement_response":{
+
+"manifest":{
+
+"chunks":[
+
+{
+
+"byte_count":0,
+
+"chunk_index":0,
+
+"row_count":0,
+
+"row_offset":0
+
+}
+
+],
+
+"format":"JSON_ARRAY",
+
+"schema":{
+
+"column_count":0,
+
+"columns":[
+
+{
+
+"name":"string",
+
+"position":0,
+
+"type_interval_type":"string",
+
+"type_name":"BOOLEAN",
+
+"type_precision":0,
+
+"type_scale":0,
+
+"type_text":"string"
+
+}
+
+]
+
+},
+
+"total_byte_count":0,
+
+"total_chunk_count":0,
+
+"total_row_count":0,
+
+"truncated":true
+
+},
+
+"result":{
+
+"byte_count":0,
+
+"chunk_index":0,
+
+"data_array":[
+
+[
+
+"string"
+
+]
+
+],
+
+"external_links":[
+
+{
+
+"byte_count":0,
+
+"chunk_index":0,
+
+"expiration":"2019-08-24T14:15:22Z",
+
+"external_link":"string",
+
+"next_chunk_index":0,
+
+"next_chunk_internal_link":"string",
+
+"row_count":0,
+
+"row_offset":0
+
+}
+
+],
+
+"next_chunk_index":0,
+
+"next_chunk_internal_link":"string",
+
+"row_count":0,
+
+"row_offset":0
+
+},
+
+"statement_id":"string",
+
+"status":{
+
+"error":{
+
+"error_code":"UNKNOWN",
+
+"message":"string"
+
+},
+
+"sql_state":"string",
+
+"state":"PENDING"
+
+}
+
+}
+
+}

@@ -7,7 +7,7 @@ Benchmark evaluation runs, results, and result details for Genie spaces. **Beta 
 
 ## Auth
 
-All endpoints require OAuth scope `genie` (preview). Standard bearer-token auth via `Authorization: Bearer <token>`.
+All endpoints require OAuth scope `genie`. Standard bearer-token auth via `Authorization: Bearer <token>`.
 
 ## Endpoint Summary
 
@@ -75,7 +75,7 @@ POST /api/2.0/genie/spaces/abc123/eval-runs
 
 **Response 200**: `actual_response[]` (response, response_type TEXT|SQL, sql_execution_result), `expected_response[]` (same shape), `assessment` (GOOD|BAD|NEEDS_REVIEW), `assessment_reasons[]`, `manual_assessment` (bool), `eval_run_status`, `benchmark_question_id`, `result_id`, `space_id`.
 
-Assessment reasons include deterministic checks (EMPTY_RESULT, RESULT_MISSING_ROWS, RESULT_EXTRA_ROWS, RESULT_MISSING_COLUMNS, RESULT_EXTRA_COLUMNS, SINGLE_CELL_DIFFERENCE, EMPTY_GOOD_SQL, COLUMN_TYPE_DIFFERENCE) and LLM judge reasons (LLM_JUDGE_WRONG_FILTER, LLM_JUDGE_WRONG_AGGREGATION, LLM_JUDGE_WRONG_COLUMNS, etc.).
+Assessment reasons include deterministic checks (EMPTY_RESULT, RESULT_MISSING_ROWS, RESULT_EXTRA_ROWS, RESULT_MISSING_COLUMNS, RESULT_EXTRA_COLUMNS, SINGLE_CELL_DIFFERENCE, EMPTY_GOOD_SQL, COLUMN_TYPE_DIFFERENCE) and LLM judge reasons (LLM_JUDGE_MISSING_OR_INCORRECT_FILTER, LLM_JUDGE_MISSING_OR_INCORRECT_JOIN, LLM_JUDGE_MISSING_OR_INCORRECT_AGGREGATION, LLM_JUDGE_INCORRECT_METRIC_CALCULATION, LLM_JUDGE_INCORRECT_TABLE_OR_FIELD_USAGE, LLM_JUDGE_FORMATTING_ERROR, LLM_JUDGE_OTHER, etc.). Older reasons like `LLM_JUDGE_WRONG_FILTER`, `LLM_JUDGE_WRONG_AGGREGATION`, `LLM_JUDGE_WRONG_COLUMNS`, `LLM_JUDGE_MISSING_JOIN`, `LLM_JUDGE_SYNTAX_ERROR`, and `LLM_JUDGE_SEMANTIC_ERROR` are deprecated -- still emitted for backward compatibility, don't use in new code.
 
 ---
 
