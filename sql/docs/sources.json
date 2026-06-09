@@ -86,8 +86,8 @@
   {
     "operation": "warehouses-create",
     "url": "https://docs.databricks.com/api/workspace/warehouses/create",
-    "fetched_at": "2026-06-09T01:22:39Z",
-    "sha256": "59c1f98bf85806ffa42f718a5a6b63d48c8cd4acdd22a0a62248976358818918"
+    "fetched_at": "2026-06-09T03:56:46Z",
+    "sha256": "333bb722f1a637d3304d3a462ebe15dc69694669691fcbe1c4b9170a640fd8f3"
   },
   {
     "operation": "warehouses-createdefaultwarehouseoverride",

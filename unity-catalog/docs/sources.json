@@ -194,8 +194,8 @@
   {
     "operation": "externallocations-update",
     "url": "https://docs.databricks.com/api/workspace/externallocations/update",
-    "fetched_at": "2026-06-09T01:22:41Z",
-    "sha256": "d03e093c2aee675f79d0894e5a0c2dfb8890ab5cf7eb75efdaa95d4e3cf93b41"
+    "fetched_at": "2026-06-09T03:56:46Z",
+    "sha256": "b9833c97c882ae990b650d1c19f0cbdf11390c17d9424caf79ca3ee09d71fe6b"
   },
   {
     "operation": "externalmetadata-createexternalmetadata",
@@ -290,8 +290,8 @@
   {
     "operation": "metastores-current",
     "url": "https://docs.databricks.com/api/workspace/metastores/current",
-    "fetched_at": "2026-06-09T01:22:41Z",
-    "sha256": "b9dd65eb69eb1f89a608201cab8b8e7bda4d15eeab8722096cd7fb8fc8ffca35"
+    "fetched_at": "2026-06-09T03:56:46Z",
+    "sha256": "1fa44a2d84743cadd96f9a8bb5d273a2f8836a3113229420066127fdd9a5e293"
   },
   {
     "operation": "metastores-delete",
@@ -344,8 +344,8 @@
   {
     "operation": "modelversions-get",
     "url": "https://docs.databricks.com/api/workspace/modelversions/get",
-    "fetched_at": "2026-06-09T01:22:41Z",
-    "sha256": "492d1c14af31eff329e637b08571206bdb8b79d49d8f160bf0578161a907418a"
+    "fetched_at": "2026-06-09T03:56:46Z",
+    "sha256": "d5eec9003d2d27bda0de28b407ce7092bf15ac511d9b99571378d060d9053675"
   },
   {
     "operation": "modelversions-getbyalias",

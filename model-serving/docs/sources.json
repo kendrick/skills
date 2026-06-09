@@ -14,14 +14,14 @@
   {
     "operation": "servingendpoints-createprovisionedthroughputendpoint",
     "url": "https://docs.databricks.com/api/workspace/servingendpoints/createprovisionedthroughputendpoint",
-    "fetched_at": "2026-06-09T01:22:38Z",
-    "sha256": "3e9fa3740e727dd48152c20012919095b6d2c2050f0d38da54e9d3501faed10f"
+    "fetched_at": "2026-06-09T03:56:46Z",
+    "sha256": "3c692da9557808d6ecc0c1b40a359f8f556fc0bee1ded2caa4edfb7908750dcf"
   },
   {
     "operation": "servingendpoints-delete",
     "url": "https://docs.databricks.com/api/workspace/servingendpoints/delete",
-    "fetched_at": "2026-06-09T01:22:38Z",
-    "sha256": "8245b3b7365bed00a22850b1773839cc9c453e2aea799ecfcd890fd325f6323d"
+    "fetched_at": "2026-06-09T03:56:46Z",
+    "sha256": "105060634721e58cc0356625e7301770cd72ff9d51a4548f5383628ddc1bea77"
   },
   {
     "operation": "servingendpoints-exportmetrics",

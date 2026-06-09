@@ -14,8 +14,8 @@
   {
     "operation": "jobs-create",
     "url": "https://docs.databricks.com/api/workspace/jobs/create",
-    "fetched_at": "2026-06-09T01:22:35Z",
-    "sha256": "b5f10e8736e8b54aaae7210a02134fb333bf5e9075a41e0360b63cc13226ec17"
+    "fetched_at": "2026-06-09T03:56:46Z",
+    "sha256": "14c44aa178e977449d7b67f17d9e06a74deafb28169064c92c38f086637b1a3f"
   },
   {
     "operation": "jobs-delete",

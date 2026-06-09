@@ -1,5 +1,5 @@
-Title: Databricks REST API reference
+Title: Create a new PT serving endpoint | Serving endpoints API | REST API reference
 
 URL Source: https://docs.databricks.com/api/workspace/servingendpoints/createprovisionedthroughputendpoint
 
-Warning: This page maybe not yet fully loaded, consider explicitly specify a timeout.
+Markdown Content:

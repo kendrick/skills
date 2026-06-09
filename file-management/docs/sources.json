@@ -56,8 +56,8 @@
   {
     "operation": "dbfs-read",
     "url": "https://docs.databricks.com/api/workspace/dbfs/read",
-    "fetched_at": "2026-06-09T01:22:33Z",
-    "sha256": "2919e0965399d764d758d8aac277a63832369daabdeeec2068ad27158fd9ef3c"
+    "fetched_at": "2026-06-09T03:56:46Z",
+    "sha256": "8e9f56d571d1680f63687f7bf6294e8ea81ffb1c997fda92182ce37305541b9b"
   },
   {
     "operation": "files-createdirectory",
