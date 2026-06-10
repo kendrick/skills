@@ -8,7 +8,7 @@ A Claude Code skill for processing raw consulting-work inputs (transcripts, meet
 
 Aligned with the memory-bank schema at [`kendrick-at-slalom/memory-bank`](https://github.com/kendrick-at-slalom/memory-bank). Inspired by, not bound to.
 
-## Why this exists
+## Why This Exists
 
 There's already a memory-bank schema at [`kendrick-at-slalom/memory-bank`](https://github.com/kendrick-at-slalom/memory-bank), with a hydrator agent and a set of `hydrate-*` skills. If you're hydrating a code repo from settled artifacts (existing decisions, ADRs buried in PRs, design docs), use that. Don't use this.
 
@@ -22,7 +22,7 @@ This skill exists for a different job: forward-filling a consulting workspace fr
 
 **Obsidian-native filenames.** `nanoid -s 10` slug filenames that wiki-link cleanly. No sequential `<ns>-ADR-<n>` IDs (those break under cross-scope nesting). No `uuid` field (Obsidian resolves by filename anyway). Small choices, but they add up when you're working in the vault every day.
 
-## What you'd lose by just using hydrate-*
+## What You'd Lose by Just Using hydrate-*
 
 Honest assessment: strip those four out and you're left with `hydrate-*` wrapped in a different invocation style. The workflow phases, the record schema, the status lifecycle, and the retrieval funnel all match memory-bank's — because we adopted them. You could run `hydrate-extract`, `hydrate-draft`, and the rest one at a time in a manually-arranged directory, and the records would come out looking identical.
 
