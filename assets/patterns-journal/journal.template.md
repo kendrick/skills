@@ -1,4 +1,4 @@
-# Patterns journal — {{ScopeName}}
+# Patterns Journal — {{ScopeName}}
 
 Running observations from this engagement. Reverse-chronological — newest at the top.
 
@@ -10,7 +10,7 @@ Conventions, tag vocabulary, weekly-review ritual, and promotion flow live in [C
 
 Entry template (copy and fill in):
 
-## YYYY-MM-DD — short context label
+## YYYY-MM-DD — Short Context Label
 
 - Observation in the speaker's words if possible. Tag aggressively. #tag #tag
 - Another observation. Note what it might mean. #tag

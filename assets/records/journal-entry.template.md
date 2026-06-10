@@ -25,7 +25,7 @@ generalized claim, not a recap of the conversation that triggered it.
 
 {{body}}
 
-## Source moment
+## Source Moment
 
 <!--
 Optional. Quote the triggering passage with a back-link to the source note.

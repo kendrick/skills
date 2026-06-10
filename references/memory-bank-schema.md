@@ -1,8 +1,8 @@
-# memory-bank schema (vendored summary)
+# memory-bank Schema (vendored summary)
 
 This skill aligns with the schema published at [`kendrick-at-slalom/memory-bank`](https://github.com/kendrick-at-slalom/memory-bank). Inspired by, not bound to — if that repo evolves, this document goes stale and gets updated manually.
 
-## Mode selection
+## Mode Selection
 
 Two modes for client and project scope, picked once at scaffold time and recorded in the scope's `CLAUDE.md`:
 
@@ -15,7 +15,7 @@ The Journal type is unaffected by mode selection — it only exists at the cross
 
 **Naming note:** lightweight `Rule` and canonical `PolicyRule` describe the same concept (standing guidance, "never X" / "always Y") with the same body fields. The shorter name is the only thing that differs. A record written in one mode can be moved into the other by renaming the file's parent folder and updating `memory_type:` in frontmatter.
 
-## Record types
+## Record Types
 
 Lightweight mode uses three of these; canonical mode uses all four.
 
@@ -28,7 +28,7 @@ Lightweight mode uses three of these; canonical mode uses all four.
 
 A fifth type — `Journal` — is local to this skill's three-tier model. It lives only in cross-client journal scope and has a different frontmatter shape (qualified `source_refs`, themes, no enforcement model).
 
-## Frontmatter — fields shared across record types
+## Frontmatter — Fields Shared Across Record Types
 
 The `memory_type` value reflects the active mode. Lightweight scopes set it to one of `Decision | Rule | Context`; canonical scopes set it to `Decision | PolicyRule | Exception | Context`.
 
@@ -59,7 +59,7 @@ supersedes: <id> | null # id of an older record this replaces
 superseded_by: <id> | null # id of a newer record that replaces this one
 ```
 
-## Type-specific body fields
+## Type-specific Body Fields
 
 These appear as `## Section` headings in the record body, not as frontmatter keys.
 
@@ -95,7 +95,7 @@ In lightweight mode, the same content gets captured as a Decision record whose d
 - Provenance
 - Why this matters
 
-## Status lifecycle
+## Status Lifecycle
 
 ```
 proposed
@@ -107,11 +107,11 @@ proposed
 
 Never silently change `accepted` → `superseded` or `accepted` → `deprecated` without the user's explicit decision. Status changes are a kind of edit the user signs off on, same as record creation.
 
-## Retrieval funnel
+## Retrieval Funnel
 
 See [retrieval-funnel.md](retrieval-funnel.md) for the four-stage querying pattern (glob → grep frontmatter → YAML headers only → full body).
 
-## What this skill does NOT adopt from memory-bank
+## What This Skill Does NOT Adopt From memory-bank
 
 - Sequential namespaced IDs (`<namespace>-ADR-<n>`). This skill uses nanoid because three-scope nesting with sequential IDs creates ordering conflicts.
 - The `uuid` field (RFC 4122). Obsidian resolves wiki-links by filename; `uuid` adds no value here.

@@ -1,4 +1,4 @@
-# Claude context — {{ProjectName}}
+# Claude Context — {{ProjectName}}
 
 > **Purpose of this file:** Project-specific grounding for Claude Code sessions in this directory. Inherits from the client root `CLAUDE.md` (engagement-wide context). Sibling work-area `CLAUDE.md` files in `notes/`, `_memory/`, and `patterns-journal/` add directory-specific conventions on top.
 >
@@ -10,15 +10,15 @@
 
 ---
 
-## The {{pursuit|project}} in one paragraph
+## The {{Pursuit|Project}} in One Paragraph
 
 <!-- Fill in: who, what, when, why. Scope, timing, primary deliverables. 2-3 sentences. -->
 
-## The user's role
+## The User's Role
 
 <!-- Fill in: the user's specific role in this project. Reporting line, peers, scope of ownership. Often inherits from the client root and narrows. -->
 
-## Repo organization
+## Repo Organization
 
 ```
 ./
@@ -37,7 +37,7 @@
 
 This {{pursuit|project}}'s memory lives at `_memory/` (subfolders: {{MEMORY_TYPE_FOLDERS}}). Facts that span multiple {{pursuits|projects}} at this client belong at the client root's `_memory/`. Patterns that generalize beyond this client belong in the cross-client journal.
 
-## Notes, memory, and synthesis
+## Notes, Memory, and Synthesis
 
 Same artifact pipeline as the client root, scoped to this {{pursuit|project}}.
 
@@ -49,7 +49,7 @@ Same artifact pipeline as the client root, scoped to this {{pursuit|project}}.
 
 Directory-specific conventions live in [`notes/CLAUDE.md`](notes/CLAUDE.md), [`_memory/CLAUDE.md`](_memory/CLAUDE.md), and [`patterns-journal/CLAUDE.md`](patterns-journal/CLAUDE.md).
 
-## Conventions inherited from the skill
+## Conventions Inherited From the Skill
 
 - One groomed note per input. Three zones: frontmatter, extracted sections, Raw Content (verbatim).
 - Memory candidates flagged inline as `[memory candidate: <scope>] <claim>`. Journal candidates as `[journal candidate: <pattern>]`. Crystallized only after user sign-off.
@@ -60,13 +60,13 @@ Directory-specific conventions live in [`notes/CLAUDE.md`](notes/CLAUDE.md), [`_
 
 <!-- {{ProjectName}}-specific overrides. Fill in during scaffold or regenerate as the {{pursuit|project}} evolves. -->
 
-### Note `type:` values
+### Note `type:` Values
 
 Controlled vocabulary for note frontmatter `type:` field. Extends the skill's baseline.
 
 {{type-enum-values}}
 
-### Active stakeholders
+### Active Stakeholders
 
 Roster format: `Name — Role/Title. Additional facts (timezone, team affiliation, comms preference).`
 
@@ -74,7 +74,7 @@ These are stakeholders specific to this {{pursuit|project}}. Cross-engagement st
 
 {{stakeholder-list}}
 
-### Transcription-error mapping
+### Transcription-error Mapping
 
 Common misheard names from meeting transcripts for this {{pursuit|project}}, with the canonical referent and (where applicable) a pointer to the client-level Context record. Used during inbox grooming to apply silent corrections (recorded in note frontmatter as `transcript_corrections:`).
 
@@ -82,12 +82,12 @@ Common misheard names from meeting transcripts for this {{pursuit|project}}, wit
 > References to "<misheard>", "<misheard>", or sound-alikes are likely transcription errors and intend to refer to <Canonical Name> (client-level Context id <nanoid>).
 -->
 
-### Tag namespace (suggested)
+### Tag Namespace (suggested)
 
 Project-specific tags layered on top of the client-wide namespace.
 
 {{tag-list}}
 
-### Pre-existing content
+### Pre-existing Content
 
 <!-- Optional, only when a project subdirectory predates this substrate. Note any legacy folders (e.g., `pending_notes/`) and how they should be treated (e.g., "out of scope for the inbox queue; move into notes/_inbox/ to groom by hand"). -->

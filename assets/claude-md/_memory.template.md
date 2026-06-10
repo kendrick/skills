@@ -1,14 +1,14 @@
-# Memory: agent conventions
+# Memory: Agent Conventions
 
 > **Audience:** Claude working in this directory.
 >
 > **Inherits from:** the scope's root `CLAUDE.md`.
 
-## Record types ({{MEMORY_MODE}} mode)
+## Record Types ({{MEMORY_MODE}} mode)
 
 {{MEMORY_TYPE_LIST}}
 
-## Required frontmatter
+## Required Frontmatter
 
 ```yaml
 ---
@@ -27,7 +27,7 @@ Optional: `related`, `applies_to`, `owners`, `effective_from`, `effective_to`, `
 
 `<slug>-<nanoid>.md` inside the type subfolder. The folder implies `memory_type`; still set the field in frontmatter for safety. Type folders in this scope: {{MEMORY_TYPE_FOLDERS}}.
 
-## Querying memory token-efficiently
+## Querying Memory Token-efficiently
 
 Default to a four-stage funnel, cheapest first. Don't skip stages unless you already have the specific record id.
 
@@ -53,7 +53,7 @@ Grep "applies_to:.*commerce" _memory/context/
 
 Anti-pattern: reading every record in full to find matches. If you catch yourself doing this, stop and go back to stage 1.
 
-## How records get created
+## How Records Get Created
 
 Memory records are agent-proposed, never user-dropped. The workflow is two-pass:
 
@@ -69,11 +69,11 @@ When creating the record:
 4. Write a concise body: context, the crystallized fact, rationale where relevant. Type-specific body sections live in [`~/.claude/skills/inbox-to-memory/references/memory-bank-schema.md`](~/.claude/skills/inbox-to-memory/references/memory-bank-schema.md).
 5. Do not auto-commit. Summarize what was proposed and let the user review.
 
-## When records graduate
+## When Records Graduate
 
 The user edits `status: proposed` → `status: accepted` after review. If a record is later replaced, mark the old one `status: superseded` and set `supersedes:` on the replacement to the old record's id. No automated supersession enforcement in this version; discipline only.
 
-## What never goes here
+## What Never Goes Here
 
 - Auto-committed proposed records.
 - Records without `source_refs`. If you can't trace a record to a source, flag it and ask.

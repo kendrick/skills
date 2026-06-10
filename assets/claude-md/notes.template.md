@@ -1,4 +1,4 @@
-# Notes: agent conventions
+# Notes: Agent Conventions
 
 > **Audience:** Claude working in this directory.
 >
@@ -6,7 +6,7 @@
 
 Grooming isn't just filename and frontmatter. It produces a normalized, extracted file: frontmatter on top, summary-style body sections in the middle, raw content verbatim at the bottom. The raw content is the source of truth; the extracted sections are the agent's contribution and require review before commit.
 
-## The inbox
+## The Inbox
 
 `notes/_inbox/` is the raw-drop zone. Files there have any filename, any shape, and no frontmatter.
 
@@ -30,7 +30,7 @@ When the user asks to groom the inbox (or invokes "process the inbox"), for each
    - **Binary sources** (`.pdf`, `.docx`, `.pptx`): move to `notes/attachments/`. Extraction is lossy; keep the original. Set `source_file: attachments/filename.ext` in the groomed note.
 10. **Summarize what was groomed and extracted.** Do not auto-commit. The user reviews extractions before committing.
 
-## Direct authoring
+## Direct Authoring
 
 When the user asks to create a fresh note (not an import):
 
@@ -39,7 +39,7 @@ When the user asks to create a fresh note (not an import):
 3. Create `notes/YYYY-MM-DD[-HHMM]-<slug>-<nanoid>.md` with scaffolded frontmatter and an empty `## Raw Content` section.
 4. Let the user write. Extraction runs later on demand.
 
-## Groomed file structure
+## Groomed File Structure
 
 ```
 ---
@@ -65,7 +65,7 @@ When the user asks to create a fresh note (not an import):
 
 Order matters. Summary sections come first for human scan-ability and cheap agent retrieval. Raw content stays the source of truth at the bottom.
 
-## Frontmatter schema
+## Frontmatter Schema
 
 ```yaml
 ---
@@ -83,7 +83,7 @@ transcript_corrections: []  # optional — applied sound-alike mappings, e.g. [S
 
 Required: `id`, `date`, `type`. Everything else optional but populated where inferable.
 
-## Extracted sections — what to pull
+## Extracted Sections — What to Pull
 
 Apply heuristics from [`~/.claude/skills/inbox-to-memory/references/extraction-heuristics.md`](~/.claude/skills/inbox-to-memory/references/extraction-heuristics.md). Short version:
 
@@ -93,7 +93,7 @@ Apply heuristics from [`~/.claude/skills/inbox-to-memory/references/extraction-h
 - **Open Questions** — substantive (escalate to `working-state.md` open questions list) and clarifying (stay with the note).
 - **Action Items / Memory Candidates** — bullets with owner bolded; memory candidates use the `[memory candidate: <scope>]` prefix per [`~/.claude/skills/inbox-to-memory/references/scope-decisions.md`](~/.claude/skills/inbox-to-memory/references/scope-decisions.md).
 
-## Inline flags during reading
+## Inline Flags During Reading
 
 While reading the raw content during grooming, when you notice an observation that might generalize beyond this client, add an inline marker right after the triggering passage:
 
@@ -103,7 +103,7 @@ participants finally spoke up after a ten-second pause. `[journal candidate: del
 
 These stay in the raw content zone. Pattern reviews collect them later via `Grep "\[journal candidate:" notes/`. Do not move flagged observations into the top extracted sections — the surrounding context is part of what makes them useful.
 
-## Collision handling
+## Collision Handling
 
 If a groomed filename already exists:
 
@@ -113,7 +113,7 @@ If a groomed filename already exists:
 
 Nanoids are unique by construction, so collisions are filename-level only.
 
-## What to never do
+## What to Never Do
 
 - Auto-commit groomed files or extractions. The user reviews and commits.
 - Fabricate dates, attendees, quotes, or cross-references.

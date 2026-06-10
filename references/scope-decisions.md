@@ -1,10 +1,10 @@
-# Scope decisions
+# Scope Decisions
 
 How to propose `project`, `client`, or `journal` scope when flagging a memory or journal candidate during phase 3 of the process mode.
 
 The proposed scope token goes into the candidate flag (`[memory candidate: project]`, `[memory candidate: client]`). The user reviews at sign-off and overrides if your proposal is wrong. After crystallization the scope is sticky — no auto-promotion.
 
-## Signals and their suggested scope
+## Signals and Their Suggested Scope
 
 | Signal                                                                                                            | Suggested scope |
 | ----------------------------------------------------------------------------------------------------------------- | --------------- |
@@ -18,13 +18,13 @@ The proposed scope token goes into the candidate flag (`[memory candidate: proje
 | Content uses generalizing language ("always", "every client", "we should", "this generalizes", "in general")      | **journal**     |
 | Speaker is reflecting on the work rather than discussing it ("looking back...", "the lesson here is...")          | **journal**     |
 
-## Conflict resolution
+## Conflict Resolution
 
 When signals conflict, suggest the **narrowest** scope. Project is the floor. Client and journal scope require positive evidence — recurrence, generalization, or explicit signals.
 
 The reason: an over-narrow scope is easy to fix (the user just says "actually that's client" at sign-off). An over-broad scope creates noise in the wrong place and is harder to retract.
 
-## Checking cross-project recurrence
+## Checking Cross-project Recurrence
 
 Before suggesting client scope based on "subject already referenced in 2+ projects," verify by grepping the client root:
 
@@ -34,7 +34,7 @@ grep -l -r "<subject>" "<client-root>"/{pursuits,projects}/*/notes/
 
 Two or more hits in distinct project directories triggers the heuristic. One hit is just _this_ project.
 
-## What never goes to journal
+## What Never Goes to Journal
 
 The journal is for portable patterns, not client gossip or methodology speculation. Do not propose journal scope for:
 
@@ -44,7 +44,7 @@ The journal is for portable patterns, not client gossip or methodology speculati
 
 If the source moment is too specific to generalize, leave the `[journal candidate: ...]` flag in place but mark it as "considered, not crystallized" by not promoting it at sign-off. The flag itself is useful provenance.
 
-## Post-crystallization moves
+## Post-crystallization Moves
 
 If a project record later turns out to belong at client scope (or vice versa), move it by hand:
 
@@ -54,13 +54,13 @@ mv <source-path>/<record>.md <target-path>/
 
 Then re-render any inbound wiki-links. The skill explicitly does _not_ offer auto-promotion in v1 — the audit cost of "did this record always live here?" outweighs the convenience. If this becomes painful, v2 can add a guarded `promote --from project --to client <record-id>` mode.
 
-## Cross-scope references are fine
+## Cross-scope References Are Fine
 
 A project's notes can wiki-link to a client-scope record. A client record can list project note ids in `source_refs`. The record's _home_ (which `_memory/` directory it lives in) is what defines its scope — not its references.
 
 This matters for the "client fact referenced by every project" case: the record lives at the client root once, and every project's notes link to it. No duplication.
 
-## working-state.md, `_memory/`, and `patterns-journal/` are different homes
+## working-state.md, `_memory/`, and `patterns-journal/` Are Different Homes
 
 A scaffolded project has three places candidate-shaped content can live, and choosing wrong creates duplication or invisibility. The split:
 
@@ -85,7 +85,7 @@ patterns-journal/journal.md → weekly review → deliberate promotion ───
 
 Both end up in the same place. The inline flag is for moments where the generalization is immediately obvious. The journal is for slow-cooked patterns that need accumulation before promotion is honest.
 
-## When to crystallize vs leave in working-state
+## When to Crystallize vs Leave in working-state
 
 The hardest call. A signal that something is ready to crystallize from `working-state.md` into `_memory/decisions/`:
 

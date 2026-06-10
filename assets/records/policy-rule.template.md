@@ -17,7 +17,7 @@ related: []
 
 # {{title}}
 
-## Rule statement
+## Rule Statement
 
 <!-- Exact text of the rule. Short, declarative, testable when possible. -->
 
@@ -35,6 +35,6 @@ related: []
 
 <!-- Why this rule exists. The incident, constraint, or stakeholder ask that motivated it. -->
 
-## Known exceptions
+## Known Exceptions
 
 <!-- Wiki-links to any Exception records that have been formally granted, e.g. [[exception-id|short-name]]. -->

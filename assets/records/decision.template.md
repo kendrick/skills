@@ -17,19 +17,19 @@ related: []
 
 # {{title}}
 
-## Decision question
+## Decision Question
 
 <!-- The question being decided. Phrased neutrally. -->
 
-## Decision outcome
+## Decision Outcome
 
 <!-- What was decided. One short paragraph. -->
 
-## Alternatives considered
+## Alternatives Considered
 
 <!-- 1-3 alternatives that were on the table. One sentence each. -->
 
-## Approved by
+## Approved By
 
 <!-- Names or roles of the person/people who approved. -->
 

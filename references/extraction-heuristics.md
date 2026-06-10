@@ -1,4 +1,4 @@
-# Extraction heuristics
+# Extraction Heuristics
 
 What to pull out of an inbox file when grooming it. Applied during phase 2 of the process mode.
 
@@ -66,7 +66,7 @@ Capture with:
 
 If an action item was implied but not committed, phrase it as an Open Question, not an Action Item.
 
-## Cross-note relationships
+## Cross-note Relationships
 
 If the content explicitly references — or implicitly extends — a known note in the same scope, tag the relation:
 
@@ -85,6 +85,6 @@ related:
 
 Only populate `related` when the content makes the link explicit. Don't speculate.
 
-## Stopping rule
+## Stopping Rule
 
 If a section is empty after honest extraction, leave it empty rather than padding. A note with no Tensions is fine. A note with no Notable Quotes probably wasn't worth grooming as a transcript and may be better written as a freeform note.

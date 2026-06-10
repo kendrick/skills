@@ -17,7 +17,7 @@ related: []
 
 # {{title}}
 
-## Rule statement
+## Rule Statement
 
 <!-- Exact text of the rule. Short, declarative, testable when possible. -->
 
@@ -35,6 +35,6 @@ related: []
 
 <!-- Why this rule exists. The incident, constraint, or stakeholder ask that motivated it. -->
 
-## Known exceptions
+## Known Exceptions
 
 <!-- In lightweight mode there is no separate Exception type. List exceptions inline here as bullets: scope, justification, who approved, expiry. If an exception is substantive enough to deserve its own record, write it as a Decision whose decision question is "should we deviate from this rule for <scope>?" and link it here. -->

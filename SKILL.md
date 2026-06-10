@@ -19,11 +19,11 @@ Decide the mode from the user's phrasing. When ambiguous, ask.
 
 ---
 
-## Process mode
+## Process Mode
 
 Six phases. The user reviews and approves between phase 4 and phase 5; never auto-promote.
 
-### Phase 1 — Detect scope
+### Phase 1 — Detect Scope
 
 Walk up from the user's cwd to find the nearest opted-in directory. A directory is opted in when it contains both `_inbox/` and one of these markers:
 
@@ -34,7 +34,7 @@ Distinguish project from client scope by path: a project sits under `pursuits/<n
 
 State the detected scope and root path back to the user before doing anything destructive. If nothing is opted in, stop and ask whether to scaffold — do not create directories silently.
 
-### Phase 2 — Extract content from each inbox file
+### Phase 2 — Extract Content From Each Inbox File
 
 For each file in `_inbox/`, dispatch by extension:
 
@@ -48,7 +48,7 @@ For each file in `_inbox/`, dispatch by extension:
 
 While reading, apply the extraction heuristics in [references/extraction-heuristics.md](references/extraction-heuristics.md). The short version: pull 6-12 surprising or contradictory quotes; flag tensions; split stated and unstated assumptions; capture action items with owner + priority; tag cross-note relationships as `confirms | contradicts | extends | introduces`.
 
-### Phase 3 — Groom into a single note
+### Phase 3 — Groom Into a Single Note
 
 Emit one note per input at `<scope-root>/notes/YYYY-MM-DD-<slug>-<nanoid>.md`. The template is at [assets/note.template.md](assets/note.template.md).
 
@@ -60,7 +60,7 @@ Three zones, always in this order:
 
 Inside the extracted sections, flag candidates **inline** using the taxonomy below. Don't hide candidates in a separate file or section — keep them where the triggering passage lives, so the user can read both together.
 
-### Candidate flag taxonomy
+### Candidate Flag Taxonomy
 
 ```
 [memory candidate: project] <claim>
@@ -75,7 +75,7 @@ Inside the extracted sections, flag candidates **inline** using the taxonomy bel
 
 Use the heuristics in [references/scope-decisions.md](references/scope-decisions.md) to pick a scope. The short version: project is the floor (cheapest to be wrong); client requires recurrence across projects or stakeholder-level facts; journal requires generalization beyond this client.
 
-### Phase 4 — Dispose source
+### Phase 4 — Dispose Source
 
 Text sources (`.md`, `.txt`, `.vtt`) get deleted from `_inbox/` — the verbatim content is preserved in the note's Raw Content zone.
 
@@ -83,7 +83,7 @@ Binary sources (`.pdf`, `.docx`, `.pptx`) move to `<scope-root>/notes/attachment
 
 Never leave a file in `_inbox/` after grooming. The inbox is a queue, not a library.
 
-### Phase 5 — Propose and crystallize (gated)
+### Phase 5 — Propose and Crystallize (gated)
 
 Stop here. Show the user every groomed note and every flagged candidate, organized by candidate type and proposed scope. Wait for explicit per-candidate sign-off.
 
@@ -120,7 +120,7 @@ Report failures. Don't silently retry or auto-fix — those bugs hide.
 
 ---
 
-## Scaffold mode
+## Scaffold Mode
 
 Stand up the directory structure and CLAUDE.md set for a new scope. Ask at most four questions:
 
@@ -131,7 +131,7 @@ Stand up the directory structure and CLAUDE.md set for a new scope. Ask at most 
 
 The chosen memory mode gets recorded in the scope's `CLAUDE.md` (top frontmatter blockquote) so later `process inbox` runs flag candidates against the right type set.
 
-### Outputs per scope
+### Outputs per Scope
 
 **Client scope (lightweight default):**
 
@@ -198,14 +198,14 @@ The differences from client scope: project scope gains `working-state.md` (the n
 
 Journal scope stays lightweight by design — single-tier substrate, no working-state, no patterns-journal (that's what the journal itself is), no `_personal.md`.
 
-### Template substitution
+### Template Substitution
 
 The CLAUDE.md and README templates use double-curly placeholders. Substitute these at scaffold time:
 
 | Placeholder | Replacement |
 | ----------- | ----------- |
 | `{{ClientName}}` / `{{ProjectName}}` / `{{ScopeName}}` | Human-readable name supplied by the user. |
-| `{{pursuit\|delivery project}}` / `{{pursuit\|project}}` / `{{pursuits\|projects}}` | Pick one side of the pipe based on question 3. |
+| `{{pursuit\|delivery project}}` / `{{pursuit\|project}}` / `{{pursuits\|projects}}` / `{{Pursuit\|Project}}` | Pick one side of the pipe based on question 3. Use the title-cased `{{Pursuit\|Project}}` form when the substitution lands inside a heading. |
 | `{{MEMORY_MODE}}` | `lightweight` or `canonical`. |
 | `{{MEMORY_TYPES}}` | `Decision, Context, Rule` (lightweight) or `Decision, PolicyRule, Exception, Context` (canonical). |
 | `{{MEMORY_TYPE_ENUM}}` | `Decision \| Context \| Rule` or `Decision \| PolicyRule \| Exception \| Context`. |
@@ -219,7 +219,7 @@ The CLAUDE.md and README templates use double-curly placeholders. Substitute the
 
 Leave placeholders that the user defers as `<!-- Fill in: ... -->` comments rather than blanks — that way they're easy to grep for later.
 
-### The Deltas convention
+### The Deltas Convention
 
 Each generated CLAUDE.md (client and project) carries a `## Deltas` section with a fixed structural shape, not free-form. The shape:
 
@@ -240,7 +240,7 @@ The transcription-error mapping is load-bearing for inbox-grooming accuracy on m
 
 During scaffold mode, prompt the user for known stakeholders and tag namespace seeds. Offer to populate the roster inline. If the user defers, leave the structure with `<!-- Fill in -->` comments.
 
-### What never lands in `_memory/`
+### What Never Lands in `_memory/`
 
 No `MEMORY.md` or `INDEX.md` summary file in any `_memory/` directory. Filenames already carry slug + id; subfolders carry type. An index would duplicate information that globbing already surfaces, drift the moment a record is renamed or superseded, and teach a retrieval path that doesn't exist in Copilot Spaces or MCP queries. If you need "what's currently in memory," generate it on demand: `Grep "^title:" _memory/`.
 
@@ -248,7 +248,7 @@ No `MEMORY.md` or `INDEX.md` summary file in any `_memory/` directory. Filenames
 
 If the target directory already contains an opted-in structure (matching markers), do **not** clobber. Report "already scaffolded at <path>" and offer to regenerate just the CLAUDE.md set. If the user agrees, write regenerated content to `CLAUDE.md.new` (and `README.md.new`, etc.) rather than overwriting — they may have customizations to merge by hand.
 
-### Existing-directory regeneration
+### Existing-directory Regeneration
 
 When invoked at a pre-existing project (e.g., `pursuits/atlas/`) that already has notes and `_memory/`:
 
@@ -261,7 +261,7 @@ When invoked at a pre-existing project (e.g., `pursuits/atlas/`) that already ha
 
 ---
 
-## Frontmatter quick reference
+## Frontmatter Quick Reference
 
 Full shapes live in the templates. Quick reference for scanning:
 
@@ -279,7 +279,7 @@ The scope's `CLAUDE.md` declares the mode in its top frontmatter blockquote. Rea
 
 ---
 
-## Filename and ID conventions
+## Filename and ID Conventions
 
 - All IDs come from the globally-installed `nanoid -s 10` CLI. Never generate manually or via Python's random module.
 - Notes: `YYYY-MM-DD-<slug>-<nanoid>.md`.
@@ -289,7 +289,7 @@ The scope's `CLAUDE.md` declares the mode in its top frontmatter blockquote. Rea
 
 ---
 
-## Operating rules
+## Operating Rules
 
 - **Stage, never auto-commit.** Outputs are proposals. Never run `git commit` unless the user asks.
 - **Preserve raw content as the source of truth.** Memory records cite notes; they don't replace them.
@@ -299,7 +299,7 @@ The scope's `CLAUDE.md` declares the mode in its top frontmatter blockquote. Rea
 
 ---
 
-## When NOT to use this skill
+## When NOT to Use This Skill
 
 - The user has a single ad-hoc note they want to write directly. The skill is for queue-driven processing, not freeform composition.
 - The cwd is not inside an opted-in directory and the user hasn't asked to scaffold one. Do not silently create memory infrastructure where none was intended.
@@ -307,7 +307,7 @@ The scope's `CLAUDE.md` declares the mode in its top frontmatter blockquote. Rea
 
 ---
 
-## Further reading
+## Further Reading
 
 - [references/extraction-heuristics.md](references/extraction-heuristics.md) — quote selection, tension surfacing, assumption mining.
 - [references/scope-decisions.md](references/scope-decisions.md) — full heuristics for proposing project vs client vs journal scope.

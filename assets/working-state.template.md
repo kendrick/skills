@@ -1,4 +1,4 @@
-# Working state
+# Working State
 
 > **Purpose:** The narrative layer — current state, decisions in motion, open questions, active hypotheses, and what's next. The bridge between conversations and the standing record of where things are. Update at the end of each working session.
 >
@@ -10,13 +10,13 @@
 
 ---
 
-## Engagement summary
+## Engagement Summary
 
 <!-- 2-3 sentences. Who, what, when, why. -->
 
 ---
 
-## Where we are right now
+## Where We Are Right Now
 
 **Phase:** <!-- e.g., "Discovery, week 1 of 4" -->
 
@@ -33,7 +33,7 @@
 
 ---
 
-## Decisions made so far
+## Decisions Made So Far
 
 Each decision has a one-line rationale. Deeper rationale lives in the working file the decision affects. When a decision crystallizes into something durable, move it to `_memory/decisions/` and reference by id here.
 
@@ -43,7 +43,7 @@ Each decision has a one-line rationale. Deeper rationale lives in the working fi
 
 ---
 
-## Open questions
+## Open Questions
 
 Substantive questions the engagement needs to answer. These get re-asked at session-end review. When answered, retire here and (if durable) crystallize in `_memory/`.
 
@@ -51,7 +51,7 @@ Substantive questions the engagement needs to answer. These get re-asked at sess
 
 ---
 
-## Active hypotheses
+## Active Hypotheses
 
 Things we're treating as probably-true pending discovery. Each gets retired (confirmed, refuted, or revised) as evidence accumulates.
 
@@ -59,7 +59,7 @@ Things we're treating as probably-true pending discovery. Each gets retired (con
 
 ---
 
-## Recent landmines and retros
+## Recent Landmines and Retros
 
 Things that surprised, broke, or required course-correction. Brief, just enough to remember the lesson.
 

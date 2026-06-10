@@ -1,4 +1,4 @@
-# Personal notes — {{ScopeName}}
+# Personal Notes — {{ScopeName}}
 
 > **Purpose:** Capture personal goals for this engagement, the strategy for achieving them, and private observations that shouldn't live in shared artifacts but should still inform how the work gets done.
 >
@@ -14,11 +14,11 @@
 
 Stable things the user wants from this engagement beyond client delivery. These don't change week to week; they inform how tradeoffs get made throughout.
 
-### Primary goals
+### Primary Goals
 
 1. <!-- the headline outcome -->
 
-### Supporting goals
+### Supporting Goals
 
 - <!-- secondary outcomes worth tracking -->
 
@@ -32,7 +32,7 @@ How the user is pursuing the goals above. More fluid than the goals — gets upd
 
 ---
 
-## Private observations
+## Private Observations
 
 Things noticed during the engagement that affect how the user is approaching the work, but that shouldn't surface anywhere else. Frustrations, second-guesses, signal about people or politics that informs the user's calls but doesn't belong in client-facing or shared internal artifacts.
 

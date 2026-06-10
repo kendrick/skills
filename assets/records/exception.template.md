@@ -18,7 +18,7 @@ exception_to: '[[{{rule-id}}|{{rule-short-name}}]]'
 
 # {{title}}
 
-## Exception scope
+## Exception Scope
 
 <!-- What this exception covers. Be specific — broad exceptions defeat the rule. -->
 
@@ -26,7 +26,7 @@ exception_to: '[[{{rule-id}}|{{rule-short-name}}]]'
 
 <!-- Why the rule should not apply here. What changed, or what constraint forced it. -->
 
-## Approved by
+## Approved By
 
 <!-- Names or roles of approvers. Sanctioned exceptions need approval; un-approved ones are violations. -->
 
