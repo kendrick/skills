@@ -1,0 +1,110 @@
+[
+  {
+    "operation": "dbfs-addblock",
+    "url": "https://docs.databricks.com/api/workspace/dbfs/addblock",
+    "fetched_at": "2026-06-09T01:22:33Z",
+    "sha256": "bc5e1f7f610d3b336be1542aaa5555a3b75b851564e2683fdc95ed9b5fbdbf06"
+  },
+  {
+    "operation": "dbfs-close",
+    "url": "https://docs.databricks.com/api/workspace/dbfs/close",
+    "fetched_at": "2026-06-09T01:22:33Z",
+    "sha256": "ebbfa7c88c2153c518eef515e0d987e053d9a798c97beb4c63a28cfc0c601b42"
+  },
+  {
+    "operation": "dbfs-create",
+    "url": "https://docs.databricks.com/api/workspace/dbfs/create",
+    "fetched_at": "2026-06-09T01:22:33Z",
+    "sha256": "dc2ad8260e67e3eef8e83db85d9b175070232c265a604eea181a206b092f0b84"
+  },
+  {
+    "operation": "dbfs-delete",
+    "url": "https://docs.databricks.com/api/workspace/dbfs/delete",
+    "fetched_at": "2026-06-09T01:22:33Z",
+    "sha256": "5ae6a14dabc1f7100932c953c8810096b490c9a779247296f6fe859a7253ffa9"
+  },
+  {
+    "operation": "dbfs-getstatus",
+    "url": "https://docs.databricks.com/api/workspace/dbfs/getstatus",
+    "fetched_at": "2026-06-09T01:22:33Z",
+    "sha256": "7b1b3a46f070d6344908e6e21949cbd791d2a923e823e6941ccb9d3da80d66d8"
+  },
+  {
+    "operation": "dbfs-list",
+    "url": "https://docs.databricks.com/api/workspace/dbfs/list",
+    "fetched_at": "2026-06-09T01:22:33Z",
+    "sha256": "140643eb19c99369d5e469fb68855a3d3b73389c6280f270abeb8e3f6d7de5e4"
+  },
+  {
+    "operation": "dbfs-mkdirs",
+    "url": "https://docs.databricks.com/api/workspace/dbfs/mkdirs",
+    "fetched_at": "2026-06-09T01:22:33Z",
+    "sha256": "1c87ca1dfb84ed23db2480d3e73502e3f4a60206b0cd9dc6c3ce2049797bd715"
+  },
+  {
+    "operation": "dbfs-move",
+    "url": "https://docs.databricks.com/api/workspace/dbfs/move",
+    "fetched_at": "2026-06-09T01:22:33Z",
+    "sha256": "ec437c57c28803d1733a90f418e758d7212f5c43adf0a392f1e65c7324ae46cf"
+  },
+  {
+    "operation": "dbfs-put",
+    "url": "https://docs.databricks.com/api/workspace/dbfs/put",
+    "fetched_at": "2026-06-09T01:22:33Z",
+    "sha256": "a86698b64c9e3c32ae623430143c58a9e409838e66e256a7fa8facfa036a10d1"
+  },
+  {
+    "operation": "dbfs-read",
+    "url": "https://docs.databricks.com/api/workspace/dbfs/read",
+    "fetched_at": "2026-06-09T03:56:46Z",
+    "sha256": "8e9f56d571d1680f63687f7bf6294e8ea81ffb1c997fda92182ce37305541b9b"
+  },
+  {
+    "operation": "files-createdirectory",
+    "url": "https://docs.databricks.com/api/workspace/files/createdirectory",
+    "fetched_at": "2026-06-09T01:22:33Z",
+    "sha256": "60f900419bc67841bcb8c06a76d365cadd42638b9793f828926b816904deb5d7"
+  },
+  {
+    "operation": "files-delete",
+    "url": "https://docs.databricks.com/api/workspace/files/delete",
+    "fetched_at": "2026-06-09T01:22:33Z",
+    "sha256": "3bbbe5e2ac872a95a88a3b644429ec210a8c267aff513f2cf852580421aae3a8"
+  },
+  {
+    "operation": "files-deletedirectory",
+    "url": "https://docs.databricks.com/api/workspace/files/deletedirectory",
+    "fetched_at": "2026-06-09T01:22:33Z",
+    "sha256": "16453ed2dffc3ed0bd418028d9bf95ab5ff5e36f4e448a366a66c40ddd038c2b"
+  },
+  {
+    "operation": "files-download",
+    "url": "https://docs.databricks.com/api/workspace/files/download",
+    "fetched_at": "2026-06-09T01:22:33Z",
+    "sha256": "eac32c7899f5d6e2f636401150f454fd61fa6cf04661a87a978cfd00222650c9"
+  },
+  {
+    "operation": "files-getdirectorymetadata",
+    "url": "https://docs.databricks.com/api/workspace/files/getdirectorymetadata",
+    "fetched_at": "2026-06-09T01:22:33Z",
+    "sha256": "890b4f050473d3688049a5d234696137adbf9876ac4399a0587e2bb333279f2e"
+  },
+  {
+    "operation": "files-getmetadata",
+    "url": "https://docs.databricks.com/api/workspace/files/getmetadata",
+    "fetched_at": "2026-06-09T01:22:33Z",
+    "sha256": "456f7c8dc0f45263ea6bba6483ec63787543d8a7f166004160dd2f7d380e5f63"
+  },
+  {
+    "operation": "files-listdirectorycontents",
+    "url": "https://docs.databricks.com/api/workspace/files/listdirectorycontents",
+    "fetched_at": "2026-06-09T01:22:33Z",
+    "sha256": "92a217b2c64f20514091cb066312a206105952010cadcd811462b01f2aed74eb"
+  },
+  {
+    "operation": "files-upload",
+    "url": "https://docs.databricks.com/api/workspace/files/upload",
+    "fetched_at": "2026-06-09T01:22:33Z",
+    "sha256": "4083ca54d6bc823cf7c4a88d8894059733f1c64f8c6469e9f34a35fbb8c9c59c"
+  }
+]

@@ -1,0 +1,122 @@
+[
+  {
+    "operation": "servingendpoints-buildlogs",
+    "url": "https://docs.databricks.com/api/workspace/servingendpoints/buildlogs",
+    "fetched_at": "2026-06-09T01:22:38Z",
+    "sha256": "f60cd52443ef15ecaf60dfe3af0d6cca6884d01246313917b13ae7127081185d"
+  },
+  {
+    "operation": "servingendpoints-create",
+    "url": "https://docs.databricks.com/api/workspace/servingendpoints/create",
+    "fetched_at": "2026-06-09T01:22:38Z",
+    "sha256": "443378565b38dca2c98c469c7b5a156b6d60837493ee23638162c83338968a56"
+  },
+  {
+    "operation": "servingendpoints-createprovisionedthroughputendpoint",
+    "url": "https://docs.databricks.com/api/workspace/servingendpoints/createprovisionedthroughputendpoint",
+    "fetched_at": "2026-06-09T03:56:46Z",
+    "sha256": "3c692da9557808d6ecc0c1b40a359f8f556fc0bee1ded2caa4edfb7908750dcf"
+  },
+  {
+    "operation": "servingendpoints-delete",
+    "url": "https://docs.databricks.com/api/workspace/servingendpoints/delete",
+    "fetched_at": "2026-06-09T03:56:46Z",
+    "sha256": "105060634721e58cc0356625e7301770cd72ff9d51a4548f5383628ddc1bea77"
+  },
+  {
+    "operation": "servingendpoints-exportmetrics",
+    "url": "https://docs.databricks.com/api/workspace/servingendpoints/exportmetrics",
+    "fetched_at": "2026-06-09T01:22:38Z",
+    "sha256": "e4e2d3637eeb828935d13bc04dbd53adeeeaca6f4db13af3a215ef937e11f62c"
+  },
+  {
+    "operation": "servingendpoints-get",
+    "url": "https://docs.databricks.com/api/workspace/servingendpoints/get",
+    "fetched_at": "2026-06-09T01:22:38Z",
+    "sha256": "ebf7b8ce20b07c8a2e878269d8dcd4e20589404413730adf3d39f9427857b0f7"
+  },
+  {
+    "operation": "servingendpoints-getopenapi",
+    "url": "https://docs.databricks.com/api/workspace/servingendpoints/getopenapi",
+    "fetched_at": "2026-06-09T01:22:38Z",
+    "sha256": "2ec0af770882e25e960d81f22c3677b00e54a4f8bb437bc3b293688bc5ea54d3"
+  },
+  {
+    "operation": "servingendpoints-getpermissionlevels",
+    "url": "https://docs.databricks.com/api/workspace/servingendpoints/getpermissionlevels",
+    "fetched_at": "2026-06-09T01:22:38Z",
+    "sha256": "a0f3af9f0f7bd9e2cc0c33ae1a175bac7eb6eaee0de03b46eecdc9a03abf6113"
+  },
+  {
+    "operation": "servingendpoints-getpermissions",
+    "url": "https://docs.databricks.com/api/workspace/servingendpoints/getpermissions",
+    "fetched_at": "2026-06-09T01:22:38Z",
+    "sha256": "3ed9ebc42c07690e5600966a5796ef5fcf37d2e087ed2bd9920681afe8ea850a"
+  },
+  {
+    "operation": "servingendpoints-list",
+    "url": "https://docs.databricks.com/api/workspace/servingendpoints/list",
+    "fetched_at": "2026-06-09T01:22:38Z",
+    "sha256": "46efb40c48f930b2bae6345b08c9230018acc2388caf13a7caa8d00f0beba913"
+  },
+  {
+    "operation": "servingendpoints-logs",
+    "url": "https://docs.databricks.com/api/workspace/servingendpoints/logs",
+    "fetched_at": "2026-06-09T01:22:38Z",
+    "sha256": "91f2510c88bced4b7bb7d9759435781a8ef48f30013f4877033ee48d3ae58853"
+  },
+  {
+    "operation": "servingendpoints-patch",
+    "url": "https://docs.databricks.com/api/workspace/servingendpoints/patch",
+    "fetched_at": "2026-06-09T01:22:38Z",
+    "sha256": "1715867c9468eb36aff7fa15b614b0c11be9d9ae44e74aa4f12434e56e685db2"
+  },
+  {
+    "operation": "servingendpoints-put",
+    "url": "https://docs.databricks.com/api/workspace/servingendpoints/put",
+    "fetched_at": "2026-06-09T01:22:38Z",
+    "sha256": "71d339de9b0cf7fad8806f10edcd48502966c716c53ac263833644ef1eb13bf9"
+  },
+  {
+    "operation": "servingendpoints-putaigateway",
+    "url": "https://docs.databricks.com/api/workspace/servingendpoints/putaigateway",
+    "fetched_at": "2026-06-09T01:22:38Z",
+    "sha256": "325b0d810d4e95d7a5374b97d963cd2db8b35ac46d509069f514a58504829f63"
+  },
+  {
+    "operation": "servingendpoints-query",
+    "url": "https://docs.databricks.com/api/workspace/servingendpoints/query",
+    "fetched_at": "2026-06-09T01:22:38Z",
+    "sha256": "99454c9273b05ccbb5f29380799f87c03388717fe0006bc3e0bc82372b07e5e0"
+  },
+  {
+    "operation": "servingendpoints-setpermissions",
+    "url": "https://docs.databricks.com/api/workspace/servingendpoints/setpermissions",
+    "fetched_at": "2026-06-09T01:22:38Z",
+    "sha256": "7ce112648ccb42fa4732b172db8e79a5af1cebbe89043b92074cd65c0da2a938"
+  },
+  {
+    "operation": "servingendpoints-updateconfig",
+    "url": "https://docs.databricks.com/api/workspace/servingendpoints/updateconfig",
+    "fetched_at": "2026-06-09T01:22:38Z",
+    "sha256": "eed6556b4c265c09863735a90c8116497391687289f646788bb0de80c145e755"
+  },
+  {
+    "operation": "servingendpoints-updatenotifications",
+    "url": "https://docs.databricks.com/api/workspace/servingendpoints/updatenotifications",
+    "fetched_at": "2026-06-09T01:22:38Z",
+    "sha256": "8b4e0b1f725dd914ddc090bf2380db4972cdde860272037eb83e087488e2d0a6"
+  },
+  {
+    "operation": "servingendpoints-updatepermissions",
+    "url": "https://docs.databricks.com/api/workspace/servingendpoints/updatepermissions",
+    "fetched_at": "2026-06-09T01:22:38Z",
+    "sha256": "d943edffcec87000e02150cf0cd3a20c65a982123ca4f78851d73a313d90d02f"
+  },
+  {
+    "operation": "servingendpoints-updateprovisionedthroughputendpointconfig",
+    "url": "https://docs.databricks.com/api/workspace/servingendpoints/updateprovisionedthroughputendpointconfig",
+    "fetched_at": "2026-06-09T01:22:38Z",
+    "sha256": "4931206757bb04f1540b66bb6efcbf95984d464c3e9193bb462c16e52fe354a5"
+  }
+]

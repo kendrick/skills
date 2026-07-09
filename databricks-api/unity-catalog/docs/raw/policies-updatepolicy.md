@@ -1,0 +1,412 @@
+Title: Update an ABAC policy | ABAC Policies API | REST API reference
+
+URL Source: https://docs.databricks.com/api/workspace/policies/updatepolicy
+
+Markdown Content:
+## Update an ABAC policy
+
+Public preview
+
+`PATCH/api/2.1/unity-catalog/policies/{on_securable_type}/{on_securable_fullname}/{name}`
+
+Update an ABAC policy on a securable.
+
+API scopes (preview):[`unity-catalog`](https://docs.databricks.com/api/workspace/api/scopes#unity-catalog)
+
+### Path parameters
+
+[`on_securable_type`](https://docs.databricks.com/api/workspace/policies/updatepolicy#on_securable_type)string Required
+
+Required. The type of the securable to update the policy for.
+
+[`on_securable_fullname`](https://docs.databricks.com/api/workspace/policies/updatepolicy#on_securable_fullname)string Required
+
+Required. The fully qualified name of the securable to update the policy for.
+
+[`name`](https://docs.databricks.com/api/workspace/policies/updatepolicy#name)string Required
+
+Required. The name of the policy to update.
+
+### Query parameters
+
+[`update_mask`](https://docs.databricks.com/api/workspace/policies/updatepolicy#update_mask)string Optional
+
+Optional. The update mask field for specifying user intentions on which fields to update in the request.
+
+### Request body
+
+[`column_mask`](https://docs.databricks.com/api/workspace/policies/updatepolicy#column_mask)object Optional
+
+Options for column mask policies. Valid only if `policy_type` is `POLICY_TYPE_COLUMN_MASK`. Required on create and optional on update. When specified on update, the new options will replace the existing options as a whole.
+
+[`function_name`](https://docs.databricks.com/api/workspace/policies/updatepolicy#column_mask-function_name)string Required
+
+The fully qualified name of the column mask function. The function is called on each row of the target table. The function's first argument and its return type should match the type of the masked column. Required on create and update.
+
+[`on_column`](https://docs.databricks.com/api/workspace/policies/updatepolicy#column_mask-on_column)string Required
+
+The alias of the column to be masked. The alias must refer to one of matched columns. The values of the column is passed to the column mask function as the first argument. Required on create and update.
+
+[`using`](https://docs.databricks.com/api/workspace/policies/updatepolicy#column_mask-using)Array of object Optional
+
+Optional list of column aliases or constant literals to be passed as additional arguments to the column mask function. The type of each column should match the positional argument of the column mask function.
+
+[`comment`](https://docs.databricks.com/api/workspace/policies/updatepolicy#comment)string Optional
+
+Optional description of the policy.
+
+[`except_principals`](https://docs.databricks.com/api/workspace/policies/updatepolicy#except_principals)Array of string Optional
+
+Optional list of user or group names that should be excluded from the policy.
+
+[`for_securable_type`](https://docs.databricks.com/api/workspace/policies/updatepolicy#for_securable_type)string Required
+
+Enum: `CATALOG | SCHEMA | TABLE | STORAGE_CREDENTIAL | EXTERNAL_LOCATION | FUNCTION | SHARE | PROVIDER | RECIPIENT | CLEAN_ROOM | METASTORE | PIPELINE | VOLUME | CONNECTION | CREDENTIAL | EXTERNAL_METADATA | STAGING_TABLE`
+
+Type of securables that the policy should take effect on. Only `TABLE` is supported at this moment. Required on create and optional on update.
+
+[`match_columns`](https://docs.databricks.com/api/workspace/policies/updatepolicy#match_columns)Array of object Optional
+
+Optional list of condition expressions used to match table columns. Only valid when `for_securable_type` is `TABLE`. When specified, the policy only applies to tables whose columns satisfy all match conditions.
+
+Array [
+
+[`alias`](https://docs.databricks.com/api/workspace/policies/updatepolicy#match_columns-alias)string
+
+Optional alias of the matched column.
+
+[`condition`](https://docs.databricks.com/api/workspace/policies/updatepolicy#match_columns-condition)string
+
+The condition expression used to match a table column.
+
+ ]
+
+[`name`](https://docs.databricks.com/api/workspace/policies/updatepolicy#name)string
+
+Name of the policy. Required on create and optional on update. To rename the policy, set `name` to a different value on update.
+
+[`on_securable_fullname`](https://docs.databricks.com/api/workspace/policies/updatepolicy#on_securable_fullname)string
+
+Full name of the securable on which the policy is defined. Required on create.
+
+[`on_securable_type`](https://docs.databricks.com/api/workspace/policies/updatepolicy#on_securable_type)string
+
+Enum: `CATALOG | SCHEMA | TABLE | STORAGE_CREDENTIAL | EXTERNAL_LOCATION | FUNCTION | SHARE | PROVIDER | RECIPIENT | CLEAN_ROOM | METASTORE | PIPELINE | VOLUME | CONNECTION | CREDENTIAL | EXTERNAL_METADATA | STAGING_TABLE`
+
+Type of the securable on which the policy is defined. Only `CATALOG`, `SCHEMA` and `TABLE` are supported at this moment. Required on create.
+
+[`policy_type`](https://docs.databricks.com/api/workspace/policies/updatepolicy#policy_type)string Required
+
+Enum: `POLICY_TYPE_ROW_FILTER | POLICY_TYPE_COLUMN_MASK`
+
+Type of the policy. Required on create.
+
+[`row_filter`](https://docs.databricks.com/api/workspace/policies/updatepolicy#row_filter)object Optional
+
+Options for row filter policies. Valid only if `policy_type` is `POLICY_TYPE_ROW_FILTER`. Required on create and optional on update. When specified on update, the new options will replace the existing options as a whole.
+
+[`function_name`](https://docs.databricks.com/api/workspace/policies/updatepolicy#row_filter-function_name)string Required
+
+The fully qualified name of the row filter function. The function is called on each row of the target table. It should return a boolean value indicating whether the row should be visible to the user. Required on create and update.
+
+[`using`](https://docs.databricks.com/api/workspace/policies/updatepolicy#row_filter-using)Array of object Optional
+
+Optional list of column aliases or constant literals to be passed as arguments to the row filter function. The type of each column should match the positional argument of the row filter function.
+
+[`to_principals`](https://docs.databricks.com/api/workspace/policies/updatepolicy#to_principals)Array of string Required
+
+List of user or group names that the policy applies to. Required on create and optional on update.
+
+[`when_condition`](https://docs.databricks.com/api/workspace/policies/updatepolicy#when_condition)string Optional
+
+Optional condition when the policy should take effect.
+
+### Responses
+
+**200** Request completed successfully.
+
+Request completed successfully.
+
+[`column_mask`](https://docs.databricks.com/api/workspace/policies/updatepolicy#column_mask)object
+
+Options for column mask policies. Valid only if `policy_type` is `POLICY_TYPE_COLUMN_MASK`. Required on create and optional on update. When specified on update, the new options will replace the existing options as a whole.
+
+[`function_name`](https://docs.databricks.com/api/workspace/policies/updatepolicy#column_mask-function_name)string
+
+The fully qualified name of the column mask function. The function is called on each row of the target table. The function's first argument and its return type should match the type of the masked column. Required on create and update.
+
+[`on_column`](https://docs.databricks.com/api/workspace/policies/updatepolicy#column_mask-on_column)string
+
+The alias of the column to be masked. The alias must refer to one of matched columns. The values of the column is passed to the column mask function as the first argument. Required on create and update.
+
+[`using`](https://docs.databricks.com/api/workspace/policies/updatepolicy#column_mask-using)Array of object
+
+Optional list of column aliases or constant literals to be passed as additional arguments to the column mask function. The type of each column should match the positional argument of the column mask function.
+
+[`comment`](https://docs.databricks.com/api/workspace/policies/updatepolicy#comment)string
+
+Optional description of the policy.
+
+[`created_at`](https://docs.databricks.com/api/workspace/policies/updatepolicy#created_at)int64
+
+Time at which the policy was created, in epoch milliseconds. Output only.
+
+[`created_by`](https://docs.databricks.com/api/workspace/policies/updatepolicy#created_by)string
+
+Username of the user who created the policy. Output only.
+
+[`except_principals`](https://docs.databricks.com/api/workspace/policies/updatepolicy#except_principals)Array of string
+
+Optional list of user or group names that should be excluded from the policy.
+
+[`for_securable_type`](https://docs.databricks.com/api/workspace/policies/updatepolicy#for_securable_type)string
+
+Enum: `CATALOG | SCHEMA | TABLE | STORAGE_CREDENTIAL | EXTERNAL_LOCATION | FUNCTION | SHARE | PROVIDER | RECIPIENT | CLEAN_ROOM | METASTORE | PIPELINE | VOLUME | CONNECTION | CREDENTIAL | EXTERNAL_METADATA | STAGING_TABLE`
+
+Type of securables that the policy should take effect on. Only `TABLE` is supported at this moment. Required on create and optional on update.
+
+[`id`](https://docs.databricks.com/api/workspace/policies/updatepolicy#id)string
+
+Unique identifier of the policy. This field is output only and is generated by the system.
+
+[`match_columns`](https://docs.databricks.com/api/workspace/policies/updatepolicy#match_columns)Array of object
+
+Optional list of condition expressions used to match table columns. Only valid when `for_securable_type` is `TABLE`. When specified, the policy only applies to tables whose columns satisfy all match conditions.
+
+Array [
+
+[`alias`](https://docs.databricks.com/api/workspace/policies/updatepolicy#match_columns-alias)string
+
+Optional alias of the matched column.
+
+[`condition`](https://docs.databricks.com/api/workspace/policies/updatepolicy#match_columns-condition)string
+
+The condition expression used to match a table column.
+
+ ]
+
+[`name`](https://docs.databricks.com/api/workspace/policies/updatepolicy#name)string
+
+Name of the policy. Required on create and optional on update. To rename the policy, set `name` to a different value on update.
+
+[`on_securable_fullname`](https://docs.databricks.com/api/workspace/policies/updatepolicy#on_securable_fullname)string
+
+Full name of the securable on which the policy is defined. Required on create.
+
+[`on_securable_type`](https://docs.databricks.com/api/workspace/policies/updatepolicy#on_securable_type)string
+
+Enum: `CATALOG | SCHEMA | TABLE | STORAGE_CREDENTIAL | EXTERNAL_LOCATION | FUNCTION | SHARE | PROVIDER | RECIPIENT | CLEAN_ROOM | METASTORE | PIPELINE | VOLUME | CONNECTION | CREDENTIAL | EXTERNAL_METADATA | STAGING_TABLE`
+
+Type of the securable on which the policy is defined. Only `CATALOG`, `SCHEMA` and `TABLE` are supported at this moment. Required on create.
+
+[`policy_type`](https://docs.databricks.com/api/workspace/policies/updatepolicy#policy_type)string
+
+Enum: `POLICY_TYPE_ROW_FILTER | POLICY_TYPE_COLUMN_MASK`
+
+Type of the policy. Required on create.
+
+[`row_filter`](https://docs.databricks.com/api/workspace/policies/updatepolicy#row_filter)object
+
+Options for row filter policies. Valid only if `policy_type` is `POLICY_TYPE_ROW_FILTER`. Required on create and optional on update. When specified on update, the new options will replace the existing options as a whole.
+
+[`function_name`](https://docs.databricks.com/api/workspace/policies/updatepolicy#row_filter-function_name)string
+
+The fully qualified name of the row filter function. The function is called on each row of the target table. It should return a boolean value indicating whether the row should be visible to the user. Required on create and update.
+
+[`using`](https://docs.databricks.com/api/workspace/policies/updatepolicy#row_filter-using)Array of object
+
+Optional list of column aliases or constant literals to be passed as arguments to the row filter function. The type of each column should match the positional argument of the row filter function.
+
+[`to_principals`](https://docs.databricks.com/api/workspace/policies/updatepolicy#to_principals)Array of string
+
+List of user or group names that the policy applies to. Required on create and optional on update.
+
+[`updated_at`](https://docs.databricks.com/api/workspace/policies/updatepolicy#updated_at)int64
+
+Time at which the policy was last modified, in epoch milliseconds. Output only.
+
+[`updated_by`](https://docs.databricks.com/api/workspace/policies/updatepolicy#updated_by)string
+
+Username of the user who last modified the policy. Output only.
+
+[`when_condition`](https://docs.databricks.com/api/workspace/policies/updatepolicy#when_condition)string
+
+Optional condition when the policy should take effect.
+
+# Request samples
+
+JSON
+
+{
+
+"column_mask":{
+
+"function_name":"string",
+
+"on_column":"string",
+
+"using":[
+
+{
+
+"alias":"string",
+
+"constant":"string"
+
+}
+
+]
+
+},
+
+"comment":"string",
+
+"except_principals":[
+
+"string"
+
+],
+
+"for_securable_type":"CATALOG",
+
+"match_columns":[
+
+{
+
+"alias":"string",
+
+"condition":"string"
+
+}
+
+],
+
+"name":"string",
+
+"on_securable_fullname":"string",
+
+"on_securable_type":"CATALOG",
+
+"policy_type":"POLICY_TYPE_ROW_FILTER",
+
+"row_filter":{
+
+"function_name":"string",
+
+"using":[
+
+{
+
+"alias":"string",
+
+"constant":"string"
+
+}
+
+]
+
+},
+
+"to_principals":[
+
+"string"
+
+],
+
+"when_condition":"string"
+
+}
+
+# Response samples
+
+200
+
+{
+
+"column_mask":{
+
+"function_name":"string",
+
+"on_column":"string",
+
+"using":[
+
+{
+
+"alias":"string",
+
+"constant":"string"
+
+}
+
+]
+
+},
+
+"comment":"string",
+
+"created_at":0,
+
+"created_by":"string",
+
+"except_principals":[
+
+"string"
+
+],
+
+"for_securable_type":"CATALOG",
+
+"id":"string",
+
+"match_columns":[
+
+{
+
+"alias":"string",
+
+"condition":"string"
+
+}
+
+],
+
+"name":"string",
+
+"on_securable_fullname":"string",
+
+"on_securable_type":"CATALOG",
+
+"policy_type":"POLICY_TYPE_ROW_FILTER",
+
+"row_filter":{
+
+"function_name":"string",
+
+"using":[
+
+{
+
+"alias":"string",
+
+"constant":"string"
+
+}
+
+]
+
+},
+
+"to_principals":[
+
+"string"
+
+],
+
+"updated_at":0,
+
+"updated_by":"string",
+
+"when_condition":"string"
+
+}

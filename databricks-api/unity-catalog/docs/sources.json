@@ -1,0 +1,728 @@
+[
+  {
+    "operation": "artifactallowlists-get",
+    "url": "https://docs.databricks.com/api/workspace/artifactallowlists/get",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "4083395a627a3d312859798ed9b42d2ee1727a99a557429fb28a01ea86528565"
+  },
+  {
+    "operation": "artifactallowlists-update",
+    "url": "https://docs.databricks.com/api/workspace/artifactallowlists/update",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "e0b9133fe5efbc890da617f7d229fcceb87394499624aab6eb9883fb2cbb5247"
+  },
+  {
+    "operation": "catalogs-create",
+    "url": "https://docs.databricks.com/api/workspace/catalogs/create",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "96adfafcf6ae7ab6a8cba550acedf48b7c0881d86cefc88cd35aa14e2e544de3"
+  },
+  {
+    "operation": "catalogs-delete",
+    "url": "https://docs.databricks.com/api/workspace/catalogs/delete",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "a29666abd3d6b4b6ec5dc2f1147edf79d376de2fdadac7e613b1507ec700e832"
+  },
+  {
+    "operation": "catalogs-get",
+    "url": "https://docs.databricks.com/api/workspace/catalogs/get",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "ba51da48cf00f424e2178b4a4eabc5bbae842e5809551d1cafaab511557d9139"
+  },
+  {
+    "operation": "catalogs-list",
+    "url": "https://docs.databricks.com/api/workspace/catalogs/list",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "99d982d5b8759a2973180a248cfd1278223e517d0de0d3aeb845125febdd59a6"
+  },
+  {
+    "operation": "catalogs-update",
+    "url": "https://docs.databricks.com/api/workspace/catalogs/update",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "eae5fcfe369f1cbe423edb0510dfd435601ab44c9cf7a92164bf238fe88aeeae"
+  },
+  {
+    "operation": "connections-create",
+    "url": "https://docs.databricks.com/api/workspace/connections/create",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "e7250904b321522cf3ef7e8b25d2e2d351defc7436092a6f5827d21b3abc4d3b"
+  },
+  {
+    "operation": "connections-delete",
+    "url": "https://docs.databricks.com/api/workspace/connections/delete",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "6ef7132ce112cbc0407f8851c49f722f9e6d18cbea8147ee00a74ca845a5fe40"
+  },
+  {
+    "operation": "connections-get",
+    "url": "https://docs.databricks.com/api/workspace/connections/get",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "b6096f4e538b4b95829650b5c93ba079a0e798f174cdd270e49285d16de263ac"
+  },
+  {
+    "operation": "connections-list",
+    "url": "https://docs.databricks.com/api/workspace/connections/list",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "565a365457079b65e4cdf6dc2c99155ac67368c078d69cf6de8112172ebc9067"
+  },
+  {
+    "operation": "connections-update",
+    "url": "https://docs.databricks.com/api/workspace/connections/update",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "8c976803b9e99dde37fa616e1fed0f200aa8e4504c0a376018da69af32d9412e"
+  },
+  {
+    "operation": "credentials-createcredential",
+    "url": "https://docs.databricks.com/api/workspace/credentials/createcredential",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "10c1ea9b20eb8ee0ec3ef47f17a7a2625c8ade53e5f50187d72152a0d9876449"
+  },
+  {
+    "operation": "credentials-deletecredential",
+    "url": "https://docs.databricks.com/api/workspace/credentials/deletecredential",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "6c3e3838c1ad39e7b60e3130c5638905da8238e1a52aea880e0f046b1232b43c"
+  },
+  {
+    "operation": "credentials-generatetemporaryservicecredential",
+    "url": "https://docs.databricks.com/api/workspace/credentials/generatetemporaryservicecredential",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "1cbe1dc0dea67663e56cc90dde25c633d90abe3734f52ff746371360984526ac"
+  },
+  {
+    "operation": "credentials-getcredential",
+    "url": "https://docs.databricks.com/api/workspace/credentials/getcredential",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "9af95f216ece92d789a8b8468325a35bca3d253334642b3b386e1f0ba2349e1c"
+  },
+  {
+    "operation": "credentials-listcredentials",
+    "url": "https://docs.databricks.com/api/workspace/credentials/listcredentials",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "8b02126c343d8fb608a5995997d7eb9a2338ff870a5c2e31d915aab50bbc68dd"
+  },
+  {
+    "operation": "credentials-updatecredential",
+    "url": "https://docs.databricks.com/api/workspace/credentials/updatecredential",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "2cb3d8d06767cc5a0977a678c833eaca4fa4c16463d355477f59733d5fadb688"
+  },
+  {
+    "operation": "credentials-validatecredential",
+    "url": "https://docs.databricks.com/api/workspace/credentials/validatecredential",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "e35517b5c3b3bfd821c5e1228ab26aa536b26e8d540ccfe8b50ce3d7266971e7"
+  },
+  {
+    "operation": "entitytagassignments-create",
+    "url": "https://docs.databricks.com/api/workspace/entitytagassignments/create",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "50b69f7a1bfc153aa5f9b27ef2db296e7b7c25734c5aa8956b013db5866757e8"
+  },
+  {
+    "operation": "entitytagassignments-delete",
+    "url": "https://docs.databricks.com/api/workspace/entitytagassignments/delete",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "07c7b4fb7df8ad54e6964742fe81c107b34b9e70f3c43be926ae1c3a0228c1bd"
+  },
+  {
+    "operation": "entitytagassignments-get",
+    "url": "https://docs.databricks.com/api/workspace/entitytagassignments/get",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "66f4600d1dae563b5f08551c8962b8b889d6fc5823e9bbb40a273d7b1dcd0a6b"
+  },
+  {
+    "operation": "entitytagassignments-list",
+    "url": "https://docs.databricks.com/api/workspace/entitytagassignments/list",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "15c969d9b78542da6115dff5dc7e10cb6fe3fbf3175ad85e93ace5270c6ecf6b"
+  },
+  {
+    "operation": "entitytagassignments-update",
+    "url": "https://docs.databricks.com/api/workspace/entitytagassignments/update",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "5e403a61711b768d32da743aafea3eb0ea6d8d6bbb8d66a7d03b374d30fd2be3"
+  },
+  {
+    "operation": "externallineage-createexternallineagerelationship",
+    "url": "https://docs.databricks.com/api/workspace/externallineage/createexternallineagerelationship",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "b4812dc552bce2af5184403ccc0e788a4d14c94611a2f381ddacb01e3913afbd"
+  },
+  {
+    "operation": "externallineage-deleteexternallineagerelationship",
+    "url": "https://docs.databricks.com/api/workspace/externallineage/deleteexternallineagerelationship",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "f4a25c0a7ee1772cda15fb83a4285bac222e33e5727eade1f5bbb0d7241ee014"
+  },
+  {
+    "operation": "externallineage-listexternallineagerelationships",
+    "url": "https://docs.databricks.com/api/workspace/externallineage/listexternallineagerelationships",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "7dd135c1315b74585e1540e6f000ed5976c566ff6288dd7adcc7878b6b4e4cc0"
+  },
+  {
+    "operation": "externallineage-updateexternallineagerelationship",
+    "url": "https://docs.databricks.com/api/workspace/externallineage/updateexternallineagerelationship",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "fb2a87c9c3427501617e587f5c0e0e9ac02d4e01ffedd5053128538b55ec8ac7"
+  },
+  {
+    "operation": "externallocations-create",
+    "url": "https://docs.databricks.com/api/workspace/externallocations/create",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "6508038a33b1fea6d8bf5a62e01ba29b52915eb27d59d7d03f541be79738b280"
+  },
+  {
+    "operation": "externallocations-delete",
+    "url": "https://docs.databricks.com/api/workspace/externallocations/delete",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "cd977f4687d7eab91bb94e7a566363ba5329e9e06c4e2ffbeee9816a0ab0b265"
+  },
+  {
+    "operation": "externallocations-get",
+    "url": "https://docs.databricks.com/api/workspace/externallocations/get",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "0ecf579dfd1200311d1e8eeea6c0b68a738a877e495a23085874676e5e6e4537"
+  },
+  {
+    "operation": "externallocations-list",
+    "url": "https://docs.databricks.com/api/workspace/externallocations/list",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "0bb5cdc26c335c7228d98239db865e784b037cdfe5294f4cc0a08fee7314d502"
+  },
+  {
+    "operation": "externallocations-update",
+    "url": "https://docs.databricks.com/api/workspace/externallocations/update",
+    "fetched_at": "2026-06-09T03:56:46Z",
+    "sha256": "b9833c97c882ae990b650d1c19f0cbdf11390c17d9424caf79ca3ee09d71fe6b"
+  },
+  {
+    "operation": "externalmetadata-createexternalmetadata",
+    "url": "https://docs.databricks.com/api/workspace/externalmetadata/createexternalmetadata",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "775d0e57ddf8a166bf1baa10e23e20b2db9735bdbeda380d378656c9df6d4107"
+  },
+  {
+    "operation": "externalmetadata-deleteexternalmetadata",
+    "url": "https://docs.databricks.com/api/workspace/externalmetadata/deleteexternalmetadata",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "7c22663f61c485f5ad02b7fd58cf4425766dd3fc23e09d0cb9e8275b22ee3514"
+  },
+  {
+    "operation": "externalmetadata-getexternalmetadata",
+    "url": "https://docs.databricks.com/api/workspace/externalmetadata/getexternalmetadata",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "b1aaca907143a58ef71a7f6a142c1a12594e450d9d993884c045a4551d37cd32"
+  },
+  {
+    "operation": "externalmetadata-listexternalmetadata",
+    "url": "https://docs.databricks.com/api/workspace/externalmetadata/listexternalmetadata",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "5254d17a1802fcb1bb89c28fd47aaaa1b0118e69b7a4004192e5cdc6a8a6fd06"
+  },
+  {
+    "operation": "externalmetadata-updateexternalmetadata",
+    "url": "https://docs.databricks.com/api/workspace/externalmetadata/updateexternalmetadata",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "c1394aced91d1056ebcf084baa568ff9627f22253fdad937e77b7fbd737e8ae6"
+  },
+  {
+    "operation": "functions-create",
+    "url": "https://docs.databricks.com/api/workspace/functions/create",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "889c9a1d6c208ee68ed79782598f2bcb09cbfc7cdafecbea1954c0040f82676a"
+  },
+  {
+    "operation": "functions-delete",
+    "url": "https://docs.databricks.com/api/workspace/functions/delete",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "49b2f1fc6ced3a1459c6da671f69917c1c9b009298e0a3f3fed6650c3c07d584"
+  },
+  {
+    "operation": "functions-get",
+    "url": "https://docs.databricks.com/api/workspace/functions/get",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "5bcb43888ffc5229d1e83a67886111295f9014f5ff144692d2be922606013654"
+  },
+  {
+    "operation": "functions-list",
+    "url": "https://docs.databricks.com/api/workspace/functions/list",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "9d0e54d46067ccec7d94c9ac0497252e53e941748034a9e67e5409d00a3a8535"
+  },
+  {
+    "operation": "functions-update",
+    "url": "https://docs.databricks.com/api/workspace/functions/update",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "ad8f90a20c7d06d3d1b7ed5e6deb1650e0b8ef34d8228cabf5c75f55b23cb694"
+  },
+  {
+    "operation": "grants-get",
+    "url": "https://docs.databricks.com/api/workspace/grants/get",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "d52f26427f0c8cc1dac8b2a42a76e007025c40b636cc20a4bec6cc04b0eb6d30"
+  },
+  {
+    "operation": "grants-geteffective",
+    "url": "https://docs.databricks.com/api/workspace/grants/geteffective",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "999583f4e1dcf21235a2275d129fa4e6e34e3a9268d8cbe70888617dbf37fb21"
+  },
+  {
+    "operation": "grants-update",
+    "url": "https://docs.databricks.com/api/workspace/grants/update",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "e97556f4afcb2e8e444198be5f6239012f1ca387b17c33bedbce78cb5c05c0ab"
+  },
+  {
+    "operation": "metastores-assign",
+    "url": "https://docs.databricks.com/api/workspace/metastores/assign",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "a011b1806c0def2ba0b2f7ff791c32319b44f310cf7f1d391d240df810779d75"
+  },
+  {
+    "operation": "metastores-create",
+    "url": "https://docs.databricks.com/api/workspace/metastores/create",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "8d9a9b9e1e507905db816196c996a93f81d65e0b6f98c6fb3c70a8f493c5c912"
+  },
+  {
+    "operation": "metastores-current",
+    "url": "https://docs.databricks.com/api/workspace/metastores/current",
+    "fetched_at": "2026-06-09T03:56:46Z",
+    "sha256": "1fa44a2d84743cadd96f9a8bb5d273a2f8836a3113229420066127fdd9a5e293"
+  },
+  {
+    "operation": "metastores-delete",
+    "url": "https://docs.databricks.com/api/workspace/metastores/delete",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "9f8afe47ddfc8ec1009cfcf07cc21717b9e4e23bdae7694259b3d02a775de058"
+  },
+  {
+    "operation": "metastores-get",
+    "url": "https://docs.databricks.com/api/workspace/metastores/get",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "6de7e079b5b62eda711ce25c8fb3c99589f205d9acf65a04ceadb9bc59e27607"
+  },
+  {
+    "operation": "metastores-list",
+    "url": "https://docs.databricks.com/api/workspace/metastores/list",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "dfda60b967bcbb65aee2ed860ab33a6c8d5e47836481a70c7ba048d17e4aa69f"
+  },
+  {
+    "operation": "metastores-summary",
+    "url": "https://docs.databricks.com/api/workspace/metastores/summary",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "523e6841eb9baf9854202c48f7c0cb279e3353ffda4ef3d24abf083e4b1d92c3"
+  },
+  {
+    "operation": "metastores-unassign",
+    "url": "https://docs.databricks.com/api/workspace/metastores/unassign",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "6733030131322d214d78d2ad16190dc41df3165ce8a814fa2240476fc367e3c9"
+  },
+  {
+    "operation": "metastores-update",
+    "url": "https://docs.databricks.com/api/workspace/metastores/update",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "7fe075172ac2587dcf8545536e8ddd42d78710e9e267bedb24582a227e4462de"
+  },
+  {
+    "operation": "metastores-updateassignment",
+    "url": "https://docs.databricks.com/api/workspace/metastores/updateassignment",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "a8e28326892b818d32c94c1b6470aa916c5a30a12bbb4753758f5949205292e2"
+  },
+  {
+    "operation": "modelversions-delete",
+    "url": "https://docs.databricks.com/api/workspace/modelversions/delete",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "d78da2f2d00c4cb00fdb286b31c3fed5f69403d215efa5ff1d92b4bf4447c804"
+  },
+  {
+    "operation": "modelversions-get",
+    "url": "https://docs.databricks.com/api/workspace/modelversions/get",
+    "fetched_at": "2026-06-09T03:56:46Z",
+    "sha256": "d5eec9003d2d27bda0de28b407ce7092bf15ac511d9b99571378d060d9053675"
+  },
+  {
+    "operation": "modelversions-getbyalias",
+    "url": "https://docs.databricks.com/api/workspace/modelversions/getbyalias",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "b3a01d8815083e06026651c3413622814e06f41e7e83488fb456e749c7366bb4"
+  },
+  {
+    "operation": "modelversions-list",
+    "url": "https://docs.databricks.com/api/workspace/modelversions/list",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "2815b49b64eb9eac607d1e7adff72f6b61ee3dcbc183da69acb89cd91c01b58f"
+  },
+  {
+    "operation": "modelversions-update",
+    "url": "https://docs.databricks.com/api/workspace/modelversions/update",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "90d0e169f3afc7d4b81880539ea027586ae47a8272f6a50b448ac6742b0a0670"
+  },
+  {
+    "operation": "onlinetables-create",
+    "url": "https://docs.databricks.com/api/workspace/onlinetables/create",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "f5bfdcc762e401473f696c2565d0b28e3c135a00b30a06809db25752e5fab2eb"
+  },
+  {
+    "operation": "onlinetables-delete",
+    "url": "https://docs.databricks.com/api/workspace/onlinetables/delete",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "15dee93f42c95cc3074f2199f19121d2077b8cba91169df613b882c3796f8225"
+  },
+  {
+    "operation": "onlinetables-get",
+    "url": "https://docs.databricks.com/api/workspace/onlinetables/get",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "94a825b011217ec94fd267b582d89aa75a48a62aeeeefc88ff66aa1800866128"
+  },
+  {
+    "operation": "policies-createpolicy",
+    "url": "https://docs.databricks.com/api/workspace/policies/createpolicy",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "2c17b393a261e77708a284453b54a36b5074f82a1a4d9b0c592f96cea455eba4"
+  },
+  {
+    "operation": "policies-deletepolicy",
+    "url": "https://docs.databricks.com/api/workspace/policies/deletepolicy",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "8cdfe2ef876ae0c1b52270d4cd70269f8e9638bf9cb9072c4fe757e00adf7c93"
+  },
+  {
+    "operation": "policies-getpolicy",
+    "url": "https://docs.databricks.com/api/workspace/policies/getpolicy",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "62da8b7765df85df6d0fd6e177c2f9a2ea31b17d6f4533f92d64352f34d5b6f8"
+  },
+  {
+    "operation": "policies-listpolicies",
+    "url": "https://docs.databricks.com/api/workspace/policies/listpolicies",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "a960e823190259787fe5b5c5b03631d35c110dcc61268ade9af50013e3e17da9"
+  },
+  {
+    "operation": "policies-updatepolicy",
+    "url": "https://docs.databricks.com/api/workspace/policies/updatepolicy",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "033a18f6b3fd361701c5971e4e542ca3814cb0ebd3fb5e707fdfc4d61a32a3f9"
+  },
+  {
+    "operation": "qualitymonitors-create",
+    "url": "https://docs.databricks.com/api/workspace/qualitymonitors/create",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "554eba5042a5adf277abfda9c16c5d66469b785be93965d7d383355c7ca82aaf"
+  },
+  {
+    "operation": "qualitymonitors-delete",
+    "url": "https://docs.databricks.com/api/workspace/qualitymonitors/delete",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "d23619d9f7d6a5f8e0b82a8f2b8f9c3d38620fc9e740034d08b3798197089de6"
+  },
+  {
+    "operation": "qualitymonitors-get",
+    "url": "https://docs.databricks.com/api/workspace/qualitymonitors/get",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "ea3c558c07229f1736c3ff699bc49b59b820f464e07633a84dba56690324da69"
+  },
+  {
+    "operation": "qualitymonitors-getrefresh",
+    "url": "https://docs.databricks.com/api/workspace/qualitymonitors/getrefresh",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "e55cd71f499e5725d03f85c2d00e7ffc683cbc52ad62a1a5922c01b26477c18d"
+  },
+  {
+    "operation": "qualitymonitors-listrefreshes",
+    "url": "https://docs.databricks.com/api/workspace/qualitymonitors/listrefreshes",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "ae21da4ede8cbf87ebeff576c6e4aa4924e172c3d35b92b202c2be8602d9e48e"
+  },
+  {
+    "operation": "qualitymonitors-runrefresh",
+    "url": "https://docs.databricks.com/api/workspace/qualitymonitors/runrefresh",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "6ca9806bb9b1bb347e9b1f794e08ad2394f3f8169388d0f2ebd212627b06f57b"
+  },
+  {
+    "operation": "qualitymonitors-update",
+    "url": "https://docs.databricks.com/api/workspace/qualitymonitors/update",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "f51adae3a3a89790358daf0c66de22c3f6f36cfc22c7e7159820e2af71132a57"
+  },
+  {
+    "operation": "registeredmodels-create",
+    "url": "https://docs.databricks.com/api/workspace/registeredmodels/create",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "9c75c5fcafac9cc7ad680fba1bc9f1304678ff249e47b8629d26fe55c84c7a48"
+  },
+  {
+    "operation": "registeredmodels-delete",
+    "url": "https://docs.databricks.com/api/workspace/registeredmodels/delete",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "403c2495d3d26b777859c9db11d04a81fc2fc3c0d050b3e968b0ad04c78fa953"
+  },
+  {
+    "operation": "registeredmodels-deletealias",
+    "url": "https://docs.databricks.com/api/workspace/registeredmodels/deletealias",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "24982b62397795eea314f6111c665c84c2209eb8bfa0731747cb4a0bd78c7ce4"
+  },
+  {
+    "operation": "registeredmodels-get",
+    "url": "https://docs.databricks.com/api/workspace/registeredmodels/get",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "b26f31b88671b2d448e11519b3ef4638a624caeac8d0ef275c167b042142387c"
+  },
+  {
+    "operation": "registeredmodels-list",
+    "url": "https://docs.databricks.com/api/workspace/registeredmodels/list",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "115b4d10dc03e90d0645a7d44d1e747a39c4ac77cbd95d701b1df655fda0c1a7"
+  },
+  {
+    "operation": "registeredmodels-setalias",
+    "url": "https://docs.databricks.com/api/workspace/registeredmodels/setalias",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "dda4517225e9cb8619ad1e5358835022fffb1cb0d9749d68fe337161f3b94c5f"
+  },
+  {
+    "operation": "registeredmodels-update",
+    "url": "https://docs.databricks.com/api/workspace/registeredmodels/update",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "22a720c9d3c9ffe52cef6c8454b6762be9017c5590bcc0095e5e5cfdf3d15d39"
+  },
+  {
+    "operation": "resourcequotas-getquota",
+    "url": "https://docs.databricks.com/api/workspace/resourcequotas/getquota",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "e02c5a27d43f9ef4bfb3980e77c6618d407499af905a97dbecde37b1a742a8c8"
+  },
+  {
+    "operation": "resourcequotas-listquotas",
+    "url": "https://docs.databricks.com/api/workspace/resourcequotas/listquotas",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "3d0126c5bc19e8a8f0527badb80910fe1f036b9944c58c8638b8dfce74808dce"
+  },
+  {
+    "operation": "rfa-batchcreateaccessrequests",
+    "url": "https://docs.databricks.com/api/workspace/rfa/batchcreateaccessrequests",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "7238703dcc76a5e8aba35e04dc66e22789aae4025ba3f94b7e81e7506023bc1d"
+  },
+  {
+    "operation": "rfa-getaccessrequestdestinations",
+    "url": "https://docs.databricks.com/api/workspace/rfa/getaccessrequestdestinations",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "1b841bc16f0d0d3f7b9e7195eccc91414ec4819a785c1f5235ccad31336b3521"
+  },
+  {
+    "operation": "rfa-updateaccessrequestdestinations",
+    "url": "https://docs.databricks.com/api/workspace/rfa/updateaccessrequestdestinations",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "2e1f71e1b7a30920ef99597e5782d523f05f67a9062959a51029c00be061cd2e"
+  },
+  {
+    "operation": "schemas-create",
+    "url": "https://docs.databricks.com/api/workspace/schemas/create",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "139ebf3ec9f7837c1115100b197f7ff4f07e96f8d2b815a95fe1a36458d89470"
+  },
+  {
+    "operation": "schemas-delete",
+    "url": "https://docs.databricks.com/api/workspace/schemas/delete",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "c196e421549f733ab2a50ed6955738153b073eae4289568f35a116b84e1d6e1a"
+  },
+  {
+    "operation": "schemas-get",
+    "url": "https://docs.databricks.com/api/workspace/schemas/get",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "291e36948a654ae685379e70d1c95f8ba5d564b7217e53abb942ba89d83b915e"
+  },
+  {
+    "operation": "schemas-list",
+    "url": "https://docs.databricks.com/api/workspace/schemas/list",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "3124e6ddc9c6ed15e5bd55e8ac0070c805dce17ab78ef21a87bbe0fb63ef7a6b"
+  },
+  {
+    "operation": "schemas-update",
+    "url": "https://docs.databricks.com/api/workspace/schemas/update",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "22427ed69b3d862ab087c52b6924f5b9b2af8aee4d7b2051011e56fdd940cec4"
+  },
+  {
+    "operation": "storagecredentials-create",
+    "url": "https://docs.databricks.com/api/workspace/storagecredentials/create",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "7903b5285cc388d9e525ad248b74cc7ec407affada48fd1acfaeef34d2799978"
+  },
+  {
+    "operation": "storagecredentials-delete",
+    "url": "https://docs.databricks.com/api/workspace/storagecredentials/delete",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "05faa6cc29b185a80f68bc97359ab979fcfbe1601ad84a94e43620277ce44efb"
+  },
+  {
+    "operation": "storagecredentials-get",
+    "url": "https://docs.databricks.com/api/workspace/storagecredentials/get",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "f37ef253b259ee9f9884ac5693ac5a3f48f6c1f0a70d1e73933b085756cf0895"
+  },
+  {
+    "operation": "storagecredentials-list",
+    "url": "https://docs.databricks.com/api/workspace/storagecredentials/list",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "7bd9917051148bf36ad5d320a0b8b9ff8b5dde4bd2a0c211d64ea38cf936d6ff"
+  },
+  {
+    "operation": "storagecredentials-update",
+    "url": "https://docs.databricks.com/api/workspace/storagecredentials/update",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "40ae1971960b7c97bb12598bc883c7fa20ae73152c0220b1fa5d9f1d7918a954"
+  },
+  {
+    "operation": "storagecredentials-validate",
+    "url": "https://docs.databricks.com/api/workspace/storagecredentials/validate",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "9f29efd354ccded49af85ce18eb00ce3c2a98f13e938baa52ad69d8751b93a14"
+  },
+  {
+    "operation": "systemschemas-disable",
+    "url": "https://docs.databricks.com/api/workspace/systemschemas/disable",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "ff59b10d8bc3d22fd6ce08da985f4accf86d59e5cf2b20635fdf733a88b32a1a"
+  },
+  {
+    "operation": "systemschemas-enable",
+    "url": "https://docs.databricks.com/api/workspace/systemschemas/enable",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "cf185061f4b4491411cdcdfc11ad01c2ddd5f0321a5e717a78ee4606d47a505c"
+  },
+  {
+    "operation": "systemschemas-list",
+    "url": "https://docs.databricks.com/api/workspace/systemschemas/list",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "d3f975a5b8b39daf6a8ae6256c5bd4e845d82329fe53c3c9b6ea0e56327166a8"
+  },
+  {
+    "operation": "tableconstraints-create",
+    "url": "https://docs.databricks.com/api/workspace/tableconstraints/create",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "09cb7a721b8cf274138d0f85bebf62c74509e086724ff87cbbdc8d896063772d"
+  },
+  {
+    "operation": "tableconstraints-delete",
+    "url": "https://docs.databricks.com/api/workspace/tableconstraints/delete",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "90ad56d9c79ed8b41dd1c6c0708a1d46800d8e9a391bd58e9b4973d9cdcb5ff4"
+  },
+  {
+    "operation": "tables-create",
+    "url": "https://docs.databricks.com/api/workspace/tables/create",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "a1cb49015d20ec74fb6c05968bd487d1944a9fe3750fdcd42f8643730c1042c7"
+  },
+  {
+    "operation": "tables-delete",
+    "url": "https://docs.databricks.com/api/workspace/tables/delete",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "22d8c7158331ebfaadb57dfda48b055a60c140bb8d8b0455032e7dd8eb6b3efa"
+  },
+  {
+    "operation": "tables-exists",
+    "url": "https://docs.databricks.com/api/workspace/tables/exists",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "1605a305401b200f37c1b1f976d0785257d719e85b9a0d0cd9a1f8072e935ccb"
+  },
+  {
+    "operation": "tables-get",
+    "url": "https://docs.databricks.com/api/workspace/tables/get",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "3bc312c818a6d8e6d7ca458d33b714f498347b7b5d378e4a25fa786b33eda98c"
+  },
+  {
+    "operation": "tables-list",
+    "url": "https://docs.databricks.com/api/workspace/tables/list",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "2e48341ea055ded70f8d4fb4e3e4b4cebb524001ca4f4d4ce61584312695d486"
+  },
+  {
+    "operation": "tables-listsummaries",
+    "url": "https://docs.databricks.com/api/workspace/tables/listsummaries",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "51f3dc6f8033a732ebec4af4bacc64618d35eb5fdca8976339f4c105071b3313"
+  },
+  {
+    "operation": "temporarypathcredentials-generatetemporarypathcredentials",
+    "url": "https://docs.databricks.com/api/workspace/temporarypathcredentials/generatetemporarypathcredentials",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "149fa2c2c01ff7074a82afab1ad625ef494f59eb45986ca8200bec71e5fcdd31"
+  },
+  {
+    "operation": "temporarytablecredentials-generatetemporarytablecredentials",
+    "url": "https://docs.databricks.com/api/workspace/temporarytablecredentials/generatetemporarytablecredentials",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "2806e2c605e3149aa947bf4656cbb9a9ea3cba5bcb9179e4278cb0544c74a18b"
+  },
+  {
+    "operation": "volumes-create",
+    "url": "https://docs.databricks.com/api/workspace/volumes/create",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "2abee8143c208378b0f1d2de399b00b2a5c6b296d7e10c13961d2865c217cf61"
+  },
+  {
+    "operation": "volumes-delete",
+    "url": "https://docs.databricks.com/api/workspace/volumes/delete",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "581b5165967771048b76c9befe603dcb776c552e54ec16b9a4f19fdf8ad0f35c"
+  },
+  {
+    "operation": "volumes-list",
+    "url": "https://docs.databricks.com/api/workspace/volumes/list",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "923239183cb1abfb31cf773b488aceb559c2ede094e7dbb73e617c6967ac6d02"
+  },
+  {
+    "operation": "volumes-read",
+    "url": "https://docs.databricks.com/api/workspace/volumes/read",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "f63647f3976a3f4e7b8e99720a1fe4449ed6452b997a2e2de20ee3a09c818679"
+  },
+  {
+    "operation": "volumes-update",
+    "url": "https://docs.databricks.com/api/workspace/volumes/update",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "9921466ea9f4fd7f61b1a7ead7d36767f0787dc31a0d3ec653e5eefd60d4d5f1"
+  },
+  {
+    "operation": "workspacebindings-get",
+    "url": "https://docs.databricks.com/api/workspace/workspacebindings/get",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "56ac48fa847c084792c3a8b43ffd831388c25c37053cd70bd0d4572e1219c808"
+  },
+  {
+    "operation": "workspacebindings-getbindings",
+    "url": "https://docs.databricks.com/api/workspace/workspacebindings/getbindings",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "70da39bf9a8f714d4f2f9d75e59c448473bcfb3e9806d7685b58c3fc57529170"
+  },
+  {
+    "operation": "workspacebindings-update",
+    "url": "https://docs.databricks.com/api/workspace/workspacebindings/update",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "77667c158716173590fc0072031987c7a13247d9f808d10a04f96a0aa9bafe51"
+  },
+  {
+    "operation": "workspacebindings-updatebindings",
+    "url": "https://docs.databricks.com/api/workspace/workspacebindings/updatebindings",
+    "fetched_at": "2026-06-09T01:22:41Z",
+    "sha256": "a6c22e7a73a2f9b8e27e349e427da0c4356b3f11586ccbcca6766d8a1a5fee47"
+  }
+]

@@ -1,0 +1,134 @@
+[
+  {
+    "operation": "genie-createmessage",
+    "url": "https://docs.databricks.com/api/workspace/genie/createmessage",
+    "fetched_at": "2026-06-09T03:36:57Z",
+    "sha256": "88aeccb870b3248108d857560cc1270eea4af451b4035b22f7f52abd189c3803"
+  },
+  {
+    "operation": "genie-createspace",
+    "url": "https://docs.databricks.com/api/workspace/genie/createspace",
+    "fetched_at": "2026-06-09T03:36:57Z",
+    "sha256": "0240145506f0d682b34ec484c49df1ba0d55b766386962c413f365571e14dc0b"
+  },
+  {
+    "operation": "genie-deleteconversation",
+    "url": "https://docs.databricks.com/api/workspace/genie/deleteconversation",
+    "fetched_at": "2026-06-09T03:36:57Z",
+    "sha256": "5ff9ec723a6ff9c47290ff26f89f849876f81f1c2e5afa33c8bc0f7a8845a4be"
+  },
+  {
+    "operation": "genie-deleteconversationmessage",
+    "url": "https://docs.databricks.com/api/workspace/genie/deleteconversationmessage",
+    "fetched_at": "2026-06-09T03:36:57Z",
+    "sha256": "10b84433abe002fc6d32ea0169fb629209acb61b1efc5abe833cff5adff59326"
+  },
+  {
+    "operation": "genie-executemessageattachmentquery",
+    "url": "https://docs.databricks.com/api/workspace/genie/executemessageattachmentquery",
+    "fetched_at": "2026-06-09T03:36:57Z",
+    "sha256": "17ca33b0158c7633607b06b25bc11375c1c87de7e8e8ca57fc911c5f03beba92"
+  },
+  {
+    "operation": "genie-generatedownloadfullqueryresult",
+    "url": "https://docs.databricks.com/api/workspace/genie/generatedownloadfullqueryresult",
+    "fetched_at": "2026-06-09T03:36:57Z",
+    "sha256": "df20a1cf93889e47d59c107f41c8854172cb10f712a07fd8da33a6133d49cb01"
+  },
+  {
+    "operation": "genie-geniecreateevalrun",
+    "url": "https://docs.databricks.com/api/workspace/genie/geniecreateevalrun",
+    "fetched_at": "2026-06-09T03:36:57Z",
+    "sha256": "30371b7ff7a1baf42dbe9c78d3b14c484b77f390951beb9b2034005bb74c473c"
+  },
+  {
+    "operation": "genie-geniegetevalresultdetails",
+    "url": "https://docs.databricks.com/api/workspace/genie/geniegetevalresultdetails",
+    "fetched_at": "2026-06-09T03:36:57Z",
+    "sha256": "c83a76b59807bfedc782b530b61609ce66dfc08d229df0502640c4a9dfdb140e"
+  },
+  {
+    "operation": "genie-geniegetevalrun",
+    "url": "https://docs.databricks.com/api/workspace/genie/geniegetevalrun",
+    "fetched_at": "2026-06-09T03:36:57Z",
+    "sha256": "2309d164a299defd7e0b080b1b0f9c9512c8b8d1901e8971aed81224a4b69b98"
+  },
+  {
+    "operation": "genie-genielistevalresults",
+    "url": "https://docs.databricks.com/api/workspace/genie/genielistevalresults",
+    "fetched_at": "2026-06-09T03:36:57Z",
+    "sha256": "7dc3cee2ab9e517b241dd447d3777526a0adecd3f16efde0d9327a2bb09f0d26"
+  },
+  {
+    "operation": "genie-genielistevalruns",
+    "url": "https://docs.databricks.com/api/workspace/genie/genielistevalruns",
+    "fetched_at": "2026-06-09T03:36:57Z",
+    "sha256": "c36e50478404bc951d47716b32e2cf50ff750a6394c79b728e75c7c56179e6f5"
+  },
+  {
+    "operation": "genie-getdownloadfullqueryresult",
+    "url": "https://docs.databricks.com/api/workspace/genie/getdownloadfullqueryresult",
+    "fetched_at": "2026-06-09T03:36:57Z",
+    "sha256": "bb4f2463c5d4b2785ca564a190dfb8a9c2af2dc033242a7f5c70160bfba7198a"
+  },
+  {
+    "operation": "genie-getmessage",
+    "url": "https://docs.databricks.com/api/workspace/genie/getmessage",
+    "fetched_at": "2026-06-09T03:36:57Z",
+    "sha256": "7b3bd6e618ec749862a198321787c43d3087fb85d657cc26e6c27f56b4e1a4ce"
+  },
+  {
+    "operation": "genie-getmessageattachmentqueryresult",
+    "url": "https://docs.databricks.com/api/workspace/genie/getmessageattachmentqueryresult",
+    "fetched_at": "2026-06-09T03:36:57Z",
+    "sha256": "f7d52f177ccc0fafd79f8cb3bdde65aa04326619a0a4650ecbb9ac2b618b9515"
+  },
+  {
+    "operation": "genie-getspace",
+    "url": "https://docs.databricks.com/api/workspace/genie/getspace",
+    "fetched_at": "2026-06-09T03:36:57Z",
+    "sha256": "823d92f8ed63a5f173dd5eb8221d872fb215b6dc81ead02162355d88e5faab7f"
+  },
+  {
+    "operation": "genie-listconversationmessages",
+    "url": "https://docs.databricks.com/api/workspace/genie/listconversationmessages",
+    "fetched_at": "2026-06-09T03:36:57Z",
+    "sha256": "bf16c8505fdcf66d8bb1df0f001a1126a6f9c475f28a727a4f7ce11973886267"
+  },
+  {
+    "operation": "genie-listconversations",
+    "url": "https://docs.databricks.com/api/workspace/genie/listconversations",
+    "fetched_at": "2026-06-09T03:36:57Z",
+    "sha256": "5a1d32742c9cac00f1e2a683d304a81de41a6fcf661ccad7e5ccc96aa2e442d9"
+  },
+  {
+    "operation": "genie-listspaces",
+    "url": "https://docs.databricks.com/api/workspace/genie/listspaces",
+    "fetched_at": "2026-06-09T03:36:57Z",
+    "sha256": "e0ca73a5f342a8b97cb9208276f137992268b7f441c4e6cf8fd728f3dd3286ee"
+  },
+  {
+    "operation": "genie-sendmessagefeedback",
+    "url": "https://docs.databricks.com/api/workspace/genie/sendmessagefeedback",
+    "fetched_at": "2026-06-09T03:36:57Z",
+    "sha256": "2795f61183ee29240e8fda6c154d0eba42138ee4cc30fab9cfbab1d0f4a7ecb4"
+  },
+  {
+    "operation": "genie-startconversation",
+    "url": "https://docs.databricks.com/api/workspace/genie/startconversation",
+    "fetched_at": "2026-06-09T03:36:57Z",
+    "sha256": "f3abda1ad8f13f8df609ba8917370b0762ecd21130a773e446b31c9fd87c6cf5"
+  },
+  {
+    "operation": "genie-trashspace",
+    "url": "https://docs.databricks.com/api/workspace/genie/trashspace",
+    "fetched_at": "2026-06-09T03:36:57Z",
+    "sha256": "67d0a5d645e8873568db8340ecda1f195a0ecae2649412ce5c7ba63c3fe90e6d"
+  },
+  {
+    "operation": "genie-updatespace",
+    "url": "https://docs.databricks.com/api/workspace/genie/updatespace",
+    "fetched_at": "2026-06-09T03:36:57Z",
+    "sha256": "99db6537b7c6ef8267ba3d2b355c92b9c245d935b145a7935301b1846d7ab5e2"
+  }
+]

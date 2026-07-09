@@ -1,0 +1,194 @@
+[
+  {
+    "operation": "alerts-create",
+    "url": "https://docs.databricks.com/api/workspace/alerts/create",
+    "fetched_at": "2026-06-09T01:22:39Z",
+    "sha256": "a03423bad08581cc15cb3e0a89317ba01680a9057b8726032e0b2661aa3d19e0"
+  },
+  {
+    "operation": "alerts-delete",
+    "url": "https://docs.databricks.com/api/workspace/alerts/delete",
+    "fetched_at": "2026-06-09T01:22:39Z",
+    "sha256": "80fa00b8b06813af7c0491f73c8cddf2a98899669142bbef8ea619cb1cf8fddf"
+  },
+  {
+    "operation": "alerts-get",
+    "url": "https://docs.databricks.com/api/workspace/alerts/get",
+    "fetched_at": "2026-06-09T01:22:39Z",
+    "sha256": "844f9a4913d5a06f13432751905b49e4e5b74e59b5b356d61ccf044aec81415c"
+  },
+  {
+    "operation": "alerts-list",
+    "url": "https://docs.databricks.com/api/workspace/alerts/list",
+    "fetched_at": "2026-06-09T01:22:39Z",
+    "sha256": "a29c394d3b7c50d9d44298ebd1975f301b4ad02ca69b473b997566db6a3d211d"
+  },
+  {
+    "operation": "alerts-update",
+    "url": "https://docs.databricks.com/api/workspace/alerts/update",
+    "fetched_at": "2026-06-09T01:22:39Z",
+    "sha256": "f3e73204edf5b2265b2f9b1df3a56da5d42214ffe1f64e09155bf577bbbc29d4"
+  },
+  {
+    "operation": "queries-create",
+    "url": "https://docs.databricks.com/api/workspace/queries/create",
+    "fetched_at": "2026-06-09T01:22:39Z",
+    "sha256": "e33020764f08fdf94137339f676b48ae6c04523e3b972a89626697747e8cd07d"
+  },
+  {
+    "operation": "queries-delete",
+    "url": "https://docs.databricks.com/api/workspace/queries/delete",
+    "fetched_at": "2026-06-09T01:22:39Z",
+    "sha256": "84c844d52c7cc76c4237e3d5a7aaa8a7e018870b193ea587c44b1ff51c9242a5"
+  },
+  {
+    "operation": "queries-get",
+    "url": "https://docs.databricks.com/api/workspace/queries/get",
+    "fetched_at": "2026-06-09T01:22:39Z",
+    "sha256": "7190be9ee9076befc9e092a4776fb0c0d32bb08d17213b2a18e4d8132375301b"
+  },
+  {
+    "operation": "queries-list",
+    "url": "https://docs.databricks.com/api/workspace/queries/list",
+    "fetched_at": "2026-06-09T01:22:39Z",
+    "sha256": "44f509e3fe573e76b6a6151db97e26bc4bb8e0ac3c4809d57fab7bf5368222c1"
+  },
+  {
+    "operation": "queries-update",
+    "url": "https://docs.databricks.com/api/workspace/queries/update",
+    "fetched_at": "2026-06-09T01:22:39Z",
+    "sha256": "6e04024390cd5288c4d9d84063181636ad1e97b610643a2bc52ce324176b3bc6"
+  },
+  {
+    "operation": "statementexecution-cancelexecution",
+    "url": "https://docs.databricks.com/api/workspace/statementexecution/cancelexecution",
+    "fetched_at": "2026-06-09T01:22:39Z",
+    "sha256": "b74b482c5d371b374ba850507734db0966c9de24750217fe839d793a32ddc4f0"
+  },
+  {
+    "operation": "statementexecution-executestatement",
+    "url": "https://docs.databricks.com/api/workspace/statementexecution/executestatement",
+    "fetched_at": "2026-06-09T01:22:39Z",
+    "sha256": "2898900ce482b45cc75acb5b92899bf6f2c28a9fdc931cc928b04f1699067207"
+  },
+  {
+    "operation": "statementexecution-getstatement",
+    "url": "https://docs.databricks.com/api/workspace/statementexecution/getstatement",
+    "fetched_at": "2026-06-09T01:22:39Z",
+    "sha256": "0665e5e2047593751cbea22b65f2c3929cc93f640f845b2d270d45186e17b70a"
+  },
+  {
+    "operation": "statementexecution-getstatementresultchunkn",
+    "url": "https://docs.databricks.com/api/workspace/statementexecution/getstatementresultchunkn",
+    "fetched_at": "2026-06-09T01:22:39Z",
+    "sha256": "4d412fb5a7b4548a8285f6d7f2c56146e331b43a847572524f04275d251ff3c4"
+  },
+  {
+    "operation": "warehouses-create",
+    "url": "https://docs.databricks.com/api/workspace/warehouses/create",
+    "fetched_at": "2026-06-09T03:56:46Z",
+    "sha256": "333bb722f1a637d3304d3a462ebe15dc69694669691fcbe1c4b9170a640fd8f3"
+  },
+  {
+    "operation": "warehouses-createdefaultwarehouseoverride",
+    "url": "https://docs.databricks.com/api/workspace/warehouses/createdefaultwarehouseoverride",
+    "fetched_at": "2026-06-09T01:22:39Z",
+    "sha256": "d8034b042410f33eb14f49ccf4b0898a06ccbb1d6638be60ef1c798af1cc005b"
+  },
+  {
+    "operation": "warehouses-delete",
+    "url": "https://docs.databricks.com/api/workspace/warehouses/delete",
+    "fetched_at": "2026-06-09T01:22:39Z",
+    "sha256": "48726cf4b9ed65b4b9f1bb45637f41f21f5081e231a1182f32cfda305045bcc3"
+  },
+  {
+    "operation": "warehouses-deletedefaultwarehouseoverride",
+    "url": "https://docs.databricks.com/api/workspace/warehouses/deletedefaultwarehouseoverride",
+    "fetched_at": "2026-06-09T01:22:39Z",
+    "sha256": "02706335dbe2467b63aa539be7ea109d24d9183d9cf249d4caef98c6e9c62ee2"
+  },
+  {
+    "operation": "warehouses-edit",
+    "url": "https://docs.databricks.com/api/workspace/warehouses/edit",
+    "fetched_at": "2026-06-09T01:22:39Z",
+    "sha256": "204011d278c9c8769046dd0eafa12df0d6dd0e08b1082b16d95db70bd8f05765"
+  },
+  {
+    "operation": "warehouses-get",
+    "url": "https://docs.databricks.com/api/workspace/warehouses/get",
+    "fetched_at": "2026-06-09T01:22:39Z",
+    "sha256": "3982b2d8440fbdc5834c32becdd42c0ffe3dba27bd36b49410b676c2513c9a7a"
+  },
+  {
+    "operation": "warehouses-getdefaultwarehouseoverride",
+    "url": "https://docs.databricks.com/api/workspace/warehouses/getdefaultwarehouseoverride",
+    "fetched_at": "2026-06-09T01:22:39Z",
+    "sha256": "30d0e1f9dd2e8501328d381684487281682af97b08101ab9a9a926bcabfd5b85"
+  },
+  {
+    "operation": "warehouses-getpermissionlevels",
+    "url": "https://docs.databricks.com/api/workspace/warehouses/getpermissionlevels",
+    "fetched_at": "2026-06-09T01:22:39Z",
+    "sha256": "774648be6b1586fc446ff8becb6ca3487593c5d2d4617aac8d10df9d746d5b1a"
+  },
+  {
+    "operation": "warehouses-getpermissions",
+    "url": "https://docs.databricks.com/api/workspace/warehouses/getpermissions",
+    "fetched_at": "2026-06-09T01:22:39Z",
+    "sha256": "7041321a13da9dca9f25e3ee7b4197b355ce157f696a72052e9890635d473b0c"
+  },
+  {
+    "operation": "warehouses-getworkspacewarehouseconfig",
+    "url": "https://docs.databricks.com/api/workspace/warehouses/getworkspacewarehouseconfig",
+    "fetched_at": "2026-06-09T01:22:39Z",
+    "sha256": "6c4189883837406d99a1a3c7aad5254902420abc2212fdd3808b62f8d67559ee"
+  },
+  {
+    "operation": "warehouses-list",
+    "url": "https://docs.databricks.com/api/workspace/warehouses/list",
+    "fetched_at": "2026-06-09T01:22:39Z",
+    "sha256": "da2fcee8591f176ed487b7d153f1722ca7be0a267deb3ff7f072dd3e98b90af4"
+  },
+  {
+    "operation": "warehouses-listdefaultwarehouseoverrides",
+    "url": "https://docs.databricks.com/api/workspace/warehouses/listdefaultwarehouseoverrides",
+    "fetched_at": "2026-06-09T01:22:39Z",
+    "sha256": "ac2fac7901854f6818d3a77d091bd61a089f17c7b2790b69f85344c4023f0b04"
+  },
+  {
+    "operation": "warehouses-setpermissions",
+    "url": "https://docs.databricks.com/api/workspace/warehouses/setpermissions",
+    "fetched_at": "2026-06-09T01:22:39Z",
+    "sha256": "a571de91c010adcea59ccb7d88de00e0d50bfb38a8d9e6a05ccc3b27ef86ef18"
+  },
+  {
+    "operation": "warehouses-setworkspacewarehouseconfig",
+    "url": "https://docs.databricks.com/api/workspace/warehouses/setworkspacewarehouseconfig",
+    "fetched_at": "2026-06-09T01:22:39Z",
+    "sha256": "a8978a23b08aa9017c3848fe24a8b71f5488d66869702135466bbfd2a9facecb"
+  },
+  {
+    "operation": "warehouses-start",
+    "url": "https://docs.databricks.com/api/workspace/warehouses/start",
+    "fetched_at": "2026-06-09T01:22:39Z",
+    "sha256": "e6bcb74511b21990b011dce68cf5f742d6a219a4b54cd95ef7ef37668dd47e59"
+  },
+  {
+    "operation": "warehouses-stop",
+    "url": "https://docs.databricks.com/api/workspace/warehouses/stop",
+    "fetched_at": "2026-06-09T01:22:39Z",
+    "sha256": "ee810fccdd4d52de78fabfc5e18c91b4310a8b38f9e577281a2dcddb57ab6874"
+  },
+  {
+    "operation": "warehouses-updatedefaultwarehouseoverride",
+    "url": "https://docs.databricks.com/api/workspace/warehouses/updatedefaultwarehouseoverride",
+    "fetched_at": "2026-06-09T01:22:39Z",
+    "sha256": "f44d221967505c3ebe1f01f174c5a22d70d7c35f870c94377c7951616b6f2f9b"
+  },
+  {
+    "operation": "warehouses-updatepermissions",
+    "url": "https://docs.databricks.com/api/workspace/warehouses/updatepermissions",
+    "fetched_at": "2026-06-09T01:22:39Z",
+    "sha256": "4b4b3e57836a25b891e25008ee084a9d00787b1b4f09545d78996c9e2d5c0100"
+  }
+]

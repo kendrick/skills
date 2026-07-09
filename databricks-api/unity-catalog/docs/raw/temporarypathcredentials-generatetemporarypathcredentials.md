@@ -1,0 +1,142 @@
+Title: Generate a temporary path credential | Temporary Path Credentials API | REST API reference
+
+URL Source: https://docs.databricks.com/api/workspace/temporarypathcredentials/generatetemporarypathcredentials
+
+Markdown Content:
+## Generate a temporary path credential
+
+Public preview
+
+`POST/api/2.0/unity-catalog/temporary-path-credentials`
+
+Get a short-lived credential for directly accessing cloud storage locations registered in Databricks. The Generate Temporary Path Credentials API is only supported for external storage paths, specifically external locations and external tables. Managed tables are not supported by this API. The metastore must have external_access_enabled flag set to true (default false). The caller must have the EXTERNAL_USE_LOCATION privilege on the external location; this privilege can only be granted by external location owners. For requests on existing external tables, the caller must also have the EXTERNAL_USE_SCHEMA privilege on the parent schema; this privilege can only be granted by catalog owners.
+
+API scopes (preview):[`unity-catalog`](https://docs.databricks.com/api/workspace/api/scopes#unity-catalog)
+
+### Request body
+
+[`dry_run`](https://docs.databricks.com/api/workspace/temporarypathcredentials/generatetemporarypathcredentials#dry_run)boolean
+
+Optional. When set to true, the service will not validate that the generated credentials can perform write operations, therefore no new paths will be created and the response will not contain valid credentials. Defaults to false.
+
+[`operation`](https://docs.databricks.com/api/workspace/temporarypathcredentials/generatetemporarypathcredentials#operation)required string
+
+Enum: `PATH_READ | PATH_READ_WRITE | PATH_CREATE_TABLE`
+
+The operation being performed on the path.
+
+[`url`](https://docs.databricks.com/api/workspace/temporarypathcredentials/generatetemporarypathcredentials#url)required string
+
+URL for path-based access.
+
+### Responses
+
+**200** Request completed successfully.
+
+Request completed successfully.
+
+[`aws_temp_credentials`](https://docs.databricks.com/api/workspace/temporarypathcredentials/generatetemporarypathcredentials#aws_temp_credentials)object
+
+AWS temporary credentials for API authentication. Read more at [https://docs.aws.amazon.com/STS/latest/APIReference/API_Credentials.html](https://docs.aws.amazon.com/STS/latest/APIReference/API_Credentials.html).
+
+[`access_key_id`](https://docs.databricks.com/api/workspace/temporarypathcredentials/generatetemporarypathcredentials#aws_temp_credentials-access_key_id)string
+
+The access key ID that identifies the temporary credentials.
+
+[`access_point`](https://docs.databricks.com/api/workspace/temporarypathcredentials/generatetemporarypathcredentials#aws_temp_credentials-access_point)string
+
+The Amazon Resource Name (ARN) of the S3 access point for temporary credentials related the external location.
+
+[`secret_access_key`](https://docs.databricks.com/api/workspace/temporarypathcredentials/generatetemporarypathcredentials#aws_temp_credentials-secret_access_key)string
+
+The secret access key that can be used to sign AWS API requests.
+
+[`session_token`](https://docs.databricks.com/api/workspace/temporarypathcredentials/generatetemporarypathcredentials#aws_temp_credentials-session_token)string
+
+The token that users must pass to AWS API to use the temporary credentials.
+
+[`azure_user_delegation_sas`](https://docs.databricks.com/api/workspace/temporarypathcredentials/generatetemporarypathcredentials#azure_user_delegation_sas)object
+
+Azure temporary credentials for API authentication. Read more at [https://docs.microsoft.com/en-us/rest/api/storageservices/create-user-delegation-sas](https://docs.microsoft.com/en-us/rest/api/storageservices/create-user-delegation-sas)
+
+[`sas_token`](https://docs.databricks.com/api/workspace/temporarypathcredentials/generatetemporarypathcredentials#azure_user_delegation_sas-sas_token)string
+
+The signed URI (SAS Token) used to access blob services for a given path
+
+[`expiration_time`](https://docs.databricks.com/api/workspace/temporarypathcredentials/generatetemporarypathcredentials#expiration_time)int64
+
+Server time when the credential will expire, in epoch milliseconds. The API client is advised to cache the credential given this expiration time.
+
+[`r2_temp_credentials`](https://docs.databricks.com/api/workspace/temporarypathcredentials/generatetemporarypathcredentials#r2_temp_credentials)object
+
+R2 temporary credentials for API authentication. Read more at [https://developers.cloudflare.com/r2/api/s3/tokens/](https://developers.cloudflare.com/r2/api/s3/tokens/).
+
+[`access_key_id`](https://docs.databricks.com/api/workspace/temporarypathcredentials/generatetemporarypathcredentials#r2_temp_credentials-access_key_id)string
+
+The access key ID that identifies the temporary credentials.
+
+[`secret_access_key`](https://docs.databricks.com/api/workspace/temporarypathcredentials/generatetemporarypathcredentials#r2_temp_credentials-secret_access_key)string
+
+The secret access key associated with the access key.
+
+[`session_token`](https://docs.databricks.com/api/workspace/temporarypathcredentials/generatetemporarypathcredentials#r2_temp_credentials-session_token)string
+
+The generated JWT that users must pass to use the temporary credentials.
+
+[`url`](https://docs.databricks.com/api/workspace/temporarypathcredentials/generatetemporarypathcredentials#url)string
+
+The URL of the storage path accessible by the temporary credential.
+
+# Request samples
+
+JSON
+
+{
+
+"dry_run":true,
+
+"operation":"PATH_READ",
+
+"url":"string"
+
+}
+
+# Response samples
+
+200
+
+{
+
+"aws_temp_credentials":{
+
+"access_key_id":"string",
+
+"access_point":"string",
+
+"secret_access_key":"string",
+
+"session_token":"string"
+
+},
+
+"azure_user_delegation_sas":{
+
+"sas_token":"string"
+
+},
+
+"expiration_time":0,
+
+"r2_temp_credentials":{
+
+"access_key_id":"string",
+
+"secret_access_key":"string",
+
+"session_token":"string"
+
+},
+
+"url":"string"
+
+}
