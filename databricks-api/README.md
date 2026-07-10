@@ -101,4 +101,4 @@ The domain routers carry one-line descriptions because this repo assumes symlink
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT, per the [collection license](../LICENSE). This skill is part of the [skills collection](..).
