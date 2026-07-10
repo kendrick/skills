@@ -15,9 +15,9 @@ Result-fetching gotcha: with `EXTERNAL_LINKS` disposition, the API returns short
 
 ## Quick Lookup
 
-Read the matching file in `rest/` (HTTP) or `python-sdk/` (SDK).
+Read the matching bucket in `rest/` (HTTP) or `python-sdk/` (SDK).
 
-| Task                                              | File                      |
+| Task                                              | Bucket                      |
 | ------------------------------------------------- | ------------------------- |
 | Create, edit, start, or stop a SQL warehouse      | `sql-warehouses`          |
 | Set permissions on a warehouse                    | `sql-warehouses`          |
@@ -29,17 +29,17 @@ Read the matching file in `rest/` (HTTP) or `python-sdk/` (SDK).
 | Create or manage saved queries                    | `sql-queries-alerts`      |
 | Create or manage alerts on query results          | `sql-queries-alerts`      |
 
-## REST API Skills
+## REST Buckets
 
-| File                              | Scope                                                     | Endpoints |
+| Bucket                              | Scope                                                     | Endpoints |
 | --------------------------------- | --------------------------------------------------------- | --------- |
 | `rest/sql-warehouses.md`          | Warehouse CRUD, lifecycle, permissions, config, overrides | 18        |
 | `rest/sql-statement-execution.md` | Execute SQL, poll results, get chunks, cancel             | 4         |
 | `rest/sql-queries-alerts.md`      | Saved queries and alert definitions                       | 10        |
 
-## Python SDK Skills
+## Python SDK Buckets
 
-| File                                    | Key Clients             |
+| Bucket                                    | Key Clients             |
 | --------------------------------------- | ----------------------- |
 | `python-sdk/sql-warehouses.md`          | `w.warehouses`          |
 | `python-sdk/sql-statement-execution.md` | `w.statement_execution` |

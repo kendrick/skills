@@ -15,9 +15,9 @@ API versioning gotcha: job lifecycle endpoints sit on `/api/2.2/jobs/...` but po
 
 ## Quick Lookup
 
-Read the matching file in `rest/` (HTTP) or `python-sdk/` (SDK).
+Read the matching bucket in `rest/` (HTTP) or `python-sdk/` (SDK).
 
-| Task                                              | File             |
+| Task                                              | Bucket             |
 | ------------------------------------------------- | ---------------- |
 | Create, update, or delete a job                   | `jobs-lifecycle` |
 | Trigger a job run or submit a one-time run        | `jobs-lifecycle` |
@@ -26,14 +26,14 @@ Read the matching file in `rest/` (HTTP) or `python-sdk/` (SDK).
 | Manage job permissions                            | `jobs-lifecycle` |
 | Check or enforce job policy compliance            | `jobs-lifecycle` |
 
-## REST API Skills
+## REST Buckets
 
-| File                        | Scope                                                  | Endpoints |
+| Bucket                        | Scope                                                  | Endpoints |
 | --------------------------- | ------------------------------------------------------ | --------- |
 | `rest/jobs-lifecycle.md`    | Job CRUD, runs, permissions, policy compliance         | 23        |
 
-## Python SDK Skills
+## Python SDK Buckets
 
-| File                              | Key Clients                              |
+| Bucket                              | Key Clients                              |
 | --------------------------------- | ---------------------------------------- |
 | `python-sdk/jobs-lifecycle.md`    | `w.jobs`, `w.policy_compliance_for_jobs` |

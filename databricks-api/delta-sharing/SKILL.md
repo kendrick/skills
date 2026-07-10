@@ -15,9 +15,9 @@ Domain-specific: recipient *activation* endpoints are public, so no auth header 
 
 ## Quick Lookup
 
-Read the matching file in `rest/` (HTTP) or `python-sdk/` (SDK).
+Read the matching bucket in `rest/` (HTTP) or `python-sdk/` (SDK).
 
-| Task | File |
+| Task | Bucket |
 |------|------|
 | Create, list, update, or delete shares | `ds-shares` |
 | Add/remove tables, volumes, notebooks from a share | `ds-shares` |
@@ -31,18 +31,18 @@ Read the matching file in `rest/` (HTTP) or `python-sdk/` (SDK).
 | Retrieve access token from activation URL | `ds-recipient-auth` |
 | Manage OIDC federation policies for recipients | `ds-recipient-auth` |
 
-## REST API Skills
+## REST Buckets
 
-| File | Scope | Endpoints |
+| Bucket | Scope | Endpoints |
 |------|-------|-----------|
 | `rest/ds-shares.md` | Share CRUD + permissions | 7 |
 | `rest/ds-recipients.md` | Recipient CRUD + token rotation + share permissions | 7 |
 | `rest/ds-providers.md` | Provider CRUD + browse shares/assets | 7 |
 | `rest/ds-recipient-auth.md` | Activation (public) + OIDC federation policies | 6 |
 
-## Python SDK Skills
+## Python SDK Buckets
 
-| File | Key Clients |
+| Bucket | Key Clients |
 |------|-------------|
 | `python-sdk/ds-shares.md` | `w.shares` |
 | `python-sdk/ds-recipients.md` | `w.recipients` |

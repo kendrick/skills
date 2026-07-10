@@ -6,11 +6,11 @@ description: "Top-level router for Databricks platform REST APIs and the Python 
 # Databricks API Reference
 
 > Compressed from official Databricks docs. Two-tier routing: this file points you to a domain,
-> each domain's SKILL.md points you to the specific sub-file for your task.
+> each domain's SKILL.md points you to the right bucket file for your task.
+
+**Grounding rule:** every endpoint path, field name, enum value, and permission you emit must come from a bucket file you've read—verified, not recalled. When a bucket leaves a question open, read the operation's raw doc in `{domain}/_docs/raw/`.
 
 ## Quick Routing
-
-Match your task to a domain, then read that domain's `SKILL.md` for sub-file routing.
 
 | What are you trying to do?                                          | Domain            | Entry point                       |
 | ------------------------------------------------------------------- | ----------------- | --------------------------------- |
@@ -23,7 +23,7 @@ Match your task to a domain, then read that domain's `SKILL.md` for sub-file rou
 | Upload, download, manage files (Files API + DBFS)                   | **File Mgmt**     | `file-management/SKILL.md`        |
 | Manage shares, recipients, providers, activation, federation        | **Delta Sharing** | `delta-sharing/SKILL.md`          |
 
-Not yet covered (fall back to official docs): Knowledge Assistants, Apps, Compute, Workspace, IAM, Secrets, Pipelines (DLT/Lakeflow), Dashboards (Lakeview) — roadmap in README.md.
+Not yet covered (fall back to official docs): Knowledge Assistants, Apps, Compute, Workspace, IAM, Secrets, Pipelines (DLT/Lakeflow), and Dashboards (Lakeview). The roadmap lives in README.md.
 
 ## Auth (all domains)
 

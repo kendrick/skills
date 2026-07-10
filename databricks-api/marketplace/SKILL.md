@@ -16,9 +16,9 @@ Domain-specific: the token needs the **`marketplace`** API scope. That scope is 
 
 ## Quick Lookup
 
-Read the matching file in `rest/` (HTTP) or `python-sdk/` (SDK).
+Read the matching bucket in `rest/` (HTTP) or `python-sdk/` (SDK).
 
-| Task                                     | File                     |
+| Task                                     | Bucket                     |
 | ---------------------------------------- | ------------------------ |
 | Browse or search listings as a consumer  | `mkt-consumer`           |
 | Install or uninstall a data product      | `mkt-consumer`           |
@@ -33,17 +33,17 @@ Read the matching file in `rest/` (HTTP) or `python-sdk/` (SDK).
 | Add/remove listings from an exchange     | `mkt-provider-exchanges` |
 | Control exchange access with filters     | `mkt-provider-exchanges` |
 
-## REST API Skills
+## REST Buckets
 
-| File                             | Scope                                                         | Endpoints |
+| Bucket                             | Scope                                                         | Endpoints |
 | -------------------------------- | ------------------------------------------------------------- | --------- |
 | `rest/mkt-consumer.md`           | Browse listings, install products, personalization, providers | 17        |
 | `rest/mkt-provider-listings.md`  | Provider profiles, listings, files, analytics dashboards      | 20        |
 | `rest/mkt-provider-exchanges.md` | Private exchanges, listing associations, filters              | 13        |
 
-## Python SDK Skills
+## Python SDK Buckets
 
-| File                                   | Key Clients                                                                                                                                          |
+| Bucket                                   | Key Clients                                                                                                                                          |
 | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `python-sdk/mkt-consumer.md`           | `w.consumer_listings`, `w.consumer_installations`, `w.consumer_fulfillments`, `w.consumer_personalization_requests`, `w.consumer_providers`          |
 | `python-sdk/mkt-provider-listings.md`  | `w.provider_listings`, `w.provider_files`, `w.provider_providers`, `w.provider_personalization_requests`, `w.provider_provider_analytics_dashboards` |

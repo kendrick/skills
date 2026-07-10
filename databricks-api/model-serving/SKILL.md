@@ -13,9 +13,9 @@ description: Model Serving APIs—endpoint lifecycle, AI Gateway, provisioned th
 
 ## Quick Lookup
 
-Read the matching file in `rest/` (HTTP) or `python-sdk/` (SDK).
+Read the matching bucket in `rest/` (HTTP) or `python-sdk/` (SDK).
 
-| Task                                                    | File                |
+| Task                                                    | Bucket                |
 | ------------------------------------------------------- | ------------------- |
 | Create, list, get, or delete a serving endpoint         | `serving-endpoints` |
 | Update endpoint config, rate limits, or AI Gateway      | `serving-endpoints` |
@@ -25,14 +25,14 @@ Read the matching file in `rest/` (HTTP) or `python-sdk/` (SDK).
 | Manage serving endpoint permissions                     | `serving-endpoints` |
 | Update tags or notification settings                    | `serving-endpoints` |
 
-## REST API Skills
+## REST Buckets
 
-| File                            | Scope                                                              | Endpoints |
-| -------------------------------- | ------------------------------------------------------------------ | --------- |
+| Bucket                            | Scope                                                              | Endpoints |
+| ------------------------------- | ------------------------------------------------------------------ | --------- |
 | `rest/serving-endpoints.md`     | CRUD, config, AI Gateway, provisioned throughput, query, permissions | 20        |
 
-## Python SDK Skills
+## Python SDK Buckets
 
-| File                                  | Key Clients            |
-| -------------------------------------- | ---------------------- |
+| Bucket                                  | Key Clients            |
+| ------------------------------------- | ---------------------- |
 | `python-sdk/serving-endpoints.md`     | `w.serving_endpoints`  |

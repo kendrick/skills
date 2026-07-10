@@ -13,9 +13,9 @@ description: File upload, download, and directory management via the modern File
 
 ## Quick Lookup
 
-Prefer the Files API for new work—DBFS is legacy. Read the matching file in `rest/` (HTTP) or `python-sdk/` (SDK).
+Prefer the Files API for new work—DBFS is legacy. Read the matching bucket in `rest/` (HTTP) or `python-sdk/` (SDK).
 
-| Task                                          | File        |
+| Task                                          | Bucket        |
 | --------------------------------------------- | ----------- |
 | Upload or download files on volumes/workspace  | `files-api` |
 | Create, list, or delete directories            | `files-api` |
@@ -24,16 +24,16 @@ Prefer the Files API for new work—DBFS is legacy. Read the matching file in `r
 | Read/write files on dbfs:/ paths (legacy)      | `dbfs-api`  |
 | Move or rename files (legacy only)             | `dbfs-api`  |
 
-## REST API Skills
+## REST Buckets
 
-| File                  | Scope                                           | Endpoints |
+| Bucket                  | Scope                                           | Endpoints |
 | --------------------- | ----------------------------------------------- | --------- |
-| `rest/files-api.md`   | Modern Files API—volumes and workspace files    | 8         |
-| `rest/dbfs-api.md`    | Legacy DBFS—streaming uploads, file ops         | 10        |
+| `rest/files-api.md`   | Modern Files API — volumes and workspace files  | 8         |
+| `rest/dbfs-api.md`    | Legacy DBFS — streaming uploads, file ops       | 10        |
 
-## Python SDK Skills
+## Python SDK Buckets
 
-| File                        | Key Clients |
+| Bucket                        | Key Clients |
 | --------------------------- | ----------- |
 | `python-sdk/files-api.md`   | `w.files`   |
 | `python-sdk/dbfs-api.md`    | `w.dbfs`    |
