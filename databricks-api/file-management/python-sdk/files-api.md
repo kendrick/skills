@@ -45,7 +45,7 @@ w.files.upload(
 ```
 
 - **file_path** (str, required): absolute volume/workspace path
-- **contents** (BinaryIO, required): file-like object
+- **contents** (BinaryIO, required): binary file-like object (BytesIO or `open(..., "rb")`), not raw bytes or str
 - **overwrite** (bool, optional): default True
 - Max size: 5 GiB
 
@@ -102,7 +102,7 @@ for entry in w.files.list_directory_contents(
 
 - **directory_path** (str, required)
 - **page_size** (int, optional): default 1000, max 1000
-- Returns iterator -- SDK handles pagination automatically
+- Returns iterator -- SDK handles pagination automatically; do not manually pass `page_token`
 
 ### Get directory metadata
 
@@ -123,7 +123,7 @@ w.files.delete_directory(directory_path="/Volumes/cat/sch/vol/my-dir/")
 ```
 
 - **directory_path** (str, required)
-- **Only empty directories.** Delete contents recursively first.
+- **Only empty directories** -- no recursive flag. Delete contents recursively first (see Common Patterns below).
 
 ---
 
@@ -150,9 +150,4 @@ with open("local.csv", "rb") as f:
 
 ## Gotchas
 
-- `contents` for upload must be a **binary file-like object** (BytesIO or `open(..., "rb")`), not raw bytes or str.
-- `list_directory_contents` returns an **iterator** that auto-paginates -- do not manually pass `page_token`.
-- `delete_directory` only works on **empty** directories -- no recursive flag. Use the pattern above.
-- `create_directory` is **idempotent** -- safe to call on existing dirs.
 - Paths must start with `/Volumes/` for UC volumes or `/Workspace/` for workspace files.
-- `download()` returns a response object; call `.contents.read()` to get bytes.

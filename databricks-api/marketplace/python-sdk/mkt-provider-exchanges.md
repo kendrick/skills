@@ -87,7 +87,7 @@ print(assoc.exchange_for_listing.id)  # save this association ID for removal
 w.provider_exchanges.delete_listing_from_exchange(id="<association-id>")
 ```
 
-Note: pass the **association ID**, not the exchange or listing ID.
+Note: pass the **association ID** (from the `add_listing_to_exchange` response or a list call), not the exchange or listing ID.
 
 ### List exchanges for a listing
 
@@ -124,7 +124,7 @@ resp = w.provider_exchange_filters.create(
 print(resp.filter_id)
 ```
 
-Required: `exchange_id`, `filter_type`, `filter_value`.
+Required: `exchange_id`, `filter_type`, `filter_value`. `filter_type` only supports `GLOBAL_METASTORE_ID`; `filter_value` must be the consumer's metastore UUID.
 
 ### List filters
 
@@ -186,8 +186,5 @@ for assoc in w.provider_exchanges.list_listings_for_exchange(exchange_id="<eid>"
 
 ## Gotchas
 
-- `filter_type` only supports `GLOBAL_METASTORE_ID` -- the value must be the consumer's metastore UUID.
-- `delete_listing_from_exchange` takes the **association ID** (from `add_listing_to_exchange` response or list), not the exchange/listing ID.
 - List methods return iterators that auto-paginate. No manual `page_token` handling needed.
 - SDK model imports: `from databricks.sdk.service.marketplace import Exchange, ExchangeFilter, FilterType`.
-- Exchange `name` is required on both create and update.

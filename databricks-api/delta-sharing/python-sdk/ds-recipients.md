@@ -31,7 +31,7 @@ recipient = w.recipients.create(
 print(recipient.name, recipient.tokens)
 ```
 **Required:** `name`, `authentication_type` (TOKEN | DATABRICKS | OIDC_FEDERATION | OAUTH_CLIENT_CREDENTIALS)
-**Optional:** `comment`, `owner`, `data_recipient_global_metastore_id` (DATABRICKS only), `sharing_code` (DATABRICKS only), `expiration_time`, `ip_access_list`, `properties_kvpairs`
+**Optional:** `comment`, `owner`, `data_recipient_global_metastore_id` (DATABRICKS only), `sharing_code` (DATABRICKS only), `expiration_time`, `ip_access_list` (CIDR notation, max 100 entries), `properties_kvpairs`
 
 ### List Recipients
 ```python
@@ -57,7 +57,9 @@ w.recipients.update(
     ip_access_list=IpAccessList(allowed_ip_addresses=["10.0.0.0/8"]),
 )
 ```
-**Optional:** `comment`, `new_name`, `owner`, `expiration_time`, `ip_access_list`, `properties_kvpairs`
+**Optional:** `comment`, `new_name`, `owner`, `expiration_time`, `ip_access_list`, `properties_kvpairs` (overwrites existing, not merged)
+
+`authentication_type` cannot be changed after creation. Renaming (`new_name`) requires both metastore admin AND recipient owner.
 
 ### Delete a Recipient
 ```python
@@ -135,9 +137,4 @@ except NotFound:
 
 ## Gotchas
 
-- **authentication_type is immutable**: Cannot change after creation
-- **properties_kvpairs overwrites**: Update replaces all existing key-value pairs, not merge
-- **Rename requires dual permission**: Both metastore admin AND recipient owner
-- **Token rotation grace**: `existing_token_expire_in_seconds=0` expires old token immediately
 - **SDK client**: `w.recipients` — import types from `databricks.sdk.service.sharing`
-- **ip_access_list max 100**: CIDR notation entries

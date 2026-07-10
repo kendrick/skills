@@ -36,7 +36,8 @@ cred = w.storage_credentials.create(
     read_only=False,
     skip_validation=False,
 )
-# IMPORTANT: Add cred.aws_iam_role.external_id to your IAM trust policy
+# IMPORTANT: add both external_id and unity_catalog_iam_arn as the trusted principal
+# in your IAM trust policy -- the credential will not work until this is done
 print(cred.aws_iam_role.external_id, cred.aws_iam_role.unity_catalog_iam_arn)
 ```
 
@@ -232,16 +233,13 @@ w.external_locations.create(name="ext-loc", url="s3://bucket/path", credential_n
 ### Paginate through all items
 ```python
 # SDK handles pagination automatically when you iterate
+# (pages may return zero results before the final page -- this is normal)
 all_locs = list(w.external_locations.list(max_results=0))
 ```
 
 ---
 
 ## Gotchas
-- **AWS IAM trust policy:** After creating a credential, you must add the returned `external_id` and configure `unity_catalog_iam_arn` as the trusted principal in the IAM role trust policy. The credential will not work until this is done.
 - **Cloud-specific credential objects:** AWS uses `AwsIamRoleRequest(role_arn=...)`. Azure and GCP have different request objects. Only one cloud credential per call.
-- **Unified credentials API path param:** The get/update/delete methods use `name_arg` (not `name`) as the parameter name.
-- **Connection options on update:** Must provide the full options dict (replacement, not merge).
 - **Temp credentials require metastore flag:** `external_access_enabled` must be set to true on the metastore (default is false). Only works for external storage paths, not managed tables.
-- **Pagination:** SDK auto-paginates when iterating. Pages may return zero results before the final page -- this is normal.
 - **Force delete:** Pass `force=True` to delete credentials/locations that have dependent objects.

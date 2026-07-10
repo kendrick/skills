@@ -118,11 +118,12 @@ Alerts monitor a saved query's results against a condition and trigger notificat
 ```
 
 **Required (in `alert`):** `display_name`, `query_id`, `condition` (with `op`, `operand.column.name`, `threshold.value`)
-**Optional:** `custom_body`, `custom_subject`, `notify_on_ok` (bool), `seconds_to_retrigger` (int, 0=fire once), `parent_path`
+**Optional:** `custom_body`, `custom_subject`, `notify_on_ok` (bool), `seconds_to_retrigger` (int, 0=fire once and do not retrigger until manually reset), `parent_path`
 **Top-level optional:** `auto_resolve_display_name` (bool, default true)
 **Condition ops:** GREATER_THAN, GREATER_THAN_OR_EQUAL, LESS_THAN, LESS_THAN_OR_EQUAL, EQUAL, NOT_EQUAL, IS_NULL
 **Threshold value types:** `double_value`, `bool_value`, `string_value`
-**Response:** Full alert object with `id`, `state` (UNKNOWN|OK|TRIGGERED), `create_time`.
+**Condition column:** The `operand.column.name` must match a column name in the query result set.
+**Response:** Full alert object with `id`, `state` (UNKNOWN|OK|TRIGGERED), `create_time`. Creating an alert with a nonexistent `query_id` returns 404.
 
 ### List Alerts
 
@@ -152,12 +153,13 @@ Same pagination as queries. Returns `results` array and `next_page_token`.
 
 **Required:** `id` (path), `update_mask` (string)
 **Optional (in `alert`):** `display_name`, `condition`, `custom_body`, `custom_subject`, `notify_on_ok`, `owner_user_name`, `query_id`, `seconds_to_retrigger`
+**Gotcha:** `update_mask` is required. List only fields you are changing. Avoid `*` wildcard.
 
 ### Delete Alert
 
 `DELETE /api/2.0/sql/alerts/{id}`
 
-Moves to trash. Trashed alerts stop triggering. Permanently deleted after 30 days.
+Moves to trash. Trashed alerts stop triggering. Permanently deleted after 30 days. Restorable via UI.
 
 ---
 
@@ -174,8 +176,3 @@ Moves to trash. Trashed alerts stop triggering. Permanently deleted after 30 day
 ## Gotchas
 
 - **Throttling:** Calling list endpoints concurrently 10+ times may cause throttling or temporary bans.
-- **update_mask required:** PATCH endpoints require `update_mask`. Omitting it or using `*` risks unintended overwrites.
-- **Delete is soft-delete:** DELETE moves to trash (restorable via UI for 30 days), not permanent deletion.
-- **seconds_to_retrigger=0:** Alert fires once and does not retrigger until manually reset.
-- **Condition column:** The `operand.column.name` must match a column name in the query result set.
-- **Query must exist for alert:** Creating an alert with a nonexistent `query_id` returns 404.

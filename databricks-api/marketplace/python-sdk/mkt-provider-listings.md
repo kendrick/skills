@@ -54,7 +54,7 @@ w.provider_providers.update(id="<provider_id>", provider=ProviderInfo(
 w.provider_providers.delete(id="<provider_id>")
 ```
 
-Required on create/update: `name`, `business_contact_email`, `privacy_policy_link`, `term_of_service_link`.
+Required on create/update: `name`, `business_contact_email`, `privacy_policy_link`, `term_of_service_link` (singular "term", not "terms" -- the SDK rejects the wrong field name). `is_featured` is consumer-read-only; setting it on create/update has no effect.
 
 ---
 
@@ -134,7 +134,7 @@ w.provider_files.delete(file_id="<file_id>")
 ```
 
 File types: `PROVIDER_ICON`, `EMBEDDED_NOTEBOOK`, `APP`.
-Statuses: `FILE_STATUS_PUBLISHED`, `FILE_STATUS_STAGING`, `FILE_STATUS_SANITIZING`, `FILE_STATUS_SANITIZATION_FAILED`.
+Statuses: `FILE_STATUS_PUBLISHED`, `FILE_STATUS_STAGING`, `FILE_STATUS_SANITIZING`, `FILE_STATUS_SANITIZATION_FAILED`. Files go through sanitization after upload -- poll `status` until `FILE_STATUS_PUBLISHED` before assuming they're available.
 
 ---
 
@@ -213,10 +213,4 @@ requests.put(icon.upload_url, data=open("icon.png", "rb"))
 
 ## Gotchas
 
-- File upload is two-step: `.create()` returns `upload_url`; PUT content to that pre-signed URL separately
-- `term_of_service_link` (singular "term") not "terms" -- SDK will reject the wrong field name
-- `is_featured` on providers is consumer-read-only; setting it on create/update has no effect
-- Files go through sanitization; poll `status` until `FILE_STATUS_PUBLISHED`
-- Analytics dashboard `id` vs `dashboard_id`: the former is Marketplace-internal, the latter opens Lakeview
-- Personalization `share` field: required for data listings on fulfill, ignored for MCP/App listings
 - `list()` methods return iterators with automatic pagination

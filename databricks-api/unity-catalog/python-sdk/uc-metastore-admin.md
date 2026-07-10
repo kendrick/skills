@@ -45,13 +45,13 @@ ms = w.metastores.get(id="<metastore-id>")
 ```python
 w.metastores.update(id="<metastore-id>", new_name="renamed", owner="admins-group")
 ```
-Optional: `new_name`, `owner`, `delta_sharing_scope`, `delta_sharing_recipient_token_lifetime_in_seconds`, `delta_sharing_organization_name`, `external_access_enabled`, `privilege_model_version`, `storage_root_credential_id`. Set `owner=""` for System User. Permission: metastore admin.
+Optional: `new_name`, `owner`, `delta_sharing_scope`, `delta_sharing_recipient_token_lifetime_in_seconds`, `delta_sharing_organization_name`, `external_access_enabled`, `privilege_model_version`, `storage_root_credential_id`. `storage_root` itself is immutable after creation -- only `storage_root_credential_id` can be changed. Set `owner=""` to transfer ownership to System User (not remove it). Permission: metastore admin.
 
 ### Delete
 ```python
 w.metastores.delete(id="<metastore-id>", force=True)
 ```
-Optional: `force` (bool). Permission: metastore admin.
+Optional: `force` (bool) -- without it, delete fails if the metastore contains objects. Permission: metastore admin.
 
 ## Current Metastore Info
 
@@ -77,7 +77,7 @@ w.metastores.assign(
     default_catalog_name="main"
 )
 ```
-Permission: account admin. `default_catalog_name` is deprecated; use Default Namespace API.
+Overwrites any existing assignment for that workspace. Permission: account admin. `default_catalog_name` is deprecated; use Default Namespace API.
 
 ### Update assignment
 ```python
@@ -102,7 +102,7 @@ for s in w.system_schemas.list(metastore_id="<id>"):
     print(s.schema, s.state)
 ```
 States: AVAILABLE, ENABLE_INITIALIZED, ENABLE_COMPLETED, DISABLE_INITIALIZED, UNAVAILABLE, MANAGED.
-Permission: account/metastore admin.
+Permission: account/metastore admin. Pages may be empty but still return a continuation token; the SDK handles this automatically as you iterate.
 
 ### Enable
 ```python
@@ -121,7 +121,7 @@ w.system_schemas.disable(metastore_id="<id>", schema_name="access")
 for q in w.resource_quotas.list_quotas():
     print(f"{q.quota_name}: {q.quota_count}/{q.quota_limit} on {q.parent_full_name}")
 ```
-Returns: `quota_name`, `quota_count`, `quota_limit`, `parent_securable_type`, `parent_full_name`, `last_refreshed_at`.
+Returns: `quota_name`, `quota_count`, `quota_limit`, `parent_securable_type`, `parent_full_name`, `last_refreshed_at`. Counts have no SLA on freshness -- the API does not trigger a refresh.
 
 ### Get single quota
 ```python
@@ -166,14 +166,3 @@ Fields: `schema` (name string), `state` (AVAILABLE|ENABLE_INITIALIZED|ENABLE_COM
 
 ### QuotaInfo (returned by resource_quotas)
 Fields: `quota_name`, `quota_count` (int), `quota_limit` (int), `parent_securable_type` (CATALOG|SCHEMA|TABLE|METASTORE|etc.), `parent_full_name`, `last_refreshed_at` (epoch seconds).
-
-## Gotchas
-
-- `default_catalog_name` on assignments is deprecated; use Default Namespace API.
-- `storage_root` is immutable after creation; only `storage_root_credential_id` can be updated.
-- Quota counts have no SLA on freshness; API does not trigger a refresh.
-- Deleting a metastore without `force=True` fails if it contains objects.
-- System schema states: list pages may be empty but still return a continuation token; SDK handles this automatically.
-- Setting `owner=""` transfers ownership to System User (not removes it).
-- The `assign` method overwrites any existing assignment for that workspace.
-- Changing `metastore_id` via `update_assignment` requires account admin; changing only `default_catalog_name` requires workspace admin.

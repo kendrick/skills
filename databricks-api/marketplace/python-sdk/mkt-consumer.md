@@ -88,6 +88,8 @@ w.consumer_installations.update(
 w.consumer_installations.delete(listing_id="<listing-id>", installation_id="<install-id>")
 ```
 
+Required for install: `listing_id`, `accepted_consumer_terms.version`. `rotate_token=True` on update forcibly rotates the sharing token when `token_detail` is empty on the installation.
+
 ---
 
 ## 3. Fulfillments
@@ -102,7 +104,7 @@ for f in w.consumer_fulfillments.list(listing_id="<listing-id>"):
     print(f.fulfillment_type)  # REQUEST_ACCESS | INSTALL
 ```
 
-`fulfillment_type=REQUEST_ACCESS` means a personalization request is required before install.
+`fulfillment_type=REQUEST_ACCESS` means a personalization request is required before install. `share_info` is required for data listings but ignored for MCP/App listing types.
 
 ---
 
@@ -129,7 +131,7 @@ for r in w.consumer_personalization_requests.list():
     print(r.listing_name, r.status)
 ```
 
-Required on create: `intended_use`, `accepted_consumer_terms`. Optional: `comment`, `first_name`, `last_name`, `company`, `recipient_type`, `is_from_lighthouse`.
+Required on create: `intended_use`, `accepted_consumer_terms`. Optional: `comment`, `first_name`, `last_name`, `company`, `recipient_type`, `is_from_lighthouse`. Max one personalization request per listing per consumer -- creating a duplicate raises an error. `get` returns a list (`personalization_requests`) even though at most one request exists per listing.
 
 ---
 
@@ -176,9 +178,3 @@ else:
 ## Gotchas
 
 - `list` methods return iterators that auto-paginate; no manual `page_token` handling needed.
-- `accepted_consumer_terms` with `version` is required for both `create` (install) and personalization request `create`.
-- Max one personalization request per listing per consumer -- duplicate raises an error.
-- `batch_get` accepts max 50 IDs.
-- `rotate_token=True` on update forcibly rotates when `token_detail` is empty.
-- `share_info` is required for data listings but ignored for MCP/App listing types.
-- `get` for personalization requests returns an array (despite being per-listing) -- expect a list even though max is one.

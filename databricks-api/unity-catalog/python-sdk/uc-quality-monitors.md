@@ -55,7 +55,7 @@ monitor = w.quality_monitors.create(
     assets_dir="/Workspace/Users/me/monitoring",
     output_schema_name="main.monitoring",
     time_series=MonitorTimeSeries(
-        granularities=["1 day"],
+        granularities=["1 day"],  # also valid: "5 minutes", "30 minutes", "1 hour", "<n> week(s)", "1 month", "1 year"
         timestamp_col="event_ts"
     )
 )
@@ -81,6 +81,8 @@ monitor = w.quality_monitors.create(
 )
 ```
 
+A table can only have one monitor -- creating a second raises a conflict error. Exactly one of `snapshot`, `time_series`, or `inference_log` must be set, and the type cannot change after creation. `output_schema_name` is always two-level (`"catalog.schema"`), not three-level.
+
 ### Get monitor
 
 ```python
@@ -102,6 +104,8 @@ monitor = w.quality_monitors.update(
     )
 )
 ```
+
+`assets_dir` is immutable after creation and ignored on update. Slicing expressions on high-cardinality columns are capped at the top 100 unique values by frequency. Must be called by the original creator, from the same workspace where the monitor was created.
 
 ### Delete monitor
 
@@ -141,6 +145,8 @@ for r in refreshes.refreshes:
     print(f"{r.refresh_id}: {r.state} ({r.trigger})")
 ```
 
+Returns max 25 most recent entries.
+
 ---
 
 ## Common patterns
@@ -150,6 +156,7 @@ for r in refreshes.refreshes:
 ```python
 from databricks.sdk.service.catalog import MonitorMetric
 
+# `definition` uses Jinja templates with a `{{column_name}}` placeholder
 monitor = w.quality_monitors.create(
     table_name="main.default.my_table",
     assets_dir="/Workspace/Users/me/monitoring",
@@ -187,14 +194,4 @@ monitor = w.quality_monitors.create(
 
 ## Gotchas
 
-- **One monitor per table.** Creating a second monitor on the same table raises a conflict error.
-- **Exactly one type required on create.** Set exactly one of `snapshot={}`, `time_series=MonitorTimeSeries(...)`, or `inference_log=MonitorInferenceLog(...)`. Cannot change type after creation.
-- **`output_schema_name` is two-level** (`"catalog.schema"`), not three-level.
-- **`assets_dir` is immutable** after creation; ignored on update calls.
-- **Update must come from original creator** in the same workspace where the monitor was created.
-- **Refresh is async.** `run_refresh()` returns immediately with a `refresh_id`. Poll `get_refresh()` until `state` is terminal (`SUCCESS`, `FAILED`, `CANCELED`).
-- **`list_refreshes()` returns max 25** most recent entries.
-- **Custom metric definitions** use Jinja templates with `{{column_name}}` placeholder.
-- **Slicing:** high-cardinality columns capped at top 100 unique values by frequency.
 - **Permissions:** Caller needs catalog/schema USE + table ownership (or catalog/schema ownership). See REST reference for full matrix.
-- **Time series granularities:** `"5 minutes"`, `"30 minutes"`, `"1 hour"`, `"1 day"`, `"<n> week(s)"`, `"1 month"`, `"1 year"`.

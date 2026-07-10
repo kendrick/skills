@@ -61,6 +61,8 @@ statement_id = resp.statement_id
 # Poll for completion (see pattern below)
 ```
 
+External link presigned URLs expire in <=15 min -- re-fetch the chunk via `get_statement_result_chunk_n` if expired. Never log these URLs.
+
 ### Key Parameters
 
 | Param | Type | Req? | Notes |
@@ -70,12 +72,14 @@ statement_id = resp.statement_id
 | `catalog` | str | opt | Default catalog |
 | `schema` | str | opt | Default schema |
 | `parameters` | list[StatementParameterListItem] | opt | Parameterized query values |
-| `disposition` | Disposition | opt | `INLINE` (default) or `EXTERNAL_LINKS` |
+| `disposition` | Disposition | opt | `INLINE` (default) or `EXTERNAL_LINKS`. `ARROW_STREAM`/`CSV` formats require `EXTERNAL_LINKS` -- only `JSON_ARRAY` works with `INLINE` |
 | `format` | Format | opt | `JSON_ARRAY`, `ARROW_STREAM`, `CSV` |
-| `wait_timeout` | str | opt | e.g. `"30s"`, `"0s"` for async |
-| `on_wait_timeout` | TimeoutAction | opt | `CONTINUE` or `CANCEL` |
-| `byte_limit` | int | opt | Max bytes for INLINE first chunk |
-| `row_limit` | int | opt | Truncate result rows |
+| `wait_timeout` | str | opt | e.g. `"30s"`, `"0s"` for fully async. Default `"10s"` waits synchronously up to that duration |
+| `on_wait_timeout` | TimeoutAction | opt | `CONTINUE` (default, keeps statement running for later polling) or `CANCEL` (aborts it) |
+| `byte_limit` | int | opt | Max bytes for INLINE first chunk. Default 16 MiB, max 100 MiB; exceeding it silently chunks the response |
+| `row_limit` | int | opt | Truncate result rows; check `resp.manifest.truncated` |
+
+**Warehouse must be running:** Statements against stopped warehouses may hang or fail with `TEMPORARILY_UNAVAILABLE`.
 
 ---
 
@@ -176,13 +180,6 @@ resp = w.statement_execution.execute_statement(
 
 ## Gotchas
 
-- **ARROW_STREAM / CSV require `EXTERNAL_LINKS`** -- only `JSON_ARRAY` works with `INLINE`.
-- **External link expiry**: Presigned URLs expire in <=15 min. Re-fetch the chunk via `get_statement_result_chunk_n` if expired. Never log these URLs.
 - **Statement results TTL**: ~1 hour after completion. After that, `get_statement` returns NOT_FOUND.
-- **wait_timeout="0s"** forces fully async. The default `"10s"` waits synchronously up to that duration.
-- **on_wait_timeout**: `CONTINUE` (default) keeps the statement running for later polling; `CANCEL` aborts it.
-- **Warehouse must be running**: Statements against stopped warehouses may hang or fail with TEMPORARILY_UNAVAILABLE.
-- **INLINE byte_limit**: Default 16 MiB, max 100 MiB. Exceeding it silently chunks the response.
 - **Enums**: Import from `databricks.sdk.service.sql` -- `Disposition`, `Format`, `StatementState`, `TimeoutAction`, `StatementParameterListItem`.
 - **Error handling**: Failed statements have `resp.status.error` with `error_code` and `message` fields.
-- **row_limit** truncates server-side; check `resp.manifest.truncated`.

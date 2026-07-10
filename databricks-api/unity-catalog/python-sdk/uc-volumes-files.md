@@ -48,8 +48,8 @@ ext_vol = w.volumes.create(
 )
 ```
 
-**Required:** `catalog_name` (str), `schema_name` (str), `name` (str), `volume_type` (VolumeType).
-**Optional:** `storage_location` (str -- required when EXTERNAL), `comment` (str).
+**Required:** `catalog_name` (str), `schema_name` (str), `name` (str), `volume_type` (use the `VolumeType.MANAGED` / `VolumeType.EXTERNAL` enum, not raw strings).
+**Optional:** `storage_location` (str -- required when EXTERNAL; for MANAGED it's auto-assigned, so don't supply it), `comment` (str). For EXTERNAL, `storage_location` must not overlap with other UC object locations.
 
 **Permissions:** USE_CATALOG + USE_SCHEMA + CREATE VOLUME on schema. External volumes also need CREATE EXTERNAL VOLUME on the external location.
 
@@ -65,7 +65,7 @@ for v in w.volumes.list(catalog_name="prod", schema_name="raw"):
 **Required:** `catalog_name` (str), `schema_name` (str).
 **Optional:** `max_results` (int), `include_browse` (bool).
 
-The SDK handles pagination automatically -- the iterator yields all results across pages.
+The SDK handles pagination automatically -- the iterator yields all results across pages. (The underlying REST API may return empty pages with a `next_page_token` still set; the SDK loops through these for you.)
 
 **Permissions:** Returns only volumes caller owns or has READ VOLUME on (+ USE_CATALOG/USE_SCHEMA).
 
@@ -110,6 +110,8 @@ w.volumes.delete("prod.raw.landing_files")
 
 **Permissions:** Metastore admin or volume owner (+ USE_CATALOG + USE_SCHEMA).
 
+Deleting a managed volume deletes the underlying data; deleting an external volume only removes the UC metadata.
+
 ---
 
 ## Common Patterns
@@ -137,13 +139,3 @@ data = w.files.download("/Volumes/prod/raw/landing_files/data.csv").read()
 ```
 
 ---
-
-## Gotchas
-
-- The `name` parameter for read/update/delete is always the **three-level** name (`catalog.schema.volume`), not just the volume name.
-- `VolumeType.MANAGED` vs `VolumeType.EXTERNAL` -- use the enum, not raw strings.
-- Managed volumes: storage location is auto-assigned; do not supply `storage_location`.
-- External volume `storage_location` must not overlap with other UC object locations.
-- Deleting a managed volume deletes underlying data; deleting an external volume only removes UC metadata.
-- The Volumes API manages volume metadata only. To read/write **files within** a volume, use `w.files` (Files API) with path `/Volumes/<catalog>/<schema>/<volume>/<file_path>`.
-- SDK `list()` auto-paginates; the REST API may return empty pages with a `next_page_token`.

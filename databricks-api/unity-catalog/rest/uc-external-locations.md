@@ -82,7 +82,7 @@ POST /api/2.1/unity-catalog/external-locations
 ### List / Get / Update / Delete
 - **List:** `GET .../external-locations?max_results=0` -- paginated. Params: `include_browse`, `page_token`, `include_unbound`.
 - **Get:** `GET .../external-locations/{name}?include_browse=true`
-- **Update:** `PATCH .../external-locations/{name}` -- body: `url`, `credential_name`, `new_name`, `owner`, `comment`, `read_only`, `force`, `skip_validation`, `isolation_mode`, `fallback`, `enable_file_events`. Admin can only rename.
+- **Update:** `PATCH .../external-locations/{name}` -- body: `url`, `credential_name`, `new_name`, `owner`, `comment`, `read_only`, `force`, `skip_validation`, `isolation_mode`, `fallback`, `enable_file_events`. Admin can only rename. Changing `url` can break dependent external tables -- use `force=true` to override.
 - **Delete:** `DELETE .../external-locations/{name}?force=true` -- owner only.
 
 ---
@@ -175,7 +175,4 @@ POST /api/2.0/unity-catalog/temporary-table-credentials
 - **AWS IAM trust policy:** After creating a storage/service credential, the response includes `external_id` and `unity_catalog_iam_arn`. You must update the IAM role trust policy to include both before the credential works (confused deputy prevention).
 - **Cloud-specific credential objects:** AWS uses `aws_iam_role` with `role_arn`; Azure uses `azure_managed_identity` or `azure_service_principal`; GCP uses `databricks_gcp_service_account`. Only one cloud credential per request.
 - **Pagination:** All list endpoints: use `max_results=0` (recommended). Pages may have zero results but still return `next_page_token` -- keep reading until `next_page_token` is absent.
-- **Credentials vs Storage Credentials API:** The `/credentials` endpoint is the unified API (supports both STORAGE and SERVICE purpose). The `/storage-credentials` endpoint is the older API. Both work; prefer the unified one.
-- **External location URL update with `force`:** Changing an external location URL can break dependent external tables. Use `force=true` to override.
-- **Connection `options` on update:** Must provide full options map (replacement, not merge).
 - **Temp path/table credentials:** Requires metastore flag `external_access_enabled=true` (default false). Only for external storage paths; managed tables not supported.

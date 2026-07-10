@@ -92,6 +92,8 @@ PATCH /api/2.1/unity-catalog/recipients/{name}
 **Required:** `name` (path)
 **Optional:** `comment`, `new_name`, `owner`, `expiration_time`, `ip_access_list`, `properties_kvpairs` (overwrites existing)
 
+`authentication_type` is set at creation and cannot be changed via update.
+
 **Response:** `200` — Updated RecipientInfo
 
 **Permissions:** Metastore admin or recipient owner. Name change requires BOTH.
@@ -151,10 +153,4 @@ GET /api/2.1/unity-catalog/recipients/{name}/share-permissions
 
 ## Gotchas
 
-- **authentication_type is immutable**: Set at creation, cannot be changed via update
-- **properties_kvpairs overwrites**: Update replaces all existing key-value pairs, not merge
-- **Rename requires dual permission**: Both metastore admin AND recipient owner needed
-- **Token rotation**: Setting `existing_token_expire_in_seconds` to 0 expires the old token immediately — no grace period
 - **activation_url is deprecated**: Use the recipient activation endpoints instead
-- **ip_access_list max 100**: CIDR notation, maximum 100 entries
-- **DATABRICKS auth type**: Requires `data_recipient_global_metastore_id` in `cloud:region:metastore-uuid` format

@@ -31,7 +31,7 @@ PREFIX = /api/2.1/unity-catalog/volumes
 **POST** `/api/2.1/unity-catalog/volumes`
 
 Required fields: `catalog_name` (str), `schema_name` (str), `name` (str), `volume_type` (str: `MANAGED` | `EXTERNAL`).
-Optional: `storage_location` (str -- required if EXTERNAL), `comment` (str, 1-65536 chars).
+Optional: `storage_location` (str -- required if EXTERNAL, and cannot be specified for MANAGED since its location is auto-assigned), `comment` (str, 1-65536 chars).
 
 ```json
 POST /api/2.1/unity-catalog/volumes
@@ -122,6 +122,8 @@ Path param `name` (str, required): three-level fully qualified name.
 
 **Permissions:** Metastore admin or volume owner (+ USE_CATALOG + USE_SCHEMA for non-admins).
 
+Deleting a managed volume deletes its underlying data; deleting an external volume only removes the UC metadata.
+
 ---
 
 ## Common Errors
@@ -132,11 +134,3 @@ Path param `name` (str, required): three-level fully qualified name.
 | 404 | Volume, schema, or catalog does not exist |
 | 409 | Storage location overlaps with existing volume/table (create external) |
 | 400 | `volume_type` missing or invalid; `storage_location` required for EXTERNAL |
-
-## Gotchas
-
-- `name` in path params is always the **three-level** name (`catalog.schema.volume`), not just the volume name.
-- Managed volumes have their storage location auto-assigned; you cannot specify `storage_location` for MANAGED type.
-- External volume `storage_location` must not nest under or contain other UC object locations.
-- List pagination can return empty pages with a `next_page_token` -- always loop until token is absent.
-- Deleting a managed volume deletes its underlying data; deleting an external volume only removes the UC metadata.

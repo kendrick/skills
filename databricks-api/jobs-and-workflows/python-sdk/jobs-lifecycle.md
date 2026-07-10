@@ -60,7 +60,7 @@ job = w.jobs.create(
 )
 print(job.job_id)
 ```
-Key params: `name`, `tasks` (list[Task]), `job_clusters`, `schedule`/`continuous` (mutually exclusive), `trigger`, `tags` (max 25), `run_as`, `queue`, `timeout_seconds`, `email_notifications`, `health`, `parameters`, `environments` (serverless), `git_source`, `budget_policy_id`, `performance_target`.
+Key params: `name`, `tasks` (list[Task]), `job_clusters`, `schedule`/`continuous` (mutually exclusive), `trigger`, `tags` (max 25), `run_as`, `queue`, `timeout_seconds`, `email_notifications`, `health`, `parameters`, `environments` (serverless), `git_source`, `budget_policy_id`, `performance_target`, `max_concurrent_runs` (default 1, max 1000; 0 skips all new runs).
 Task types: `notebook_task`, `spark_jar_task`, `spark_python_task`, `python_wheel_task`, `sql_task`, `dbt_task`, `pipeline_task`, `run_job_task`, `condition_task`, `for_each_task`, `dashboard_task`, `alert_task`.
 
 ### Get Job
@@ -84,7 +84,7 @@ w.jobs.update(
     fields_to_remove=["schedule"],
 )
 ```
-Top-level fields replaced; arrays merged by key. Use `fields_to_remove` for deletions.
+Top-level fields replaced; arrays merged by key (`task_key`, `job_cluster_key`). Use `fields_to_remove` for deletions (supports `tasks/task_key`, `job_clusters/key`).
 
 ### Reset (Full Replace)
 ```python
@@ -116,7 +116,7 @@ run = w.jobs.run_now(
 )
 print(run.run_id)
 ```
-Optional: `only` (task keys subset), `queue`, `pipeline_params`, `performance_target`.
+Optional: `only` (task keys subset), `queue`, `pipeline_params`, `performance_target`, `idempotency_token` (max 64 chars; retrying after the matching run was deleted returns an error). Runs appear in the Jobs UI, support automatic retries, and are eligible for serverless auto-optimization -- unlike `submit`; prefer `create` + `run_now` for production workloads.
 
 ### Submit (one-time, no saved job)
 ```python
@@ -160,7 +160,7 @@ print(output.notebook_output.result)  # from dbutils.notebook.exit()
 print(output.logs)  # stdout/stderr for jar/python tasks
 print(output.error)  # error message if failed
 ```
-Limit: 5 MB. Runs expire after 60 days.
+Limit: 5 MB -- store larger results in cloud storage. Runs expire after 60 days; save results before then.
 
 ### Export Run
 ```python
@@ -172,7 +172,7 @@ for view in export.views:
 ### Cancel Run
 ```python
 w.jobs.cancel_run(run_id=455644833)
-# Async: run may still be executing after call returns
+# Async: run may still be executing after call returns -- poll get_run() to confirm terminal state
 ```
 
 ### Cancel All Runs
@@ -183,7 +183,7 @@ w.jobs.cancel_all_runs(job_id=11223344)
 ### Delete Run
 ```python
 w.jobs.delete_run(run_id=455644833)
-# Must be non-active. Cancel first if needed.
+# Must be non-active. Cancel first and wait for termination, then delete.
 ```
 
 ### Repair Run
@@ -195,6 +195,7 @@ repair = w.jobs.repair_run(
 )
 print(repair.repair_id)  # pass as latest_repair_id for next repair
 ```
+Tasks re-run within the ORIGINAL run using CURRENT job settings (not the settings at original run time); the run must not be in progress.
 Options: `rerun_tasks` (list of task keys), `rerun_all_failed_tasks`, `rerun_dependent_tasks`, `job_parameters`. Only one of `rerun_tasks` or `rerun_all_failed_tasks`.
 
 ---
@@ -202,6 +203,7 @@ Options: `rerun_tasks` (list of task keys), `rerun_all_failed_tasks`, `rerun_dep
 ## 4. Permissions
 
 Levels: `CAN_VIEW`, `CAN_MANAGE_RUN`, `CAN_MANAGE`, `IS_OWNER`
+`job_id` is passed as a string in permissions calls, not an int.
 
 ```python
 # Get
@@ -334,16 +336,4 @@ Note: The `state` field (deprecated) uses `life_cycle_state` + `result_state`. P
 
 ## Gotchas
 
-- **reset vs update**: `reset()` replaces ALL settings (unset fields revert to defaults); `update()` merges top-level fields and merges array entries by key (`task_key`, `job_cluster_key`). Use `fields_to_remove` in update to delete specific fields (supports `tasks/task_key`, `job_clusters/key`).
-- **run_now vs submit**: `run_now` = saved job (visible in UI, retries work, serverless auto-optimization). `submit` = one-time run (no UI, no retries, no auto-optimization). For production workloads, prefer create + run_now.
-- **repair semantics**: Re-runs tasks within the ORIGINAL run using CURRENT job settings (not the settings at original run time). Must pass `latest_repair_id` from the previous repair for sequential repairs. Run must not be in progress. Only one of `rerun_tasks` or `rerun_all_failed_tasks` can be set.
-- **cancel is async**: The run may still be executing after `cancel_run()` returns. Poll `get_run()` to confirm terminal state.
-- **delete_run**: Only works for non-active runs. Cancel first, wait for termination, then delete.
-- **pagination**: SDK auto-paginates `list()` and `list_runs()`. For `get()`/`get_run()`, arrays with >100 items require manual `page_token` handling.
-- **output limits**: `get_run_output()` returns max 5 MB of output. For larger results, use cloud storage.
-- **run expiry**: Runs are auto-deleted after 60 days. Save results before expiry.
-- **permissions job_id is string**: Permissions methods take `job_id` as string, not int.
 - **timeout_seconds**: Changes apply to active runs immediately. All other setting changes apply only to future runs.
-- **SDK client paths**: Jobs = `w.jobs`, Policy compliance = `w.policy_compliance_for_jobs`.
-- **max_concurrent_runs**: Setting to 0 causes all new runs to be skipped. Default is 1. Max is 1000.
-- **idempotency_token**: Max 64 chars. If a run with the same token exists, returns existing run_id. If the token's run was deleted, returns an error.

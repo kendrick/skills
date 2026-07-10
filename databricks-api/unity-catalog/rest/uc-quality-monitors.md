@@ -39,6 +39,8 @@ Path param `table_name`: three-level UC name `catalog.schema.table_name` (case-i
 POST /api/2.1/unity-catalog/tables/{table_name}/monitor
 ```
 
+A table can have at most one monitor attached -- create fails with `409` if one already exists.
+
 **Required fields:**
 - `assets_dir` (string) -- absolute path for monitoring asset storage
 - `output_schema_name` (string) -- two-level `catalog.schema` for output tables
@@ -48,7 +50,7 @@ POST /api/2.1/unity-catalog/tables/{table_name}/monitor
 - `time_series` (object) -- requires `granularities` (array of string) and `timestamp_col` (string). Granularities: `"5 minutes"`, `"30 minutes"`, `"1 hour"`, `"1 day"`, `"<n> week(s)"`, `"1 month"`, `"1 year"`
 - `inference_log` (object) -- requires `granularities`, `timestamp_col`, `model_id_col`, `prediction_col`, `problem_type` (`PROBLEM_TYPE_CLASSIFICATION` | `PROBLEM_TYPE_REGRESSION`). Optional: `label_col`, `prediction_proba_col`
 
-**Optional fields:** `baseline_table_name`, `custom_metrics[]`, `notifications.on_failure.email_addresses[]`, `schedule` (requires `quartz_cron_expression` + `timezone_id`), `slicing_exprs[]`, `skip_builtin_dashboard` (bool), `warehouse_id`
+**Optional fields:** `baseline_table_name`, `custom_metrics[]` (type: `CUSTOM_METRIC_TYPE_AGGREGATE` for raw columns, `CUSTOM_METRIC_TYPE_DERIVED` for metrics depending on aggregates, `CUSTOM_METRIC_TYPE_DRIFT` for baseline-vs-input or consecutive-window comparisons), `notifications.on_failure.email_addresses[]`, `schedule` (requires `quartz_cron_expression` + `timezone_id`), `slicing_exprs[]` (high-cardinality columns capped at the top 100 unique values by frequency), `skip_builtin_dashboard` (bool), `warehouse_id`
 
 ```json
 {
@@ -61,7 +63,7 @@ POST /api/2.1/unity-catalog/tables/{table_name}/monitor
 }
 ```
 
-**Response (200):** Returns full monitor object including `status`, `dashboard_id`, `profile_metrics_table_name`, `drift_metrics_table_name`, `monitor_version`.
+**Response (200):** Returns full monitor object including `status` (`MONITOR_STATUS_ACTIVE` | `MONITOR_STATUS_PENDING` | `MONITOR_STATUS_DELETE_PENDING` | `MONITOR_STATUS_ERROR` | `MONITOR_STATUS_FAILED`), `dashboard_id`, `profile_metrics_table_name`, `drift_metrics_table_name`, `monitor_version`.
 
 **Permissions:** One of: (1) owner of parent catalog + USE_SCHEMA + SELECT on table, (2) USE_CATALOG + owner of parent schema + SELECT, (3) USE_CATALOG + USE_SCHEMA + owner of table.
 
@@ -150,13 +152,4 @@ Path params: `table_name` (string), `refresh_id` (int64). Returns single refresh
 
 ## Gotchas
 
-- **One monitor per table.** A table can only have one monitor attached.
 - **Exactly one type required on create.** Must set exactly one of `snapshot`, `time_series`, or `inference_log`. Cannot change type after creation.
-- **`output_schema_name` is two-level** (`catalog.schema`), not three-level.
-- **`assets_dir` is immutable** after creation (ignored on update).
-- **Update requires original creator** calling from the same workspace where the monitor was created.
-- **Refresh is async.** `run_refresh` returns immediately; poll with `get_refresh` using the returned `refresh_id`.
-- **List refreshes returns max 25** most recent entries.
-- **Custom metrics types:** `CUSTOM_METRIC_TYPE_AGGREGATE` (raw columns), `CUSTOM_METRIC_TYPE_DERIVED` (depends on aggregates), `CUSTOM_METRIC_TYPE_DRIFT` (compares baseline vs input or consecutive windows).
-- **Slicing expressions:** high-cardinality columns are capped at top 100 unique values by frequency.
-- **Status enum:** `MONITOR_STATUS_ACTIVE`, `MONITOR_STATUS_PENDING`, `MONITOR_STATUS_DELETE_PENDING`, `MONITOR_STATUS_ERROR`, `MONITOR_STATUS_FAILED`.

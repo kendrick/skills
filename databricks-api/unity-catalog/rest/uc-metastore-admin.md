@@ -47,7 +47,7 @@ Permission: account admin or first metastore in region.
 ```
 GET /metastores?max_results=0
 ```
-Optional: `max_results` (int32), `page_token`. Use `max_results=0` for server-default page size (recommended). Paginate until `next_page_token` is absent. Pages may be empty yet still return a token.
+Optional: `max_results` (int32), `page_token`. Use `max_results=0` for server-default page size (recommended); omitting it returns all results unpaginated, which is deprecated. Paginate until `next_page_token` is absent. Pages may be empty yet still return a token.
 Permission: admin.
 
 ### Get
@@ -64,14 +64,14 @@ PATCH /metastores/{id}
 {"new_name": "renamed", "owner": "admins-group"}
 ```
 Required path: `id`. Optional body: `new_name`, `owner`, `delta_sharing_scope` (INTERNAL|INTERNAL_AND_EXTERNAL), `delta_sharing_recipient_token_lifetime_in_seconds`, `delta_sharing_organization_name`, `external_access_enabled`, `privilege_model_version`, `storage_root_credential_id`.
-Set `owner: ""` to transfer to System User. Permission: metastore admin.
+Set `owner: ""` to transfer to System User. `storage_root` is immutable after creation -- only `storage_root_credential_id` can be changed. Permission: metastore admin.
 
 ### Delete
 
 ```
 DELETE /metastores/{id}?force=true
 ```
-Required path: `id`. Optional query: `force` (bool, default false). Permission: metastore admin.
+Required path: `id`. Optional query: `force` (bool, default false) -- without it, delete fails if the metastore contains objects. Permission: metastore admin.
 
 ## Current Metastore Info
 
@@ -115,7 +115,7 @@ Required path: `workspace_id`. Required query: `metastore_id`. Permission: accou
 ```
 GET /metastores/{metastore_id}/systemschemas?max_results=0
 ```
-Required path: `metastore_id`. Optional: `max_results`, `page_token`. Returns `schemas[]` with `schema` (name) and `state` (AVAILABLE|ENABLE_INITIALIZED|ENABLE_COMPLETED|DISABLE_INITIALIZED|UNAVAILABLE|MANAGED). Permission: account/metastore admin.
+Required path: `metastore_id`. Optional: `max_results`, `page_token`. Returns `schemas[]` with `schema` (name) and `state` (AVAILABLE|ENABLE_INITIALIZED|ENABLE_COMPLETED|DISABLE_INITIALIZED|UNAVAILABLE|MANAGED). Permission: account/metastore admin. Pages may be empty but still return `next_page_token`; keep paginating until the token is absent.
 
 ### Enable
 ```
@@ -155,8 +155,3 @@ Required path: `parent_securable_type` (e.g. SCHEMA, CATALOG, METASTORE), `paren
 ## Gotchas
 
 - `default_catalog_name` on assignments is deprecated; use Default Namespace API instead.
-- List metastores without `max_results` returns all results unpaginated (deprecated behavior).
-- System schema list pages may be empty but still return `next_page_token`; keep paginating until token is absent.
-- Quota counts have no SLA on freshness and are not refreshed by the API call.
-- Deleting a metastore without `force=true` fails if it contains objects.
-- `storage_root` is immutable after creation; only `storage_root_credential_id` can be updated.

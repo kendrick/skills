@@ -38,7 +38,8 @@ rel = w.external_lineage.create_external_lineage_relationship(
 )
 print(rel.id)
 
-# List downstream relationships
+# List downstream relationships (lineage_direction is required -- UPSTREAM or
+# DOWNSTREAM, no "both" option; call twice if you need both directions)
 rels = w.external_lineage.list_external_lineage_relationships(
     object_info=ExternalLineageObjectInfo(table={"name": "main.sales.customers"}),
     lineage_direction="DOWNSTREAM"
@@ -70,7 +71,7 @@ Tags on UC entities: catalogs, schemas, tables, columns, volumes, externallocati
 **Permissions**: own the entity OR APPLY TAG + USE SCHEMA + USE CATALOG. Governed tags also need ASSIGN/MANAGE on the tag policy.
 
 ```python
-# Create tag
+# Create tag (raises if tag_key already exists on the entity -- RESOURCE_ALREADY_EXISTS)
 tag = w.entity_tag_assignments.create(
     entity_name="main.default.customer_data",
     entity_type="tables",
@@ -78,7 +79,8 @@ tag = w.entity_tag_assignments.create(
     tag_value="high"
 )
 
-# List tags for an entity
+# List tags for an entity (may return empty pages with a next_page_token still
+# set -- the SDK handles this automatically as long as you iterate the generator)
 tags = w.entity_tag_assignments.list(
     entity_type="tables",
     entity_name="main.default.customer_data"
@@ -138,7 +140,8 @@ for m in w.external_metadata.list_external_metadata():
 # Get by name
 meta = w.external_metadata.get_external_metadata(name="security_events_stream")
 
-# Update
+# Update -- entity_type and system_type are required even for partial updates;
+# owner cannot be combined with other field updates in the same call
 w.external_metadata.update_external_metadata(
     name="security_events_stream",
     entity_type="Topic",
@@ -176,11 +179,3 @@ w.external_lineage.create_external_lineage_relationship(
     columns=[ExternalLineageColumnRelationship(source="contact_id", target="id")]
 )
 ```
-
-## Gotchas
-
-- **Tag pagination**: `list` may return empty pages with `next_page_token`; iterate until token is absent (SDK handles this automatically if you iterate the generator).
-- **External metadata update**: `entity_type` and `system_type` are required in the body even for partial updates.
-- **Owner transfer**: cannot combine `owner` update with other field updates on external metadata in one call.
-- **Lineage direction**: `list_external_lineage_relationships` requires `lineage_direction` -- `UPSTREAM` or `DOWNSTREAM` -- no "both" option; call twice if needed.
-- **RESOURCE_ALREADY_EXISTS**: creating a tag with a key that already exists on the entity returns 400.

@@ -20,7 +20,7 @@ w = WorkspaceClient()  # uses DATABRICKS_HOST + DATABRICKS_TOKEN env vars
 
 ## Functions (UDFs)
 
-**WARNING**: Functions API is experimental.
+**WARNING**: Functions API is experimental; expect breaking changes.
 
 ### List functions
 ```python
@@ -175,11 +175,6 @@ ready = [v for v in versions if v.status == "READY"]
 `PENDING_REGISTRATION` -> `READY` (or `FAILED_REGISTRATION`). Only `READY` versions can be served.
 
 ## Gotchas
-- Functions API is experimental; expect breaking changes
-- Function update only changes `owner` -- delete + recreate to modify logic
-- Model update can change `name`/`owner`/`comment` only
-- Model version update can only change `comment`
-- Deleting a registered model cascades to ALL its versions
 - `include_aliases` defaults to False -- pass explicitly to get alias data
 - List endpoints paginate automatically in the SDK; raw REST requires manual `next_page_token` handling
 - Pages may return 0 results with a `next_page_token` -- not end of results until token absent

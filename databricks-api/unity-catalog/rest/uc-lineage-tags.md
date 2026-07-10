@@ -172,11 +172,3 @@ Requires metastore admin or owner. Response: `{}`.
 | 403 | PERMISSION_DENIED | Insufficient privileges |
 | 404 | RESOURCE_DOES_NOT_EXIST | Entity/tag/metadata not found |
 | 500 | INTERNAL_SERVER_ERROR | Retry with backoff |
-
-## Gotchas
-
-- **Lineage list flattening**: query params for `object_info` must be flattened (e.g. `object_info.table.name=main.sales.customers`), not nested JSON.
-- **Tag pagination**: empty pages with `next_page_token` are valid; only stop when token is absent.
-- **Lineage update_mask**: required query param for PATCH on lineage and metadata; always list explicit fields.
-- **External metadata update**: `entity_type` and `system_type` are required in the body even for partial updates.
-- **Owner transfer**: updating `owner` on external metadata cannot be combined with other field updates in the same request.

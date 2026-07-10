@@ -36,6 +36,8 @@ GET /api/2.1/unity-catalog/shares
 
 **Optional:** `max_results` (int32, <=1000), `page_token` (string)
 
+Returns all shares if `max_results` is not set.
+
 **Response:** `200` — `shares[]` with `name`, `owner`, `comment`, `created_at`, `objects[]`, `storage_location`, `storage_root` + `next_page_token`
 
 **Permissions:** USE_SHARE on metastore returns all; otherwise only owned shares
@@ -100,6 +102,8 @@ PATCH /api/2.1/unity-catalog/shares/{name}
 
 **`updates[].action`:** `ADD`, `REMOVE`, `UPDATE`
 
+`storage_root` cannot be updated if the share contains notebook files.
+
 **Response:** `200` — Updated ShareInfo
 
 **Permissions:** Share owner or metastore admin. Adding tables requires SELECT on each table. Renaming requires owner + CREATE_SHARE. Metastore admins can only modify `owner`.
@@ -157,13 +161,3 @@ PATCH /api/2.1/unity-catalog/shares/{name}/permissions
 **Response:** `200` — Updated `privilege_assignments[]`
 
 **Permissions:** USE_SHARE + SET_SHARE_PERMISSION on metastore OR share owner. Granting to new recipients requires owning those recipients.
-
----
-
-## Gotchas
-
-- **updates array max 100**: Each update call supports at most 100 data object changes
-- **storage_root immutable with notebooks**: Cannot update `storage_root` if share contains notebook files
-- **Metastore admin limits**: Admins can only change `owner` field, not other share properties
-- **Rename requires dual permission**: Both ownership AND CREATE_SHARE privilege needed
-- **Pagination**: List returns all if `max_results` not set

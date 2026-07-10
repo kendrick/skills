@@ -74,6 +74,7 @@ policy = w.policies.create_policy(
     row_filter=RowFilterPolicy(function_name="main.security.region_fn")
 )
 ```
+`for_securable_type` only supports `TABLE` despite the enum listing many types. A `row_filter.function_name` must return a boolean; a `column_mask.function_name` must accept the masked column's type as its first argument and return that same type.
 
 ### List / Get / Update / Delete
 ```python
@@ -92,6 +93,7 @@ p = w.policies.get_policy(
 w.policies.update_policy(
     on_securable_type="SCHEMA", on_securable_fullname="main.hr", name="mask_ssn",
     to_principals=["analysts", "interns"]
+    # pass update_mask for a partial update; without it, all provided fields replace existing values
 )
 
 # Delete
@@ -103,7 +105,7 @@ w.policies.delete_policy(
 ## 3. Workspace Bindings
 
 ```python
-# Get bindings (preferred API)
+# Get bindings (preferred API -- the deprecated `get`/`update` only ever worked for catalogs)
 bindings = w.workspace_bindings.get_bindings(
     securable_type="catalog", securable_name="main"
 )
@@ -121,7 +123,7 @@ result = w.workspace_bindings.update_bindings(
     remove=[WorkspaceBinding(workspace_id=67890)]
 )
 ```
-Supported types: `catalog`, `storage_credential`, `credential`, `external_location`.
+Supported types: `catalog`, `storage_credential`, `credential`, `external_location`. Adding a workspace that's already bound with a different `binding_type` updates (not duplicates) the binding.
 
 ## 4. Request for Access (Public Preview)
 
@@ -156,6 +158,7 @@ w.rfa.update_access_request_destinations(
     update_mask="destinations"
 )
 ```
+Destinations on sub-schema objects (tables, volumes, functions, models) are inherited from the parent schema and cannot be set directly. Max 5 email + 5 external notification destinations per securable; if a URL destination is used, it must be the only one.
 
 ## 5. Artifact Allowlists
 
@@ -205,7 +208,7 @@ matchers = list(current.artifact_matchers or [])
 matchers.append(ArtifactMatcher(artifact="com.newlib.*", match_type=ArtifactMatchType.PREFIX_MATCH))
 w.artifact_allowlists.update(artifact_type="LIBRARY_JAR", artifact_matchers=matchers)
 
-# Paginate through all grants
+# Paginate through all grants (pages may come back empty with a token still set -- keep iterating)
 page = w.grants.get(securable_type="catalog", full_name="main", max_results=0)
 all_assignments = list(page.privilege_assignments or [])
 while page.next_page_token:
@@ -247,14 +250,3 @@ Common errors: 400 (invalid securable_type, max_results 1-149), 403 (insufficien
 ## Gotchas
 
 - Always use `max_results=0` for paginated grants/bindings calls; unpaginated is deprecated.
-- Pagination may return empty pages with `next_page_token` present -- keep iterating until token is absent.
-- `get` returns direct grants only; `get_effective` includes inherited. Use effective for auditing actual access.
-- ABAC `for_securable_type` only supports `TABLE` despite the enum listing many types.
-- ABAC column mask function must accept the masked column type as first arg and return same type.
-- ABAC row filter function must return boolean.
-- Artifact allowlist `update` is a full replace (PUT). Read-modify-write to avoid data loss.
-- RFA destinations on sub-schema objects (tables, volumes, functions, models) are inherited and cannot be set directly.
-- RFA: max 5 email + 5 external notification destinations; if URL destination used, must be the only one.
-- Deprecated: `w.workspace_bindings.get()` / `.update()` (catalog-only). Use `get_bindings` / `update_bindings`.
-- Workspace bindings: adding a workspace already bound with a different binding_type updates (not duplicates) the binding.
-- Policy `update_policy` with `update_mask` allows partial updates; without it, all provided fields replace existing values.

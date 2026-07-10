@@ -82,7 +82,7 @@ with open("large.parquet", "rb") as f:
 w.dbfs.close(handle=handle)
 ```
 
-Handle has a **10-minute idle timeout**.
+Handle has a **10-minute idle timeout**; always close handles in try/finally.
 
 ---
 
@@ -102,6 +102,8 @@ w.dbfs.move(source_path="/mnt/data/old.csv", destination_path="/mnt/data/new.csv
 info = w.dbfs.get_status(path="/mnt/data/file.csv")
 # info.path, info.is_dir, info.file_size, info.modification_time
 ```
+
+Large deletes (>10K files) may raise 503; retry or use dbutils.fs.
 
 ---
 
@@ -146,8 +148,5 @@ def upload_file(w, local_path: str, dbfs_path: str):
 
 1. **All data is base64-encoded** -- both upload and download require base64 encode/decode
 2. **1 MB limit** per put, add_block, and read call
-3. **Streaming handle**: 10-min idle timeout; always close handles in try/finally
-4. **Paths must be absolute DBFS paths** (`/mnt/...`, `/FileStore/...`)
-5. **Large deletes** (>10K files): may raise 503; retry or use dbutils.fs
-6. **List timeout**: ~60s for large directories
-7. **DBFS is legacy** -- `w.files` (Files API) supports direct binary without base64
+3. **Paths must be absolute DBFS paths** (`/mnt/...`, `/FileStore/...`)
+4. **DBFS is legacy** -- `w.files` (Files API) supports direct binary without base64

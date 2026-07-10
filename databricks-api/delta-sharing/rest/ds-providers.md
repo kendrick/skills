@@ -56,7 +56,9 @@ POST /api/2.1/unity-catalog/providers
 ```
 
 **Required:** `name`, `authentication_type` (TOKEN | DATABRICKS | OIDC_FEDERATION | OAUTH_CLIENT_CREDENTIALS)
-**Optional:** `comment`, `owner`, `recipient_profile_str` (required for TOKEN/OAUTH_CLIENT_CREDENTIALS)
+**Optional:** `comment`, `owner`, `recipient_profile_str` (required for TOKEN/OAUTH_CLIENT_CREDENTIALS; must be valid JSON with `shareCredentialsVersion`, `bearerToken`, `endpoint`)
+
+For DATABRICKS auth, the provider is auto-populated with `cloud`, `region`, `metastore_id` — no profile string needed.
 
 **Response:** `200` — ProviderInfo with `name`, `authentication_type`, `owner`, `comment`, `recipient_profile` (TOKEN/OAUTH only), `cloud`, `region`, `metastore_id` (DATABRICKS only), `created_at/by`, `updated_at/by`
 
@@ -129,19 +131,11 @@ GET /api/2.1/unity-catalog/providers/{name}/shares
 GET /api/2.1/data-sharing/providers/{provider_name}/shares/{share_name}
 ```
 
+Note the base path: `/api/2.1/data-sharing/` instead of `/api/2.1/unity-catalog/`.
+
 **Required:** `provider_name` (path), `share_name` (path)
 **Optional:** `table_max_results` (int32, <=1000, default 500), `function_max_results` (int32, <=1000, default 500), `volume_max_results` (int32, <=1000, default 500), `notebook_max_results` (int32, <=100, default 100)
 
 **Response:** `200` — `tables[]`, `functions[]`, `volumes[]`, `notebooks[]`, `share` metadata
 
 **Permissions:** API scope `sharing`
-
----
-
-## Gotchas
-
-- **recipient_profile_str**: Required for TOKEN and OAUTH_CLIENT_CREDENTIALS auth types; must be valid JSON with `shareCredentialsVersion`, `bearerToken`, `endpoint`
-- **DATABRICKS auth type**: Provider auto-populated with `cloud`, `region`, `metastore_id` — no profile string needed
-- **Rename requires dual permission**: Both metastore admin AND provider owner
-- **List share assets path differs**: Uses `/api/2.1/data-sharing/` base instead of `/api/2.1/unity-catalog/`
-- **Asset pagination**: Each asset type (tables, functions, volumes, notebooks) has its own max_results param

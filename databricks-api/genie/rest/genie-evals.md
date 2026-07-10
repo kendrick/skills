@@ -28,7 +28,7 @@ All endpoints require OAuth scope `genie`. Standard bearer-token auth via `Autho
 `POST /api/2.0/genie/spaces/{space_id}/eval-runs`
 
 - **Path**: `space_id` (uuid, required)
-- **Body**: `benchmark_question_ids` (string[], optional -- omit to evaluate all benchmark questions)
+- **Body**: `benchmark_question_ids` (string[], optional -- omit to evaluate all benchmark questions; passing an empty array is not the same)
 
 ```json
 POST /api/2.0/genie/spaces/abc123/eval-runs
@@ -93,8 +93,6 @@ Assessment reasons include deterministic checks (EMPTY_RESULT, RESULT_MISSING_RO
 ## Gotchas
 
 - **Beta API**: Endpoints may change without notice.
-- **Omit `benchmark_question_ids`** to run all benchmark questions in the space; passing an empty array is not the same.
 - **Eval runs are async**: After POST create, poll GET eval-run until `eval_run_status` is `DONE` (or a terminal state).
 - **Terminal statuses**: DONE, EVALUATION_FAILED, EVALUATION_CANCELLED, EVALUATION_TIMEOUT. Only RUNNING and NOT_STARTED are non-terminal.
 - **404 FEATURE_DISABLED**: If evals are not enabled on your workspace, you get 404 with FEATURE_DISABLED, not 403.
-- **Pagination**: Default page size 20, max 100. Use `next_page_token` to iterate.

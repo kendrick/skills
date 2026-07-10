@@ -61,7 +61,7 @@ Returns: `space_id`, `title`, `description`, `serialized_space`, `warehouse_id`,
 GET /api/2.0/genie/spaces?page_size=20&page_token=<token>
 ```
 Optional: `page_size` (int32, max 100, default 20), `page_token` (string).
-Returns: `spaces[]` (excludes `serialized_space`), `next_page_token`.
+Returns: `spaces[]` (excludes `serialized_space` -- use Get Space to retrieve full content), `next_page_token`.
 
 ### Get Space
 ```
@@ -178,7 +178,7 @@ Initiates full result download. Returns: `download_id`, `download_id_signature`.
 GET .../attachments/{attachment_id}/downloads/{download_id}?download_id_signature=<jwt>
 ```
 Required path: `download_id`. Required query: `download_id_signature` (string).
-Returns: `statement_response` with `external_links[]` containing presigned URLs.
+Returns: `statement_response` with `external_links[]` containing presigned URLs (`EXTERNAL_LINKS` disposition). Do NOT send an `Authorization` header when downloading from these URLs.
 
 ---
 
@@ -210,11 +210,7 @@ Returns `{}`.
 ## Gotchas
 
 - `serialized_space` is a JSON **string** (not an object) -- must be serialized/escaped before sending.
-- List Spaces **excludes** `serialized_space` -- use Get Space to retrieve full content.
-- Update Space `serialized_space` is a **full replacement**, not a partial merge.
 - Start Conversation returns the first message in an async processing state -- poll Get Message until `status` is `COMPLETED` or `FAILED`.
 - Query results expire. When status is `QUERY_RESULT_EXPIRED`, call Execute Attachment Query to re-run.
-- Full download uses `EXTERNAL_LINKS` disposition with presigned URLs -- do NOT send `Authorization` header when downloading from these URLs.
-- `include_all` on List Conversations requires CAN MANAGE permission on the space.
 - `id` fields on conversation/message objects are deprecated -- use `conversation_id` / `message_id` instead.
 - Pagination: max `page_size` is 100 across all list endpoints; default is 20.

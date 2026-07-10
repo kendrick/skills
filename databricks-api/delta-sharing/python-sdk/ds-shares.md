@@ -67,6 +67,8 @@ updated = w.shares.update(
 **Required:** `name`
 **Optional:** `comment`, `new_name`, `owner`, `storage_root`, `updates` (max 100 objects)
 
+`storage_root` cannot be updated if the share contains notebook files. Metastore admins can only change `owner`; renaming requires ownership AND CREATE_SHARE privilege.
+
 ### Delete a Share
 ```python
 w.shares.delete(name="my_share")
@@ -150,9 +152,4 @@ except PermissionDenied:
 
 ## Gotchas
 
-- **updates max 100**: Each update call supports at most 100 data object changes
-- **storage_root immutable with notebooks**: Cannot update if share contains notebook files
-- **Metastore admin limits**: Admins can only change `owner`, not other share properties
-- **Rename requires dual permission**: Both ownership AND CREATE_SHARE privilege
 - **SDK client**: `w.shares` (not `w.delta_sharing` or similar)
-- **Import path**: `from databricks.sdk.service.sharing import ...`

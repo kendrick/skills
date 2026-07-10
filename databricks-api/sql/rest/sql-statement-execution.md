@@ -43,11 +43,13 @@ API scope (preview): `sql`
 | `byte_limit` | int64 | opt | Max bytes for first INLINE chunk (default 16 MiB, max 100 MiB) |
 | `row_limit` | int64 | opt | Max rows returned (truncation) |
 
+**Parameterized queries:** Use `parameters` array with `{name, value, type}` objects. Reference as `:name` in SQL. Types: `STRING`, `INT`, `DECIMAL`, `DOUBLE`, `BOOLEAN`, `DATE`, `TIMESTAMP`.
+
 ### Disposition Modes
 
 **INLINE** (default): Result data embedded in JSON response as `data_array`. Best for small results (< 25 MiB).
 
-**EXTERNAL_LINKS**: Results stored externally; response contains presigned URLs. Required for large results or `ARROW_STREAM`/`CSV` formats. Links expire in <=15 min -- do not log them.
+**EXTERNAL_LINKS**: Results stored externally; response contains presigned URLs. Required for large results or `ARROW_STREAM`/`CSV` formats. Links expire in <=15 min -- do not log them (they contain credentials). Re-fetch the chunk if expired.
 
 ### Minimal Example -- Synchronous INLINE
 
@@ -85,7 +87,9 @@ Returns a statement object with `statement_id`, `status` (`{state, error}`), `ma
 
 Key `status.state` values: `PENDING`, `RUNNING`, `SUCCEEDED`, `FAILED`, `CANCELED`, `CLOSED`.
 
-**Permissions**: Requires CAN_USE on the warehouse and appropriate data permissions.
+**row_limit:** Truncates results server-side; `manifest.truncated` will be `true` when applied.
+
+**Permissions**: Requires CAN_USE on the warehouse and appropriate data permissions. If the warehouse is stopped, the statement may block until it starts (within `wait_timeout`) or fail with 503.
 
 ---
 
@@ -163,10 +167,3 @@ curl -X POST "${DATABRICKS_HOST}/api/2.0/sql/statements/${STATEMENT_ID}/cancel" 
 ## Gotchas
 
 - **Statement TTL**: Results are available for **~1 hour** after completion, then the statement_id becomes NOT_FOUND.
-- **EXTERNAL_LINKS expiry**: Presigned URLs expire in <=15 min. Re-fetch the chunk if expired. Never log these URLs (they contain credentials).
-- **INLINE size limit**: Default 16 MiB per chunk. If results exceed this, use EXTERNAL_LINKS or increase `byte_limit` (max 100 MiB).
-- **ARROW_STREAM/CSV require EXTERNAL_LINKS**: Only `JSON_ARRAY` works with `INLINE` disposition.
-- **wait_timeout="0s"** forces async mode. Without it, the API waits up to `wait_timeout` then either continues (poll later) or cancels depending on `on_wait_timeout`.
-- **Parameterized queries**: Use `parameters` array with `{name, value, type}` objects. Reference as `:name` in SQL. Types: `STRING`, `INT`, `DECIMAL`, `DOUBLE`, `BOOLEAN`, `DATE`, `TIMESTAMP`.
-- **Warehouse must be running**: If stopped, the statement may block until the warehouse starts (within wait_timeout) or fail with 503.
-- **row_limit** truncates results server-side; `manifest.truncated` will be `true`.

@@ -113,7 +113,7 @@ Required: `job_id`. Permission: CAN_MANAGE.
 POST /api/2.2/jobs/run-now
 {"job_id": 11223344, "job_parameters": {"key": "val"}, "idempotency_token": "uuid"}
 ```
-Required: `job_id`. Optional: `job_parameters`, `idempotency_token` (<=64 chars), `only` (task keys subset), `queue`, `pipeline_params`, `performance_target`. Response: `{"run_id": 455644833}`. Permission: CAN_MANAGE_RUN.
+Required: `job_id`. Optional: `job_parameters`, `idempotency_token` (<=64 chars), `only` (task keys subset), `queue`, `pipeline_params`, `performance_target`. Response: `{"run_id": 455644833}`. Permission: CAN_MANAGE_RUN. Appears in the Jobs UI and supports automatic retries, unlike Submit.
 
 ### Submit (one-time, no saved job)
 ```
@@ -144,7 +144,7 @@ Optional: `job_id` (omit to list all jobs' runs), `active_only` (QUEUED/PENDING/
 ```
 GET /api/2.2/jobs/runs/get-output?run_id=455644833
 ```
-Required: `run_id`. Returns `notebook_output.result` (from `dbutils.notebook.exit()`), `logs`, `error`, `error_trace`. **Limit**: first 5 MB of output. Runs expire after 60 days.
+Required: `run_id`. Returns `notebook_output.result` (from `dbutils.notebook.exit()`), `logs`, `error`, `error_trace`. **Limit**: first 5 MB of output; store large results in cloud storage. Runs expire after 60 days.
 
 ### Export Run
 ```
@@ -171,7 +171,7 @@ Required: `job_id`. Cancels all active runs for the job. Permission: CAN_MANAGE.
 POST /api/2.2/jobs/runs/delete
 {"run_id": 455644833}
 ```
-Run must be non-active (completed/cancelled). Returns error if run is still active.
+Run must be non-active (completed/cancelled). Returns error if run is still active. Cancel first, then delete.
 
 ### Repair Run
 ```
@@ -179,13 +179,14 @@ POST /api/2.2/jobs/runs/repair
 {"run_id": 455644833, "rerun_all_failed_tasks": true, "latest_repair_id": 734650698524280}
 ```
 Required: `run_id`. Optional: `rerun_tasks` (task key list), `rerun_all_failed_tasks`, `rerun_dependent_tasks`, `latest_repair_id` (required for 2nd+ repair), `job_parameters`. Response: `{"repair_id": 734650698524280}`.
-Tasks re-run as part of the original run with CURRENT job settings. Only one of `rerun_tasks` or `rerun_all_failed_tasks`.
+Tasks re-run as part of the original run with CURRENT job settings. Run must not be in progress. Only one of `rerun_tasks` or `rerun_all_failed_tasks`.
 
 ---
 
 ## 4. Permissions
 
 Levels: `CAN_VIEW`, `CAN_MANAGE_RUN`, `CAN_MANAGE`, `IS_OWNER`
+Permissions endpoints use `/api/2.0/`, not `/api/2.2/`.
 
 ### Get Permissions
 ```
@@ -265,14 +266,6 @@ Note: The `state` field (deprecated) uses `life_cycle_state` + `result_state`. P
 
 ## Gotchas
 
-- **reset vs update**: `reset` replaces ALL settings (unset fields revert to defaults); `update` merges top-level fields and merges array entries by key. Use `fields_to_remove` in update to delete specific fields.
-- **run-now vs submit**: `run-now` triggers a saved job (appears in UI, retries work); `submit` creates a one-time run (no UI, no retries, no serverless auto-optimization).
-- **repair semantics**: Repair re-runs tasks within the ORIGINAL run using CURRENT job settings. Must pass `latest_repair_id` from previous repair for sequential repairs. Run must not be in progress.
-- **cancel is async**: The run may still be executing after cancel returns.
-- **delete run**: Only works on non-active runs. Cancel first, then delete.
 - **pagination**: Read endpoints (get, list) return max 100 array items (tasks, job_clusters). Use `page_token`/`next_page_token` for more. Write endpoints accept up to 1000 tasks.
-- **output limits**: `get-output` returns max 5 MB. Store large results in cloud storage.
-- **run expiry**: Runs are auto-deleted after 60 days.
 - **idempotency_token**: Max 64 chars. If a run with the same token exists, returns existing run_id instead of creating a new one.
 - **timeout_seconds changes**: Applied to active runs immediately. Other setting changes apply to future runs only.
-- **permissions API version**: Permissions endpoints use `/api/2.0/`, not `/api/2.2/`.

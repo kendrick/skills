@@ -27,7 +27,7 @@ API scope: `sharing` (preview)
 
 ## Recipient Activation (Public)
 
-These endpoints require NO authentication. They are used by recipients to activate their share access.
+These endpoints require NO authentication. They are used by recipients to activate their share access. Anyone with the URL can retrieve the token.
 
 ### Get Activation URL Info
 
@@ -59,6 +59,8 @@ GET /api/2.1/unity-catalog/public/data_sharing_activation/{activation_url}
 ```
 
 **Response fields:** `bearerToken` (string), `endpoint` (string), `expirationTime` (string, epoch ms), `shareCredentialsVersion` (int32)
+
+Activation URLs are one-time: once a token is retrieved, the activation URL is consumed.
 
 ---
 
@@ -102,6 +104,8 @@ POST /api/2.0/data-sharing/recipients/{recipient_name}/federation-policies
 **Conditionally required (if oidc_policy provided):** `oidc_policy.issuer`, `oidc_policy.subject`, `oidc_policy.subject_claim`
 **Optional:** `name`, `comment`, `oidc_policy.audiences` (string[])
 
+`name` must be lowercase alphanumeric and hyphens only. Common `subject_claim` values are `sub`, `azp`, `oid` — depends on the identity provider.
+
 **Response:** `200` — Created policy with `id`, `name`, `oidc_policy`, `create_time`, `update_time`
 
 **Permissions:** API scope `sharing`
@@ -134,10 +138,5 @@ DELETE /api/2.0/data-sharing/recipients/{recipient_name}/federation-policies/{na
 
 ## Gotchas
 
-- **Activation URLs are one-time**: Once a token is retrieved, the activation URL is consumed
-- **Public endpoints**: Activation endpoints require NO auth — anyone with the URL can retrieve the token
-- **Federation policies are OIDC_FEDERATION only**: Only applicable to recipients with `authentication_type: OIDC_FEDERATION`
-- **Policy name format**: Lowercase alphanumeric and hyphens only
-- **subject_claim**: Common values are `sub`, `azp`, `oid` — depends on the identity provider
 - **API version difference**: Federation policies use `/api/2.0/data-sharing/`, activation uses `/api/2.1/unity-catalog/public/`
 - **No update endpoint**: Federation policies can only be created and deleted, not updated — delete and recreate to change

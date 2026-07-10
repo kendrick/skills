@@ -106,7 +106,7 @@ POST /api/2.0/marketplace-exchange/exchanges-for-listing
 DELETE /api/2.0/marketplace-exchange/exchanges-for-listing/{id}
 ```
 
-- Required path param: `id` (the association ID, not exchange or listing ID)
+- Required path param: `id` (the association ID returned when adding, not exchange or listing ID)
 - Response: `{}`
 
 ### List exchanges for a listing
@@ -140,7 +140,7 @@ POST /api/2.0/marketplace-exchange/filters
 {"filter": {"exchange_id": "<eid>", "filter_type": "GLOBAL_METASTORE_ID", "filter_value": "<metastore-uuid>"}}
 ```
 
-- Required: `filter.exchange_id`, `filter.filter_type` (enum: `GLOBAL_METASTORE_ID`), `filter.filter_value`
+- Required: `filter.exchange_id`, `filter.filter_type` (enum: `GLOBAL_METASTORE_ID` -- currently the only supported type), `filter.filter_value` (the target consumer's metastore UUID)
 - Optional: `filter.name`
 - Response: `{"filter_id": "<id>"}`
 
@@ -185,8 +185,6 @@ DELETE /api/2.0/marketplace-exchange/filters/{id}
 
 ## Gotchas
 
-- The delete-listing-from-exchange endpoint takes the **association ID** (returned when adding), not the exchange or listing ID.
-- `filter_type` currently only supports `GLOBAL_METASTORE_ID`. The value is the target consumer's metastore UUID.
 - GET exchange returns embedded `filters` and `linked_listings`, but list endpoints return them as separate arrays -- use the dedicated list endpoints for pagination.
 - All list endpoints use cursor-based pagination (`page_token` / `next_page_token`).
 - Exchange names must be unique within the provider's scope.

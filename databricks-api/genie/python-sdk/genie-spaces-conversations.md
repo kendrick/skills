@@ -49,7 +49,7 @@ space = w.genie.create_space(
 )
 print(space.space_id)
 
-# List (paginated)
+# List (paginated) -- excludes serialized_space; use get_space() for full content
 for page in w.genie.list_spaces(page_size=50):
     for s in page.spaces:
         print(s.space_id, s.title)
@@ -57,7 +57,7 @@ for page in w.genie.list_spaces(page_size=50):
 # Get (includes serialized_space)
 space = w.genie.get_space(space_id="<space_id>")
 
-# Update (serialized_space is full replacement)
+# Update (serialized_space is full replacement -- fetch first with get_space(), modify, then update)
 w.genie.update_space(space_id="<space_id>", title="New Title")
 
 # Update with optimistic concurrency (Public Preview) -- pass etag from a prior get_space()
@@ -151,7 +151,7 @@ result = w.genie.get_message_attachment_query_result(
 )
 # result.statement_response contains manifest, result data, statement_id
 
-# Re-execute expired query
+# Re-execute query after QUERY_RESULT_EXPIRED status
 result = w.genie.execute_message_attachment_query(
     space_id="<space_id>",
     conversation_id=conv_id,
@@ -178,7 +178,7 @@ dl_result = w.genie.get_download_full_query_result(
     download_id=download_id,
     download_id_signature=download_sig
 )
-# dl_result.statement_response.result.external_links[] has presigned URLs
+# dl_result.statement_response.result.external_links[] has presigned URLs (fetch without an Authorization header)
 ```
 
 ---
@@ -220,10 +220,4 @@ def ask_genie(w, space_id, question, timeout=120):
 ## Gotchas
 
 - `serialized_space` is a JSON **string**, not a dict -- serialize with `json.dumps()` before passing.
-- List Spaces **excludes** `serialized_space` -- use `get_space()` for full content.
-- `update_space()` replaces `serialized_space` entirely -- fetch first with `get_space()`, modify, then update.
-- Messages are async -- always poll `get_message()` until terminal status (`COMPLETED`/`FAILED`/`CANCELLED`).
-- When status is `QUERY_RESULT_EXPIRED`, call `execute_message_attachment_query()` to re-run the SQL.
-- Full download presigned URLs must be fetched **without** an Authorization header.
-- `include_all=True` on `list_conversations()` requires CAN MANAGE permission.
 - `id` fields on response objects are deprecated -- use `conversation_id` / `message_id`.

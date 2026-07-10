@@ -62,6 +62,7 @@ POST /api/2.0/serving-endpoints
 - **Required**: `name` (string, unique, alphanumeric/dash/underscore)
 - **Optional**: `config.served_entities[]`, `config.traffic_config`, `ai_gateway`, `tags[]`, `description`, `email_notifications`, `route_optimized`, `budget_policy_id`
 - **Response**: Full endpoint object with `state.ready` (READY|NOT_READY), `state.config_update`
+- **Async**: Returns immediately; endpoint is NOT_READY until entities deploy. Poll GET until `state.ready == "READY"`.
 - **Permission**: Workspace user
 - **Errors**: 400 BAD_REQUEST, 401 UNAUTHENTICATED, 500
 
@@ -105,7 +106,7 @@ PUT /api/2.0/serving-endpoints/{name}/config
 }
 ```
 - **Optional fields per entity**: `entity_name`, `entity_version`, `environment_vars`, `external_model`, `workload_size` (Small/Medium/Large), `workload_type` (CPU/GPU_SMALL/etc), `scale_to_zero_enabled`, `min/max_provisioned_throughput`, `burst_scaling_enabled`
-- Cannot update while another update is IN_PROGRESS. Errors: 400, 401, 409 RESOURCE_CONFLICT, 500.
+- Cannot update while another update is IN_PROGRESS; wait for completion or failure first. Errors: 400, 401, 409 RESOURCE_CONFLICT, 500.
 
 ### Update AI Gateway
 ```
@@ -123,8 +124,9 @@ PUT /api/2.0/serving-endpoints/{name}/ai-gateway
 - Rate limit keys: `user`, `endpoint`, `user_group`, `service_principal`. Period: `minute` only.
 - Supports `tokens` and `calls` limits; `principal` field for per-user/group targeting.
 - Fully supported for external model, PT, and pay-per-token endpoints; agents only support inference tables.
+- To change the inference table catalog/schema, disable the inference table first, then re-enable with the new catalog/schema.
 
-### Update Rate Limits (DEPRECATED -- use AI Gateway)
+### Update Rate Limits (DEPRECATED -- use `ai_gateway.rate_limits`)
 ```
 PUT /api/2.0/serving-endpoints/{name}/rate-limits
 ```
@@ -170,7 +172,7 @@ PUT /api/2.0/serving-endpoints/pt/{name}/config
   }
 }
 ```
-Updates are instantaneous (no rollout delay). Errors: 400, 404, 409 RESOURCE_CONFLICT.
+Updates are instantaneous (no rollout delay), unlike standard endpoint config updates which roll out gradually. Errors: 400, 404, 409 RESOURCE_CONFLICT.
 
 ---
 
@@ -192,6 +194,7 @@ POST /serving-endpoints/{name}/invocations
 
 **Embeddings**: `{"input": "text to embed"}`
 
+- Path uses `/serving-endpoints/` with no `/api/2.0/` prefix, unlike the management endpoints.
 - Optional: `stream` (bool), `stop` (array), `n`, `extra_params`, `client_request_id`, `usage_context`
 - Response header `served-model-name` indicates which model handled the request.
 - Permission: CAN_QUERY. Errors: 401, 403 PERMISSION_DENIED, 404 RESOURCE_DOES_NOT_EXIST, 500.
@@ -228,7 +231,7 @@ Returns `{"logs": "..."}` -- recent inference server logs.
 
 ## 6. Permissions
 
-Permission levels: `CAN_MANAGE`, `CAN_QUERY`, `CAN_VIEW`. Uses endpoint **id** (not name).
+Permission levels: `CAN_MANAGE`, `CAN_QUERY`, `CAN_VIEW`. Uses endpoint **id** (UUID from the `id` field), not the endpoint name.
 
 ### Get Permissions
 ```
@@ -272,14 +275,6 @@ ACL entries accept one of: `user_name`, `group_name`, `service_principal_name`.
 
 ## Gotchas
 
-- **Async creation**: POST create returns immediately; endpoint is NOT_READY until entities deploy. Poll GET until `state.ready == "READY"`.
-- **Config update blocking**: Cannot issue a new config update while `state.config_update == "IN_PROGRESS"`. Wait for completion or failure first.
 - **Served entity states**: Each entity has `state.deployment` (DEPLOYMENT_CREATING, DEPLOYMENT_READY, etc). Endpoint is READY only when all active entities are ready.
 - **`served_models` is deprecated** -- use `served_entities` everywhere.
 - **`auto_capture_config` is deprecated** for PT endpoints -- use AI Gateway `inference_table_config` instead.
-- **Rate limits at top level are deprecated** -- use `ai_gateway.rate_limits`.
-- **Query path differs**: Query uses `/serving-endpoints/` (no `/api/2.0/` prefix).
-- **Permissions use endpoint ID** (UUID from `id` field), not the endpoint name.
-- **AI Gateway on agents**: Only inference tables are supported for agent endpoints; guardrails and rate limits are not.
-- **Inference table catalog/schema change**: Must disable inference table first, then re-enable with new catalog/schema.
-- **PT config updates are instant**; standard endpoint config updates roll out gradually.

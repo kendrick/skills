@@ -76,6 +76,9 @@ POST /api/2.0/sql/warehouses
 **cluster_size values:** 2X-Small, X-Small, Small, Medium, Large, X-Large, 2X-Large, 3X-Large, 4X-Large, 5X-Large.
 **spot_instance_policy:** POLICY_UNSPECIFIED | COST_OPTIMIZED (default) | RELIABILITY_OPTIMIZED.
 **channel.name:** CHANNEL_NAME_CURRENT (default) | CHANNEL_NAME_PREVIEW | CHANNEL_NAME_PREVIOUS | CHANNEL_NAME_CUSTOM.
+**warehouse_type:** `TYPE_UNSPECIFIED` is not valid for create; use `CLASSIC` or `PRO`.
+**min_num_clusters/max_num_clusters:** `max_num_clusters` ceiling is 40; `min_num_clusters` ceiling is `min(max_num_clusters, 30)`.
+**Name constraints:** Warehouse names must be unique within the org and under 100 characters.
 
 ### List
 
@@ -98,10 +101,11 @@ GET /api/2.0/sql/warehouses/{id}
 ```
 POST /api/2.0/sql/warehouses/{id}/edit
 ```
+Note: this endpoint is POST, not the PUT/PATCH you might expect for an edit.
 ```json
 {"cluster_size": "Medium", "auto_stop_mins": 60}
 ```
-**Required:** `id` (path). All body fields optional -- incremental edit; unset fields retain existing values. Same fields as Create. **Response:** `{}`.
+**Required:** `id` (path). All body fields optional -- incremental edit; unset fields retain existing values, so this is not idempotent. Same fields as Create. **Response:** `{}`.
 
 **Full edit example (curl):**
 ```bash
@@ -159,7 +163,7 @@ Permission levels: `CAN_MANAGE`, `IS_OWNER`, `CAN_USE`, `CAN_MONITOR`, `CAN_VIEW
 ```
 GET /api/2.0/permissions/warehouses/{warehouse_id}
 ```
-Returns `{access_control_list: [{user_name, group_name, all_permissions: [{permission_level, inherited}]}]}`.
+Returns `{access_control_list: [{user_name, group_name, all_permissions: [{permission_level, inherited}]}]}`. Warehouses inherit permissions from the root object; inherited grants show `inherited: true` with an `inherited_from_object` array.
 
 ### Set Permissions (replace all)
 
@@ -208,7 +212,7 @@ GET /api/2.0/sql/config/warehouses
 Returns workspace-wide settings shared by all SQL warehouses:
 - `channel` -- default DBSQL version channel for new warehouses
 - `security_policy` -- NONE | DATA_ACCESS_CONTROL | PASSTHROUGH
-- `sql_configuration_parameters.configuration_pairs` -- [{key, value}] SQL Spark config
+- `sql_configuration_parameters.configuration_pairs` -- [{key, value}] SQL Spark config. Use this field, not the deprecated `config_param` or `global_param`.
 - `data_access_config` -- [{key, value}] for external hive metastore (max 512K serialized)
 - `enabled_warehouse_types` -- [{warehouse_type, enabled}] controls allowed types
 - `google_service_account` (GCP only), `instance_profile_arn` (AWS, deprecated)
@@ -287,21 +291,7 @@ Update requires `update_mask` query param (comma-separated fields or `*` for all
 
 ## Gotchas
 
-- **Edit is POST not PUT/PATCH** -- endpoint is `/warehouses/{id}/edit`, not a standard REST verb.
-- **Edit is incremental** -- omitted fields keep current values. Not idempotent.
-- **Serverless requires PRO** -- set `warehouse_type: "PRO"` AND `enable_serverless_compute: true`.
-- **auto_stop_mins** -- must be 0 (disabled) or >= 10. Values 1-9 are invalid.
-- **max_num_clusters** -- ceiling is 40; `min_num_clusters` ceiling is min(max_num_clusters, 30).
-- **Start is async** -- returns immediately; poll GET /{id} for state=RUNNING.
-- **Permissions: PUT replaces, PATCH adds** -- PUT with empty list removes all direct permissions.
-- **Default warehouse overrides are Beta** and use `/api/warehouses/v1/` (not `/api/2.0/`).
-- **Workspace config deprecated fields** -- use `sql_configuration_parameters.configuration_pairs`, not `config_param` or `global_param`.
-- **Name constraints** -- warehouse names must be unique within the org and under 100 characters.
-- **Tags limit** -- max 45 custom_tags per warehouse; tags propagate to cloud resources (EC2, EBS).
-- **Warehouse types** -- `TYPE_UNSPECIFIED` is not valid for create; use `CLASSIC` or `PRO`.
-- **Workspace config is full replacement** -- unlike warehouse edit (incremental), set config replaces the entire configuration.
 - **Pagination** -- List warehouses and list overrides both support `page_size` + `page_token`. Check `next_page_token` in response; omitted means no more pages.
-- **Permission inheritance** -- warehouses inherit permissions from root object. GET permissions shows `inherited: true` with `inherited_from_object` array for inherited grants.
 
 ## Quick Reference: Create + Start + Query Flow
 

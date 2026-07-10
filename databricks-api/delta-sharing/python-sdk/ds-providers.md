@@ -31,7 +31,10 @@ provider = w.providers.create(
 print(provider.name)
 ```
 **Required:** `name`, `authentication_type` (TOKEN | DATABRICKS | OIDC_FEDERATION | OAUTH_CLIENT_CREDENTIALS)
-**Optional:** `comment`, `owner`, `recipient_profile_str` (required for TOKEN/OAUTH_CLIENT_CREDENTIALS)
+**Optional:** `comment`, `owner`, `recipient_profile_str` (required for TOKEN/OAUTH_CLIENT_CREDENTIALS; must be valid JSON with `shareCredentialsVersion`, `bearerToken`, `endpoint`)
+
+For DATABRICKS auth, the provider is auto-populated with cloud/region/metastore — no profile string needed.
+
 **Permissions:** Metastore admin
 
 ### List Providers
@@ -56,6 +59,8 @@ w.providers.update(
 )
 ```
 **Optional:** `comment`, `new_name`, `owner`, `recipient_profile_str`
+
+Renaming (`new_name`) requires both metastore admin AND provider owner.
 
 ### Delete a Provider
 ```python
@@ -122,8 +127,4 @@ except NotFound:
 
 ## Gotchas
 
-- **recipient_profile_str**: Required for TOKEN and OAUTH_CLIENT_CREDENTIALS; must be valid JSON with `shareCredentialsVersion`, `bearerToken`, `endpoint`
-- **DATABRICKS auth type**: Auto-populated cloud/region/metastore — no profile string needed
-- **Rename requires dual permission**: Both metastore admin AND provider owner
 - **SDK client**: `w.providers` — import types from `databricks.sdk.service.sharing`
-- **list_provider_share_assets**: Each asset type has its own max_results parameter

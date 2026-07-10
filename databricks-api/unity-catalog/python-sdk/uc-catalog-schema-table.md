@@ -42,7 +42,7 @@ for cat in w.catalogs.list():
 ```python
 cat = w.catalogs.get(name="my_catalog")
 cat = w.catalogs.update(name="my_catalog", comment="Updated comment", owner="new_owner@co.com")
-w.catalogs.delete(name="my_catalog", force=True)  # force=True for non-empty
+w.catalogs.delete(name="my_catalog", force=True)  # force=True for non-empty (otherwise returns 409)
 ```
 
 ## Schemas
@@ -88,12 +88,16 @@ table = w.tables.create(
 )
 ```
 
+Column spec must be Spark-compatible -- the SDK does not validate column correctness. Use Spark SQL for managed tables (this API only supports `EXTERNAL` + `DELTA`). Creating external tables needs explicit `EXTERNAL_USE_SCHEMA` + `EXTERNAL_USE_LOCATION` grants (not inherited via `ALL_PRIVILEGES`).
+
 ### List
 
 ```python
 for t in w.tables.list(catalog_name="my_catalog", schema_name="my_schema"):
     print(t.full_name, t.table_type)
 ```
+
+Does NOT return `table_constraints` or `view_dependencies` -- call `get()` for full details.
 
 ### List Summaries (lightweight, cross-schema)
 
@@ -156,6 +160,8 @@ ot = w.online_tables.create(
 )
 ```
 
+Provisioning is async -- poll `get().status.detailed_state` until it reaches `ONLINE`.
+
 ### Get / Delete
 
 ```python
@@ -175,6 +181,7 @@ The SDK handles pagination automatically via iterators. Just iterate:
 for item in w.catalogs.list():  # auto-paginates
     pass
 ```
+`list()` returns a generator -- wrap it in `list()` (the builtin) if you need a concrete list.
 
 ### Error Handling
 
@@ -188,14 +195,3 @@ except NotFound:
 except PermissionDenied:
     print("Insufficient privileges")
 ```
-
-## Gotchas
-
-- **Three-level naming:** Schema `full_name` = `catalog.schema`. Table `full_name` = `catalog.schema.table`.
-- **Create Table API:** Only supports `table_type=EXTERNAL` + `data_source_format=DELTA`. Use Spark SQL for managed tables.
-- **Column spec:** Must be Spark-compatible. SDK does not validate column correctness.
-- **List Tables:** Does NOT return `table_constraints` or `view_dependencies`. Call `get()` for full details.
-- **Online Tables:** Provisioning is async. Poll `status.detailed_state` until `ONLINE`.
-- **Delete non-empty:** Use `force=True` for catalogs/schemas. Otherwise returns 409.
-- **SDK iterators:** `list()` returns a generator. Wrap in `list()` if you need a concrete list.
-- **Permissions cascade:** Creating external tables needs explicit EXTERNAL_USE_SCHEMA + EXTERNAL_USE_LOCATION (not inherited via ALL_PRIVILEGES).

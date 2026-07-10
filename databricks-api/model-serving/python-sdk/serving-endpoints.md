@@ -75,6 +75,8 @@ endpoint = w.serving_endpoints.create_and_wait(
 print(endpoint.state.ready)  # READY
 ```
 
+`create()` alone is async -- it returns immediately while the endpoint provisions; `create_and_wait()` blocks until READY.
+
 ### List
 ```python
 endpoints = w.serving_endpoints.list()
@@ -113,6 +115,8 @@ updated = w.serving_endpoints.update_config_and_wait(
 )
 ```
 
+`update_config()` alone is async -- use `update_config_and_wait()` to block. Cannot update while `state.config_update` is IN_PROGRESS (409) -- check it first.
+
 ### Update AI Gateway
 ```python
 from databricks.sdk.service.serving import AiGatewayConfig, AiGatewayRateLimit, AiGatewayUsageTrackingConfig, AiGatewayInferenceTableConfig, AiGatewayGuardrails, AiGatewayGuardrailParameters
@@ -126,6 +130,8 @@ gw = w.serving_endpoints.put_ai_gateway(
     ),
 )
 ```
+
+Agent endpoints support only inference tables; guardrails and rate limits are not available. To change the inference table catalog/schema, disable it first, then re-enable with the new values.
 
 ### Update Tags
 ```python
@@ -166,7 +172,7 @@ pt_ep = w.serving_endpoints.create_provisioned_throughput_endpoint(
     ),
 )
 
-# Update PT config (instantaneous)
+# Update PT config -- instantaneous, unlike standard config updates which roll out gradually
 w.serving_endpoints.update_provisioned_throughput_endpoint_config(
     name="my-pt-endpoint",
     config=PtEndpointCoreConfigInput(
@@ -182,6 +188,8 @@ w.serving_endpoints.update_provisioned_throughput_endpoint_config(
 ---
 
 ## 4. Query
+
+Input formats are mutually exclusive: `messages` for chat, `dataframe_split`/`dataframe_records` for custom models, `input` for embeddings, `prompt` for completions.
 
 ### Chat/Completions (external/foundation models)
 ```python
@@ -236,7 +244,7 @@ print(svc.logs)
 
 ## 6. Permissions
 
-Permission levels: `CAN_MANAGE`, `CAN_QUERY`, `CAN_VIEW`. Uses endpoint **id** (not name).
+Permission levels: `CAN_MANAGE`, `CAN_QUERY`, `CAN_VIEW`. Uses endpoint **id** (UUID), not the endpoint name string.
 
 ```python
 from databricks.sdk.service.iam import ServingEndpointAccessControlRequest, ServingEndpointPermissionLevel
@@ -314,13 +322,5 @@ ep = w.serving_endpoints.create_and_wait(
 
 ## Gotchas
 
-- **`create()` is async** -- returns immediately while endpoint provisions. Use `create_and_wait()` to block until READY.
-- **`update_config()` is also async** -- use `update_config_and_wait()` to block.
-- **Cannot update config while IN_PROGRESS** -- check `state.config_update` first or you get 409.
 - **`served_models` is deprecated** -- always use `served_entities`.
 - **`auto_capture_config` is deprecated** for PT endpoints -- use AI Gateway inference tables.
-- **Permissions use endpoint `id`** (UUID), not the endpoint name string.
-- **AI Gateway on agents**: Only inference tables supported; guardrails/rate limits are not available.
-- **PT config updates are instant**; standard endpoint updates roll out gradually.
-- **Inference table catalog/schema changes**: Must disable first, then re-enable with new values.
-- **Query input formats are mutually exclusive**: use `messages` for chat, `dataframe_split`/`dataframe_records` for custom models, `input` for embeddings, `prompt` for completions.

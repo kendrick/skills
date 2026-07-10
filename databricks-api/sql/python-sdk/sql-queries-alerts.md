@@ -80,7 +80,7 @@ updated = w.queries.update(
 w.queries.delete(id="<query-uuid>")
 ```
 
-Moves to trash (soft-delete). Permanently deleted after 30 days.
+Moves to trash (soft-delete). Permanently deleted after 30 days, restorable via UI only.
 
 ---
 
@@ -117,8 +117,9 @@ print(alert.id, alert.state)
 ```
 
 **Required:** `display_name`, `query_id`, `condition` (op, operand, threshold)
-**Optional:** `custom_body`, `custom_subject`, `notify_on_ok`, `seconds_to_retrigger`, `parent_path`, `auto_resolve_display_name`
+**Optional:** `custom_body`, `custom_subject`, `notify_on_ok`, `seconds_to_retrigger` (0 = fire once, no retrigger), `parent_path`, `auto_resolve_display_name`
 **Condition ops:** GREATER_THAN, GREATER_THAN_OR_EQUAL, LESS_THAN, LESS_THAN_OR_EQUAL, EQUAL, NOT_EQUAL, IS_NULL
+**Column name:** `operand.column.name` must be an exact column name from the query result.
 
 ### List Alerts
 
@@ -148,6 +149,7 @@ updated = w.alerts.update(
 ```
 
 **Required:** `id`, `update_mask`
+**Gotcha:** `update_mask` is required. Omitting it silently changes nothing.
 
 ### Delete Alert
 
@@ -155,7 +157,7 @@ updated = w.alerts.update(
 w.alerts.delete(id="<alert-uuid>")
 ```
 
-Moves to trash. Trashed alerts stop triggering.
+Moves to trash. Trashed alerts stop triggering. Permanently deleted after 30 days, restorable via UI only.
 
 ---
 
@@ -187,8 +189,4 @@ alert = w.alerts.create(
 ## Gotchas
 
 - **Throttling:** Concurrent list calls (10+) may cause throttling or temporary bans.
-- **update_mask required:** All update calls require `update_mask`. Omitting it silently changes nothing.
-- **Delete is soft-delete:** Trashed objects are permanently deleted after 30 days; restorable via UI only.
-- **seconds_to_retrigger=0:** Alert fires once and does not retrigger.
-- **Column name must match:** `operand.column.name` must be an exact column name from the query result.
 - **SDK class imports:** Alert condition types are in `databricks.sdk.service.sql`. Check SDK version for exact class names.

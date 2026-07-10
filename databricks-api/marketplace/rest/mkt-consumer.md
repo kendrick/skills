@@ -119,7 +119,7 @@ PUT /api/2.1/marketplace-consumer/listings/{listing_id}/installations/{installat
 { "installation": { "catalog_name": "new_catalog" }, "rotate_token": true }
 ```
 
-Required path: `listing_id`, `installation_id`. Body: `installation` (required object), `rotate_token` (bool -- rotates sharing token; forcibly rotates if `token_detail` empty).
+Required path: `listing_id`, `installation_id`. Body: `installation` (required object), `rotate_token` (bool -- rotates sharing token; forcibly rotates if `token_detail` is empty in the installation object).
 
 ### Uninstall
 
@@ -150,6 +150,7 @@ GET /api/2.1/marketplace-consumer/listings/{listing_id}/fulfillments
 
 Required path: `listing_id`. Optional: `page_size`, `page_token`.
 Response: `{ fulfillments: [{ fulfillment_type (REQUEST_ACCESS|INSTALL), listing_id, recipient_type, repo_info, share_info }], next_page_token }`.
+Note: `fulfillment_type=REQUEST_ACCESS` means a personalization request is required before install. `share_info` is required for data listings but ignored for MCP and App listing types.
 
 ---
 
@@ -233,11 +234,5 @@ Provider fields: `id`, `name`, `description`, `business_contact_email`, `support
 ## Gotchas
 
 - Batch endpoints use colon syntax: `listings:batchGet`, `providers:batchGet` -- not a sub-path.
-- Batch endpoints accept max 50 IDs per request.
-- `accepted_consumer_terms.version` is required for both install and personalization-request create.
-- `rotate_token` on update forcibly rotates when `token_detail` is empty in the installation object.
-- Fulfillment `fulfillment_type=REQUEST_ACCESS` means a personalization request is required before install.
-- Search endpoint (`/search-listings`) is separate from list (`/listings`) and requires the `query` param.
 - Personalization request GET and POST share the same path -- method determines operation.
 - All list endpoints support cursor-based pagination via `page_token` / `next_page_token`.
-- `share_info` is required for data listings but ignored for MCP and App listing types.

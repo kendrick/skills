@@ -185,7 +185,5 @@ POST /api/2.0/dbfs/mkdirs
 
 1. **All data is base64-encoded** -- both upload (put/add-block) and download (read) use base64
 2. **1 MB limit** on put contents, add-block data, and read length per call
-3. **Streaming handle timeout**: 10 minutes idle on create handle
-4. **All paths must be absolute DBFS paths** (e.g., `/mnt/...`, `/FileStore/...`)
-5. **List/delete timeout**: list >10K files times out at ~60s; large deletes return 503
-6. **DBFS is legacy** -- the Files API supports direct binary streaming without base64
+3. **All paths must be absolute DBFS paths** (e.g., `/mnt/...`, `/FileStore/...`)
+4. **DBFS is legacy** -- the Files API supports direct binary streaming without base64

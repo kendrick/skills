@@ -61,8 +61,9 @@ POST /api/2.0/marketplace-provider/provider
 }
 ```
 
-**Required**: `name`, `business_contact_email`, `privacy_policy_link`, `term_of_service_link`
+**Required**: `name`, `business_contact_email`, `privacy_policy_link`, `term_of_service_link` (singular "term", not "terms")
 **Optional**: `description`, `company_website_link`, `support_contact_email`, `icon_file_id`, `dark_mode_icon_file_id`, `published_by`
+Note: `is_featured` is read-only for consumers; ignored on create/update.
 **Response**: `{"id": "<provider_id>"}`
 
 ### List Providers
@@ -112,7 +113,7 @@ POST /api/2.0/marketplace-provider/listing
 }
 ```
 
-**Key summary fields**: `name` (req), `listingType` (STANDARD|PERSONALIZED), `categories[]`, `status` (DRAFT|PUBLISHED), `setting.visibility` (PUBLIC|PRIVATE), `share` (name+type for data listings), `provider_id`, `exchange_ids[]`
+**Key summary fields**: `name` (req), `listingType` (STANDARD|PERSONALIZED; camelCase in JSON, not `listing_type`), `categories[]`, `status` (DRAFT|PUBLISHED), `setting.visibility` (PUBLIC|PRIVATE), `share` (name+type for data listings), `provider_id`, `exchange_ids[]`
 **Key detail fields**: `description`, `cost`, `documentation_link`, `terms_of_service`, `tags[]`, `file_ids[]`
 **Response**: `{"listing_id": "<id>"}`
 
@@ -137,6 +138,8 @@ Update returns full listing object. Delete returns `{}`.
 ## 3. Files
 
 Supports: `PROVIDER_ICON`, `EMBEDDED_NOTEBOOK`, `APP`. File statuses: `FILE_STATUS_PUBLISHED`, `FILE_STATUS_STAGING`, `FILE_STATUS_SANITIZING`, `FILE_STATUS_SANITIZATION_FAILED`.
+`file_parent_type` enum: `PROVIDER` (icon), `LISTING` (listing files), `LISTING_RESOURCE`.
+Files go through sanitization -- check `status` before assuming they are available.
 
 ### Create File (get upload URL)
 
@@ -255,12 +258,4 @@ Returns `{id, dashboard_id, version}` with newly created Lakeview dashboard.
 
 ## Gotchas
 
-- File upload is two-step: POST to create returns `upload_url`, then PUT content to that pre-signed URL
-- `file_parent_type` enum: `PROVIDER` (icon), `LISTING` (listing files), `LISTING_RESOURCE`
-- Files go through sanitization -- check `status` before assuming they are available
-- `listingType` (camelCase in JSON) not `listing_type`
-- Provider `term_of_service_link` (singular "term"), not "terms"
-- `is_featured` on providers is read-only for consumers; ignored on create/update
-- Personalization request `share` field is only for data listings; empty/ignored for MCP and App listings
-- Analytics dashboard `id` is Marketplace-specific; `dashboard_id` is the Lakeview ID for opening
 - Both `/api/2.0/marketplace-provider/...` and `/api/2.1/marketplace-provider/...` paths are accepted; bodies and responses are identical.

@@ -12,7 +12,6 @@
 - [4. Workspace Configuration](#4-workspace-configuration)
 - [5. Default Warehouse Overrides (Beta)](#5-default-warehouse-overrides-beta)
 - [Common Patterns](#common-patterns) — wait for ready, find running, stop idle, custom polling
-- [Gotchas](#gotchas)
 - [Error Handling Example](#error-handling-example)
 - [Key Enums and Types](#key-enums-and-types)
 - [Workspace Config Details](#workspace-config-details)
@@ -52,7 +51,7 @@ wh = w.warehouses.create_and_wait(
 )
 print(wh.id)
 ```
-`create()` returns a waiter; `create_and_wait()` blocks until RUNNING. Key params: `name` (required, str, unique, <100 chars), `cluster_size` (required, str: "2X-Small"|"X-Small"|"Small"|"Medium"|"Large"|"X-Large"|"2X-Large"|"3X-Large"|"4X-Large"|"5X-Large"), `auto_stop_mins` (int, default 120, 0=disabled, min 10), `min_num_clusters` (int, default 1, max min(max,30)), `max_num_clusters` (int, max 40), `enable_photon` (bool, default True), `warehouse_type` (EndpointInfoWarehouseType: CLASSIC|PRO), `enable_serverless_compute` (bool, requires PRO), `tags` (EndpointTags), `channel` (Channel), `spot_instance_policy` (SpotInstancePolicy: COST_OPTIMIZED|RELIABILITY_OPTIMIZED).
+`create()` returns a waiter; `create_and_wait()` blocks until RUNNING. Key params: `name` (required, str, unique, <100 chars), `cluster_size` (required, str: "2X-Small"|"X-Small"|"Small"|"Medium"|"Large"|"X-Large"|"2X-Large"|"3X-Large"|"4X-Large"|"5X-Large"), `auto_stop_mins` (int, default 120, 0=disabled, min 10), `min_num_clusters` (int, default 1, max min(max,30)), `max_num_clusters` (int, max 40), `enable_photon` (bool, default True), `warehouse_type` (EndpointInfoWarehouseType: CLASSIC|PRO), `enable_serverless_compute` (bool, requires PRO), `tags` (EndpointTags, max 45 custom tags, applied to underlying cloud resources), `channel` (Channel), `spot_instance_policy` (SpotInstancePolicy: COST_OPTIMIZED|RELIABILITY_OPTIMIZED).
 
 ### List
 
@@ -81,7 +80,7 @@ w.warehouses.edit_and_wait(
     auto_stop_mins=60,
 )
 ```
-Incremental -- omitted fields keep current values. `edit()` returns waiter; `edit_and_wait()` blocks until RUNNING. Accepts same params as `create()` plus required `id`.
+Incremental -- omitted fields keep current values; this is not idempotent. `edit()` returns waiter; `edit_and_wait()` blocks until RUNNING. Accepts same params as `create()` plus required `id`.
 
 ### Delete
 
@@ -144,7 +143,7 @@ Levels: CAN_MANAGE, IS_OWNER, CAN_USE, CAN_MONITOR, CAN_VIEW.
 - `update_permissions()` -- adds/updates without affecting unmentioned entries (PATCH).
 - Each ACL entry targets exactly one of: `user_name`, `group_name`, or `service_principal_name`.
 
-Response `access_control_list` entries include `all_permissions` with `inherited` flag and `inherited_from_object` list.
+Response `access_control_list` entries include `all_permissions` with `inherited` flag and `inherited_from_object` list, for permissions inherited from the root object.
 
 ---
 
@@ -168,6 +167,7 @@ w.warehouses.set_workspace_warehouse_config(
     ),
 )
 ```
+Use `sql_configuration_parameters.configuration_pairs`, not the deprecated `config_param` or `global_param` fields. `security_policy` values: `NONE`, `DATA_ACCESS_CONTROL`, `PASSTHROUGH`.
 
 ---
 
@@ -200,7 +200,7 @@ w.warehouses.delete_default_warehouse_override(name="default-warehouse-overrides
 ```
 Override types: `LAST_SELECTED` (uses last warehouse the user selected in UI) or `CUSTOM` (requires explicit `warehouse_id`). Use `"me"` for current user or numeric user ID string.
 
-`update_default_warehouse_override()` requires `update_mask` (comma-separated field names or `"*"`). Pass `allow_missing=True` to upsert. List is admin-only and returns paginated results automatically.
+`update_default_warehouse_override()` requires `update_mask` (comma-separated field names or `"*"`). Pass `allow_missing=True` to upsert. List is admin-only and returns paginated results automatically. This API is Beta and may change.
 
 ---
 
@@ -270,25 +270,6 @@ w.warehouses.update_permissions(
 ```
 
 ---
-
-## Gotchas
-
-- **`create_and_wait` / `edit_and_wait`** block until RUNNING. Use `create()` / `edit()` for async.
-- **Edit is incremental** -- omitted fields keep existing values; this is not idempotent.
-- **Serverless requires PRO** -- set `warehouse_type=EndpointInfoWarehouseType.PRO` AND `enable_serverless_compute=True`.
-- **auto_stop_mins** must be 0 (disabled) or >= 10.
-- **max_num_clusters** max is 40; **min_num_clusters** max is min(max_num_clusters, 30).
-- **set_permissions replaces all** direct permissions; **update_permissions** is additive.
-- **Default warehouse overrides are Beta** -- API may change.
-- **Workspace config deprecated fields** -- use `sql_configuration_parameters` with `configuration_pairs`, not `config_param` or `global_param`.
-- **Warehouse name** must be unique within the workspace and under 100 characters.
-- **Tags** -- max 45 custom tags per warehouse. Applied to underlying cloud resources.
-- **Workspace config set_workspace_warehouse_config** is a full replacement (idempotent), unlike warehouse edit which is incremental.
-- **Error handling** -- SDK raises `databricks.sdk.errors.NotFound` (404), `databricks.sdk.errors.PermissionDenied` (403), `databricks.sdk.errors.BadRequest` (400), etc.
-- **Pagination** -- `list()` and `list_default_warehouse_overrides()` handle pagination automatically via iterators. No need to manage `page_token` manually.
-- **Permission inheritance** -- `get_permissions()` returns entries with `inherited=True` and `inherited_from_object` for permissions inherited from root object.
-- **Warehouse types** -- use `EndpointInfoWarehouseType.CLASSIC` or `EndpointInfoWarehouseType.PRO` enum values.
-- **Security policy** values for workspace config: `"NONE"`, `"DATA_ACCESS_CONTROL"`, `"PASSTHROUGH"`.
 
 ## Error Handling Example
 

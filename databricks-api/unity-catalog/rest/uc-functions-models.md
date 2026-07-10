@@ -41,7 +41,7 @@ Host: <workspace>.cloud.databricks.com
 ```
 GET /api/2.1/unity-catalog/functions?catalog_name=main&schema_name=default&max_results=0
 ```
-Required query: `catalog_name` (string), `schema_name` (string). Optional: `max_results` (int, <=1000, use 0 for paginated), `page_token`, `include_browse` (bool).
+Required query: `catalog_name` (string), `schema_name` (string). Optional: `max_results` (int, <=1000, use 0 for paginated -- unpaginated mode is deprecated), `page_token`, `include_browse` (bool).
 Permissions: USE_CATALOG + USE_SCHEMA, or metastore admin. Returns only functions caller owns or has EXECUTE on.
 Response: `{"functions": [...], "next_page_token": "..."}`. Paginate until `next_page_token` absent.
 
@@ -72,7 +72,7 @@ Permissions: metastore admin, catalog owner, function owner, or USE_CATALOG + US
 PATCH /api/2.1/unity-catalog/functions/main.default.add_one
 {"owner": "new_owner@example.com"}
 ```
-Only `owner` can be updated. Caller must be metastore admin, catalog owner, schema owner (with USE_CATALOG), or function owner (with USE_CATALOG + USE_SCHEMA).
+Only `owner` can be updated -- to modify logic, delete + recreate. Caller must be metastore admin, catalog owner, schema owner (with USE_CATALOG), or function owner (with USE_CATALOG + USE_SCHEMA).
 
 ### Delete function
 ```
@@ -95,7 +95,7 @@ Permissions: USE_CATALOG + USE_SCHEMA + (CREATE_MODEL or CREATE_FUNCTION) on par
 GET /api/2.1/unity-catalog/models?catalog_name=main&schema_name=default&max_results=100
 ```
 All query params optional. If `catalog_name` given, `schema_name` required too. Optional: `max_results` (<=100), `page_token`, `include_browse`.
-Without catalog/schema filter: lists all models in metastore (default page 100).
+Without catalog/schema filter: lists all models in metastore (default page 100); with scope, default page size is 10000.
 Permissions: metastore admin sees all; others need EXECUTE or ownership + USE_CATALOG + USE_SCHEMA.
 
 ### Get model
@@ -173,12 +173,5 @@ DELETE /api/2.1/unity-catalog/models/main.default.my_model/versions/3
 - 409: name already exists (functions, models)
 
 ## Gotchas
-- Functions API is experimental; expect breaking changes
-- Function update only changes `owner` -- to modify logic, delete + recreate
-- Model update can change `name`/`owner`/`comment` only -- no other fields
-- Model version update can only change `comment`
-- Deleting a registered model cascades to ALL versions
-- List functions: use `max_results=0` for paginated mode; unpaginated is deprecated
 - List pagination: pages may have 0 results but still return `next_page_token` -- keep reading until token absent
-- Model list without catalog/schema scope defaults to 100 results per page; with scope defaults to 10000
 - `include_aliases` defaults to false on get endpoints -- pass explicitly if needed

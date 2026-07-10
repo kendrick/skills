@@ -19,7 +19,7 @@ w = WorkspaceClient()
 
 ## 1. Recipient Activation (Public)
 
-These are public endpoints — no authentication needed. Used by recipients to activate their share access.
+These are public endpoints — no authentication needed. Used by recipients to activate their share access. A `WorkspaceClient` is still required to make the call, even though the underlying API itself is unauthenticated.
 
 ### Get Activation URL Info
 ```python
@@ -40,6 +40,8 @@ print(token_info.share_credentials_version)
 ```
 
 **Returns:** `bearer_token` (string), `endpoint` (string), `expiration_time` (string, epoch ms), `share_credentials_version` (int32)
+
+Activation URLs are one-time: once a token is retrieved, the URL is consumed.
 
 ---
 
@@ -76,6 +78,8 @@ print(policy.id, policy.name)
 **Required:** `recipient_name`
 **Conditionally required:** `oidc_policy.issuer`, `oidc_policy.subject`, `oidc_policy.subject_claim`
 **Optional:** `name`, `comment`, `oidc_policy.audiences`
+
+`name` must be lowercase alphanumeric and hyphens only.
 
 ### Get a Federation Policy
 ```python
@@ -136,10 +140,5 @@ except NotFound:
 
 ## Gotchas
 
-- **Activation URLs are one-time**: Once token is retrieved, the URL is consumed
-- **Public endpoints**: Activation methods require no auth — `WorkspaceClient` still needed for URL routing
-- **Federation policies are OIDC_FEDERATION only**: Only for recipients with that auth type
 - **No update method**: Delete and recreate to change a federation policy
-- **Policy name format**: Lowercase alphanumeric and hyphens only
 - **SDK clients**: `w.recipient_activation` and `w.recipient_federation_policies` — verify method names match your SDK version
-- **Import path**: `from databricks.sdk.service.sharing import OidcFederationPolicy`

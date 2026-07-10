@@ -113,7 +113,7 @@ POST /api/2.1/unity-catalog/tables
 ```
 - **Required:** `catalog_name`, `schema_name`, `name`, `table_type` (EXTERNAL only via API), `data_source_format` (DELTA only via API), `storage_location`, `columns`
 - **Permission:** USE_CATALOG + CREATE_TABLE + USE_SCHEMA + CREATE_EXTERNAL_TABLE on external location; also EXTERNAL_USE_SCHEMA + EXTERNAL_USE_LOCATION (must be explicitly granted)
-- **Note:** Column spec must be Spark-compatible. API does not validate column correctness.
+- **Note:** Column spec must be Spark-compatible. API does not validate column correctness. Use Spark/SQL for managed tables.
 
 ### List Tables
 
@@ -122,7 +122,7 @@ GET /api/2.1/unity-catalog/tables?catalog_name=my_catalog&schema_name=my_schema&
 ```
 - **Required:** `catalog_name`, `schema_name`
 - **Optional:** `max_results` (<=50), `page_token`, `omit_columns`, `omit_properties`, `include_browse`
-- **Note:** `table_constraints` and `view_dependencies` are NOT returned by list.
+- **Note:** `table_constraints` and `view_dependencies` are NOT returned by list. Use Get Table for those.
 
 ### List Table Summaries
 
@@ -180,7 +180,7 @@ POST /api/2.0/online-tables
 }
 ```
 - **Optional spec fields:** `run_continuously` (object) or `run_triggered` (object), `timeseries_key`, `perform_full_copy` (bool)
-- **Note:** Uses `/api/2.0/` (not 2.1). `pipeline_id` is server-generated.
+- **Note:** Uses `/api/2.0/` (not 2.1). `pipeline_id` is server-generated. Provisioning is async -- poll `status.detailed_state`.
 
 ### Get / Delete Online Table
 
@@ -199,11 +199,6 @@ POST /api/2.0/online-tables
 ## Gotchas
 
 - **Pagination:** Always use `max_results=0` for paginated calls. Unpaginated calls are deprecated. Pages can be empty -- only stop when `next_page_token` is absent.
-- **Three-level naming:** Schemas use `catalog.schema`, tables use `catalog.schema.table` as `full_name`.
-- **Create Table API:** Only supports EXTERNAL + DELTA. Use Spark/SQL for managed tables.
-- **List Tables:** Does NOT return `table_constraints` or `view_dependencies`. Use Get Table for those.
-- **Online Tables:** Use API version 2.0, not 2.1. Provisioning is async -- poll `status.detailed_state`.
-- **Delete cascade:** Catalogs and schemas require `force=true` to delete when non-empty. Table constraint delete uses `cascade` param.
 - **storage_root vs storage_location:** Set `storage_root` on create; response includes computed `storage_location`.
 - **CMK on catalogs (Public Preview):** `managed_encryption_settings` is accepted on `catalogs.create` and `catalogs.update` and returned by all four catalog ops (create/get/list/update). Shape: `customer_managed_key_id` on AWS/GCP, `azure_encryption_settings` (with `azure_cmk_access_connector_id`, `azure_cmk_managed_identity_id`, `azure_tenant_id`) plus `azure_key_vault_key_id` on Azure.
 - **Custom retention (Public Preview):** Catalogs and schemas can set `custom_max_retention_hours` (int64) to override the metastore default. Returned by get/list and accepted on create and update.

@@ -38,7 +38,7 @@ GET /api/2.1/unity-catalog/permissions/{securable_type}/{full_name}
     ?principal=user@co.com&max_results=0&page_token=...
 ```
 - Path: `securable_type` (req str), `full_name` (req str -- e.g. `main`, `main.schema1`, `main.schema1.table1`)
-- Query: `principal` (opt str -- filter to one user/group), `max_results` (opt int32 -- use 0 for paginated, min valid positive value is 150), `page_token` (opt str)
+- Query: `principal` (opt str -- filter to one user/group), `max_results` (opt int32 -- use 0 for paginated, min valid positive value is 150; omitting it returns unpaginated results, which is deprecated), `page_token` (opt str)
 - Response: `{ "privilege_assignments": [{"principal":"...","privileges":["SELECT"]}], "next_page_token":"..." }`
 - Pagination: pages may be empty with token present; stop only when `next_page_token` absent
 - Permission: caller needs some level of access to the securable to read its grants
@@ -48,7 +48,7 @@ GET /api/2.1/unity-catalog/permissions/{securable_type}/{full_name}
 GET /api/2.1/unity-catalog/effective-permissions/{securable_type}/{full_name}
     ?principal=...&max_results=0&page_token=...
 ```
-Same params. Response includes `inherited_from_name` and `inherited_from_type` per privilege.
+Same params. Response includes `inherited_from_name` and `inherited_from_type` per privilege. Use this endpoint (not direct `GET`) for auditing who can actually access what, since direct `GET` excludes inherited grants.
 
 ### Update permissions
 ```
@@ -84,6 +84,7 @@ POST /api/2.1/unity-catalog/policies
 ```
 Required: `name`, `policy_type`, `on_securable_type`, `on_securable_fullname`, `for_securable_type`, `to_principals`, plus `row_filter` or `column_mask`.
 Optional: `comment`, `except_principals`, `when_condition`, `match_columns`.
+`column_mask.function_name` must accept the masked column's type as its first argument and return that same type. `row_filter.function_name` must return a boolean.
 
 ### List
 ```
@@ -153,7 +154,7 @@ PUT /api/2.1/unity-catalog/artifact-allowlists/{artifact_type}
 ```json
 {"artifact_matchers":[{"artifact":"com.company.*","match_type":"PREFIX_MATCH"}]}
 ```
-Replaces the entire allowlist. `match_type` only supports `PREFIX_MATCH`.
+Replaces the entire allowlist -- always `GET` first, append your entries, then `PUT` back. `match_type` only supports `PREFIX_MATCH`. Requires metastore admin or `MANAGE_ALLOWLIST`.
 
 ## securable_type Values (for Grants)
 
@@ -171,18 +172,3 @@ Replaces the entire allowlist. `match_type` only supports `PREFIX_MATCH`.
 | 403 | Insufficient privileges -- need owner, metastore admin, or the relevant grant |
 | 404 | Securable not found, deleted principal, or caller lacks any visibility |
 | 409 | ABAC policy name conflict on same securable |
-
-## Gotchas
-
-- Grants `GET` without `max_results` returns unpaginated (deprecated soon). Always use `max_results=0`.
-- Pagination can return empty pages with a `next_page_token` -- keep reading until token is absent.
-- Effective permissions include inherited grants; direct `GET` does not. Use effective for auditing who can actually access what.
-- ABAC policies `for_securable_type` only supports `TABLE` currently despite the enum listing many types.
-- ABAC `column_mask.function_name` must accept the masked column type as first arg and return the same type.
-- ABAC `row_filter.function_name` must return boolean.
-- Workspace bindings: the old `/workspace-bindings/catalogs/{name}` endpoints are deprecated; use `/bindings/{securable_type}/{securable_name}`.
-- Workspace bindings default to `BINDING_TYPE_READ_WRITE`. Adding a workspace that is already bound with a different type updates (not duplicates) the binding.
-- RFA destinations on sub-schema securables (tables, volumes, functions, models) are always inherited from the parent schema -- cannot be set directly.
-- RFA: max 5 email + 5 external notification destinations per securable; if a URL destination is assigned, no other destinations allowed.
-- Artifact allowlist `PUT` is a full replace, not a merge. Always GET first, append your entries, then PUT back.
-- Artifact allowlist requires metastore admin or `MANAGE_ALLOWLIST` privilege on the metastore.

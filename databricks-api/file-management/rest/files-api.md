@@ -48,7 +48,7 @@ Content-Type: application/octet-stream
 - **file_path** (required, string): absolute path in URL
 - **overwrite** (optional, bool, query): default true. Set `false` to fail if file exists
 - Max file size: **5 GiB**
-- Body: raw bytes (octet stream) -- do NOT encode
+- Body: raw bytes (octet stream), not JSON or multipart -- do NOT encode. Set `Content-Type: application/octet-stream`
 - Response: **204** No Content
 
 ### Download a file
@@ -92,7 +92,7 @@ PUT /api/2.0/fs/directories/Volumes/cat/sch/vol/new-dir/
 ```
 
 - **directory_path** (required, string)
-- Creates parent dirs automatically (like `mkdir -p`). Idempotent.
+- Creates parent dirs automatically (like `mkdir -p`). Idempotent -- safe to call on existing dirs.
 - Response: **204** No Content
 
 ### List directory contents
@@ -123,7 +123,7 @@ DELETE /api/2.0/fs/directories/Volumes/cat/sch/vol/my-dir/
 ```
 
 - **directory_path** (required, string)
-- **Only deletes empty directories.** List contents and delete children recursively first.
+- **Only deletes empty directories** -- no recursive flag exists. List contents and delete children recursively first.
 - Response: **204** No Content
 
 ---
@@ -143,8 +143,3 @@ DELETE /api/2.0/fs/directories/Volumes/cat/sch/vol/my-dir/
 ## Gotchas
 
 - Paths in URL are **not** JSON body fields -- they are embedded in the URL path after `/fs/files` or `/fs/directories`.
-- Upload body must be **raw bytes**, not JSON or multipart. Set `Content-Type: application/octet-stream`.
-- Directory delete only works on **empty** directories -- no recursive flag exists.
-- `PUT` for directories is **idempotent** -- safe to call on existing dirs.
-- `overwrite` defaults to **true** on upload; set `false` explicitly to prevent overwrites.
-- Directory list returns max 1000 items per page; always paginate via `next_page_token`.
