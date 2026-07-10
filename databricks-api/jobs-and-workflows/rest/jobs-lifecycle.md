@@ -2,7 +2,7 @@
 
 Job CRUD, trigger runs, manage run lifecycle, permissions, and policy compliance.
 
-> Raw docs: ../docs/raw/ -- for full endpoint details, read {service}-{operation}.md
+> Raw docs: ../_docs/raw/ -- for full endpoint details, read {service}-{operation}.md
 
 ## Auth
 

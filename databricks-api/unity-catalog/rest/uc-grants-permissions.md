@@ -3,7 +3,7 @@
 Grants, privileges, ABAC policies (row filters/column masks), workspace bindings, access requests, artifact allowlists.
 
 > See also: uc-catalog-schema-table (objects you're granting on), uc-metastore-admin (metastore-level admin)
-> Raw docs: ../docs/raw/ — for full endpoint details, read {service}-{operation}.md
+> Raw docs: ../_docs/raw/ — for full endpoint details, read {service}-{operation}.md
 
 ## Auth
 

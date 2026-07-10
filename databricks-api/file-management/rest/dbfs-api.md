@@ -6,7 +6,7 @@ Legacy DBFS file operations -- streaming upload/download, directory management, 
 
 > See also: files-api (modern replacement -- supports direct binary upload, no base64 encoding)
 
-> Raw docs: ../docs/raw/ -- for full endpoint details, read dbfs-{operation}.md
+> Raw docs: ../_docs/raw/ -- for full endpoint details, read dbfs-{operation}.md
 
 ## Auth
 

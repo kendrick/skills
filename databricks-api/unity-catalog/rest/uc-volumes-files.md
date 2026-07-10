@@ -3,7 +3,7 @@
 Managed and external volume CRUD within Unity Catalog schemas.
 
 > See also: uc-catalog-schema-table (volumes live inside schemas), uc-external-locations (required for external volumes)
-> Raw docs: ../docs/raw/ — for full endpoint details, read {service}-{operation}.md
+> Raw docs: ../_docs/raw/ — for full endpoint details, read {service}-{operation}.md
 
 ## Auth
 

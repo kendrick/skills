@@ -5,7 +5,7 @@ Table quality monitors -- create, configure, refresh, and monitor data quality m
 > **Deprecation notice:** This API (`/api/2.1/unity-catalog/tables/{table_name}/monitor`) is deprecated. Use the Data Quality Monitors API (`/api/data-quality/v1/monitors`) for new implementations.
 
 > See also: `uc-catalog-schema-table` (monitors attach to tables), `uc-grants-permissions` (for access control)
-> Raw docs: ../docs/raw/ — for full endpoint details, read {service}-{operation}.md
+> Raw docs: ../_docs/raw/ — for full endpoint details, read {service}-{operation}.md
 
 ## Auth
 

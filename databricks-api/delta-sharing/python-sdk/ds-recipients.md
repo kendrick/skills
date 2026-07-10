@@ -2,7 +2,7 @@
 
 > Manage share recipients, tokens, and view recipient share permissions.
 > See also: [ds-shares.md](ds-shares.md) (the shares themselves), [ds-recipient-auth.md](ds-recipient-auth.md) (activation & federation)
-> Raw docs: ../docs/raw/ — for full endpoint details, read recipients-*.md
+> Raw docs: ../_docs/raw/ — for full endpoint details, read recipients-*.md
 > Package: `databricks-sdk` — verify against your version (`pip show databricks-sdk`)
 
 ## Setup

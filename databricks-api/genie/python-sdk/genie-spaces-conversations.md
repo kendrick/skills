@@ -1,6 +1,6 @@
 # Genie Spaces & Conversations -- Databricks Python SDK
 
-> Raw docs: ../docs/raw/ -- for full endpoint details, read genie-{operation}.md
+> Raw docs: ../_docs/raw/ -- for full endpoint details, read genie-{operation}.md
 > Package: databricks-sdk
 
 ## Setup

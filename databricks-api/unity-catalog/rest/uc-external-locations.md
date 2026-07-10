@@ -3,7 +3,7 @@
 Scope: External locations, storage credentials, general credentials (storage + service), connections (Lakehouse Federation), temporary path/table credentials.
 
 > See also: uc-grants-permissions (for granting access), uc-catalog-schema-table (for external tables)
-> Raw docs: ../docs/raw/ — for full endpoint details, read {service}-{operation}.md
+> Raw docs: ../_docs/raw/ — for full endpoint details, read {service}-{operation}.md
 
 ## Auth
 All endpoints: `Authorization: Bearer <token>`, base URL `https://<workspace>.cloud.databricks.com`. API scope: `unity-catalog`.

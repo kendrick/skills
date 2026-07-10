@@ -3,7 +3,7 @@
 SQL warehouse CRUD, start/stop lifecycle, permissions, workspace configuration, default warehouse overrides.
 
 > See also: sql-statement-execution (for running queries), sql-queries-alerts (for saved queries/alerts)
-> Raw docs: ../docs/raw/ — for full endpoint details, read {service}-{operation}.md
+> Raw docs: ../_docs/raw/ — for full endpoint details, read {service}-{operation}.md
 
 ## Contents
 

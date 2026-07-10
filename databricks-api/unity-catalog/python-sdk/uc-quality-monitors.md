@@ -5,7 +5,7 @@ Table quality monitors -- create, configure, refresh, and monitor data quality m
 > **Deprecation notice:** The `w.quality_monitors` API is deprecated. Use the Data Quality Monitors API for new implementations.
 
 > See also: `uc-catalog-schema-table` (monitors attach to tables), `uc-grants-permissions` (for access control)
-> Raw docs: ../docs/raw/ — for full endpoint details, read {service}-{operation}.md
+> Raw docs: ../_docs/raw/ — for full endpoint details, read {service}-{operation}.md
 
 ## Setup
 

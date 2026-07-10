@@ -3,7 +3,7 @@
 CRUD operations for the three-level namespace (catalog > schema > table), plus table constraints and online tables.
 
 > Package: `databricks-sdk` (`pip install databricks-sdk`)
-> Raw docs: ../docs/raw/ — for full endpoint details, read {service}-{operation}.md
+> Raw docs: ../_docs/raw/ — for full endpoint details, read {service}-{operation}.md
 
 ## Setup
 

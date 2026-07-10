@@ -3,7 +3,7 @@
 Metastore CRUD, workspace-metastore assignments, system schemas, resource quotas.
 
 > See also: uc-grants-permissions (metastore-level grants), uc-external-locations (storage credentials for metastore)
-> Raw docs: ../docs/raw/ — for full endpoint details, read {service}-{operation}.md
+> Raw docs: ../_docs/raw/ — for full endpoint details, read {service}-{operation}.md
 
 ## Auth
 

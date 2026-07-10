@@ -3,7 +3,7 @@
 Upload, download, delete, and manage files and directories on Unity Catalog volumes and workspace paths.
 
 > See also: dbfs-api (for legacy DBFS operations)
-> Raw docs: ../docs/raw/ -- for full endpoint details, read files-{operation}.md
+> Raw docs: ../_docs/raw/ -- for full endpoint details, read files-{operation}.md
 
 **Status:** Public preview
 **API scope:** `files`

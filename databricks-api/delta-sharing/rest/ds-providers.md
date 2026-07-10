@@ -2,7 +2,7 @@
 
 > Manage external data providers and browse their shared assets.
 > See also: [ds-shares.md](ds-shares.md) (your own shares), [ds-recipients.md](ds-recipients.md) (who receives your shares)
-> Raw docs: ../docs/raw/ — for full endpoint details, read providers-*.md
+> Raw docs: ../_docs/raw/ — for full endpoint details, read providers-*.md
 
 ## Auth
 

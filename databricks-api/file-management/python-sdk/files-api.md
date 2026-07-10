@@ -2,7 +2,7 @@
 
 Upload, download, delete, and manage files and directories on Unity Catalog volumes and workspace paths.
 
-> Raw docs: ../docs/raw/ -- for full endpoint details, read files-{operation}.md
+> Raw docs: ../_docs/raw/ -- for full endpoint details, read files-{operation}.md
 > Package: `databricks-sdk` (`pip install databricks-sdk`)
 
 ## Setup

@@ -3,7 +3,7 @@
 Genie spaces CRUD, conversations, messages, query execution, result downloads, feedback.
 
 > See also: genie-evals (for benchmarking/evaluation)
-> Raw docs: ../docs/raw/ -- for full endpoint details, read genie-{operation}.md
+> Raw docs: ../_docs/raw/ -- for full endpoint details, read genie-{operation}.md
 
 ## Auth
 

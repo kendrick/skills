@@ -3,7 +3,7 @@
 Registered functions (UDFs), registered models (MLflow UC), model versions, and aliases.
 
 > See also: uc-catalog-schema-table (functions/models live in schemas), uc-grants-permissions (for access control)
-> Raw docs: ../docs/raw/ — for full endpoint details, read {service}-{operation}.md
+> Raw docs: ../_docs/raw/ — for full endpoint details, read {service}-{operation}.md
 
 ## Setup
 ```python

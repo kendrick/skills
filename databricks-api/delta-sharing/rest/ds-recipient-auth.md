@@ -2,7 +2,7 @@
 
 > Recipient activation (public endpoints) and OIDC federation policy management.
 > See also: [ds-recipients.md](ds-recipients.md) (recipient CRUD and tokens)
-> Raw docs: ../docs/raw/ — for full endpoint details, read recipientactivation-*.md, recipientfederationpolicies-*.md
+> Raw docs: ../_docs/raw/ — for full endpoint details, read recipientactivation-*.md, recipientfederationpolicies-*.md
 
 ## Auth
 

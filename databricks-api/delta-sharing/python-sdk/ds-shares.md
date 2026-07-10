@@ -2,7 +2,7 @@
 
 > Manage shared data objects and their permissions.
 > See also: [ds-recipients.md](ds-recipients.md) (who receives shares), [ds-providers.md](ds-providers.md) (external providers)
-> Raw docs: ../docs/raw/ — for full endpoint details, read shares-*.md
+> Raw docs: ../_docs/raw/ — for full endpoint details, read shares-*.md
 > Package: `databricks-sdk` — verify against your version (`pip show databricks-sdk`)
 
 ## Setup

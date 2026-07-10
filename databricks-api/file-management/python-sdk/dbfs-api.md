@@ -2,7 +2,7 @@
 
 > **DBFS is legacy. Prefer the Files API (`w.files`) for new work.**
 
-> Raw docs: ../docs/raw/ -- for full endpoint details, read dbfs-{operation}.md
+> Raw docs: ../_docs/raw/ -- for full endpoint details, read dbfs-{operation}.md
 
 > Package: `databricks-sdk`
 

@@ -3,7 +3,7 @@
 CRUD operations for the three-level namespace (catalog > schema > table), plus table constraints and online tables.
 
 > See also: `uc-grants-permissions` (access control), `uc-external-locations` (external tables)
-> Raw docs: ../docs/raw/ — for full endpoint details, read {service}-{operation}.md
+> Raw docs: ../_docs/raw/ — for full endpoint details, read {service}-{operation}.md
 
 ## Auth
 

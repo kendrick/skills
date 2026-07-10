@@ -3,7 +3,7 @@
 External lineage relationships, entity tag assignments, external metadata objects.
 
 > See also: uc-catalog-schema-table (objects you're tagging/tracing), uc-grants-permissions (for access control on tagged objects)
-> Raw docs: ../docs/raw/ — for full endpoint details, read {service}-{operation}.md
+> Raw docs: ../_docs/raw/ — for full endpoint details, read {service}-{operation}.md
 
 ## Setup
 

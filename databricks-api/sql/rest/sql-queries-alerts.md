@@ -4,7 +4,7 @@ Saved SQL queries CRUD, alert definitions CRUD.
 
 > See also: sql-statement-execution (for executing queries), sql-warehouses (for the warehouses queries run on)
 
-> Raw docs: ../docs/raw/ -- for full endpoint details, read {service}-{operation}.md
+> Raw docs: ../_docs/raw/ -- for full endpoint details, read {service}-{operation}.md
 
 ## Auth
 

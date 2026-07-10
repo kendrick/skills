@@ -2,7 +2,7 @@
 
 Create, configure, query, and manage model serving endpoints — including AI Gateway, provisioned throughput, permissions, logs, and metrics.
 
-> Raw docs: ../docs/raw/ — for full endpoint details, read servingendpoints-{operation}.md
+> Raw docs: ../_docs/raw/ — for full endpoint details, read servingendpoints-{operation}.md
 > Package: databricks-sdk
 
 ## Contents

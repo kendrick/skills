@@ -4,7 +4,7 @@ Scope: Private exchanges CRUD, exchange-listing associations, exchange filters (
 
 > See also: mkt-provider-listings (for managing the listings you add to exchanges), mkt-consumer (for the consumer view)
 
-> Raw docs: ../docs/raw/ -- for full endpoint details, read {service}-{operation}.md
+> Raw docs: ../_docs/raw/ -- for full endpoint details, read {service}-{operation}.md
 
 **Status:** Public Preview. All endpoints require OAuth scope `marketplace`.
 

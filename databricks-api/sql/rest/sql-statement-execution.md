@@ -4,7 +4,7 @@ Execute SQL statements, poll for results, retrieve result chunks, cancel executi
 
 > See also: sql-warehouses (for managing the warehouses you execute against), sql-queries-alerts (for saved queries)
 
-> Raw docs: ../docs/raw/ -- for full endpoint details, read {service}-{operation}.md
+> Raw docs: ../_docs/raw/ -- for full endpoint details, read {service}-{operation}.md
 
 ## Auth
 

@@ -3,7 +3,7 @@
 Browse listings, install data products, manage installations, personalization requests, view providers.
 
 > See also: mkt-provider-listings (for publishing), mkt-provider-exchanges (for private exchanges)
-> Raw docs: ../docs/raw/ -- for full endpoint details, read {service}-{operation}.md
+> Raw docs: ../_docs/raw/ -- for full endpoint details, read {service}-{operation}.md
 
 ## Auth
 

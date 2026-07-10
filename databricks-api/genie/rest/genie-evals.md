@@ -3,7 +3,7 @@
 Benchmark evaluation runs, results, and result details for Genie spaces. **Beta API.**
 
 > See also: genie-spaces-conversations (for the spaces/conversations these evals test)
-> Raw docs: ../docs/raw/ — for full endpoint details, read genie-{operation}.md
+> Raw docs: ../_docs/raw/ — for full endpoint details, read genie-{operation}.md
 
 ## Auth
 

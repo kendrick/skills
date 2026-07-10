@@ -3,7 +3,7 @@
 Publish and manage listings, upload files, manage provider profiles, handle personalization requests, and analytics dashboards.
 
 > See also: mkt-consumer (consumer view), mkt-provider-exchanges (private exchanges)
-> Raw docs: ../docs/raw/ -- for full endpoint details, read {service}-{operation}.md
+> Raw docs: ../_docs/raw/ -- for full endpoint details, read {service}-{operation}.md
 
 All endpoints: **Public Preview**. Scope: `marketplace`. Base: `{workspace-url}/api/2.0/marketplace-provider`.
 
