@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# tools/refresh.sh
+# _maintenance/tools/refresh.sh
 #
 # Keep the Databricks skill files in sync with upstream Databricks docs.
 #
 # Modes:
-#   --backfill  Walk docs/raw/ and (re)build {domain}/docs/sources.json from
+#   --backfill  Walk _docs/raw/ and (re)build {domain}/_docs/sources.json from
 #               whatever is on disk. Safe to re-run; preserves fetched_at for
 #               files whose sha256 still matches.
 #   --check     (default) Re-fetch each tracked URL via Jina, compare hashes,
@@ -19,7 +19,7 @@ set -euo pipefail
 # --- bash version guard ----------------------------------------------------
 
 if [[ -z "${BASH_VERSION:-}" ]]; then
-    echo "ERROR: refresh.sh requires bash. Run as 'bash tools/refresh.sh' or './tools/refresh.sh'." >&2
+    echo "ERROR: refresh.sh requires bash. Run as 'bash _maintenance/tools/refresh.sh' or './_maintenance/tools/refresh.sh'." >&2
     exit 3
 fi
 
@@ -75,7 +75,10 @@ check_deps
 
 # --- config + CLI ----------------------------------------------------------
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Script lives in _maintenance/tools/; the shipped payload (domains with
+# _docs/raw/) is the sibling databricks-api/. Reports land in _maintenance/.
+MAINT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO_ROOT="$(cd "$MAINT_DIR/../databricks-api" && pwd)"
 MODE="check"
 DOMAIN=""
 VERBOSE=0
@@ -86,7 +89,7 @@ usage() {
 Usage: $0 [--backfill | --check | --apply | --refetch-broken] [--domain <name>] [--verbose]
 
 Modes:
-  --backfill         Build {domain}/docs/sources.json from on-disk raw docs (idempotent).
+  --backfill         Build {domain}/_docs/sources.json from on-disk raw docs (idempotent).
   --check            (default) Re-fetch via Jina and report drift. Read-only.
   --apply            Re-fetch via Jina, overwrite changed raw docs, update manifest.
   --refetch-broken   Find raw/*.md cached as Jina partial-render placeholders and re-fetch them.
@@ -144,19 +147,19 @@ clean_jina() {
     awk '/[^[:space:]]/ {last=NR} {lines[NR]=$0} END {for (i=1; i<=last; i++) print lines[i]}' "$f" > "${f}.tmp" && mv "${f}.tmp" "$f"
 }
 
-# Discover domains: top-level dirs containing docs/raw/.
+# Discover domains: top-level dirs containing _docs/raw/.
 discover_domains() {
     local d name
     for d in "$REPO_ROOT"/*/; do
         name=$(basename "$d")
-        [[ -d "$d/docs/raw" ]] && echo "$name"
+        [[ -d "$d/_docs/raw" ]] && echo "$name"
     done
 }
 
 domains_to_process() {
     if [[ -n "$DOMAIN" ]]; then
-        if [[ ! -d "$REPO_ROOT/$DOMAIN/docs/raw" ]]; then
-            echo "ERROR: domain '$DOMAIN' has no docs/raw/ directory at $REPO_ROOT/$DOMAIN/docs/raw" >&2
+        if [[ ! -d "$REPO_ROOT/$DOMAIN/_docs/raw" ]]; then
+            echo "ERROR: domain '$DOMAIN' has no _docs/raw/ directory at $REPO_ROOT/$DOMAIN/_docs/raw" >&2
             exit 4
         fi
         echo "$DOMAIN"
@@ -171,8 +174,8 @@ rel_path() { echo "${1#$REPO_ROOT/}"; }
 
 backfill_domain() {
     local domain="$1"
-    local raw_dir="$REPO_ROOT/$domain/docs/raw"
-    local manifest="$REPO_ROOT/$domain/docs/sources.json"
+    local raw_dir="$REPO_ROOT/$domain/_docs/raw"
+    local manifest="$REPO_ROOT/$domain/_docs/sources.json"
     local existing="[]"
     [[ -f "$manifest" ]] && existing=$(cat "$manifest")
     local now; now=$(now_iso)
@@ -234,9 +237,9 @@ fetch_clean() {
 check_or_apply_domain() {
     local domain="$1"
     local mode="$2"  # "check" or "apply"
-    local raw_dir="$REPO_ROOT/$domain/docs/raw"
-    local manifest="$REPO_ROOT/$domain/docs/sources.json"
-    local report="$REPO_ROOT/refresh-report-${domain}.md"
+    local raw_dir="$REPO_ROOT/$domain/_docs/raw"
+    local manifest="$REPO_ROOT/$domain/_docs/sources.json"
+    local report="$MAINT_DIR/refresh-report-${domain}.md"
 
     if [[ ! -f "$manifest" ]]; then
         info "ERROR: manifest not found at $(rel_path "$manifest"). Run: bash tools/refresh.sh --backfill --domain $domain"
@@ -366,8 +369,8 @@ check_or_apply_domain() {
 # and report it so the user can investigate.
 refetch_broken_domain() {
     local domain="$1"
-    local raw_dir="$REPO_ROOT/$domain/docs/raw"
-    local manifest="$REPO_ROOT/$domain/docs/sources.json"
+    local raw_dir="$REPO_ROOT/$domain/_docs/raw"
+    local manifest="$REPO_ROOT/$domain/_docs/sources.json"
     local placeholder='page maybe not yet fully loaded'
     local now; now=$(now_iso)
     local ok=0 fail=0 total=0
