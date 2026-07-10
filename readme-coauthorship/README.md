@@ -6,7 +6,7 @@ A Claude Code skill that co-authors READMEs, brand-new or long-neglected, root-l
 
 Most READMEs bury the answers a reader actually shows up with: what is this, and how do I run it? Instead there's a badge wall, a philosophy section, and install steps that assume the maintainer's machine. Generic doc tooling doesn't help much, because it treats a README like any other document. READMEs have their own settled craft—readers decide in seconds, structure works as a funnel from general to specific, section sets differ by project type, and a subdirectory README is a different animal from a root one.
 
-This skill encodes that craft. It scans the repo before asking anything and refuses to fabricate what it can't verify. What it writes adapts to the target: library, CLI, app, docs repo, config directory, or monorepo. The research behind it is in [research.md](research.md).
+This skill encodes that craft. It scans the repo before asking anything and refuses to fabricate what it can't verify. What it writes adapts to the target: library, CLI, app, docs repo, config directory, or monorepo. The research behind it is in [research.md](https://github.com/kendrick/skills/blob/main/_docs/readme-coauthorship-research.md).
 
 ## How It Works
 
