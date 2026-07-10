@@ -1,103 +1,70 @@
 # inbox-to-memory
 
-A Claude Code skill for processing raw consulting work inputs (transcripts, meeting notes, PDFs, slide decks, scratch braindumps) into structured markdown notes, and for proposing memory records across three scope tiers:
+A Claude Code skill that drains a folder of meeting artifacts into groomed notes and durable memory records.
 
-- **Project** memory, local to a single pursuit or delivery project.
-- **Client** memory, shared across all engagements with one client.
-- **Cross-client journal**, for patterns that generalize past any single client.
+If your calendar generates more paper than insight—transcripts, slide decks, PDFs, half-finished scratch notes—this gives the pile a queue. Drop everything into `_inbox/`, say "process the inbox," and each input becomes one groomed markdown note: frontmatter on top, extracted quotes and tensions and action items in the middle, the verbatim original at the bottom. Along the way the skill flags candidates for longer-term memory, and you approve each one before any record is created.
 
-Aligned with the memory-bank schema at [`kendrick-at-slalom/memory-bank`](https://github.com/kendrick-at-slalom/memory-bank). Inspired by, not bound to.
-
-## Why This Exists
-
-There's already a memory-bank schema at [`kendrick-at-slalom/memory-bank`](https://github.com/kendrick-at-slalom/memory-bank), with a hydrator agent and a set of `hydrate-*` skills. If you're hydrating a code repo from settled artifacts (existing decisions, ADRs buried in PRs, design docs), use that. Don't use this.
-
-This skill exists for a different job: forward-filling a note-taking workspace from meeting transcripts, Office docs, PDFs, and raw notes.
-
-Four things make it stand out from other tooling:
-
-1. **A queue, not a backfill.** Drop a transcript into `_inbox/`. Drop a PPTX. Drop a scratch braindump. Drop a half-written email someone forwarded you. Process the queue. Then the source goes away: text files get deleted (their content lives on in the groomed note), binaries move to `attachments/`. The hydrate-\* skills point you at existing artifacts. This one drains a queue.
-
-1. **Groomed notes as the durable thing.** A memory bank treats the source as authoritative and leaves it where it is. The records get extracted and stored separately; the source stays put. That doesn't fit when your source is a `.vtt` file that's only valuable once it's been processed. Here, every input produces one groomed markdown note: frontmatter on top, extracted sections in the middle, verbatim raw content at the bottom. The note becomes the thing you grep, the thing you wiki-link to, the thing you scan six months later when you've forgotten the conversation. Records link out from it.
-
-1. **Cross-client patterns get a home.** A memory bank's scope model is single-tier; each bank is typically independent: project, team, domain, or org. There's no cross-bank concept. Consulting work needs a third tier for patterns that generalize past any one client. This skill adds a `Journal` record type and a cross-client journal directory for that purpose.
-
-1. **Obsidian-native filenames.** `nanoid -s 10` slug filenames that wiki-link cleanly. No sequential `<ns>-ADR-<n>` IDs (those break under cross-scope nesting). No `uuid` field (Obsidian resolves by filename anyway). Small choices, but they add up when you're working in the vault every day.
-
-## What You'd Lose by Just Using hydrate-\*
-
-Honest assessment: strip those four out and you're left with `hydrate-*` wrapped in a different invocation style. The workflow phases, the record schema, the status lifecycle, and the retrieval funnel all match memory-bank's — because we adopted them. You could run `hydrate-extract`, `hydrate-draft`, and the rest one at a time in a manually-arranged directory, and the records would come out looking identical.
-
-What you'd miss is the ergonomics. No inbox UX. No groomed-note artifact. No journal tier. No Obsidian-native filename conventions. The records exist but the conversational substrate they came from doesn't have a first-class home in your vault.
-
-If those ergonomic deltas matter to you, this is the skill. If they don't, `hydrate-*` is enough.
+Records land in one of three tiers: a single project, a client (any organization or relationship you work with repeatedly), or a cross-cutting journal for patterns that outlive both.
 
 ## Install
 
+The preferred route is the `skills` CLI:
+
 ```bash
-# Highly recommended
-npx skills add https://github.com/kendrick/inbox-to-memory
+npx skills add https://github.com/kendrick/skills
 ```
 
-… or
+Prefer to manage it by hand? Clone the collection and copy this directory in:
 
 ```bash
-git clone git@github.com:kendrick/inbox-to-memory.git ~/.claude/skills/inbox-to-memory
+git clone git@github.com:kendrick/skills.git
+cp -R skills/inbox-to-memory ~/.claude/skills/inbox-to-memory
 ```
 
 ## Use
 
-Two modes, one skill, decided by the user's phrasing.
-
-**Process mode** (default):
+**Process mode** (the default). From anywhere inside a set-up directory:
 
 ```
-> drop a transcript into /Users/Wherever/Your/Notes/Live/_inbox/
-> "process the inbox"
+> process the inbox
 ```
 
-The skill walks up to find the nearest opted-in directory, reads each file in `_inbox/`, produces one groomed markdown note per input (three zones: frontmatter, extracted sections, Raw Content), flags memory and journal candidates inline, and waits for user sign-off before crystallizing any records.
+The skill finds the nearest opted-in directory, grooms every file in `_inbox/` into a note under `notes/`, flags memory and journal candidates inline, and stops for your sign-off before crystallizing anything. When it finishes, the inbox is empty: text sources are deleted (their content lives on in the note's Raw Content zone), binaries move to `notes/attachments/`.
 
-**Scaffold mode**:
+**Scaffold mode.** In a fresh directory:
 
 ```
-> cd into a new project directory
-> "scaffold a new project here"
+> scaffold a new project here
 ```
 
-A short interview stands up the substrate for project, client, or journal scope. Up to four questions, the last picks memory mode (lightweight Decision/Context/Rule, or canonical adding Exception). Idempotent; existing structure isn't clobbered. See [`SKILL.md`](SKILL.md#scaffold-mode) for what each scope emits.
+A short interview (four questions at most) stands up the substrate for a project, a client, or the journal. Existing structure is never clobbered.
 
-## Layout
+Both modes, their phases, and the record schema are specified in [SKILL.md](SKILL.md).
+
+## What's Here
 
 ```
 inbox-to-memory/
-├── SKILL.md                          # the skill — both modes inline
-├── README.md                         # this file
-├── assets/                           # templates used at output time
-│   ├── claude-md/*.template.md       # CLAUDE.md per scope and per work area
-│   ├── readme/*.template.md          # README.md per scope and per work area
-│   ├── records/*.template.md         # Decision, Rule, PolicyRule, Exception, Context, Journal
-│   ├── note.template.md              # the groomed-note shape
-│   ├── personal.template.md          # _personal.md for private goals and observations
-│   ├── working-state.template.md     # narrative layer for project scope
-│   └── patterns-journal/journal.template.md
-└── references/                       # progressive-disclosure reading
-    ├── extraction-heuristics.md      # quote selection, tensions, assumptions
-    ├── scope-decisions.md            # project vs client vs journal proposal heuristics
-    ├── memory-bank-schema.md         # vendored schema summary
-    └── retrieval-funnel.md           # token-efficient querying at scale
+├── SKILL.md          # the skill — both modes inline
+├── assets/           # templates emitted at scaffold and crystallize time
+│   ├── claude-md/    # CLAUDE.md per scope
+│   ├── readme/       # README.md per scope
+│   ├── records/      # Decision, Rule, PolicyRule, Exception, Context, Journal
+│   └── ...           # note, personal, working-state, journal templates
+└── references/       # progressive-disclosure reading
+    ├── extraction-heuristics.md
+    ├── scope-decisions.md
+    ├── memory-bank-schema.md
+    └── retrieval-funnel.md
 ```
 
-## Concepts
+## Gotchas
 
-- **Opted-in directory.** A directory is opted in when it contains `_inbox/` plus either `_memory/` (project or client scope) or `entries/` (journal scope). The skill refuses to operate on un-opted-in directories.
-- **Three zones in a groomed note.** Frontmatter, then extracted sections (Notable Quotes, Tensions, Stated/Unstated Assumptions, Open Questions, Action Items / Memory Candidates), then `## Raw Content` verbatim.
-- **Two-pass memory promotion.** The skill flags candidates inline (`[memory candidate: <scope>] ...`, `[journal candidate: ...]`). The user signs off per candidate before any record is created. Unpromoted candidates keep their prefix — useful as "considered, not crystallized" provenance.
-- **Scope is sticky.** Once a record is created, its scope is fixed. Moving across scopes is a manual operation. Cross-scope references between records and notes are fine.
-- **Memory mode picked at scaffold time.** Lightweight (Decision, Context, Rule) or canonical (adds Exception for sanctioned deviations from a Rule). The choice is recorded in the scope's `CLAUDE.md` so later candidate flags use the right vocabulary.
-- **`patterns-journal/` as engagement-internal staging.** Project and client scope each get a `patterns-journal/journal.md` for rough, tagged, append-only observations. Promotion to the cross-client journal is a deliberate weekly operation, not automatic.
-- **`working-state.md` as the narrative layer.** Project scope adds a `working-state.md` between raw notes and crystallized memory records — decisions in motion, open questions, active hypotheses. Updated each session.
+- The skill only operates on opted-in directories (ones containing `_inbox/` plus `_memory/` or `entries/`). Anywhere else, it refuses and offers to scaffold instead.
+- IDs come from the `nanoid` CLI (`nanoid -s 10`), which must be installed globally.
+- Draining the inbox is destructive by design: after grooming, text sources are gone from `_inbox/` and binaries have moved. The content survives in the notes, but if you want pristine originals kept elsewhere, copy before you drop.
+- Nothing is ever promoted to memory automatically. Every record requires your explicit per-candidate approval, and unpromoted candidates keep their `[memory candidate: ...]` flag as a record of what was considered.
 
 ## License
 
-MIT.
+MIT, per the [collection license](../LICENSE). This skill is part of the [skills collection](..).
