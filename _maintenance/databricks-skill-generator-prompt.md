@@ -41,10 +41,10 @@ https://docs.databricks.com/api/account/{service-name}/{operation-name}
 ### 0b. Fetch via Jina Reader
 
 ```bash
-mkdir -p docs/raw
+mkdir -p _docs/raw
 for url in "${URLS[@]}"; do
   filename=$(echo "$url" | sed 's|.*/workspace/||; s|.*/account/||; s|/|-|g').md
-  curl -s "https://r.jina.ai/${url}" -o "docs/raw/${filename}"
+  curl -s "https://r.jina.ai/${url}" -o "_docs/raw/${filename}"
   sleep 3  # rate limit
 done
 ```
@@ -54,7 +54,7 @@ done
 Jina captures the full page including sidebar navigation. Databricks API docs have a consistent structure — a giant nav block between the H1 title and the first H2 (the actual endpoint heading). Strip this on every file:
 
 ```bash
-for f in docs/raw/*.md; do
+for f in _docs/raw/*.md; do
   awk '
     NR<=5 { print; next }                    # keep Jina metadata (Title, URL, etc.)
     /^## / && !found { found=1 }             # first ## marks content start
@@ -78,7 +78,7 @@ Jina can't extract client-rendered (SPA) pages. For each fetch, check if the out
 
 ### 0e. Write the source manifest
 
-After fetch + cleanup, generate `{domain}/docs/sources.json` so the refresh tooling can detect drift later. One entry per successfully fetched raw doc:
+After fetch + cleanup, generate `{domain}/_docs/sources.json` so the refresh tooling can detect drift later. One entry per successfully fetched raw doc:
 
 ```json
 [
@@ -91,13 +91,13 @@ After fetch + cleanup, generate `{domain}/docs/sources.json` so the refresh tool
 ]
 ```
 
-The easiest way is to run the repo's existing tool against the new domain:
+The easiest way is to run the repo's existing tool against the new domain (from `_maintenance/`):
 
 ```bash
 bash tools/refresh.sh --backfill --domain <new-domain-slug>
 ```
 
-It walks `docs/raw/`, parses each file's `URL Source:` line, hashes the content, and writes the manifest. Idempotent.
+It walks `_docs/raw/`, parses each file's `URL Source:` line, hashes the content, and writes the manifest. Idempotent.
 
 ### 0f. Checkpoint
 
@@ -186,7 +186,7 @@ Generate TWO files per bucket:
 
 > [One-line scope]
 > See also: [related-file.md] (why)
-> Raw docs: ../docs/raw/ — for full endpoint details, read {service}-{operation}.md
+> Raw docs: ../_docs/raw/ — for full endpoint details, read {service}-{operation}.md
 
 ## Auth
 
@@ -238,9 +238,7 @@ METHOD /api/2.x/path
 
 ## Gotchas
 
-- [Non-obvious behaviors]
-- [Ordering dependencies]
-- [Known quirks]
+- [Cross-cutting quirks ONLY — behaviors that span operations (TTLs, service-wide limits, ordering across endpoints). A caveat scoped to one operation lives inline in that operation's section, stated once.]
 ````
 
 ### Python SDK skill file template
@@ -250,7 +248,7 @@ METHOD /api/2.x/path
 
 > [One-line scope]
 > See also: [related-file.md] (why)
-> Raw docs: ../docs/raw/ — for full endpoint details, read {service}-{operation}.md
+> Raw docs: ../_docs/raw/ — for full endpoint details, read {service}-{operation}.md
 > Package: `databricks-sdk` — verify against your version (`pip show databricks-sdk`)
 
 ## Setup
@@ -301,7 +299,7 @@ from databricks.sdk.errors import NotFound, PermissionDenied
 
 ## Gotchas
 
-- [SDK-specific: version breaks, field renames, etc.]
+- [Cross-cutting quirks ONLY (version breaks, service-wide behavior). Operation-scoped caveats live inline with their operation, stated once.]
 ````
 
 ### Compression rules
@@ -309,9 +307,10 @@ from databricks.sdk.errors import NotFound, PermissionDenied
 1. **One example per operation.** Required params + single most common optional param.
 2. **Extract from Jina docs:** path, method, params (names + types), permissions, errors. Discard the rest.
 3. **Skip:** marketing prose, UI instructions, pagination boilerplate, cross-cloud duplication, full JSON schemas, deprecated endpoints.
-4. **Keep:** endpoint path/method, required vs optional params, permissions, one example, real error codes, ordering dependencies, gotchas. Each skill file's header points to `../docs/raw/` where the full fetched docs live — agents can `Read` those files for verbose details.
+4. **Keep:** endpoint path/method, required vs optional params, permissions, one example, real error codes, ordering dependencies, gotchas. Each skill file's header points to `../_docs/raw/` where the full fetched docs live — agents can `Read` those files for verbose details.
 5. **Size target: 1,500–3,000 tokens per file.** Over 4K → split. Under 800 → merge.
 6. **Cross-reference** related files with `> See also:` in the header.
+7. **Co-locate caveats with their operation.** Each caveat is stated once, next to the operation it constrains. The Gotchas section holds only cross-cutting quirks that span operations — never a restatement of something already inline.
 
 ---
 
@@ -322,57 +321,55 @@ Each domain gets its own `SKILL.md` as the entry point / router. This lives at `
 ````markdown
 ---
 name: databricks-[domain-slug]
-description: [What the skill covers, plus concrete trigger phrases. See "Description guidance" below.]
+description: [One line: what the domain covers. See "Description guidance" below.]
 ---
 
 # Databricks [Domain Name] API Skills
 
 > Parent: [../SKILL.md](../SKILL.md) (top-level Databricks API router with auth, account vs workspace base URLs)
-> API status: [GA | Public Preview | Private Preview]. Flag this if endpoints are pre-GA.
-
-## Usage
-
-1. Match your task to a file using Quick Lookup below
-2. Read the file in `rest/` (HTTP) or `python-sdk/` (SDK)
-3. For cross-domain tasks, read multiple files
-
-## Quick Lookup
-
-| Task                              | File          |
-| --------------------------------- | ------------- |
-| [Human-readable task description] | `[file-name]` |
-| ...                               | ...           |
-
-## REST API Skills
-
-| File             | Scope         | Endpoints |
-| ---------------- | ------------- | --------- |
-| `rest/[file].md` | [Brief scope] | [count]   |
-| ...              | ...           | ...       |
-
-## Python SDK Skills
-
-| File                   | Key Clients              |
-| ---------------------- | ------------------------ |
-| `python-sdk/[file].md` | `w.client1`, `w.client2` |
-| ...                    | ...                      |
+> API status: [GA | Public Preview | Private Preview]. Flag this only if endpoints are pre-GA.
 
 ## Auth
 
 `Authorization: Bearer <PAT-or-OAuth-token>` against the workspace base URL. Python SDK: `WorkspaceClient()` auto-detects from env or `.databrickscfg`. See [../SKILL.md](../SKILL.md) for the full auth block (account-level base URL, OAuth M2M, notebook auto-auth in DBR 13.1+).
 
 [Domain-specific permission notes if any (e.g., required scopes, account-vs-workspace token requirements).]
+
+[Domain-wide gotchas worth surfacing before routing, if any (API version traps, expiring URLs). Keep to a line or two each.]
+
+## Quick Lookup
+
+Read the matching bucket in `rest/` (HTTP) or `python-sdk/` (SDK).
+
+| Task                              | Bucket        |
+| --------------------------------- | ------------- |
+| [Human-readable task description] | `[file-name]` |
+| ...                               | ...           |
+
+## REST Buckets
+
+| Bucket           | Scope         | Endpoints |
+| ---------------- | ------------- | --------- |
+| `rest/[file].md` | [Brief scope] | [count]   |
+| ...              | ...           | ...       |
+
+## Python SDK Buckets
+
+| Bucket                 | Key Clients              |
+| ---------------------- | ------------------------ |
+| `python-sdk/[file].md` | `w.client1`, `w.client2` |
+| ...                    | ...                      |
 ````
 
 ### Description guidance
 
-The `description` field is the primary triggering signal. Write it so Claude reaches for the skill on realistic user phrasings, not only when the user says the exact domain name. Pattern:
+Domain SKILL.mds are reached through the top-level router, never invoked on their own—under the symlink-only deployment this repo assumes, nested SKILL.mds don't register as skills, so trigger phrasing in their descriptions does no work. Write one human-facing line summarizing what the domain covers (the Quick Lookup table carries the routing), e.g.:
 
 ```
-description: <one sentence on what the skill covers>. Use when <concrete task vocabulary 1>, <task vocabulary 2>, <task vocabulary 3>, or <adjacent phrasing a user might reach for>.
+description: SQL APIs—warehouses, statement execution, saved queries, and alerts.
 ```
 
-Lean into vocabulary a real user would type: verb phrases ("query a model endpoint", "rotate a recipient token"), product nouns ("AI Gateway", "provisioned throughput", "OIDC federation"), and tasks adjacent to the domain that someone might not realize this skill handles. Mention preview status if the API is preview-only; users sometimes filter by stability.
+Trigger vocabulary belongs in ONE place: the top-level router's description, where invocation actually happens. If the new domain adds task vocabulary a user would type ("serve a model", "rotate a recipient token"), extend the top router's description enumeration instead.
 
 ---
 
@@ -389,7 +386,7 @@ Lean into vocabulary a real user would type: verb phrases ("query a model endpoi
 3. **Cross-references:** Verify all `> See also:` links point to real files.
 4. **Unfetched gaps:** Note which files may be incomplete.
 5. **SDK caveat:** Remind user to spot-check `databricks-sdk` field names.
-6. **Manifest integrity:** Confirm `{domain}/docs/sources.json` exists, has one entry per raw doc, and that each entry's `sha256` matches the on-disk file. Re-run `bash tools/refresh.sh --backfill --domain <name>` if anything's out of sync.
+6. **Manifest integrity:** Confirm `{domain}/_docs/sources.json` exists, has one entry per raw doc, and that each entry's `sha256` matches the on-disk file. Re-run `bash tools/refresh.sh --backfill --domain <name>` (from `_maintenance/`) if anything's out of sync.
 
 ---
 
@@ -404,21 +401,21 @@ Lean into vocabulary a real user would type: verb phrases ("query a model endpoi
 ├── python-sdk/                 ← Python SDK-primary skills
 │   ├── {prefix}-{bucket}.md
 │   └── ...
-└── docs/raw/                   ← raw fetched docs (reference)
+└── _docs/raw/                   ← raw fetched docs (reference)
     └── ...
 ```
 
-This gets placed at `~/.local/share/skills/databricks/{domain}/`.
+This gets placed at `databricks-api/{domain}/` in the skills repo (the shipped payload; maintainer tooling like this prompt lives in the sibling `_maintenance/`).
 
-The **top-level** `~/.local/share/skills/databricks/SKILL.md` routes to each domain. That file is maintained separately (see below).
+The **top-level** `databricks-api/SKILL.md` routes to each domain. That file is maintained separately (see below).
 
 ---
 
 ## Appendix: Top-level router pattern
 
-When multiple domains exist, the top-level SKILL.md at `~/.local/share/skills/databricks/SKILL.md` is a two-tier router: it points at each domain's `SKILL.md`, and the domain SKILL.md points at its sub-files. The filesystem is the source of truth for layout; don't maintain a hand-written tree.
+When multiple domains exist, the top-level `databricks-api/SKILL.md` is a two-tier router: it points at each domain's `SKILL.md`, and the domain SKILL.md points at its sub-files. The filesystem is the source of truth for layout; don't maintain a hand-written tree.
 
-After generating a domain skill, update the top-level SKILL.md. Add a row to the Quick Routing table in the form `| [task description] | **[Domain]** | \`{domain}/SKILL.md\` |`. If the domain isn't built yet, mark the row inline (e.g., a `🔲 Not started` cell) so users scanning the table don't follow it to a dead path. Then update the Domain Status table: change the domain's row from `🔲 Not started` to `✅ Built` with file counts and notes.
+After generating a domain skill, update the top-level SKILL.md: add a row to the Quick Routing table in the form `| [task description] | **[Domain]** | \`{domain}/SKILL.md\` |`, and remove the domain from the "Not yet covered" line beneath the table. Then update the status table in `databricks-api/README.md`, the single source of truth for build status.
 
 ---
 
@@ -432,4 +429,4 @@ After generating a domain skill, update the top-level SKILL.md. Add a row to the
 6. Phase 2: I generate REST + Python SDK skill files
 7. Phase 3: I write the domain SKILL.md
 8. Phase 4: Self-review
-9. **Phase 5: Update the top-level SKILL.md** (Quick Routing, Domain Status, Directory Structure)
+9. **Phase 5: Update the top-level SKILL.md** (Quick Routing row, "Not yet covered" line) **and the README status table**
