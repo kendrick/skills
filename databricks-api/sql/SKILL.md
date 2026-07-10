@@ -1,19 +1,21 @@
 ---
 name: databricks-sql
-description: "Run SQL on Databricks via warehouses, statement execution, saved queries, and alerts. Use when creating, starting, or stopping a SQL warehouse, setting warehouse permissions or workspace defaults, executing a SQL statement (sync or async), polling for results via INLINE or EXTERNAL_LINKS disposition, downloading result chunks, cancelling a long-running statement, saving queries, or building alerts on query results. Heads up: EXTERNAL_LINKS pre-signed URLs expire fast, so fetch chunks promptly."
+description: SQL APIs—warehouses, statement execution, saved queries, and alerts.
 ---
 
 # Databricks SQL API Skills
 
 > Parent: [../SKILL.md](../SKILL.md) (top-level Databricks API router)
 
-## Usage
+## Auth
 
-1. Match your task to a file using Quick Lookup below
-2. Read the file in `rest/` (HTTP) or `python-sdk/` (SDK)
-3. For cross-domain tasks, read multiple files
+`Authorization: Bearer <PAT-or-OAuth-token>` against `https://<workspace-host>`. Python SDK: `WorkspaceClient()` auto-detects from env or `.databrickscfg`. See [../SKILL.md](../SKILL.md) for the full auth block (account-level base URL, OAuth M2M, notebook auto-auth in DBR 13.1+).
+
+Result-fetching gotcha: with `EXTERNAL_LINKS` disposition, the API returns short-lived pre-signed URLs. Treat them as ephemeral. Fetch the chunks immediately rather than caching the URLs, and re-poll the statement to refresh them if a fetch fails.
 
 ## Quick Lookup
+
+Read the matching file in `rest/` (HTTP) or `python-sdk/` (SDK).
 
 | Task                                              | File                      |
 | ------------------------------------------------- | ------------------------- |
@@ -42,9 +44,3 @@ description: "Run SQL on Databricks via warehouses, statement execution, saved q
 | `python-sdk/sql-warehouses.md`          | `w.warehouses`          |
 | `python-sdk/sql-statement-execution.md` | `w.statement_execution` |
 | `python-sdk/sql-queries-alerts.md`      | `w.queries`, `w.alerts` |
-
-## Auth
-
-`Authorization: Bearer <PAT-or-OAuth-token>` against `https://<workspace-host>`. Python SDK: `WorkspaceClient()` auto-detects from env or `.databrickscfg`. See [../SKILL.md](../SKILL.md) for the full auth block (account-level base URL, OAuth M2M, notebook auto-auth in DBR 13.1+).
-
-Result-fetching gotcha: with `EXTERNAL_LINKS` disposition, the API returns short-lived pre-signed URLs. Treat them as ephemeral. Fetch the chunks immediately rather than caching the URLs, and re-poll the statement to refresh them if a fetch fails.

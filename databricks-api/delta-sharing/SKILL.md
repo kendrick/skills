@@ -1,19 +1,21 @@
 ---
 name: databricks-delta-sharing
-description: Databricks Delta Sharing APIs covering shares, recipients, providers, activation tokens, and OIDC federation. Use when creating or updating a share, adding tables/volumes/notebooks to a share, granting share access, rotating recipient tokens, browsing what a provider has shared, activating a public share, or configuring OIDC federation policies for recipient identity.
+description: Delta Sharing APIs—shares, recipients, providers, activation tokens, and OIDC federation.
 ---
 
 # Databricks Delta Sharing API Skills
 
 > Parent: [../SKILL.md](../SKILL.md) (top-level Databricks API router)
 
-## Usage
+## Auth
 
-1. Match your task to a file using Quick Lookup below
-2. Read the file in `rest/` (HTTP) or `python-sdk/` (SDK)
-3. For cross-domain tasks, read multiple files
+`Authorization: Bearer <PAT-or-OAuth-token>` against `https://<workspace-host>`. Python SDK: `WorkspaceClient()` auto-detects from env or `.databrickscfg`. See [../SKILL.md](../SKILL.md) for the full auth block (account-level base URL, OAuth M2M, notebook auto-auth in DBR 13.1+).
+
+Domain-specific: recipient *activation* endpoints are public, so no auth header is required. Everything else needs the workspace token.
 
 ## Quick Lookup
+
+Read the matching file in `rest/` (HTTP) or `python-sdk/` (SDK).
 
 | Task | File |
 |------|------|
@@ -46,9 +48,3 @@ description: Databricks Delta Sharing APIs covering shares, recipients, provider
 | `python-sdk/ds-recipients.md` | `w.recipients` |
 | `python-sdk/ds-providers.md` | `w.providers` |
 | `python-sdk/ds-recipient-auth.md` | `w.recipient_activation`, `w.recipient_federation_policies` |
-
-## Auth
-
-`Authorization: Bearer <PAT-or-OAuth-token>` against `https://<workspace-host>`. Python SDK: `WorkspaceClient()` auto-detects from env or `.databrickscfg`. See [../SKILL.md](../SKILL.md) for the full auth block (account-level base URL, OAuth M2M, notebook auto-auth in DBR 13.1+).
-
-Domain-specific: recipient *activation* endpoints are public, so no auth header is required. Everything else needs the workspace token.

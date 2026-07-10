@@ -1,6 +1,6 @@
 ---
 name: databricks-unity-catalog
-description: Databricks Unity Catalog governance APIs for the lakehouse, spanning about 120 endpoints across REST and the Python SDK. Use when creating or updating catalogs, schemas, tables, volumes, or functions; managing grants, ABAC policies, workspace bindings, or access requests; setting up storage credentials, external locations, connections, or Lakehouse Federation; configuring metastores, system schemas, or resource quotas; registering UC functions or ML models; tracking lineage or tags; or running data quality monitors.
+description: Unity Catalog governance APIs—catalogs, schemas, tables, volumes, grants, lineage, and quality monitors—via REST and the Python SDK.
 ---
 
 # Databricks Unity Catalog API Skills
@@ -20,15 +20,11 @@ All UC objects live in a three-level namespace: `catalog.schema.object`.
 You must create parent objects before children (catalog → schema → table/view/volume/function).
 Grants cascade: `USE CATALOG` on a catalog is required before any schema-level access.
 
-## Usage
+## Quick Lookup
 
-1. Identify which domain your task falls under (see Quick Lookup below)
-2. Read the corresponding file in `rest/` (for HTTP calls) or `python-sdk/` (for SDK usage)
-3. If your task spans domains (e.g., create a table AND set grants), read both relevant files
+Read the matching bucket in `rest/` (HTTP) or `python-sdk/` (SDK). Tasks that span files (e.g. create a table AND grant access to it): read every matching file.
 
-## Quick domain lookup
-
-| Task                                           | File                      |
+| Task                                           | Bucket                      |
 | ---------------------------------------------- | ------------------------- |
 | Create/list/update a catalog, schema, or table | `uc-catalog-schema-table` |
 | Manage table constraints or online tables      | `uc-catalog-schema-table` |
@@ -49,9 +45,9 @@ Grants cascade: `USE CATALOG` on a catalog is required before any schema-level a
 | Create or manage data quality monitors         | `uc-quality-monitors`     |
 | Run or check monitor refreshes                 | `uc-quality-monitors`     |
 
-## REST API Skills
+## REST Buckets
 
-| File                              | Scope                                                                           | Endpoints |
+| Bucket                              | Scope                                                                           | Endpoints |
 | --------------------------------- | ------------------------------------------------------------------------------- | --------- |
 | `rest/uc-catalog-schema-table.md` | Catalogs, schemas, tables, constraints, online tables                           | 21        |
 | `rest/uc-volumes-files.md`        | Volumes (managed + external)                                                    | 5         |
@@ -62,11 +58,11 @@ Grants cascade: `USE CATALOG` on a catalog is required before any schema-level a
 | `rest/uc-metastore-admin.md`      | Metastore config, workspace assignment, system schemas, quotas                  | 15        |
 | `rest/uc-quality-monitors.md`     | Table quality monitors and refreshes                                            | 7         |
 
-## Python SDK Skills
+## Python SDK Buckets
 
 Same domains, Python SDK-first examples. Files in `python-sdk/` with matching names.
 
-| File                                    | Key SDK Clients                                                                    |
+| Bucket                                    | Key SDK Clients                                                                    |
 | --------------------------------------- | ---------------------------------------------------------------------------------- |
 | `python-sdk/uc-catalog-schema-table.md` | `w.catalogs`, `w.schemas`, `w.tables`, `w.table_constraints`, `w.online_tables`    |
 | `python-sdk/uc-volumes-files.md`        | `w.volumes`                                                                        |
