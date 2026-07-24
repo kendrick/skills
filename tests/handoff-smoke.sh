@@ -33,17 +33,30 @@ require_file _maintenance/handoff/PROVENANCE.md
 require_file _maintenance/handoff/upstream/harpb-handoff.md
 require_file _maintenance/handoff/upstream/mattpocock-SKILL.md
 require_file _maintenance/handoff/sync-upstream.sh
+require_file _maintenance/handoff/sync-upstream.mjs
+require_file _maintenance/handoff/sync-upstream.ps1
+require_file _maintenance/handoff/template/SKILL.md
 
 require_text handoff/SKILL.md "disable-model-invocation: true"
-require_text handoff/SKILL.md "argument-hint: \"[handoff id to resume | a prompt to hand off | empty for whole session]\""
+require_text handoff/SKILL.md "argument-hint: '[handoff id to resume | a prompt to hand off | empty for whole session]'"
 require_text handoff/SKILL.md "## How to Verify"
 require_text handoff/SKILL.md "**Skills.**"
-require_text handoff/SKILL.md 'mkdir -p "$HANDOFF_DIR"'
-require_text handoff/SKILL.md 'if [[ "$ARGUMENTS" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{4}- ]]'
+require_text handoff/SKILL.md "This workflow is designed to work across coding agents and operating systems."
 require_text handoff/SKILL.md "a write is complete when the document exists"
 require_text _maintenance/handoff/PROVENANCE.md "## Deviations From Upstream"
 
 bash -n _maintenance/handoff/sync-upstream.sh
+node --check _maintenance/handoff/sync-upstream.mjs
+
+rendered_skill="$(mktemp "${TMPDIR:-/tmp}/handoff-rendered.XXXXXX")"
+rm "$rendered_skill"
+trap 'rm -f "$rendered_skill"' EXIT
+node _maintenance/handoff/sync-upstream.mjs --skip-upstream --write --output "$rendered_skill"
+cmp -s _maintenance/handoff/template/SKILL.md "$rendered_skill" || {
+  echo "renderer output differs from the canonical template" >&2
+  exit 1
+}
+node _maintenance/handoff/sync-upstream.mjs --skip-upstream --check
 
 if [[ "${HANDOFF_VERIFY_UPSTREAM:-0}" == "1" ]]; then
   sync_output="$(bash _maintenance/handoff/sync-upstream.sh)"

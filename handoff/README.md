@@ -1,6 +1,6 @@
-# handoff
+# Handoff
 
-Write a handoff file before `/clear`, then restore its unfinished work in a fresh Claude Code session.
+Carry unfinished work into a fresh coding-agent session without relying on a conversation summary.
 
 ## Install
 
@@ -10,51 +10,69 @@ Install this skill from the repository with the `skills` CLI:
 npx skills add kendrick/skills --skill handoff
 ```
 
-## Use It
+## Start a Handoff
 
-`handoff` is user-invoked. Type it in Claude Code when you want to move work to a fresh session.
+Invoke `handoff` before you clear a session or move to a new one. It writes a short document to `.agents/handoff/` at the repository root. That document holds the next task, open work, decisions, and verification steps.
 
-### Hand Off the Current Session
+Use the invocation your coding agent supports:
+
+| Coding Agent | Invocation |
+| --- | --- |
+| Claude Code | `/handoff` |
+| Codex | `$handoff` |
+| GitHub Copilot CLI | Ask it to use the `/handoff` skill. |
+
+For example, in Claude Code:
 
 ```text
 /handoff
 ```
 
-The skill writes the document in `.claude/handoff/`, then prints the command to run after `/clear`.
+The response gives you the exact handoff ID to use next:
 
-### Hand Off One Task
+```text
+Handoff written: .agents/handoff/2026-07-24-1530-sitelink-probes.md
+Clear this session, then invoke: handoff 2026-07-24-1530-sitelink-probes
+```
+
+## Hand Off One Task
+
+Add a prompt after the invocation when only one piece of work needs to move forward:
 
 ```text
 /handoff convert the sitelink probes to validation scenarios
 ```
 
-The prompt becomes the handoff goal. The file contains only the task and context needed to complete it.
+The prompt becomes the goal and first unfinished task. The handoff keeps only the context needed to finish it.
 
-### Resume Work
+## Resume Work
+
+In the fresh session, invoke the skill with the datetime prefix or any unique part of the filename:
 
 ```text
 /handoff 2026-07-24-1530
 ```
 
-You can use a unique partial ID instead of the full filename. In a fresh session, bare `/handoff` resumes the most recent handoff.
+Use the matching invocation form for Codex or Copilot. A bare invocation in a fresh session resumes the newest handoff. When several files match, the skill lists them and asks you to choose.
 
-## What the Handoff Keeps
+## What Goes in the File
 
-Each handoff starts with unfinished tasks, then records the goal, completed work, next action, relevant paths, decisions, suggested skills, and verification commands. It links to plans, issues, ADRs, commits, and diffs rather than copying them.
+Each handoff begins with unfinished tasks. It then records the goal, completed work, next action, relevant paths, decisions, helpful skills, and verification commands. It links to plans, issues, ADRs, commits, and diffs instead of copying them.
 
-See [SKILL.md](SKILL.md) for the complete behavior and document template.
+Handoff files are yours to keep, prune, or ignore. If they live in a tracked project, add `.agents/handoff/` to that project's ignore rules if you do not want them in commits.
 
-## Maintain It
+See [SKILL.md](SKILL.md) for the full workflow and document template.
 
-Upstream snapshots and the drift check live outside the shipped skill in [`_maintenance/handoff/`](../_maintenance/handoff/).
+## Maintainers
 
-Run the check from any directory in the repository:
+The reviewed source and upstream snapshots live in [`_maintenance/handoff/`](../_maintenance/handoff/). Use the Node 18+ workflow there to check upstream drift and render the shipped skill:
 
 ```bash
-bash _maintenance/handoff/sync-upstream.sh
+node _maintenance/handoff/sync-upstream.mjs --check
+node _maintenance/handoff/sync-upstream.mjs --write
 ```
 
-It prints `No upstream changes` for unchanged sources. When an upstream changes, it prints a diff and exits nonzero so the merge can be reviewed.
+The check prints a diff and exits nonzero when an upstream snapshot or generated file differs. Update the canonical template deliberately, then render it.
 
 ## More
 

@@ -6,4 +6,10 @@
 
 ## Deviations From Upstream
 
-None yet. Record deliberate differences from either upstream here before updating snapshots or the merged skill.
+The local template keeps the upstream write and resume loop but makes these deliberate changes:
+
+- It stores handoff files in `.agents/handoff/` and uses each host's task or plan mechanism when available.
+- It removes harpb's repository-specific exceptions and service names.
+- It keeps the merged skill in `template/SKILL.md`; `sync-upstream.mjs --write` emits the shipped `handoff/SKILL.md` only after upstream checks pass.
+
+Record later differences from either upstream here before updating snapshots or the template.
