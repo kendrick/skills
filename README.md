@@ -11,7 +11,7 @@
 
 Agent skills you install on individually or all at once.
 
-Four skills live here right now: one for driving Databricks APIs, one for turning meeting artifacts into durable notes, one for writing READMEs, and one for handing work to a fresh session. Each sits in its own directory with a full guide, loads into your LLM harness the same way, and works independently of the rest.
+Four skills live here right now: one for driving Databricks APIs, one for turning meeting artifacts into durable notes, one for writing READMEs, and one for carrying unfinished Claude Code work into a fresh session. Each sits in its own directory with a full guide, loads into your LLM harness the same way, and works independently of the rest.
 
 ## Install
 
@@ -47,9 +47,9 @@ Co-authors READMEs—this one included—whether brand-new, long-neglected, at t
 npx skills add kendrick/skills --skill readme-coauthorship
 ```
 
-### [handoff](handoff/)
+### [handoff](handoff/README.md)
 
-Writes a handoff file before you clear a Claude Code session, then restores its unfinished tasks and context in the next session. Use it when a compacted conversation would lose the detail needed to finish the work.
+Use `/handoff` in Claude Code to write a handoff file before `/clear`. It restores unfinished tasks and context in a fresh session when a compacted conversation would lose the detail needed to finish the work.
 
 ```bash
 npx skills add kendrick/skills --skill handoff

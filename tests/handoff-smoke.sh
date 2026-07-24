@@ -22,8 +22,9 @@ require_text() {
 }
 
 require_file handoff/SKILL.md
-[[ "$(find handoff -maxdepth 1 -type f | wc -l | tr -d ' ')" == "1" ]] || {
-  echo "handoff/ must ship only SKILL.md" >&2
+require_file handoff/README.md
+[[ "$(find handoff -maxdepth 1 -type f | wc -l | tr -d ' ')" == "2" ]] || {
+  echo "handoff/ must ship only SKILL.md and README.md" >&2
   exit 1
 }
 
