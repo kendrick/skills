@@ -11,7 +11,7 @@
 
 Agent skills you install on individually or all at once.
 
-Three skills live here right now: one for driving Databricks APIs, one for turning meeting artifacts into durable notes, and one for writing READMEs. Each sits in its own directory with a full guide, loads into your LLM harness the same way, and works independently of the rest.
+Four skills live here right now: one for driving Databricks APIs, one for turning meeting artifacts into durable notes, one for writing READMEs, and one for handing work to a fresh session. Each sits in its own directory with a full guide, loads into your LLM harness the same way, and works independently of the rest.
 
 ## Install
 
@@ -47,9 +47,17 @@ Co-authors READMEs—this one included—whether brand-new, long-neglected, at t
 npx skills add kendrick/skills --skill readme-coauthorship
 ```
 
+### [handoff](handoff/)
+
+Writes a handoff file before you clear a Claude Code session, then restores its unfinished tasks and context in the next session. Use it when a compacted conversation would lose the detail needed to finish the work.
+
+```bash
+npx skills add kendrick/skills --skill handoff
+```
+
 ## Repository Layout
 
-- [databricks-api/](databricks-api/), [inbox-to-memory/](inbox-to-memory/), [readme-coauthorship/](readme-coauthorship/): the skills, one directory each
+- [databricks-api/](databricks-api/), [inbox-to-memory/](inbox-to-memory/), [readme-coauthorship/](readme-coauthorship/), [handoff/](handoff/): the skills, one directory each
 - [\_docs/](_docs/): research notes behind the skills, like the [readme-coauthorship writeup](_docs/readme-coauthorship-research.md)
 - [\_maintenance/](_maintenance/): maintainer tooling, including the refresh workflow that keeps `databricks-api` synced with upstream Databricks docs
 
