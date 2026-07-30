@@ -7,7 +7,7 @@ description: Maintainer workflow—detect drift between the compressed databrick
 
 Detect and apply drift between the compressed skill files in `databricks-api/` and the upstream Databricks docs.
 
-Each domain has a manifest at `databricks-api/{domain}/_docs/sources.json` tracking every endpoint's source URL and the sha256 of its last-known raw doc. A bash script (`tools/refresh.sh`, sibling of this skill in `_maintenance/`) handles the deterministic side (fetch, diff, report). This skill handles the semantic side (decide which compressed skill files need editing, propose changes, apply).
+Each domain has a manifest at `databricks-api/{domain}/_docs/sources.json` tracking every endpoint's source URL and the sha256 of its last-known raw doc. A bash script (`tools/refresh.sh`, sibling of this skill in `_maintenance/databricks-api/`) handles the deterministic side (fetch, diff, report). This skill handles the semantic side (decide which compressed skill files need editing, propose changes, apply).
 
 ## Prereqs
 
@@ -17,7 +17,7 @@ Each domain has a manifest at `databricks-api/{domain}/_docs/sources.json` track
 
 ### 0. cd to the Maintenance Dir
 
-All commands below run from `_maintenance/`, the parent of the directory holding this SKILL.md. `cd` there first; `tools/refresh.sh` and the drift reports live there, and the script finds the domains in the sibling `databricks-api/` on its own.
+All commands below run from `_maintenance/databricks-api/`, the parent of the directory holding this SKILL.md. `cd` there first; `tools/refresh.sh` and the drift reports live there, and the script finds the domains in the repo-root `databricks-api/` on its own.
 
 ### 1. Figure Out the Scope
 
@@ -29,7 +29,7 @@ Ask the user which domain to refresh, or whether to run against all 8. Default t
 bash tools/refresh.sh --check --domain <name>
 ```
 
-Omit `--domain` for all domains. This writes `refresh-report-{domain}.md` in `_maintenance/` if anything's changed or failed. If nothing drifted, the script reports "no drift" and writes nothing; exit cleanly.
+Omit `--domain` for all domains. This writes `refresh-report-{domain}.md` in `_maintenance/databricks-api/` if anything's changed or failed. If nothing drifted, the script reports "no drift" and writes nothing; exit cleanly.
 
 ### 3. Read the Report
 
@@ -66,7 +66,7 @@ This overwrites the raw docs in `databricks-api/{domain}/_docs/raw/` with the fr
 
 ### 6. Clean Up
 
-Delete `refresh-report-{domain}.md` from `_maintenance/` once changes are committed. It's a transient artifact, not meant to be checked in.
+Delete `refresh-report-{domain}.md` from `_maintenance/databricks-api/` once changes are committed. It's a transient artifact, not meant to be checked in.
 
 ## Troubleshooting
 
@@ -84,7 +84,7 @@ This scans `databricks-api/{domain}/_docs/raw/` for placeholder files, re-fetche
 
 ## Adding a New Domain
 
-When a new domain is added via `databricks-skill-generator-prompt.md` (sibling of this skill in `_maintenance/`), the generator writes `databricks-api/{domain}/_docs/sources.json` at build time (Phase 0d). No backfill needed for new domains.
+When a new domain is added via `databricks-skill-generator-prompt.md` (sibling of this skill in `_maintenance/databricks-api/`), the generator writes `databricks-api/{domain}/_docs/sources.json` at build time (Phase 0d). No backfill needed for new domains.
 
 For domains that pre-date this skill, run `bash tools/refresh.sh --backfill --domain <name>` once to bootstrap the manifest.
 

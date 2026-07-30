@@ -59,7 +59,7 @@ npx skills add kendrick/skills --skill handoff
 
 - [databricks-api/](databricks-api/), [inbox-to-memory/](inbox-to-memory/), [readme-coauthorship/](readme-coauthorship/), [handoff/](handoff/): the skills, one directory each
 - [\_docs/](_docs/): research notes behind the skills, like the [readme-coauthorship writeup](_docs/readme-coauthorship-research.md)
-- [\_maintenance/](_maintenance/): maintainer tooling, including the refresh workflow that keeps `databricks-api` synced with upstream Databricks docs
+- [\_maintenance/](_maintenance/): maintainer tooling, one subdirectory per skill that needs it: the refresh workflow that keeps `databricks-api` synced with upstream Databricks docs, and the upstream sync behind `handoff`
 
 ## Contributing
 

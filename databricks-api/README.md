@@ -77,15 +77,15 @@ Each domain follows the same shape:
 
 ## Maintenance
 
-Everything a maintainer needs lives in `_maintenance/` at the repo root, deliberately outside the shipped `databricks-api/` folder so skill installers that scan for SKILL.md files never pick it up.
+Everything a maintainer needs lives in `_maintenance/databricks-api/` at the repo root, deliberately outside the shipped `databricks-api/` folder so skill installers that scan for SKILL.md files never pick it up.
 
 ### Adding a New Domain
 
-[\_maintenance/databricks-skill-generator-prompt.md](../_maintenance/databricks-skill-generator-prompt.md) is the recipe. Hand a subagent the prompt plus a domain name and an endpoint list; it fetches docs via Jina, proposes a bucket grouping for your review, generates the REST + SDK skill files and the domain router, then self-reviews for coverage and token budgets. After it runs, update the status table above.
+[\_maintenance/databricks-api/databricks-skill-generator-prompt.md](../_maintenance/databricks-api/databricks-skill-generator-prompt.md) is the recipe. Hand a subagent the prompt plus a domain name and an endpoint list; it fetches docs via Jina, proposes a bucket grouping for your review, generates the REST + SDK skill files and the domain router, then self-reviews for coverage and token budgets. After it runs, update the status table above.
 
 ### Keeping Skills Current
 
-Databricks docs evolve: fields get added, endpoints come out of preview, occasionally something gets renamed. Each domain tracks its fetched docs' source URLs and content hashes in `{domain}/_docs/sources.json`. From `_maintenance/`, a bash script handles the deterministic side:
+Databricks docs evolve: fields get added, endpoints come out of preview, occasionally something gets renamed. Each domain tracks its fetched docs' source URLs and content hashes in `{domain}/_docs/sources.json`. From `_maintenance/databricks-api/`, a bash script handles the deterministic side:
 
 ```bash
 bash tools/refresh.sh --check --domain <name>      # detect drift, write a report
@@ -93,7 +93,7 @@ bash tools/refresh.sh --apply --domain <name>      # apply upstream changes to r
 bash tools/refresh.sh --backfill --domain <name>   # (re)build the manifest from on-disk raw docs
 ```
 
-For the semantic side (deciding which compressed skill files need updating based on the drift report), the companion workflow at [\_maintenance/refresh-skill/SKILL.md](../_maintenance/refresh-skill/SKILL.md) walks Claude through proposing edits.
+For the semantic side (deciding which compressed skill files need updating based on the drift report), the companion workflow at [\_maintenance/databricks-api/refresh-skill/SKILL.md](../_maintenance/databricks-api/refresh-skill/SKILL.md) walks Claude through proposing edits.
 
 ### A Note on the Nested SKILL.md Files
 

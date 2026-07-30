@@ -91,7 +91,7 @@ After fetch + cleanup, generate `{domain}/_docs/sources.json` so the refresh too
 ]
 ```
 
-The easiest way is to run the repo's existing tool against the new domain (from `_maintenance/`):
+The easiest way is to run the repo's existing tool against the new domain (from `_maintenance/databricks-api/`):
 
 ```bash
 bash tools/refresh.sh --backfill --domain <new-domain-slug>
@@ -386,7 +386,7 @@ Trigger vocabulary belongs in ONE place: the top-level router's description, whe
 3. **Cross-references:** Verify all `> See also:` links point to real files.
 4. **Unfetched gaps:** Note which files may be incomplete.
 5. **SDK caveat:** Remind user to spot-check `databricks-sdk` field names.
-6. **Manifest integrity:** Confirm `{domain}/_docs/sources.json` exists, has one entry per raw doc, and that each entry's `sha256` matches the on-disk file. Re-run `bash tools/refresh.sh --backfill --domain <name>` (from `_maintenance/`) if anything's out of sync.
+6. **Manifest integrity:** Confirm `{domain}/_docs/sources.json` exists, has one entry per raw doc, and that each entry's `sha256` matches the on-disk file. Re-run `bash tools/refresh.sh --backfill --domain <name>` (from `_maintenance/databricks-api/`) if anything's out of sync.
 
 ---
 
@@ -405,7 +405,7 @@ Trigger vocabulary belongs in ONE place: the top-level router's description, whe
     └── ...
 ```
 
-This gets placed at `databricks-api/{domain}/` in the skills repo (the shipped payload; maintainer tooling like this prompt lives in the sibling `_maintenance/`).
+This gets placed at `databricks-api/{domain}/` in the skills repo (the shipped payload; maintainer tooling like this prompt lives in `_maintenance/databricks-api/`).
 
 The **top-level** `databricks-api/SKILL.md` routes to each domain. That file is maintained separately (see below).
 
