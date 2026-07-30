@@ -50,15 +50,20 @@ require_file _maintenance/handoff/sync-upstream.ps1
 require_file _maintenance/handoff/template/SKILL.md
 
 require_text handoff/SKILL.md "disable-model-invocation: true"
-require_text handoff/SKILL.md "argument-hint: '[handoff id to resume | a prompt to hand off | empty for whole session]'"
+require_text handoff/SKILL.md "argument-hint: '[handoff id to resume | a prompt to hand off | md for a canvas | empty for whole session]'"
 require_text handoff/SKILL.md "## How to Verify"
 require_text handoff/SKILL.md "**Skills.**"
 require_text handoff/SKILL.md "This workflow is designed to work across coding agents and operating systems."
-require_text handoff/SKILL.md "a write is complete when the document exists"
+require_text handoff/SKILL.md "a write is complete when the document is delivered"
 
 # Storage lives in the OS temp directory now. The refute keeps the old in-repo
 # path from creeping back through an upstream sync.
 require_text handoff/SKILL.md "<TMP>/agent-handoff/<PROJECT>/"
+
+# The durability test is what keeps a sandboxed host from writing into a
+# container, so pin its wording along with the branch that serves those hosts.
+require_text handoff/SKILL.md "still reachable after this session ends"
+require_text handoff/SKILL.md "## Render a Canvas"
 refute_text handoff/SKILL.md ".agents/handoff"
 require_text handoff/README.md "agent-handoff"
 

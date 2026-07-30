@@ -1,8 +1,8 @@
 ---
 name: handoff
-description: Save a session handoff or resume one after clearing a session. Use ONLY when the user explicitly invokes handoff or asks to hand off / resume a handoff. Never use for summaries, status updates, or note-taking.
+description: Save a session handoff to a file or a side-panel canvas, or resume one after clearing a session. Use ONLY when the user explicitly invokes handoff or asks to hand off / resume a handoff. Never use for summaries, status updates, or note-taking.
 disable-model-invocation: true
-argument-hint: '[handoff id to resume | a prompt to hand off | empty for whole session]'
+argument-hint: '[handoff id to resume | a prompt to hand off | md for a canvas | empty for whole session]'
 ---
 
 # Handoff
@@ -11,7 +11,7 @@ Write a handoff document before clearing a session, then use it to rebuild the w
 
 This workflow is designed to work across coding agents and operating systems. Where a step names a shell command, treat it as the intent; use your native shell (bash, PowerShell, or file tools) to achieve the same result. Always use forward slashes in paths written into documents.
 
-## Shared Paths and Phase Detection
+## Paths, Phase, and Destination
 
 Resolve once per invocation:
 
@@ -20,6 +20,15 @@ Resolve once per invocation:
 - **TMP**: the OS temp directory: `${TMPDIR:-/tmp}` in bash or zsh, `$env:TEMP` in PowerShell, `require('os').tmpdir()` in Node. Inside WSL2, use the Linux temp directory rather than a mounted Windows one.
 - **HANDOFF_DIR**: `<TMP>/agent-handoff/<PROJECT>/`, created on the first file write.
 - **ARGS**: the text following the skill invocation. (Claude Code exposes this as `$ARGUMENTS`; on other agents it is simply the rest of the user's message.)
+
+Choose a destination:
+
+- Write a **file** when HANDOFF_DIR is **durable**: on the user's own machine, still reachable after this session ends. A coding agent running on a laptop or workstation qualifies.
+- Otherwise render a **canvas**. `md` or `markdown` in ARGS picks the canvas on any host.
+
+A sandboxed VM accepts writes into a container that is discarded with the session, so a successful write is not evidence of durability.
+
+`md` and `markdown` are destination flags, as is a leading `to`, `in`, or `as`. Strip them from ARGS before detecting the phase, so `handoff md` is write-session on a canvas and `handoff md convert the probes` is write-prompt on a canvas. Keep the word in the prompt when the remainder needs it to read as a complete instruction, as in `handoff markdown parsing is broken`.
 
 Choose a phase:
 
@@ -33,7 +42,7 @@ Name every new document `<YYYY-MM-DD-HHMM>-<slug>.md`. Datetime-first keeps late
 
 Write one document for the whole session. Copy pending and in-progress tasks from the task list, then write only the context the next session needs. Do not repeat material already captured in a plan, issue, ADR, commit, diff, or other artifact; link to it by path or URL instead.
 
-Print this pointer and stop working:
+On a file destination, print this pointer and stop working:
 
 ```text
 Handoff written: <path>
@@ -43,11 +52,21 @@ Clear this session, then invoke: handoff <YYYY-MM-DD-HHMM>-<slug>
 
 ## Write a Prompt Handoff
 
-For free-text ARGS, write one focused handoff. Keep the prompt verbatim as the goal, make it the primary unfinished task, and include only related tasks and context. Slugify the prompt for the filename. Print the pointer above and stop.
+For free-text ARGS, write one focused handoff. Keep the prompt verbatim as the goal, make it the primary unfinished task, and include only related tasks and context. Slugify the prompt for the document name, then close as the destination directs.
+
+## Render a Canvas
+
+On a canvas destination, build the document the phase calls for, then hand it to the user on the host's side panel: a Claude artifact, a ChatGPT canvas, any surface they can scroll and copy on its own. Title it with the document name so the next session can still refer to it. Fall back to a downloadable `.md` file, then to fenced markdown in the reply, and name the fallback you used. The canvas destination writes nothing to disk.
+
+Close with this in place of the file pointer:
+
+```text
+Handoff ready in the panel. Start a new session, then paste this document back or attach the file.
+```
 
 ## Finish a Write
 
-For either write branch, a write is complete when the document exists, the pointer names it, and the response stops.
+For either write branch, a write is complete when the document is delivered (a file at the path, or a canvas on the panel), the closing pointer names it, and the response stops.
 
 ## Resume a Handoff
 

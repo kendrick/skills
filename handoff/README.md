@@ -56,6 +56,17 @@ Add a prompt after the invocation when only one piece of work needs to move forw
 
 The prompt becomes the goal and first unfinished task. The handoff keeps only the context needed to finish it.
 
+## Hand Off to a Document
+
+Add `md` or `markdown` and the handoff opens beside the chat as a document (a Claude artifact, a ChatGPT canvas) instead of landing on disk:
+
+```text
+/handoff md
+/handoff md convert the sitelink probes to validation scenarios
+```
+
+Long technical markdown reads cleanly in a panel and copies out whole, where a fenced block in a chat transcript tends to break up. This is also the default on hosts without a durable filesystem of your own, like Claude or ChatGPT on the web. Those hosts run in a sandbox that gets discarded when the session ends, so a file written there would be gone by the time you looked for it.
+
 ## Resume Work
 
 In the fresh session, invoke the skill with the datetime prefix or any unique part of the filename:

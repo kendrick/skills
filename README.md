@@ -49,7 +49,7 @@ npx skills add kendrick/skills --skill readme-coauthorship
 
 ### [handoff](handoff/README.md)
 
-Use `handoff` to write a handoff file before ending a coding-agent session. It restores unfinished tasks and context in a fresh session when conversation history would lose the detail needed to finish the work. See the [handoff guide](handoff/README.md) for Claude Code, Codex, and GitHub Copilot CLI invocation details.
+Use `handoff` to write a handoff before ending a coding-agent session, either to a file on your machine or to a document panel when you are working on the web. It restores unfinished tasks and context in a fresh session when conversation history would lose the detail needed to finish the work. See the [handoff guide](handoff/README.md) for Claude Code, Codex, and GitHub Copilot CLI invocation details.
 
 ```bash
 npx skills add kendrick/skills --skill handoff
