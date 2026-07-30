@@ -41,7 +41,7 @@ Name every new document `<YYYY-MM-DD-HHMM>-<slug>.md`. Datetime-first keeps late
 
 ## Write a Session Handoff
 
-Write one document for the whole session. Copy pending and in-progress tasks from the task list, then write only the context the next session needs. Do not repeat material already captured in a plan, issue, ADR, commit, diff, or other artifact; link to it by path or URL instead.
+Write one document for the whole session. Copy pending and in-progress tasks from the task list, then write only the context the next session needs. Link material already captured in a plan, issue, ADR, commit, or diff by path or URL rather than repeating it.
 
 On a file destination, print this pointer and stop working:
 
@@ -89,7 +89,7 @@ Resume state is rebuilt once every unfinished task exists and the in-progress ta
 
 ## Document Template
 
-Keep the narrative short. The next session should be able to act from this file and the linked artifacts.
+The next session should be able to act from this document and the linked artifacts.
 
 ```markdown
 # Handoff: <slug>
@@ -129,4 +129,4 @@ Session: <session id, if your platform exposes one; omit otherwise>
 <Commands or checks that confirm the work still holds. Prefer cross-platform commands (git, node, package scripts); note the shell if one is required.>
 ```
 
-The `Session:` line is optional metadata for transcript correlation (e.g. Claude Code's `$CLAUDE_CODE_SESSION_ID`); nothing in this skill depends on it. Omit `Unfinished Tasks` only when there are none. Handoff files belong to the user: leave them in place for the OS or the user to clear.
+The `Session:` line is optional metadata for transcript correlation (e.g. Claude Code's `$CLAUDE_CODE_SESSION_ID`). Omit `Unfinished Tasks` only when there are none. Handoff files belong to the user: leave them in place for the OS or the user to clear.
