@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# _maintenance/tools/refresh.sh
+# _maintenance/databricks-api/tools/refresh.sh
 #
 # Keep the Databricks skill files in sync with upstream Databricks docs.
 #
@@ -19,7 +19,7 @@ set -euo pipefail
 # --- bash version guard ----------------------------------------------------
 
 if [[ -z "${BASH_VERSION:-}" ]]; then
-    echo "ERROR: refresh.sh requires bash. Run as 'bash _maintenance/tools/refresh.sh' or './_maintenance/tools/refresh.sh'." >&2
+    echo "ERROR: refresh.sh requires bash. Run as 'bash _maintenance/databricks-api/tools/refresh.sh' or './_maintenance/databricks-api/tools/refresh.sh'." >&2
     exit 3
 fi
 
@@ -75,10 +75,15 @@ check_deps
 
 # --- config + CLI ----------------------------------------------------------
 
-# Script lives in _maintenance/tools/; the shipped payload (domains with
-# _docs/raw/) is the sibling databricks-api/. Reports land in _maintenance/.
+# Script lives in _maintenance/databricks-api/tools/; the shipped payload
+# (domains with _docs/raw/) is databricks-api/ at the repo root. Reports land in
+# _maintenance/databricks-api/.
+#
+# Mind the two hops out of MAINT_DIR. The maintenance folder and the shipped
+# folder share a name, so a single `..` resolves right back here instead of
+# failing, and the script would happily scan itself for domains.
 MAINT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-REPO_ROOT="$(cd "$MAINT_DIR/../databricks-api" && pwd)"
+REPO_ROOT="$(cd "$MAINT_DIR/../../databricks-api" && pwd)"
 MODE="check"
 DOMAIN=""
 VERBOSE=0
