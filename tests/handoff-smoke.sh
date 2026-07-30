@@ -21,6 +21,18 @@ require_text() {
   }
 }
 
+# Guards against a migration regressing. The trailing `return 0` matters: under
+# `set -e`, a function ending on a failed grep aborts the script.
+refute_text() {
+  local file="$1"
+  local text="$2"
+  grep -Fq -- "$text" "$file" && {
+    echo "unexpected text in $file: $text" >&2
+    exit 1
+  }
+  return 0
+}
+
 require_file handoff/SKILL.md
 require_file handoff/README.md
 [[ "$(find handoff -maxdepth 1 -type f | wc -l | tr -d ' ')" == "2" ]] || {
@@ -43,6 +55,13 @@ require_text handoff/SKILL.md "## How to Verify"
 require_text handoff/SKILL.md "**Skills.**"
 require_text handoff/SKILL.md "This workflow is designed to work across coding agents and operating systems."
 require_text handoff/SKILL.md "a write is complete when the document exists"
+
+# Storage lives in the OS temp directory now. The refute keeps the old in-repo
+# path from creeping back through an upstream sync.
+require_text handoff/SKILL.md "<TMP>/agent-handoff/<PROJECT>/"
+refute_text handoff/SKILL.md ".agents/handoff"
+require_text handoff/README.md "agent-handoff"
+
 require_text _maintenance/handoff/PROVENANCE.md "## Deviations From Upstream"
 
 bash -n _maintenance/handoff/sync-upstream.sh

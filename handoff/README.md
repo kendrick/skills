@@ -12,7 +12,7 @@ npx skills add kendrick/skills --skill handoff
 
 ## Start a Handoff
 
-Invoke `handoff` before you clear a session or move to a new one. It writes a short document to `.agents/handoff/` at the repository root. That document holds the next task, open work, decisions, and verification steps.
+Invoke `handoff` before you clear a session or move to a new one. It writes a short document to a project-scoped folder in your OS temp directory. That document holds the next task, open work, decisions, and verification steps.
 
 Use the invocation your coding agent supports:
 
@@ -31,9 +31,20 @@ For example, in Claude Code:
 The response gives you the exact handoff ID to use next:
 
 ```text
-Handoff written: .agents/handoff/2026-07-24-1530-sitelink-probes.md
+Handoff written: /var/folders/9k/…/T/agent-handoff/skills/2026-07-24-1530-sitelink-probes.md
 Clear this session, then invoke: handoff 2026-07-24-1530-sitelink-probes
+(Temp storage: your OS may sweep this file eventually.)
 ```
+
+## Where Handoffs Live
+
+| OS | Location |
+| --- | --- |
+| macOS | `$TMPDIR/agent-handoff/<project>/` |
+| Linux, WSL2 | `/tmp/agent-handoff/<project>/` (the Linux side, not `/mnt/c`) |
+| Windows | `%TEMP%\agent-handoff\<project>\` |
+
+`<project>` is your repository's folder name, so handoffs from different projects stay apart. Your OS clears temp files on its own schedule. Resume within the session or two you meant to, or copy the file somewhere you keep things.
 
 ## Hand Off One Task
 
@@ -59,7 +70,7 @@ Use the matching invocation form for Codex or Copilot. A bare invocation in a fr
 
 Each handoff begins with unfinished tasks. It then records the goal, completed work, next action, relevant paths, decisions, helpful skills, and verification commands. It links to plans, issues, ADRs, commits, and diffs instead of copying them.
 
-Handoff files are yours to keep, prune, or ignore. If they live in a tracked project, add `.agents/handoff/` to that project's ignore rules if you do not want them in commits.
+Handoff files are yours to keep, prune, or ignore. Earlier versions of this skill wrote them to `.agents/handoff/` inside each project; those are still there, and you can move or delete them at your leisure.
 
 See [SKILL.md](SKILL.md) for the full workflow and document template.
 

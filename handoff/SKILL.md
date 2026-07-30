@@ -16,13 +16,15 @@ This workflow is designed to work across coding agents and operating systems. Wh
 Resolve once per invocation:
 
 - **ROOT**: the output of `git rev-parse --show-toplevel` (identical on every OS); fall back to the current working directory if not in a git repo.
-- **HANDOFF_DIR**: `<ROOT>/.agents/handoff/`. Create it if missing.
+- **PROJECT**: ROOT's final path segment, lowercased to `a-z0-9-`. It keeps one project's handoffs clear of another's.
+- **TMP**: the OS temp directory: `${TMPDIR:-/tmp}` in bash or zsh, `$env:TEMP` in PowerShell, `require('os').tmpdir()` in Node. Inside WSL2, use the Linux temp directory rather than a mounted Windows one.
+- **HANDOFF_DIR**: `<TMP>/agent-handoff/<PROJECT>/`, created on the first file write.
 - **ARGS**: the text following the skill invocation. (Claude Code exposes this as `$ARGUMENTS`; on other agents it is simply the rest of the user's message.)
 
 Choose a phase:
 
 - ARGS starts with a `YYYY-MM-DD-HHMM` datetime, or uniquely matches part of exactly one filename in HANDOFF_DIR → **resume**. If a partial match hits more than one file, list them and ask.
-- ARGS is empty → **write-session** — unless the session is fresh (empty task list, no changed files, no work done), in which case **resume** the lexicographically last filename in HANDOFF_DIR. If HANDOFF_DIR is empty, say so and stop.
+- ARGS is empty → **write-session** — unless the session is fresh (empty task list, no changed files, no work done), in which case **resume** the lexicographically last filename in HANDOFF_DIR. If HANDOFF_DIR is missing or empty, say so and stop.
 - Anything else → **write-prompt**.
 
 Name every new document `<YYYY-MM-DD-HHMM>-<slug>.md`. Datetime-first keeps latest = lexicographically last. Build the slug from the session theme or prompt; lowercase `a-z0-9-` only (Windows-safe, sort-safe). If the exact filename already exists, append `-<SS>` (seconds).
@@ -36,6 +38,7 @@ Print this pointer and stop working:
 ```text
 Handoff written: <path>
 Clear this session, then invoke: handoff <YYYY-MM-DD-HHMM>-<slug>
+(Temp storage: your OS may sweep this file eventually.)
 ```
 
 ## Write a Prompt Handoff
@@ -106,4 +109,4 @@ Session: <session id, if your platform exposes one; omit otherwise>
 <Commands or checks that confirm the work still holds. Prefer cross-platform commands (git, node, package scripts); note the shell if one is required.>
 ```
 
-The `Session:` line is optional metadata for transcript correlation (e.g. Claude Code's `$CLAUDE_CODE_SESSION_ID`); nothing in this skill depends on it. Omit `Unfinished Tasks` only when there are none. Keep handoff files for the user to prune or ignore; never delete them automatically.
+The `Session:` line is optional metadata for transcript correlation (e.g. Claude Code's `$CLAUDE_CODE_SESSION_ID`); nothing in this skill depends on it. Omit `Unfinished Tasks` only when there are none. Handoff files belong to the user: leave them in place for the OS or the user to clear.
