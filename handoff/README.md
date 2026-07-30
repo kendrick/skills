@@ -75,6 +75,8 @@ In the fresh session, invoke the skill with the datetime prefix or any unique pa
 /handoff 2026-07-24-1530
 ```
 
+You can also paste the handoff document into the message, or attach the `.md`. All three sources rebuild the same state, so a handoff written to a canvas on the web resumes just as well as one on disk.
+
 Use the matching invocation form for Codex or Copilot. A bare invocation in a fresh session resumes the newest handoff. When several files match, the skill lists them and asks you to choose.
 
 ## What Goes in the File

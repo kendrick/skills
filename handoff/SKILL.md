@@ -2,7 +2,7 @@
 name: handoff
 description: Save a session handoff to a file or a side-panel canvas, or resume one after clearing a session. Use ONLY when the user explicitly invokes handoff or asks to hand off / resume a handoff. Never use for summaries, status updates, or note-taking.
 disable-model-invocation: true
-argument-hint: '[handoff id to resume | a prompt to hand off | md for a canvas | empty for whole session]'
+argument-hint: '[handoff id or pasted doc to resume | a prompt to hand off | md for a canvas | empty for whole session]'
 ---
 
 # Handoff
@@ -32,8 +32,9 @@ A sandboxed VM accepts writes into a container that is discarded with the sessio
 
 Choose a phase:
 
+- The message carries a handoff document (text pasted under a `# Handoff:` heading, or an attached `.md`) → **resume**.
 - ARGS starts with a `YYYY-MM-DD-HHMM` datetime, or uniquely matches part of exactly one filename in HANDOFF_DIR → **resume**. If a partial match hits more than one file, list them and ask.
-- ARGS is empty → **write-session** — unless the session is fresh (empty task list, no changed files, no work done), in which case **resume** the lexicographically last filename in HANDOFF_DIR. If HANDOFF_DIR is missing or empty, say so and stop.
+- ARGS is empty → **write-session** — unless the session is fresh (empty task list, no changed files, no work done), in which case **resume** the lexicographically last filename in HANDOFF_DIR. If HANDOFF_DIR is missing or empty, ask for the document instead.
 - Anything else → **write-prompt**.
 
 Name every new document `<YYYY-MM-DD-HHMM>-<slug>.md`. Datetime-first keeps latest = lexicographically last. Build the slug from the session theme or prompt; lowercase `a-z0-9-` only (Windows-safe, sort-safe). If the exact filename already exists, append `-<SS>` (seconds).
@@ -70,7 +71,7 @@ For either write branch, a write is complete when the document is delivered (a f
 
 ## Resume a Handoff
 
-Locate and read the resolved document. If it is missing, list available handoffs and stop.
+Take the document from whichever source the user gave you: a matched file in HANDOFF_DIR, the text pasted into the message, or an attached `.md`. If a named file is missing, list available handoffs and stop. All three sources rebuild state the same way.
 
 Recreate every unfinished task using your platform's task or plan tool, preserving each subject and description verbatim, and restore the task marked `in_progress` to that state:
 
@@ -81,7 +82,7 @@ Recreate every unfinished task using your platform's task or plan tool, preservi
 Then confirm in one line and continue with the in-progress task, or the first pending task:
 
 ```text
-Resumed from <filename> — N tasks restored. Continuing: <subject>.
+Resumed from <filename or pasted document> — N tasks restored. Continuing: <subject>.
 ```
 
 Resume state is rebuilt once every unfinished task exists and the in-progress task is restored.

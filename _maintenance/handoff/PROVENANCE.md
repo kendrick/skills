@@ -10,7 +10,7 @@ The local template keeps the upstream write and resume loop but makes these deli
 
 - It stores handoff files in the OS temp directory, namespaced by project (`<TMP>/agent-handoff/<project-slug>/`), and uses each host's task or plan mechanism when available.
 - Storage now converges with mattpocock's "Save to the temporary directory of the user's OS - not the current workspace", which the initial merge rejected in favour of a repository folder. The template arrived at the same place independently, on durability and cleanliness grounds rather than by adopting upstream.
-- It adds a canvas destination for hosts with no durable filesystem. Neither upstream describes a host without one.
+- It adds a canvas destination for hosts with no durable filesystem, and accepts a pasted document or an attached `.md` on resume. Neither upstream describes a non-filesystem host.
 - It removes harpb's repository-specific exceptions and service names.
 - It keeps the merged skill in `template/SKILL.md`; `sync-upstream.mjs --write` emits the shipped `handoff/SKILL.md` only after upstream checks pass.
 

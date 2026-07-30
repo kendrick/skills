@@ -50,7 +50,7 @@ require_file _maintenance/handoff/sync-upstream.ps1
 require_file _maintenance/handoff/template/SKILL.md
 
 require_text handoff/SKILL.md "disable-model-invocation: true"
-require_text handoff/SKILL.md "argument-hint: '[handoff id to resume | a prompt to hand off | md for a canvas | empty for whole session]'"
+require_text handoff/SKILL.md "argument-hint: '[handoff id or pasted doc to resume | a prompt to hand off | md for a canvas | empty for whole session]'"
 require_text handoff/SKILL.md "## How to Verify"
 require_text handoff/SKILL.md "**Skills.**"
 require_text handoff/SKILL.md "This workflow is designed to work across coding agents and operating systems."
@@ -64,6 +64,7 @@ require_text handoff/SKILL.md "<TMP>/agent-handoff/<PROJECT>/"
 # container, so pin its wording along with the branch that serves those hosts.
 require_text handoff/SKILL.md "still reachable after this session ends"
 require_text handoff/SKILL.md "## Render a Canvas"
+require_text handoff/SKILL.md "pasted into the message"
 refute_text handoff/SKILL.md ".agents/handoff"
 require_text handoff/README.md "agent-handoff"
 
