@@ -16,11 +16,12 @@ Invoke `handoff` before you clear a session or move to a new one. It writes a sh
 
 Use the invocation your coding agent supports:
 
-| Coding Agent | Invocation |
-| --- | --- |
-| Claude Code | `/handoff` |
-| Codex | `$handoff` |
-| GitHub Copilot CLI | Ask it to use the `/handoff` skill. |
+| Coding Agent                 | Invocation                                                                          |
+| ---------------------------- | ----------------------------------------------------------------------------------- |
+| Claude Code                  | `/handoff`                                                                          |
+| Codex                        | `$handoff`                                                                          |
+| GitHub Copilot CLI           | Ask it to use the `/handoff` skill.                                                 |
+| Claude or ChatGPT on the web | Ask for a handoff once the skill's instructions are in the conversation or project. |
 
 For example, in Claude Code:
 
@@ -35,16 +36,6 @@ Handoff written: /var/folders/9k/…/T/agent-handoff/skills/2026-07-24-1530-site
 Clear this session, then invoke: handoff 2026-07-24-1530-sitelink-probes
 (Temp storage: your OS may sweep this file eventually.)
 ```
-
-## Where Handoffs Live
-
-| OS | Location |
-| --- | --- |
-| macOS | `$TMPDIR/agent-handoff/<project>/` |
-| Linux, WSL2 | `/tmp/agent-handoff/<project>/` (the Linux side, not `/mnt/c`) |
-| Windows | `%TEMP%\agent-handoff\<project>\` |
-
-`<project>` is your repository's folder name, so handoffs from different projects stay apart. Your OS clears temp files on its own schedule. Resume within the session or two you meant to, or copy the file somewhere you keep things.
 
 ## Hand Off One Task
 
@@ -79,13 +70,29 @@ You can also paste the handoff document into the message, or attach the `.md`. A
 
 Use the matching invocation form for Codex or Copilot. A bare invocation in a fresh session resumes the newest handoff. When several files match, the skill lists them and asks you to choose.
 
-## What Goes in the File
+## Where Handoffs Live
+
+| OS          | Location                                                       |
+| ----------- | -------------------------------------------------------------- |
+| macOS       | `$TMPDIR/agent-handoff/<project>/`                             |
+| Linux, WSL2 | `/tmp/agent-handoff/<project>/` (the Linux side, not `/mnt/c`) |
+| Windows     | `%TEMP%\agent-handoff\<project>\`                              |
+
+`<project>` is your repository's folder name, so handoffs from different projects stay apart.
+
+## What Goes in a Handoff
 
 Each handoff begins with unfinished tasks. It then records the goal, completed work, next action, relevant paths, decisions, helpful skills, and verification commands. It links to plans, issues, ADRs, commits, and diffs instead of copying them.
 
-Handoff files are yours to keep, prune, or ignore. Earlier versions of this skill wrote them to `.agents/handoff/` inside each project; those are still there, and you can move or delete them at your leisure.
-
 See [SKILL.md](SKILL.md) for the full workflow and document template.
+
+## Gotchas
+
+Temp directories get swept. Your OS clears them on its own schedule, so resume within a session or two, or copy the file somewhere you keep things.
+
+`md` writes nothing to disk. The document lives in the panel, so copy it out or leave the panel open until you have resumed from it.
+
+Handoffs written before this skill moved to temp storage are still in `.agents/handoff/` inside each project. Resume by ID will not find them; paste one in instead, and move or delete the folder at your leisure.
 
 ## Maintainers
 
@@ -97,6 +104,14 @@ node _maintenance/handoff/sync-upstream.mjs --write
 ```
 
 The check prints a diff and exits nonzero when an upstream snapshot or generated file differs. Update the canonical template deliberately, then render it.
+
+To verify this skill on its own, from the repository root:
+
+```bash
+bash tests/handoff-smoke.sh
+```
+
+It confirms `handoff/` still ships only SKILL.md and README.md, that the shipped skill matches the canonical template byte for byte, and that the load-bearing strings survived. Set `HANDOFF_VERIFY_UPSTREAM=1` to re-fetch both upstreams as part of the run.
 
 ## More
 
