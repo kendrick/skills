@@ -70,6 +70,24 @@ You can also paste the handoff document into the message, or attach the `.md`. A
 
 Use the matching invocation form for Codex or Copilot. A bare invocation in a fresh session resumes the newest handoff. When several files match, the skill lists them and asks you to choose.
 
+Resuming does not start the work. Whichever source you use, the skill reads the document, rebuilds your unfinished tasks, and then stops for your answer:
+
+```text
+Resumed from 2026-07-24-1530-sitelink-probes.md — 4 tasks restored.
+
+Goal: convert the sitelink probes to validation scenarios.
+Done: probe harness extracted, 12 fixtures ported.
+Next up: wire the scenario runner into the CI matrix.
+
+Start on "wire the scenario runner into the CI matrix"?
+```
+
+You get the state back and still decide what happens next, which matters because you cleared the session and may have moved on since. To skip the question, say so in the invocation itself:
+
+```text
+/handoff 2026-07-24-1530 and get going
+```
+
 ## Where Handoffs Live
 
 | OS          | Location                                                       |
