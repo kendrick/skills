@@ -66,6 +66,13 @@ require_text handoff/SKILL.md "still reachable after this session ends"
 require_text handoff/SKILL.md "## Render a Canvas"
 require_text handoff/SKILL.md "pasted into the message"
 refute_text handoff/SKILL.md ".agents/handoff"
+
+# Resume stops for the user instead of working. The refute matters most: this
+# instruction arrived by inheriting harpb's "keep going", so a sync is exactly
+# how it comes back.
+require_text handoff/SKILL.md "it does not start the work"
+require_text handoff/SKILL.md "the response stops for the user's answer"
+refute_text handoff/SKILL.md "Continuing:"
 require_text handoff/README.md "agent-handoff"
 
 require_text _maintenance/handoff/PROVENANCE.md "## Deviations From Upstream"
