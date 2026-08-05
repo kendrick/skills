@@ -89,7 +89,7 @@ require_text file-issue/SKILL.md "**≥4 distinct components**"
 # feature most likely to get "fixed" back in by someone who assumes blocking is
 # the responsible default.
 require_text file-issue/SKILL.md "Surface what you find and let the user choose"
-require_text file-issue/SKILL.md "Never block."
+require_text file-issue/SKILL.md "Never block"
 
 # Write guard and scope.
 require_text file-issue/SKILL.md "wait for explicit confirmation before \`gh issue create\`"
