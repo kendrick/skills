@@ -57,6 +57,36 @@ require_line() {
   }
 }
 
+# Each planted defect has to name itself. A lint that reports "this file is bad"
+# will keep reporting it after the cause changes, which is how a check quietly
+# stops testing what its name claims.
+require_failure() {
+  local output="$1"
+  local prefix="$2"
+  grep -Fq -- "$prefix" <(printf '%s\n' "$output") || {
+    echo "lint did not report the failure: $prefix" >&2
+    printf '%s\n' "$output" >&2
+    exit 1
+  }
+}
+
+refute_failure() {
+  local output="$1"
+  local needle="$2"
+  grep -F -- "$needle" <(printf '%s\n' "$output") | grep -q '^FAIL' && {
+    echo "lint flagged something it should have left alone: $needle" >&2
+    printf '%s\n' "$output" >&2
+    exit 1
+  }
+  return 0
+}
+
+# The lint exits nonzero once it finds anything, so `set -e` would otherwise kill
+# the run before the assertions about what it found.
+run_lint() {
+  bash "$lint" "$1" 2>&1 || true
+}
+
 require_file "$lint"
 [[ -x "$lint" ]] || {
   echo "$lint must be executable" >&2
@@ -75,24 +105,64 @@ for scope in old-only mixed broken; do
   require_dir "$fixtures/$scope/_memory"
 done
 
-old_only_out="$(bash "$lint" "$fixtures/old-only")"
+old_only_out="$(run_lint "$fixtures/old-only")"
 require_line "$old_only_out" "scope: $fixtures/old-only" old-only
 require_line "$old_only_out" "v1 files: 4" old-only
 require_line "$old_only_out" "v2 files: 0" old-only
 require_line "$old_only_out" "total files: 4" old-only
 require_line "$old_only_out" "failures: 0" old-only
 
-mixed_out="$(bash "$lint" "$fixtures/mixed")"
+mixed_out="$(run_lint "$fixtures/mixed")"
 require_line "$mixed_out" "scope: $fixtures/mixed" mixed
 require_line "$mixed_out" "v1 files: 3" mixed
 require_line "$mixed_out" "v2 files: 2" mixed
 require_line "$mixed_out" "total files: 5" mixed
 require_line "$mixed_out" "failures: 0" mixed
 
-# No correctness checks land until #6, so the defect fixture is still clean. The
-# ticket that plants the first defect flips this to a nonzero expectation.
-broken_out="$(bash "$lint" "$fixtures/broken")"
-require_line "$broken_out" "failures: 0" broken
+# The v1 files in the mixed scope carry every shape the contract now forbids:
+# block-style lists, a nested relationship mapping, no schema key. They are legal
+# forever, so naming them here is the guard against the contract checks leaking
+# onto the generation they were never written for.
+for legacy in \
+  2025-12-02-atlas-steerco-ZGulgExW0q.md \
+  2026-01-13-atlas-cutover-readiness-JJuYgImRWn.md \
+  freeze-window-owned-by-ops-ocPwdpeY0a.md; do
+  refute_failure "$mixed_out" "$legacy"
+done
+
+# One defect per file, so a count is a meaningful assertion and a check that
+# starts firing twice shows up as an arithmetic failure rather than a wash.
+broken_out="$(run_lint "$fixtures/broken")"
+require_line "$broken_out" "v1 files: 0" broken
+require_line "$broken_out" "v2 files: 4" broken
+require_line "$broken_out" "failures: 4" broken
+
+if bash "$lint" "$fixtures/broken" >/dev/null 2>&1; then
+  echo "lint exited zero on the broken fixture" >&2
+  exit 1
+fi
+
+require_failure "$broken_out" "FAIL $fixtures/broken/notes/2026-03-01-block-style-list-G2WFweWKJf.md: frontmatter-single-line:"
+require_failure "$broken_out" "FAIL $fixtures/broken/notes/2026-03-02-frontmatter-budget-kFtFA-Xh5P.md: frontmatter-budget:"
+require_failure "$broken_out" "FAIL $fixtures/broken/notes/2026-03-03-key-order-fdTdMPSqFs.md: frontmatter-key-order:"
+require_failure "$broken_out" "FAIL $fixtures/broken/notes/2026-03-04-unregistered-token-30z5F4kx6U.md: token-grammar:"
+
+# Fail the block-style list and pass its inline-array equivalent, proved on the
+# same file rather than on two files that differ in other ways too. Without the
+# second half, a check that flagged every list whatsoever would look correct.
+inline_scope="$(mktemp -d "${TMPDIR:-/tmp}/i2m-inline.XXXXXX")"
+trap 'rm -rf "$not_a_scope" "$inline_scope"' EXIT
+mkdir -p "$inline_scope/_inbox" "$inline_scope/_memory/decisions" "$inline_scope/notes"
+awk '
+  /^attendees:$/ { print "attendees: [Priya Raghavan, Marcus Dell]"; skip = 1; next }
+  skip && /^  - / { next }
+  { skip = 0; print }
+' "$fixtures/broken/notes/2026-03-01-block-style-list-G2WFweWKJf.md" \
+  >"$inline_scope/notes/2026-03-01-block-style-list-G2WFweWKJf.md"
+
+inline_out="$(run_lint "$inline_scope")"
+require_line "$inline_out" "v2 files: 1" inline-equivalent
+require_line "$inline_out" "failures: 0" inline-equivalent
 
 # Classification reads one key and stops. The mixed fixture carries a note built
 # to v2 shape in every respect except the schema key, and it has to come back v1
@@ -113,6 +183,38 @@ fi
 
 # The skill has to name the lint, or nothing invokes it in the field.
 require_text inbox-to-memory/SKILL.md "scripts/lint-scope.sh"
+
+# Both key orders get pinned verbatim. They are duplicated by hand into the
+# templates, the lint, and eventually the migrator, and the only thing keeping
+# those three copies honest is that changing the order fails here first.
+contracts=inbox-to-memory/references/machine-contracts.md
+require_file "$contracts"
+require_text "$contracts" "schema, id, date, type, summary, attendees, tags, topics, entities, source_file, transcript_corrections, open_questions, resolved_questions, deferred_tensions, unpromoted_candidates, related"
+require_text "$contracts" "schema, id, memory_type, title, status, date, effective_from, effective_to, last_confirmed, source_refs, applies_to, owners, tags, themes, related, supersedes, superseded_by"
+
+# Twenty lines is what makes a header read a contract instead of a habit. It is
+# the number every retrieval claim in the funnel doc rests on.
+require_text "$contracts" "first 20 lines"
+
+# Every token the skill emits needs a row with a grep. A token invented at the
+# point of use is one nothing can find later, which is the whole failure the
+# closed vocabulary exists to prevent.
+for token in \
+  "[memory candidate: project]" \
+  "[memory candidate: client]" \
+  "[memory candidate: update existing" \
+  "[journal candidate:" \
+  "[working-state candidate]" \
+  "[contradicts accepted:" \
+  "[open question:" \
+  "[open question resolved:" \
+  "[tension:"; do
+  require_text "$contracts" "$token"
+done
+
+# The doc is reference material the skill reads on demand, so it has to be
+# reachable from SKILL.md rather than sitting in the directory unmentioned.
+require_text inbox-to-memory/SKILL.md "references/machine-contracts.md"
 
 # yq arrives as a prerequisite here and gets consumed by the contract checks in
 # #6. It is not installed by default anywhere, so the README has to say so next

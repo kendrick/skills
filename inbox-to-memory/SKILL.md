@@ -73,6 +73,8 @@ Inside the extracted sections, flag candidates **inline** using the taxonomy bel
 - The "update existing" variant signals an amendment to an already-crystallized record. Its scope is inherited from the target.
 - Journal candidates take no scope token — their destination is always the cross-client journal.
 
+Every token the skill emits is registered in the grammar table in [references/machine-contracts.md](references/machine-contracts.md) with the grep that finds it. Register a new shape there before using it; a token invented at the point of use is one nothing can retrieve later.
+
 Use the heuristics in [references/scope-decisions.md](references/scope-decisions.md) to pick a scope. The short version: project is the floor (cheapest to be wrong); client requires recurrence across projects or stakeholder-level facts; journal requires generalization beyond this client.
 
 ### Phase 4 — Dispose Source
@@ -321,3 +323,4 @@ The scope's `CLAUDE.md` declares the mode in its top frontmatter blockquote. Rea
 - [references/scope-decisions.md](references/scope-decisions.md) — full heuristics for proposing project vs client vs journal scope.
 - [references/memory-bank-schema.md](references/memory-bank-schema.md) — vendored summary of the substrate schema. Inspired by, not bound to.
 - [references/retrieval-funnel.md](references/retrieval-funnel.md) — token-efficient four-stage retrieval at scale.
+- [references/machine-contracts.md](references/machine-contracts.md) — the frontmatter contract and the closed token grammar, both enforced by the lint.
