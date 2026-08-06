@@ -252,17 +252,26 @@ Each generated CLAUDE.md (client and project) carries a `## Deltas` section with
 **Client-level Deltas:**
 - `### Active engagements` — short list of in-flight projects and pursuits.
 - `### Cross-engagement stakeholders` — roster of people who appear across multiple projects at this client. Format: `Name — Role/Title. Additional facts.`
-- `### Transcription-error mapping` — common misheard names with the canonical referent.
+- `### Alias table` — every name that arrives under more than one spelling, canonical form first.
 - `### Client-wide tag namespace` — controlled vocabulary for memory record `tags:`.
 
 **Project-level Deltas:**
 - `### Note type: values` — controlled vocabulary for note frontmatter `type:`.
 - `### Active stakeholders` — project-specific roster.
-- `### Transcription-error mapping` — project-specific misheard names, optionally pointing to client-level Context records.
+- `### Alias table` — project-specific aliases, optionally pointing to client-level Context records.
 - `### Tag namespace (suggested)` — project-specific tags.
 - `### Pre-existing content` — optional, only when a project subdirectory predates the substrate.
 
-The transcription-error mapping is load-bearing for inbox-grooming accuracy on meeting transcripts. During process mode, the agent reads the Deltas section, applies known sound-alikes silently while grooming, and records what was applied in the groomed note's frontmatter as `transcript_corrections: [Saatchi→Shachi, Lince→Lancey]`.
+The alias table is load-bearing for grooming accuracy. It covers everything that reaches a note under more than one spelling: transcript mishears, nicknames, abbreviations, and OCR variants off slides and PDFs. The form is `canonical <- [variant, variant]`.
+
+During process mode, read it and normalize while grooming, then record what was applied in the groomed note's frontmatter as `transcript_corrections: [Saatchi→Shachi, Lince→Lancey]`. The key keeps its old name so greps written against v1 notes keep working.
+
+Two rules govern how far normalization reaches:
+
+- **Extracted sections only.** Never rewrite raw content. It is the source of truth, and a normalized transcript stops being a record of what was actually said.
+- **Read either heading.** Scopes scaffolded before the rename say `### Transcription-error mapping`. Both resolve to the same table, so an existing setup keeps working without being touched.
+
+The `entities` frontmatter key holds canonical forms only, never the variants they came from. The point of the key is that one grep finds every note touching a person or system, and that fails the moment the same person appears under three spellings.
 
 During scaffold mode, prompt the user for known stakeholders and tag namespace seeds. Offer to populate the roster inline. If the user defers, leave the structure with `<!-- Fill in -->` comments.
 

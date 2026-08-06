@@ -27,7 +27,7 @@ related: [extends::zFpm-hfD5u]
 
 ## Decisions
 
-- Freeze end date is treated as fixed at 2026-02-28. — committed by Marcus Dell | discarded: waiting for the Q1 close to confirm, on the grounds that the written Finance date is already the confirmation | reversibility: two-way
+- [decision: two-way] Freeze end date is treated as fixed at 2026-02-28. | committed: @Marcus Dell | discarded: waiting for the Q1 close to confirm, on the grounds that the written Finance date is already the confirmation
 
 ## Stated Assumptions
 

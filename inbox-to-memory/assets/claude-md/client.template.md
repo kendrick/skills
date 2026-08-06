@@ -116,13 +116,19 @@ These are stakeholders who appear across multiple of this client's projects. Pro
 
 {{stakeholder-list}}
 
-### Transcription-error Mapping
+### Alias Table
 
-Common misheard names from meeting transcripts, with the canonical referent. Used during inbox grooming to apply silent corrections (recorded in note frontmatter as `transcript_corrections:`).
+Every name that reaches this client's notes under more than one spelling: transcript mishears, nicknames, abbreviations, and OCR variants off slides and PDFs. One canonical form on the left, everything that resolves to it on the right.
 
-<!-- Pattern (fill in as transcripts surface them):
-> References to "<misheard>", "<misheard>", or sound-alikes are likely transcription errors and intend to refer to <Canonical Name> (Context id <nanoid>).
+Applied during inbox grooming to the extracted sections only. Raw content stays exactly as captured, because it is the source of truth and a normalized transcript is no longer a record of what was said. What got applied is recorded in note frontmatter as `transcript_corrections:`.
+
+<!-- Fill in as transcripts and decks surface them:
+Shachi Deshpande <- [Saatchi, Sachi, S. Deshpande]
+Northwind Billing <- [NWB, North Wind, Northwlnd]
 -->
+
+<!-- Older scopes name this section "Transcription-error mapping". Both headings
+     are read, so a scaffold generated before the rename keeps working untouched. -->
 
 ### Client-wide Tag Namespace
 

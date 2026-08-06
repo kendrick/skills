@@ -74,13 +74,19 @@ These are stakeholders specific to this {{pursuit|project}}. Cross-engagement st
 
 {{stakeholder-list}}
 
-### Transcription-error Mapping
+### Alias Table
 
-Common misheard names from meeting transcripts for this {{pursuit|project}}, with the canonical referent and (where applicable) a pointer to the client-level Context record. Used during inbox grooming to apply silent corrections (recorded in note frontmatter as `transcript_corrections:`).
+Names specific to this {{pursuit|project}} that arrive under more than one spelling: transcript mishears, nicknames, abbreviations, and OCR variants off slides and PDFs. One canonical form on the left, everything that resolves to it on the right. Client-wide aliases live in the client root's `CLAUDE.md` and are inherited.
 
-<!-- Pattern (fill in as transcripts surface them):
-> References to "<misheard>", "<misheard>", or sound-alikes are likely transcription errors and intend to refer to <Canonical Name> (client-level Context id <nanoid>).
+Applied during inbox grooming to the extracted sections only. Raw content stays exactly as captured, because it is the source of truth and a normalized transcript is no longer a record of what was said. What got applied is recorded in note frontmatter as `transcript_corrections:`.
+
+<!-- Fill in as transcripts and decks surface them:
+Shachi Deshpande <- [Saatchi, Sachi, S. Deshpande]   # client-level Context <nanoid>
+Atlas <- [Atlus, ATLAS programme]
 -->
+
+<!-- Older scopes name this section "Transcription-error mapping". Both headings
+     are read, so a scaffold generated before the rename keeps working untouched. -->
 
 ### Tag Namespace (suggested)
 

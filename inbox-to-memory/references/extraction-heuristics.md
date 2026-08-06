@@ -44,6 +44,20 @@ The disposition is `resolved`, `deferred`, or `unacknowledged`.
 
 A deferred tension names a matching open question in the same note, one to one. Deferring something should open a thread rather than end one. A resolved tension records how it landed inline.
 
+## Decisions
+
+A quote that settles something is a decision, not just a good quote. When you pull a decisional quote into Notable Quotes, write the decision itself here too:
+
+```
+- [decision: two-way] Freeze end date is fixed at 2026-02-28. | committed: @Marcus Dell | discarded: waiting for the Q1 close to confirm, on the grounds that the written Finance date already is the confirmation
+```
+
+Record what got ruled out and the reason someone gave at the time. Everything else about a decision is recoverable from the transcript; the discarded alternatives are not, and they are what tell you six months later whether the reason still holds.
+
+Mark reversibility honestly. `two-way` is a decision you can walk back in a conversation. `one-way` is one you can only walk back with a migration, a renegotiation, or an apology.
+
+**A decision that is still hedged does not belong here.** "Leaning toward," "probably," and "unless someone objects" are working-state, not settled fact. Route them to `working-state.md` per [scope-decisions.md](scope-decisions.md). Writing a hedge down as a decision is how a room's tentative direction becomes something nobody feels able to reopen.
+
 ## Open Questions
 
 An open question is a contract, not a topic. Each one carries a resolver, what it blocks, and a default naming what happens if nobody ever answers:

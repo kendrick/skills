@@ -61,6 +61,7 @@ Every inline token the skill emits is registered here with the grep that finds i
 | Open question             | `[open question: <slug>] <question>`                             | `grep -F '[open question:'`                           |
 | Open question, resolved   | `[open question resolved: <slug>] <question>`                    | `grep -F '[open question resolved:'`                  |
 | Tension                   | `[tension: resolved\|deferred\|unacknowledged] <description>`     | `grep -F '[tension:'`                                 |
+| Decision                  | `[decision: one-way\|two-way] <what was decided>`                 | `grep -F '[decision:'`                                |
 
 The two open-question greps are disjoint: `[open question resolved:` does not contain `[open question:`, so counting one never picks up the other.
 
@@ -74,13 +75,30 @@ Fields are pipe-delimited and named. Order is not enforced; presence is.
 - [tension: deferred] <description> | stakes: <one clause> | open question: <slug>
 - [tension: resolved] <description> | stakes: <one clause> | resolved: <how it landed>
 - [tension: unacknowledged] <description> | stakes: <one clause>
+- [decision: one-way|two-way] <what was decided> | committed: @<name> | discarded: <alternatives, with the reason given at the time>
 ```
+
+The discarded alternatives are a decision's payload. What got decided is usually recoverable from the transcript; what got ruled out, and the reason someone gave for ruling it out, is the part with a six-month shelf life, and it is the only part that tells you later whether the reason still holds.
+
+Reversibility rides in the token because it changes how hard a decision is worth reopening. A two-way door reopened is a conversation; a one-way door reopened is a migration.
 
 A slug is lowercase kebab, two to five words, and identical across every note asking the same question. That stability is what lets the skill count how long something has gone unanswered.
 
 A missing field is reported and never filled in. A fabricated resolver does more damage than an admitted gap, because it sends someone to chase a person who was never going to answer.
 
 Every deferred tension names an open question in the same note, one to one. Deferring something should open a thread rather than close one, and the pairing is arithmetic, which is why the lint can check it.
+
+## Anchors
+
+A v2 anchor quotes four to six verbatim words, optionally followed by a line number:
+
+```
+1. "Finance gave us a date." — Marcus Dell (raw: "Finance gave us a date" L19)
+```
+
+The snippet is authoritative and the line number is a convenience. A bare `(raw: L19)` is a lint failure on a v2 note, because line numbers move the first time raw content is reflowed and a reference that silently points at the wrong line is worse than one that points nowhere.
+
+V1 notes keep their bare line refs and are never rewritten.
 
 ## Derived Counts
 

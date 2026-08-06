@@ -29,7 +29,8 @@ REGISTERED_TOKENS="[memory candidate:
 [contradicts accepted:
 [open question:
 [open question resolved:
-[tension:"
+[tension:
+[decision:"
 
 FRONTMATTER_LINE_BUDGET=20
 
@@ -259,7 +260,7 @@ check_tensions() {
         continue
         ;;
     esac
-    grep -Fq -- '| stakes:' <<<"$line" || fail tension-fields "a $disposition tension is missing \`stakes\`"
+    grep -Fq -- '| stakes:' <<<"$line" || fail tension-fields "this $disposition tension is missing \`stakes\`"
     [[ "$disposition" == resolved ]] && ! grep -Fq -- '| resolved:' <<<"$line" &&
       fail tension-fields "a resolved tension does not record its resolution"
 
@@ -281,6 +282,31 @@ check_tensions() {
     grep -Fq -- "[open question: $slug]" "$body" ||
       fail tension-deferred-pairing "deferred tension names \`$slug\`, which this note never opens"
   done < <(grep -F -- '[tension:' "$body" || true)
+}
+
+check_decisions() {
+  local body="$1"
+  local line reversibility
+  while IFS= read -r line; do
+    reversibility="$(sed -E 's/^.*\[decision: ([^]]*)\].*$/\1/' <<<"$line")"
+    case "$reversibility" in
+      one-way | two-way) ;;
+      *) fail decision-fields "\`$reversibility\` is not one-way or two-way" ;;
+    esac
+    # The discarded alternatives are the payload. What got decided is recoverable
+    # from the transcript; what got ruled out, and why, is not.
+    grep -Fq -- '| discarded:' <<<"$line" ||
+      fail decision-fields "a decision records no discarded alternatives"
+  done < <(grep -F -- '[decision:' "$body" || true)
+}
+
+# Line numbers move the first time raw content is reflowed, and a reference that
+# silently points at the wrong line is worse than one that points nowhere.
+check_anchors() {
+  local offender
+  offender="$(grep -oE '\(raw: [^")]*\)' "$1" | head -1 || true)"
+  [[ -n "$offender" ]] && fail anchor-form "\`$offender\` is a bare line ref; quote 4-6 verbatim words"
+  return 0
 }
 
 check_counts() {
@@ -341,6 +367,8 @@ for file in ${v2_files[@]+"${v2_files[@]}"}; do
   check_tokens "$body"
   check_open_questions "$body"
   check_tensions "$body"
+  check_decisions "$body"
+  check_anchors "$body"
   # Records carry no body tokens and no counts; the four keys are a note contract.
   grep -q '^memory_type:' "$file" || check_counts "$file" "$body"
 

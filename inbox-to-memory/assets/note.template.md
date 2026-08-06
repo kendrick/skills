@@ -21,9 +21,10 @@ unpromoted_candidates: 0
 
 <!--
 6-12 quotes, prioritizing surprising, contradictory, or unstated-assumption-revealing statements.
-Include line refs back to Raw Content, e.g. "(raw: L42)".
+Anchor each with 4-6 verbatim words from Raw Content. The snippet is what survives
+a reflow; the line number is a convenience and optional.
 
-1. "<quote>" — <speaker> (raw: L<line>)
+1. "<quote>" — <speaker> (raw: "<4-6 verbatim words>" L<line>)
 2. ...
 -->
 
@@ -37,6 +38,16 @@ you pay for. Every deferred tension names an open question in this note.
 - [tension: deferred] <description> | stakes: <what breaks if this stays open> | open question: <slug>
 - [tension: resolved] <description> | stakes: <clause> | resolved: <how it landed>
 - [tension: unacknowledged] <description> | stakes: <clause>
+-->
+
+## Decisions
+
+<!--
+What got settled, and what got ruled out to settle it. The discarded alternatives
+are the payload: six months on, they are what tell you whether the reason still
+holds. A decision still being hedged goes to working-state, not here.
+
+- [decision: two-way] <what was decided> | committed: @<name> | discarded: <alternatives, with the reason given at the time>
 -->
 
 ## Stated Assumptions

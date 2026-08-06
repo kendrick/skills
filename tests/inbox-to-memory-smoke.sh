@@ -140,8 +140,8 @@ done
 # starts firing twice shows up as an arithmetic failure rather than a wash.
 broken_out="$(run_lint "$fixtures/broken")"
 require_line "$broken_out" "v1 files: 0" broken
-require_line "$broken_out" "v2 files: 12" broken
-require_line "$broken_out" "failures: 12" broken
+require_line "$broken_out" "v2 files: 16" broken
+require_line "$broken_out" "failures: 16" broken
 
 if bash "$lint" "$fixtures/broken" >/dev/null 2>&1; then
   echo "lint exited zero on the broken fixture" >&2
@@ -160,6 +160,14 @@ require_failure "$broken_out" "FAIL $fixtures/broken/notes/2026-03-09-missing-co
 require_failure "$broken_out" "FAIL $fixtures/broken/notes/2026-03-10-orphan-resolution-Fb7y8W-jW6.md: open-question-resolution:"
 require_failure "$broken_out" "FAIL $fixtures/broken/notes/2026-03-11-tension-missing-stakes-diU2GZ1m5r.md: tension-fields:"
 require_failure "$broken_out" "FAIL $fixtures/broken/notes/2026-03-12-tension-bad-disposition-GAQIZYiAjU.md: tension-fields:"
+require_failure "$broken_out" "FAIL $fixtures/broken/notes/2026-03-13-decision-no-alternatives-lHfh6YSmjI.md: decision-fields:"
+require_failure "$broken_out" "FAIL $fixtures/broken/notes/2026-03-14-bare-line-anchor-oKaK8iH1B0.md: anchor-form:"
+require_failure "$broken_out" "FAIL $fixtures/broken/notes/2026-03-15-multiline-summary-gcnwRBmRy_.md: frontmatter-single-line:"
+require_failure "$broken_out" "FAIL $fixtures/broken/notes/2026-03-16-decision-bad-reversibility-w-6dqoA-ky.md: decision-fields:"
+
+# V1 notes anchor to bare line numbers everywhere, and that has to stay legal. The
+# check keys off the schema, never off the shape of the reference.
+refute_failure "$old_only_out" "anchor-form"
 
 # Fail the block-style list and pass its inline-array equivalent, proved on the
 # same file rather than on two files that differ in other ways too. Without the
@@ -300,6 +308,41 @@ require_text inbox-to-memory/SKILL.md "Process mode never edits a prior note."
 # lint rejects and learns the contract by failing.
 require_text inbox-to-memory/assets/note.template.md "[open question: <slug>]"
 require_text inbox-to-memory/assets/note.template.md "[tension: deferred]"
+require_text inbox-to-memory/assets/note.template.md "[decision: two-way]"
+
+# The Decisions section sits after Tensions. A decision that lands before the
+# disagreement that produced it reads as though there was never a disagreement.
+[[ "$(grep -n '^## Tensions' inbox-to-memory/assets/note.template.md | cut -d: -f1)" \
+   -lt "$(grep -n '^## Decisions' inbox-to-memory/assets/note.template.md | cut -d: -f1)" ]] || {
+  echo "the Decisions section must sit after Tensions in the note template" >&2
+  exit 1
+}
+
+# Discarded alternatives are the payload, and reversibility is what says whether a
+# decision is worth reopening. Both have to be taught, not just accepted.
+require_text "$contracts" "The discarded alternatives are a decision's payload."
+require_text "$heuristics" "A decision that is still hedged does not belong here."
+require_text "$heuristics" "working-state"
+
+# Anchors survive a reflow only if the snippet is authoritative.
+require_text "$contracts" "The snippet is authoritative and the line number is a convenience."
+
+# The alias table generalizes the old mapping without stranding scopes that were
+# scaffolded under the old heading, and normalization stops at raw content.
+for scope_template in client project; do
+  require_text "inbox-to-memory/assets/claude-md/$scope_template.template.md" "### Alias Table"
+  require_text "inbox-to-memory/assets/claude-md/$scope_template.template.md" " <- ["
+done
+require_text inbox-to-memory/SKILL.md "### Transcription-error mapping"
+require_text inbox-to-memory/SKILL.md "**Extracted sections only.** Never rewrite raw content."
+
+# The key name is frozen for grep compatibility with v1 notes, whatever the
+# section it reads from is called now.
+require_text inbox-to-memory/SKILL.md "transcript_corrections:"
+
+# Entities exist so one grep finds every note touching a person or system, which
+# fails the moment the same person appears under three spellings.
+require_text inbox-to-memory/SKILL.md "canonical forms only, never the variants"
 
 # yq arrives as a prerequisite here and gets consumed by the contract checks in
 # #6. It is not installed by default anywhere, so the README has to say so next
