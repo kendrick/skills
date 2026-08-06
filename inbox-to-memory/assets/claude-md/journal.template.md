@@ -14,17 +14,16 @@ Most entries are _promoted_ from `[journal candidate: ...]` flags in client note
 
 ```yaml
 ---
+schema: 2
 id: <nanoid>
 memory_type: Journal
 title: '...'
 status: current | superseded | archived
 date: YYYY-MM-DD
-themes: []
+last_confirmed: YYYY-MM-DD
+source_refs: [<vault-relative scope path>::<note-id>] # cross-scope, one string each
 applies_to: [] # generalized patterns ("rfp-defense", "client-onboarding")
-source_refs: # cross-scope refs; each entry is qualified
-  - scope: pursuit | project | client
-    path: <vault-relative path to source note>
-    note_id: <nanoid>
+themes: []
 related: [] # other journal entry ids
 ---
 # <title>

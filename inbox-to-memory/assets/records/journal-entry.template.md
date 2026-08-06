@@ -1,18 +1,17 @@
 ---
-id: { { nanoid } }
+schema: 2
+id: '{{nanoid}}'
 memory_type: Journal
-title: '{{Pattern, not source. "Hypercare scope by deliverable, not calendar"}}'
+title: '{{Pattern, not source. Hypercare scope by deliverable, not calendar}}'
 status: current
-date: { { YYYY-MM-DD } }
-themes: []
+date: '{{YYYY-MM-DD}}'
+last_confirmed: '{{YYYY-MM-DD}}'
+source_refs: ['{{scope path from vault root}}::{{note-id}}']
 applies_to: []
-source_refs:
-  - scope: { { pursuit | project | client } }
-    path: { { relative path from vault root to the source note } }
-    note_id: { { nanoid } }
+themes: []
 related: []
-# supersedes:
-# superseded_by:
+# supersedes: <id-of-old-entry>
+# superseded_by: null
 ---
 
 # {{title}}

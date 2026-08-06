@@ -18,7 +18,7 @@ set -euo pipefail
 # migrator; the smoke test pins all three copies to the same string so a drift
 # fails there before it reaches a scope.
 NOTE_KEY_ORDER="schema id date type summary attendees tags topics entities source_file transcript_corrections open_questions resolved_questions deferred_tensions unpromoted_candidates related"
-RECORD_KEY_ORDER="schema id memory_type title status date effective_from effective_to last_confirmed source_refs applies_to owners tags themes related supersedes superseded_by"
+RECORD_KEY_ORDER="schema id memory_type title status date effective_from effective_to last_confirmed source_refs applies_to owners tags themes related exception_to supersedes superseded_by"
 
 # The closed token vocabulary, as the prefixes a scan actually produces. A token
 # shape missing from this list is one nothing can retrieve later, which is the

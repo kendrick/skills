@@ -69,19 +69,30 @@ Order matters. Summary sections come first for human scan-ability and cheap agen
 
 ```yaml
 ---
+schema: 2
 id: <nanoid>
 date: YYYY-MM-DD
 type: {{NOTE_TYPE_ENUM}}
-attendees: []       # if meeting-shaped
-tags: []            # from controlled vocabulary in root CLAUDE.md
-topics: []          # from controlled vocabulary in root CLAUDE.md
-related: []         # refs to other notes/records by id, only when explicitly referenced
-source_file: ""     # optional, binary sources only — "attachments/<filename>"
-transcript_corrections: []  # optional — applied sound-alike mappings, e.g. [Saatchi→Shachi]
+summary: 'one or two sentences, enough to skip opening the file'
+attendees: [] # if meeting-shaped
+tags: [] # from controlled vocabulary in root CLAUDE.md
+topics: [] # from controlled vocabulary in root CLAUDE.md
+entities: [] # canonical names of people and systems this note touches
+# source_file: attachments/<filename>          # binary sources only
+# transcript_corrections: [Shachi <- Saatchi]  # applied aliases
+open_questions: 0
+resolved_questions: 0
+deferred_tensions: 0
+unpromoted_candidates: 0
+# related: [extends::<note-id>]                # explicit reference only
 ---
 ```
 
-Required: `id`, `date`, `type`. Everything else optional but populated where inferable.
+Required: `schema`, `id`, `date`, `type`, and all four counts. Everything else is optional but populated where inferable.
+
+The key order above is fixed, values stay on one line, lists are inline arrays, and the whole block closes inside the first 20 lines so a header read is guaranteed to catch all of it. The full rules and the reason for each are in [`~/.claude/skills/inbox-to-memory/references/machine-contracts.md`](~/.claude/skills/inbox-to-memory/references/machine-contracts.md).
+
+Files without a `schema` key are v1. They stay legal, nothing rewrites them, and a directory holding both generations is fine.
 
 ## Extracted Sections — What to Pull
 

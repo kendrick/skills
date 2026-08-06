@@ -1,14 +1,20 @@
 ---
-id: {{nanoid}}
-date: {{YYYY-MM-DD}}
-type: {{one of: rfp-daily-sync | steerco | stakeholder-call | internal | reading | braindump | transcript | standup | working-session}}
+schema: 2
+id: '{{nanoid}}'
+date: '{{YYYY-MM-DD}}'
+type: '{{one of the type enum in the scope CLAUDE.md}}'
+summary: '{{one or two sentences, enough to skip opening the file}}'
 attendees: []
 tags: []
 topics: []
-# source_file: attachments/<filename>      # uncomment only for binary-extracted notes
-# related:                                 # uncomment only when content explicitly references known notes
-#   - note_id: <nanoid>
-#     relation: confirms | contradicts | extends | introduces
+entities: []
+# source_file: attachments/<filename>          # binary-extracted notes only
+# transcript_corrections: [Shachi <- Saatchi]  # applied aliases, extracted sections only
+open_questions: 0
+resolved_questions: 0
+deferred_tensions: 0
+unpromoted_candidates: 0
+# related: [extends::<note-id>]                # only on an explicit reference, never on topical similarity
 ---
 
 ## Notable Quotes

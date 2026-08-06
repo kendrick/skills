@@ -25,10 +25,10 @@ schema, id, date, type, summary, attendees, tags, topics, entities, source_file,
 Records, including journal entries:
 
 ```
-schema, id, memory_type, title, status, date, effective_from, effective_to, last_confirmed, source_refs, applies_to, owners, tags, themes, related, supersedes, superseded_by
+schema, id, memory_type, title, status, date, effective_from, effective_to, last_confirmed, source_refs, applies_to, owners, tags, themes, related, exception_to, supersedes, superseded_by
 ```
 
-A file is a record when it has `memory_type` and a note otherwise. `themes` belongs to journal entries; `tags` to everything else.
+A file is a record when it has `memory_type` and a note otherwise. `themes` belongs to journal entries and `tags` to everything else; `exception_to` only to Exception records in canonical mode.
 
 **Compound references.** A relationship is one greppable string of the form `<relation>::<id>`, never a nested mapping:
 
@@ -36,7 +36,15 @@ A file is a record when it has `memory_type` and a note otherwise. `themes` belo
 related: [extends::JJuYgImRWn, confirms::ZGulgExW0q]
 ```
 
-Journal source references take the same form in place of a `scope` / `path` / `note_id` mapping. Finding what extends a note is then `grep -F 'extends::JJuYgImRWn'` rather than a YAML parse.
+The relation vocabulary is `confirms`, `contradicts`, `extends`, and `introduces`.
+
+A journal entry's `source_refs` use the same shape, `<scope-path>::<note-id>`, in place of a `scope` / `path` / `note_id` mapping:
+
+```yaml
+source_refs: [11 Clients/northwind/pursuits/atlas::JJuYgImRWn]
+```
+
+The scope path is relative to the vault root. It is there for a human skimming where a pattern came from; the id is what resolves the file, which is why a moved note doesn't break the reference. Finding every entry sourced from one note is then `grep -F '::JJuYgImRWn'` rather than a YAML parse.
 
 ## The Token Grammar
 

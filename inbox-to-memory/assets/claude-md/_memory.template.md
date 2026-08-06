@@ -12,16 +12,20 @@
 
 ```yaml
 ---
+schema: 2
 id: <nanoid>
 memory_type: {{MEMORY_TYPE_ENUM}}
 title: "..."
 status: proposed | accepted | superseded | deprecated | rejected
 date: YYYY-MM-DD
+last_confirmed: YYYY-MM-DD
 source_refs: [<note-or-record-id>]
 ---
 ```
 
-Optional: `related`, `applies_to`, `owners`, `effective_from`, `effective_to`, `tags`, `supersedes`, `superseded_by`.
+Optional, in this order among the keys you keep: `effective_from`, `effective_to`, `applies_to`, `owners`, `tags`, `related`, `exception_to`, `supersedes`, `superseded_by`.
+
+Values stay on one line, lists are inline arrays, and the block closes inside the first 20 lines so a header read catches all of it. Records with no `schema` key are v1 and stay legal indefinitely.
 
 ## Filename
 

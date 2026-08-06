@@ -1,19 +1,21 @@
 ---
-id: { { nanoid } }
+schema: 2
+id: '{{nanoid}}'
 memory_type: Exception
-title: '{{Title — describes the exception, not the rule}}'
-status: { { proposed | accepted } }
-date: { { YYYY-MM-DD } }
-# effective_from: YYYY-MM-DD
-# effective_to: YYYY-MM-DD | null    # set when the exception expires
-source_refs: [{ { note-id } }]
+title: '{{Title describing the exception, not the rule}}'
+status: '{{proposed | accepted}}'
+date: '{{YYYY-MM-DD}}'
+# effective_from: '{{YYYY-MM-DD}}'
+# effective_to: null   # set this when the exception expires
+last_confirmed: '{{YYYY-MM-DD}}'
+source_refs: ['{{note-id}}']
 applies_to: []
 owners: []
 tags: []
 related: []
 exception_to: '[[{{rule-id}}|{{rule-short-name}}]]'
-# supersedes:
-# superseded_by:
+# supersedes: <id-of-old-exception>
+# superseded_by: null
 ---
 
 # {{title}}

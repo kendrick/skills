@@ -273,11 +273,23 @@ When invoked at a pre-existing project (e.g., `pursuits/atlas/`) that already ha
 
 ## Frontmatter Quick Reference
 
-Full shapes live in the templates. Quick reference for scanning:
+Full shapes live in the templates, and the rules behind them in [references/machine-contracts.md](references/machine-contracts.md). Values stay on one line, lists are inline arrays, and the block closes inside the first 20 lines. Omit any key you don't need; the order below is fixed among the keys you keep.
 
-**Groomed note**: `id`, `date`, `type`, `attendees[]`, `tags[]`, `topics[]`, optional `source_file`, optional `related[]`.
+**Groomed note**, in order:
 
-**Memory record** (memory-bank-aligned): `id`, `memory_type`, `title`, `status` (proposed|accepted|superseded|deprecated|rejected), `date`, optional `effective_from`/`effective_to`, `source_refs[]`, `applies_to[]`, `owners[]`, `tags[]`, `related[]`, optional `supersedes`/`superseded_by`. Plus type-specific body fields per [references/memory-bank-schema.md](references/memory-bank-schema.md).
+```
+schema, id, date, type, summary, attendees, tags, topics, entities, source_file, transcript_corrections, open_questions, resolved_questions, deferred_tensions, unpromoted_candidates, related
+```
+
+**Memory record** (memory-bank-aligned), in order:
+
+```
+schema, id, memory_type, title, status, date, effective_from, effective_to, last_confirmed, source_refs, applies_to, owners, tags, themes, related, exception_to, supersedes, superseded_by
+```
+
+`status` is `proposed|accepted|superseded|deprecated|rejected`. Type-specific body fields are in [references/memory-bank-schema.md](references/memory-bank-schema.md).
+
+Files with no `schema` key are v1. They stay legal forever, the lint never flags them, and a scope holding both generations is a supported state rather than an unfinished migration.
 
 `memory_type` values depend on the scope's chosen memory mode:
 - **Lightweight** (default): `Decision | Context | Rule`. Exception is folded into Decision.
@@ -285,7 +297,7 @@ Full shapes live in the templates. Quick reference for scanning:
 
 The scope's `CLAUDE.md` declares the mode in its top frontmatter blockquote. Read it before flagging candidates so the suggested type uses the right vocabulary.
 
-**Journal entry**: `id`, `memory_type: Journal`, `title`, `status` (current|superseded|archived), `date`, `themes[]`, `applies_to[]`, qualified `source_refs[]` (each entry has `scope`, `path`, `note_id`), `related[]`. Body is free prose.
+**Journal entry** follows the record order, using `themes` in place of `tags` and `status` values of `current|superseded|archived`. Its `source_refs` are compound strings of the form `<scope-path>::<note-id>`, so a moved note doesn't break the reference. Body is free prose.
 
 ---
 

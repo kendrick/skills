@@ -188,9 +188,17 @@ require_text inbox-to-memory/SKILL.md "scripts/lint-scope.sh"
 # templates, the lint, and eventually the migrator, and the only thing keeping
 # those three copies honest is that changing the order fails here first.
 contracts=inbox-to-memory/references/machine-contracts.md
+note_key_order="schema, id, date, type, summary, attendees, tags, topics, entities, source_file, transcript_corrections, open_questions, resolved_questions, deferred_tensions, unpromoted_candidates, related"
+record_key_order="schema, id, memory_type, title, status, date, effective_from, effective_to, last_confirmed, source_refs, applies_to, owners, tags, themes, related, exception_to, supersedes, superseded_by"
 require_file "$contracts"
-require_text "$contracts" "schema, id, date, type, summary, attendees, tags, topics, entities, source_file, transcript_corrections, open_questions, resolved_questions, deferred_tensions, unpromoted_candidates, related"
-require_text "$contracts" "schema, id, memory_type, title, status, date, effective_from, effective_to, last_confirmed, source_refs, applies_to, owners, tags, themes, related, supersedes, superseded_by"
+require_text "$contracts" "$note_key_order"
+require_text "$contracts" "$record_key_order"
+
+# SKILL.md carries the same two strings verbatim rather than a paraphrase. A quick
+# reference that drifts from the contract is worse than no quick reference: it is
+# the copy an agent actually reads before writing a file.
+require_text inbox-to-memory/SKILL.md "$note_key_order"
+require_text inbox-to-memory/SKILL.md "$record_key_order"
 
 # Twenty lines is what makes a header read a contract instead of a habit. It is
 # the number every retrieval claim in the funnel doc rests on.
@@ -215,6 +223,43 @@ done
 # The doc is reference material the skill reads on demand, so it has to be
 # reachable from SKILL.md rather than sitting in the directory unmentioned.
 require_text inbox-to-memory/SKILL.md "references/machine-contracts.md"
+
+# Lint the shipped templates by standing them up as a scope. A template that
+# doesn't satisfy the contract emits files that don't either, and the placeholders
+# have to survive a YAML parse for that check to mean anything.
+tpl_scope="$(mktemp -d "${TMPDIR:-/tmp}/i2m-templates.XXXXXX")"
+trap 'rm -rf "$not_a_scope" "$inline_scope" "$tpl_scope"' EXIT
+mkdir -p "$tpl_scope/_inbox" "$tpl_scope/_memory/decisions" "$tpl_scope/notes" "$tpl_scope/entries"
+cp inbox-to-memory/assets/note.template.md "$tpl_scope/notes/"
+for record in context decision exception policy-rule rule; do
+  cp "inbox-to-memory/assets/records/$record.template.md" "$tpl_scope/_memory/decisions/"
+done
+cp inbox-to-memory/assets/records/journal-entry.template.md "$tpl_scope/entries/"
+
+tpl_out="$(run_lint "$tpl_scope")"
+require_line "$tpl_out" "v1 files: 0" templates
+require_line "$tpl_out" "v2 files: 7" templates
+require_line "$tpl_out" "failures: 0" templates
+
+for template in inbox-to-memory/assets/note.template.md inbox-to-memory/assets/records/*.template.md; do
+  require_text "$template" "schema: 2"
+done
+
+# Relationships and journal sources are flat compound strings now. The refutes are
+# the load-bearing half: the nested forms are what v1 files carry, and a template
+# that reintroduces one starts minting files no documented grep will match.
+require_text inbox-to-memory/assets/note.template.md "related: [extends::"
+refute_text inbox-to-memory/assets/note.template.md "note_id:"
+require_text inbox-to-memory/assets/records/journal-entry.template.md "source_refs: ["
+refute_text inbox-to-memory/assets/records/journal-entry.template.md "- scope:"
+
+# The scaffolds document the shape the agent writes from, so they have to agree
+# with the templates. A scaffold left behind teaches the old schema to every scope
+# stood up after this, and those files would be born needing migration.
+for scaffold in notes journal _memory; do
+  require_text "inbox-to-memory/assets/claude-md/$scaffold.template.md" "schema: 2"
+done
+refute_text inbox-to-memory/assets/claude-md/journal.template.md "note_id: <nanoid>"
 
 # yq arrives as a prerequisite here and gets consumed by the contract checks in
 # #6. It is not installed by default anywhere, so the README has to say so next
