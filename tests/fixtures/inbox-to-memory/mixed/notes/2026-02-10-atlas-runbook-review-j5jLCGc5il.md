@@ -48,6 +48,8 @@ related: [extends::zFpm-hfD5u]
 - [ ] @Priya (priority: high) — put a rollback owner in the runbook before the dry run (raw: "before the dry run" L58)
 - [memory candidate: project] Rollback ownership is named in the runbook, not inherited from the on-call rotation.
 - [memory candidate: client] Finance issues freeze end dates in writing when asked directly.
+- [[freeze-window-owned-by-ops-ocPwdpeY0a|memory]] Freeze window end dates come from Finance in writing.
+- [[atlas-region-topology-under-its-old-name-mPmy8XBe5H|memory]] Billing region and deployment region are not the same boundary. The literal filename here is wrong on purpose: the id still resolves it.
 
 ## Raw Content
 

@@ -309,6 +309,26 @@ check_anchors() {
   return 0
 }
 
+# Files are never renamed, so a link whose literal target is missing is usually a
+# file that moved rather than one that vanished. The id is the last ten characters
+# of the target and it never changes, which is why the fallback resolves before
+# anything gets reported broken.
+check_links() {
+  local target
+  while IFS= read -r target; do
+    [[ -z "$target" ]] && continue
+    # An unsubstituted placeholder is not a link. Templates ship with them, and
+    # resolving one would mean asserting a file named `{{nanoid}}` should exist.
+    case "$target" in
+      *'{{'* | *'<'*) continue ;;
+    esac
+    find "$scope" -name "$target.md" -print -quit | grep -q . && continue
+    local id="${target: -10}"
+    find "$scope" -name "*$id*.md" -print -quit | grep -q . && continue
+    fail link-broken "\`$target\` resolves neither by name nor by id \`$id\`"
+  done < <(grep -oE '\[\[[^]|]*' "$1" | sed 's/^\[\[//' | sort -u || true)
+}
+
 check_counts() {
   local file="$1" body="$2"
   local key expected stated
@@ -369,6 +389,7 @@ for file in ${v2_files[@]+"${v2_files[@]}"}; do
   check_tensions "$body"
   check_decisions "$body"
   check_anchors "$body"
+  check_links "$body"
   # Records carry no body tokens and no counts; the four keys are a note contract.
   grep -q '^memory_type:' "$file" || check_counts "$file" "$body"
 

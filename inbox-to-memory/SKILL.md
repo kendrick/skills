@@ -343,6 +343,9 @@ The scope's `CLAUDE.md` declares the mode in its top frontmatter blockquote. Rea
 - **One groomed note per input.** No four-file fragmentation. Sections, not separate files.
 - **Never auto-promote across scopes.** Scope is decided at flagging time, confirmed at sign-off, sticky after crystallization. If a record needs to move, the user moves it by hand. (This trades convenience for audit safety — at high enough volume, v2 may add a guarded `promote` mode.)
 - **Cross-scope references are fine.** A project note can wiki-link to a client-scope record. A client record can list project note ids in its `source_refs`. The record's _home_ (which `_memory/` it lives in) defines its scope, not its references.
+- **Stop at `## Raw Content`.** When reading a note to answer a question, read down to the raw content heading and no further. The extracted sections above it are the reviewed layer and are what you came for. Raw content is for a human reading back, and for verifying a quote you have specific reason to doubt. Reading it by default pulls a whole transcript into context to answer something the sections already answered.
+- **Never rename, resolve by id.** Files keep the name they were created with and ids never regenerate. When a wiki link's filename target is missing, resolve by id first: the last ten characters of the target are the nanoid. Report a link broken only after that fallback fails too.
+- **VTT raw content is collapsed, not verbatim.** Cues get merged into speaker turns with timestamps kept at turn boundaries, via `scripts/collapse-vtt.sh`. This is the one sanctioned exception to preserving raw content exactly as captured. A wall of two-second cues is unreadable to the human the zone exists for, and the words themselves are unchanged.
 
 ---
 

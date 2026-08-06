@@ -140,8 +140,8 @@ done
 # starts firing twice shows up as an arithmetic failure rather than a wash.
 broken_out="$(run_lint "$fixtures/broken")"
 require_line "$broken_out" "v1 files: 0" broken
-require_line "$broken_out" "v2 files: 16" broken
-require_line "$broken_out" "failures: 16" broken
+require_line "$broken_out" "v2 files: 17" broken
+require_line "$broken_out" "failures: 17" broken
 
 if bash "$lint" "$fixtures/broken" >/dev/null 2>&1; then
   echo "lint exited zero on the broken fixture" >&2
@@ -343,6 +343,103 @@ require_text inbox-to-memory/SKILL.md "transcript_corrections:"
 # Entities exist so one grep finds every note touching a person or system, which
 # fails the moment the same person appears under three spellings.
 require_text inbox-to-memory/SKILL.md "canonical forms only, never the variants"
+
+# The read boundary has to land in all three places an agent might learn it: the
+# operating rules it reads first, the scaffold a scope teaches from, and the funnel
+# stage where the cost actually gets paid.
+funnel=inbox-to-memory/references/retrieval-funnel.md
+require_text inbox-to-memory/SKILL.md "Stop at \`## Raw Content\`."
+require_text inbox-to-memory/assets/claude-md/notes.template.md "stop at \`## Raw Content\`"
+require_text "$funnel" "**Stop at \`## Raw Content\`.**"
+require_text "$funnel" "## Stage 4 — Read Full Body"
+
+require_text inbox-to-memory/SKILL.md "Never rename, resolve by id."
+require_text "$funnel" "## Links Resolve by ID"
+
+# A grep that matches one generation returns half an answer and looks like a whole
+# one, so every documented query says which files it reaches.
+awk '
+  /^[[:space:]]*#/ { block = block " " $0; next }
+  /^[[:space:]]*grep / {
+    if (block !~ /generation/ && block !~ /v1/ && block !~ /v2/) {
+      print "grep with no compatibility note on line " NR ": " $0
+      bad = 1
+    }
+    # Consume the block. Without this, one annotated grep vouches for every
+    # unannotated grep that follows it.
+    block = ""
+    next
+  }
+  /^[[:space:]]*$/ { next }
+  { block = "" }
+  END { exit bad }
+' "$funnel" || {
+  echo "every grep in the funnel doc needs a v1/v2 compatibility note above it" >&2
+  exit 1
+}
+
+# Run the documented index emitter rather than a paraphrase of it. A one-liner
+# nobody executes is a one-liner that stopped working two refactors ago.
+index_cmd="$(awk '/^## Materializing an Index/ { f = 1 } f && /^```bash$/ { c = 1; next } c && /^```$/ { exit } c' "$funnel")"
+[[ -n "$index_cmd" ]] || {
+  echo "could not extract the index one-liner from $funnel" >&2
+  exit 1
+}
+case "$index_cmd" in
+  *yq* | *python* | *jq* | *perl*)
+    echo "the index emitter must need nothing beyond awk and grep" >&2
+    exit 1
+    ;;
+esac
+
+index_out="$(cd "$fixtures/mixed" && eval "$index_cmd")"
+[[ "$(printf '%s\n' "$index_out" | wc -l | tr -d ' ')" == "2" ]] || {
+  echo "index emitter should produce one row per record in the mixed scope" >&2
+  printf '%s\n' "$index_out" >&2
+  exit 1
+}
+require_text <(printf '%s\n' "$index_out") "mPmy8XBe5H"
+require_text <(printf '%s\n' "$index_out") "ocPwdpeY0a"
+
+# The v1 record has no last_confirmed, and the column has to come back empty
+# rather than absent. An empty cell is what makes the ones with nothing to reason
+# about visible in the output.
+v1_row="$(printf '%s\n' "$index_out" | grep ocPwdpeY0a)"
+[[ "$(printf '%s' "$v1_row" | cut -f5)" == "" ]] || {
+  echo "v1 record should emit an empty last_confirmed cell, got: $v1_row" >&2
+  exit 1
+}
+v2_row="$(printf '%s\n' "$index_out" | grep mPmy8XBe5H)"
+[[ "$(printf '%s' "$v2_row" | cut -f5)" == "2026-02-10" ]] || {
+  echo "v2 record should carry its last_confirmed date, got: $v2_row" >&2
+  exit 1
+}
+
+# No index file in a memory directory, in any form, under any name. The on-demand
+# emitter exists specifically so this stays true, and it is the convenience most
+# likely to get added back by someone who finds globbing tedious.
+require_text inbox-to-memory/SKILL.md "No \`MEMORY.md\` or \`INDEX.md\` summary file"
+if find "$fixtures" -path '*_memory*' \( -name 'MEMORY.md' -o -name 'INDEX.md' -o -name 'index.md' \) | grep -q .; then
+  echo "an index file landed in a fixture memory directory" >&2
+  exit 1
+fi
+
+# VTT collapsing is the one sanctioned exception to verbatim raw content, so it
+# ships as something runnable rather than a description of what to do by hand.
+vtt=inbox-to-memory/scripts/collapse-vtt.sh
+require_file "$vtt"
+require_text inbox-to-memory/SKILL.md "one sanctioned exception to preserving raw content"
+collapsed="$(bash "$vtt" "$fixtures/steerco-excerpt.vtt")"
+[[ "$(printf '%s\n' "$collapsed" | wc -l | tr -d ' ')" == "3" ]] || {
+  echo "six cues from three speakers' turns should collapse to three lines" >&2
+  printf '%s\n' "$collapsed" >&2
+  exit 1
+}
+require_line "$collapsed" "[00:00:01] Priya Raghavan: Cutover is a date, not a readiness state, and that is the problem." vtt
+require_line "$collapsed" "[00:00:06] Marcus Dell: Finance gave us a date. It is in writing. That one is done." vtt
+# The last turn exercises the other speaker form and a continuation line with no
+# speaker of its own, which is where a naive collapser drops half a sentence.
+require_line "$collapsed" "[00:00:11] Priya Raghavan: Third meeting, same question, still nobody's name on it." vtt
 
 # yq arrives as a prerequisite here and gets consumed by the contract checks in
 # #6. It is not installed by default anywhere, so the README has to say so next

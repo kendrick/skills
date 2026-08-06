@@ -65,6 +65,8 @@ When the user asks to create a fresh note (not an import):
 
 Order matters. Summary sections come first for human scan-ability and cheap agent retrieval. Raw content stays the source of truth at the bottom.
 
+**Reading a note, stop at `## Raw Content`.** The extracted sections above it are the reviewed layer and are what you came for. Raw content is for a human reading back, and for verifying a quote you have specific reason to doubt. Reading it by default pulls a whole transcript into context to answer something the sections already answered.
+
 ## Frontmatter Schema
 
 ```yaml
