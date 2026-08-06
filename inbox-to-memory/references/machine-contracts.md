@@ -76,6 +76,8 @@ Fields are pipe-delimited and named. Order is not enforced; presence is.
 - [tension: resolved] <description> | stakes: <one clause> | resolved: <how it landed>
 - [tension: unacknowledged] <description> | stakes: <one clause>
 - [decision: one-way|two-way] <what was decided> | committed: @<name> | discarded: <alternatives, with the reason given at the time>
+- [contradicts accepted: [[<record>|<label>]]] <what the new input says> | claims: <what the record says>
+- [contradicts accepted: [[<record>|<label>]]] <statement> | claims: <what the record says> | dismissed: <reason, and who decided>
 ```
 
 The discarded alternatives are a decision's payload. What got decided is usually recoverable from the transcript; what got ruled out, and the reason someone gave for ruling it out, is the part with a six-month shelf life, and it is the only part that tells you later whether the reason still holds.
@@ -85,6 +87,10 @@ Reversibility rides in the token because it changes how hard a decision is worth
 A slug is lowercase kebab, two to five words, and identical across every note asking the same question. That stability is what lets the skill count how long something has gone unanswered.
 
 A missing field is reported and never filled in. A fabricated resolver does more damage than an admitted gap, because it sends someone to chase a person who was never going to answer.
+
+A contradiction is the only token asserting something about a file other than the one it sits in, so it carries both halves of the disagreement. `claims:` is what the record says, quoted closely enough to settle the conflict without opening it, and closely enough to expose the cases where the two never actually disagreed.
+
+Dismissal is a resolution that leaves the flag in place. A dismissed contradiction is the record that someone looked and decided it was nothing, which is what keeps the next four notes from re-flagging the same non-conflict.
 
 Every deferred tension names an open question in the same note, one to one. Deferring something should open a thread rather than close one, and the pairing is arithmetic, which is why the lint can check it.
 
@@ -109,7 +115,9 @@ Four keys on every v2 note, counted from body tokens and never estimated:
 | `open_questions`         | `[open question:` tokens                                            |
 | `resolved_questions`     | `[open question resolved:` tokens                                   |
 | `deferred_tensions`      | `[tension: deferred]` tokens                                        |
-| `unpromoted_candidates`  | candidate tokens still carrying their prefix rather than a wiki link |
+| `unpromoted_candidates`  | candidate tokens still carrying their prefix rather than a wiki link, plus contradiction flags carrying no `dismissed:` |
+
+A contradiction counts as unpromoted until it is settled, and it settles two ways. Approving it rewrites the line to a wiki link, like any other candidate. Dismissing it leaves the flag where it is and adds `dismissed:`, so the count has to read the field rather than the prefix. Counting dismissals forever would make "every note with unfinished business" a query that never comes back empty, which is the one thing these keys exist to answer.
 
 These four are an explicit exception to omit-if-empty: a v2 note carries all four even when the value is zero. Without the exception a legitimate zero and a missing key look identical, which defeats the query the counts exist to serve. Finding every note with unfinished business is `grep -L 'open_questions: 0'`, and that only works if the key is always there.
 
@@ -128,5 +136,6 @@ Each failure names the file and the check that caught it, so a defect whose caus
 | `frontmatter-known-keys`    | A key appears that neither order lists.                              |
 | `frontmatter-key-order`     | Present keys are not in contract order.                              |
 | `token-grammar`             | A bracketed token in the body is absent from the grammar table.      |
+| `contradiction-fields`      | A contradiction names no record, or never states what that record claims. |
 
 Token scanning stops at `## Raw Content`. Raw content is a verbatim capture of someone else's writing, and whatever brackets it happens to contain are not this skill's tokens.

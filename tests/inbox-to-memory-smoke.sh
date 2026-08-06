@@ -115,8 +115,8 @@ require_line "$old_only_out" "failures: 0" old-only
 mixed_out="$(run_lint "$fixtures/mixed")"
 require_line "$mixed_out" "scope: $fixtures/mixed" mixed
 require_line "$mixed_out" "v1 files: 3" mixed
-require_line "$mixed_out" "v2 files: 4" mixed
-require_line "$mixed_out" "total files: 7" mixed
+require_line "$mixed_out" "v2 files: 5" mixed
+require_line "$mixed_out" "total files: 8" mixed
 require_line "$mixed_out" "failures: 0" mixed
 
 # A question open across three notes is a finding about the engagement, not a
@@ -137,11 +137,14 @@ for legacy in \
 done
 
 # One defect per file, so a count is a meaningful assertion and a check that
-# starts firing twice shows up as an arithmetic failure rather than a wash.
+# starts firing twice shows up as an arithmetic failure rather than a wash. The
+# arithmetic is off by one because a contradiction has to point at something
+# accepted: the lone record in this scope is link bait, carries no defect, and is
+# the reason failures trail the file count.
 broken_out="$(run_lint "$fixtures/broken")"
 require_line "$broken_out" "v1 files: 0" broken
-require_line "$broken_out" "v2 files: 17" broken
-require_line "$broken_out" "failures: 17" broken
+require_line "$broken_out" "v2 files: 19" broken
+require_line "$broken_out" "failures: 18" broken
 
 if bash "$lint" "$fixtures/broken" >/dev/null 2>&1; then
   echo "lint exited zero on the broken fixture" >&2
@@ -164,6 +167,11 @@ require_failure "$broken_out" "FAIL $fixtures/broken/notes/2026-03-13-decision-n
 require_failure "$broken_out" "FAIL $fixtures/broken/notes/2026-03-14-bare-line-anchor-oKaK8iH1B0.md: anchor-form:"
 require_failure "$broken_out" "FAIL $fixtures/broken/notes/2026-03-15-multiline-summary-gcnwRBmRy_.md: frontmatter-single-line:"
 require_failure "$broken_out" "FAIL $fixtures/broken/notes/2026-03-16-decision-bad-reversibility-w-6dqoA-ky.md: decision-fields:"
+require_failure "$broken_out" "FAIL $fixtures/broken/notes/2026-03-18-contradiction-no-claims-19UymDD7Rt.md: contradiction-fields:"
+
+# The record the flag points at is clean. Asserting that here is what keeps the
+# link bait from quietly becoming an eighteenth defect nobody planted.
+refute_failure "$broken_out" "vendor-lock-window-WJicoHVdFw.md"
 
 # V1 notes anchor to bare line numbers everywhere, and that has to stay legal. The
 # check keys off the schema, never off the shape of the reference.
@@ -193,6 +201,36 @@ require_line "$inline_out" "failures: 0" inline-equivalent
 require_file "$fixtures/mixed/notes/2026-01-13-atlas-cutover-readiness-JJuYgImRWn.md"
 refute_text "$fixtures/mixed/notes/2026-01-13-atlas-cutover-readiness-JJuYgImRWn.md" "schema:"
 require_text "$fixtures/mixed/notes/2026-01-13-atlas-cutover-readiness-JJuYgImRWn.md" "tags: [cutover, readiness]"
+
+# Both ends of the contradiction round-trip have to be legal in a passing scope:
+# the amendment that became a wiki link, and the dismissal that kept its flag. The
+# dismissed one is the assertion that matters. A flag deleted on dismissal takes
+# with it the only evidence anyone ever looked.
+round_trip="$fixtures/mixed/notes/2026-02-17-atlas-freeze-exceptions-SDy5SGVwfu.md"
+require_file "$round_trip"
+refute_failure "$mixed_out" "2026-02-17-atlas-freeze-exceptions-SDy5SGVwfu.md"
+require_text "$round_trip" "| dismissed:"
+require_text "$round_trip" "|memory — updated]]"
+
+# The count reads the dismissal, not the prefix. Strip the field and the same note
+# has two outstanding contradictions instead of one, which is what proves the rule
+# is doing the work rather than the arithmetic happening to line up.
+dismissal_scope="$(mktemp -d "${TMPDIR:-/tmp}/i2m-dismissal.XXXXXX")"
+trap 'rm -rf "$not_a_scope" "$inline_scope" "$dismissal_scope"' EXIT
+cp -R "$fixtures/mixed/." "$dismissal_scope/"
+stripped="$dismissal_scope/notes/2026-02-17-atlas-freeze-exceptions-SDy5SGVwfu.md"
+sed 's/ | dismissed: [^|]*$//' "$round_trip" >"$stripped"
+dismissal_out="$(run_lint "$dismissal_scope")"
+require_failure "$dismissal_out" "derived-counts: \`unpromoted_candidates\` says 1, body has 2"
+
+# Phase 2.5 can only hold to five body reads per input if the scope it runs over
+# has records to spare. This is the fixture-side half of that promise: the budget
+# itself is a property of an agent run and nothing here can assert it.
+mixed_records="$(find "$fixtures/mixed/_memory" -name '*.md' | wc -l | tr -d ' ')"
+[[ "$mixed_records" -le 5 ]] || {
+  echo "the mixed fixture holds $mixed_records records; phase 2.5 budgets five body reads per input" >&2
+  exit 1
+}
 
 # A directory with no opt-in markers is refused outright. Reporting it as an
 # empty scope would let a mistyped path pass for a clean bill of health.
@@ -250,7 +288,7 @@ require_text inbox-to-memory/SKILL.md "references/machine-contracts.md"
 # doesn't satisfy the contract emits files that don't either, and the placeholders
 # have to survive a YAML parse for that check to mean anything.
 tpl_scope="$(mktemp -d "${TMPDIR:-/tmp}/i2m-templates.XXXXXX")"
-trap 'rm -rf "$not_a_scope" "$inline_scope" "$tpl_scope"' EXIT
+trap 'rm -rf "$not_a_scope" "$inline_scope" "$dismissal_scope" "$tpl_scope"' EXIT
 mkdir -p "$tpl_scope/_inbox" "$tpl_scope/_memory/decisions" "$tpl_scope/notes" "$tpl_scope/entries"
 cp inbox-to-memory/assets/note.template.md "$tpl_scope/notes/"
 for record in context decision exception policy-rule rule; do
@@ -440,6 +478,38 @@ require_line "$collapsed" "[00:00:06] Marcus Dell: Finance gave us a date. It is
 # The last turn exercises the other speaker form and a continuation line with no
 # speaker of its own, which is where a naive collapser drops half a sentence.
 require_line "$collapsed" "[00:00:11] Priya Raghavan: Third meeting, same question, still nobody's name on it." vtt
+
+# The half number is the point. Phases 3 through 6 have carried those numbers
+# since v1, and every scaffold that says "phase 5 sign-off" has to keep pointing
+# at sign-off after a phase gets inserted ahead of it.
+require_text inbox-to-memory/SKILL.md "### Phase 2.5 — Check Against Accepted Memory"
+for phase in \
+  "### Phase 3 — Groom Into a Single Note" \
+  "### Phase 4 — Dispose Source" \
+  "### Phase 5 — Propose and Crystallize (gated)" \
+  "### Phase 6 — Verify"; do
+  require_text inbox-to-memory/SKILL.md "$phase"
+done
+
+# Normalizing after the lookup instead of before it returns a clean no-conflict
+# report on a scope that has the conflict, which is worse than not looking.
+require_text inbox-to-memory/SKILL.md "**Normalize them through the scope's alias table** before any lookup"
+
+# A budget quietly exceeded on every input is one that stopped bounding anything.
+require_text inbox-to-memory/SKILL.md "**Five body reads per input, and the budget binds.**"
+require_text inbox-to-memory/SKILL.md "read budget bound is named"
+
+# All three outcomes, and the one that leaves the flag behind.
+for outcome in "**Amend.**" "**Supersede.**" "**Dismiss.**"; do
+  require_text inbox-to-memory/SKILL.md "$outcome"
+done
+require_text inbox-to-memory/SKILL.md "**A dismissed flag stays in the note permanently.**"
+
+# Both halves of the disagreement travel together, and the contract says why.
+require_text "$contracts" "contradiction-fields"
+require_text "$contracts" "| claims: <what the record says>"
+require_text "$heuristics" "Flag it only when the statements can't both be true."
+require_text inbox-to-memory/assets/note.template.md "[contradicts accepted: [[<record>|<label>]]]"
 
 # yq arrives as a prerequisite here and gets consumed by the contract checks in
 # #6. It is not installed by default anywhere, so the README has to say so next

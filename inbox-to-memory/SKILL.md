@@ -21,7 +21,7 @@ Decide the mode from the user's phrasing. When ambiguous, ask.
 
 ## Process Mode
 
-Six phases. The user reviews and approves between phase 4 and phase 5; never auto-promote.
+Six phases, plus a 2.5 that slots in ahead of grooming. The user reviews and approves between phase 4 and phase 5; never auto-promote.
 
 ### Phase 1 — Detect Scope
 
@@ -48,6 +48,34 @@ For each file in `_inbox/`, dispatch by extension:
 
 While reading, apply the extraction heuristics in [references/extraction-heuristics.md](references/extraction-heuristics.md). The short version: pull 6-12 surprising or contradictory quotes; flag tensions; split stated and unstated assumptions; capture action items with owner + priority; tag cross-note relationships as `confirms | contradicts | extends | introduces`.
 
+### Phase 2.5 — Check Against Accepted Memory
+
+Nothing else in the skill reads memory before writing to it, which is how a working session quietly contradicts an `accepted` record and the groomed note cheerfully writes down both. The conflict then surfaces months later, usually when someone acts on the stale half.
+
+This phase carries a half number on purpose. Phases 3 through 6 keep the numbers they have had since v1, and every scaffold, note, and CLAUDE.md that refers to "phase 5 sign-off" keeps pointing at sign-off.
+
+For each inbox file, in order:
+
+1. **Extract the named entities.** People, systems, vendors, regions, anything a record might be about.
+2. **Normalize them through the scope's alias table** before any lookup. Grep matching happens on canonical forms only. Skip this and "Shachi" and "Saatchi" search as two people, which produces a clean no-conflict report on a scope that has the conflict.
+3. **Glob `_memory/`** and grep the entity list against frontmatter and titles.
+4. **Read the headers of the hits.** Frontmatter, and no further. That's stage 3 of [references/retrieval-funnel.md](references/retrieval-funnel.md).
+5. **Body-read only the records whose headers suggest overlap** with something this input actually claims.
+
+**Five body reads per input, and the budget binds.** It is not a suggestion to stay near. When detection would need a sixth read to be useful, say so in the phase 6 report and leave the read undone. A budget quietly exceeded on every input is one nobody notices has stopped bounding anything. A scope where five is routinely too few is telling you its records are too granular, which is a finding worth having.
+
+Only `status: accepted` records produce flags. A `proposed` record hasn't been agreed to yet, so disagreeing with it is just discussion; a `superseded` one is already known to be wrong.
+
+Flag a conflict inline, where the triggering passage lives:
+
+```
+[contradicts accepted: [[<record-filename>|<short-label>]]] <what this input says> | claims: <what the record says>
+```
+
+Both halves are required. The record's own claim written down beside the new statement is what lets a reader settle the disagreement without opening the record, and what makes it obvious when the two never actually disagreed.
+
+A contradiction is a first-class candidate, resolved at phase 5 sign-off like any other. Its three outcomes are in that phase.
+
 ### Phase 3 — Groom Into a Single Note
 
 Emit one note per input at `<scope-root>/notes/YYYY-MM-DD-<slug>-<nanoid>.md`. The template is at [assets/note.template.md](assets/note.template.md).
@@ -67,9 +95,11 @@ Inside the extracted sections, flag candidates **inline** using the taxonomy bel
 [memory candidate: client] <claim>
 [memory candidate: update existing [[<filename>|<short-name>]]] <amended claim>
 [journal candidate: <generalized pattern>]
+[contradicts accepted: [[<filename>|<short-name>]]] <statement> | claims: <what the record says>
 ```
 
 - The scope token (`project` or `client`) is the skill's _proposal_, not a decision. The user confirms or overrides at phase 5.
+- The contradiction flag comes out of phase 2.5 rather than out of reading the input alone. It's the one candidate type that needs memory read first.
 - The "update existing" variant signals an amendment to an already-crystallized record. Its scope is inherited from the target.
 - Journal candidates take no scope token — their destination is always the cross-client journal.
 
@@ -123,6 +153,16 @@ For each candidate the user approves:
    - Amend the target record's body. Mark new content inline with `(added YYYY-MM-DD, <note-id>)` so the next reader can trace which source contributed which passage.
    - Keep the original `date` field. Only bump it if the core claim has materially changed — at which point consider whether the old record should be `status: superseded` and a new record created instead.
 
+#### Resolving a Contradiction
+
+A `[contradicts accepted: ...]` flag has three outcomes, and the user picks one per flag:
+
+- **Amend.** The record was right but incomplete. Take the update-existing path above against the flagged record, and rewrite the line to `[[<target>|memory — updated]]`.
+- **Supersede.** The record is now wrong. Create the replacement, set the old record's `status: superseded` and its `superseded_by`, set the new record's `supersedes`, and rewrite the line to `[[<new-record>|memory — supersedes <old-label>]]`.
+- **Dismiss.** They don't actually conflict, or the new statement is the mistaken one. Append `| dismissed: <reason, and who decided>` and leave everything else where it is.
+
+**A dismissed flag stays in the note permanently.** It is the record that someone looked at this and decided it was nothing, which is what stops the next four notes from re-flagging the same non-conflict. Deleting it throws away the only evidence the question was ever asked.
+
 Never auto-promote. Every record creation requires explicit user approval per candidate. Unpromoted candidates keep their `[memory candidate: ...]` or `[journal candidate: ...]` prefix — the prefix signals "considered, not crystallized," which is itself useful provenance.
 
 ### Phase 6 — Verify
@@ -141,6 +181,7 @@ Then check by hand what the lint can't:
 - Every record file has a valid `id`, a `memory_type` matching its folder, and at least one entry in `source_refs`.
 - Every wiki-link path resolves (the target file exists at the expected location).
 - The `_inbox/` is empty.
+- Any input where the phase 2.5 read budget bound is named, along with what went unread. A budget that silently truncates detection reports the same "no conflicts" as a scope that genuinely has none.
 
 Report failures. Don't silently retry or auto-fix — those bugs hide.
 

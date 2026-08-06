@@ -44,6 +44,24 @@ The disposition is `resolved`, `deferred`, or `unacknowledged`.
 
 A deferred tension names a matching open question in the same note, one to one. Deferring something should open a thread rather than end one. A resolved tension records how it landed inline.
 
+## Contradictions Against Memory
+
+A tension is disagreement inside the room. A contradiction is disagreement with something the scope already agreed to and wrote down, which is why it needs memory read first (phase 2.5) and gets its own flag:
+
+```
+- [contradicts accepted: [[freeze-window-owned-by-ops-ocPwdpeY0a|freeze window ownership]]] Priya said the delivery lead signs off on freeze exceptions now. | claims: exceptions are Ops' call and always have been
+```
+
+Flag it only when the statements can't both be true. Three things get mistaken for contradictions and none of them are:
+
+- **Newer detail on the same claim.** The record says exceptions are Ops' call; someone adds that Ops routes them through a delivery lead first. That's an amendment waiting to happen rather than a conflict, and flagging it as one lands in the same place anyway, a step later.
+- **Different subjects wearing the same word.** Half the false positives here are vocabulary. Two people saying "region" about the same system are frequently discussing two different boundaries.
+- **Someone being wrong out loud.** A participant misremembering what was agreed is worth a note, not a challenge to the record. The room's memory is what the record is for.
+
+Write `claims:` from the record's own words. Paraphrasing it into your summary of the new statement is how two positions that never disagreed end up looking incompatible.
+
+Nothing gets flagged against a `proposed` record. Disagreeing with something nobody has agreed to yet is just the discussion that produces it.
+
 ## Decisions
 
 A quote that settles something is a decision, not just a good quote. When you pull a decisional quote into Notable Quotes, write the decision itself here too:

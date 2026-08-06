@@ -38,6 +38,13 @@ you pay for. Every deferred tension names an open question in this note.
 - [tension: deferred] <description> | stakes: <what breaks if this stays open> | open question: <slug>
 - [tension: resolved] <description> | stakes: <clause> | resolved: <how it landed>
 - [tension: unacknowledged] <description> | stakes: <clause>
+
+A contradiction against an accepted record comes out of phase 2.5 and carries both
+halves, so the disagreement can be settled without opening the record. Dismissing
+one keeps the flag and adds the reason; it never gets deleted.
+
+- [contradicts accepted: [[<record>|<label>]]] <what this input says> | claims: <what the record says>
+- [contradicts accepted: [[<record>|<label>]]] <statement> | claims: <what the record says> | dismissed: <reason, and who decided>
 -->
 
 ## Decisions

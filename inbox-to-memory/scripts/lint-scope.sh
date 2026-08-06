@@ -218,6 +218,14 @@ count_matches() {
   { grep -oE -- "$2" "$1" 2>/dev/null || true; } | wc -l | tr -d ' '
 }
 
+# A dismissed contradiction is settled, not outstanding. It keeps its flag as
+# provenance of what was considered, and counting it forever would make "every
+# note with unfinished business" a query that never comes back empty.
+count_open_contradictions() {
+  { grep -F -- '[contradicts accepted:' "$1" || true; } |
+    { grep -Fvc -- '| dismissed:' || true; } | tr -d ' '
+}
+
 frontmatter_number() {
   awk -v key="$2" '
     NR == 1 && $0 != "---" { exit }
@@ -284,6 +292,23 @@ check_tensions() {
   done < <(grep -F -- '[tension:' "$body" || true)
 }
 
+# A contradiction is the one flag that asserts something about a file other than
+# the one it lives in, so it carries both halves of the disagreement. Without the
+# record's own claim written down beside the new statement, settling it means
+# opening the record to find out whether the two ever actually disagreed.
+check_contradictions() {
+  local body="$1"
+  local line
+  while IFS= read -r line; do
+    if ! grep -qE '\[contradicts accepted: \[\[[^]|]+\|[^]]+\]\]\]' <<<"$line"; then
+      fail contradiction-fields "this contradiction names no record it contradicts"
+      continue
+    fi
+    grep -Fq -- '| claims:' <<<"$line" ||
+      fail contradiction-fields "this contradiction does not state what the record claims"
+  done < <(grep -F -- '[contradicts accepted:' "$body" || true)
+}
+
 check_decisions() {
   local body="$1"
   local line reversibility
@@ -337,7 +362,10 @@ check_counts() {
       open_questions) expected="$(count_matches "$body" '\[open question:')" ;;
       resolved_questions) expected="$(count_matches "$body" '\[open question resolved:')" ;;
       deferred_tensions) expected="$(count_matches "$body" '\[tension: deferred\]')" ;;
-      unpromoted_candidates) expected="$(count_matches "$body" '\[(memory candidate:|journal candidate:|working-state candidate\])')" ;;
+      unpromoted_candidates)
+        expected="$(count_matches "$body" '\[(memory candidate:|journal candidate:|working-state candidate\])')"
+        expected=$((expected + $(count_open_contradictions "$body")))
+        ;;
     esac
     stated="$(frontmatter_number "$file" "$key")"
     if [[ "$stated" == "absent" ]]; then
@@ -387,6 +415,7 @@ for file in ${v2_files[@]+"${v2_files[@]}"}; do
   check_tokens "$body"
   check_open_questions "$body"
   check_tensions "$body"
+  check_contradictions "$body"
   check_decisions "$body"
   check_anchors "$body"
   check_links "$body"
