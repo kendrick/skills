@@ -31,7 +31,12 @@ Include line refs back to Raw Content, e.g. "(raw: L42)".
 
 <!--
 Places where speakers disagreed, hedged, or contradicted themselves or each other.
-- <description of the tension> — <speakers involved> (raw: L<line>)
+Unacknowledged is the disposition nobody in the room was tracking, and the one
+you pay for. Every deferred tension names an open question in this note.
+
+- [tension: deferred] <description> | stakes: <what breaks if this stays open> | open question: <slug>
+- [tension: resolved] <description> | stakes: <clause> | resolved: <how it landed>
+- [tension: unacknowledged] <description> | stakes: <clause>
 -->
 
 ## Stated Assumptions
@@ -44,7 +49,14 @@ Places where speakers disagreed, hedged, or contradicted themselves or each othe
 
 ## Open Questions
 
-<!-- What didn't get resolved. -->
+<!--
+An answerable question, not a topic. The slug is lowercase kebab, 2-5 words, and
+identical across every note asking the same thing. Never invent a missing field:
+@unknown is a true answer, a guessed resolver is not.
+
+- [open question: <slug>] <question>? | resolver: @<name or unknown> | blocks: <decision, or informational> | default: <what happens if nobody answers>
+- [open question resolved: <slug>] <question>? | resolved: <the answer, and who gave it>
+-->
 
 ## Action Items / Memory Candidates
 

@@ -115,9 +115,15 @@ require_line "$old_only_out" "failures: 0" old-only
 mixed_out="$(run_lint "$fixtures/mixed")"
 require_line "$mixed_out" "scope: $fixtures/mixed" mixed
 require_line "$mixed_out" "v1 files: 3" mixed
-require_line "$mixed_out" "v2 files: 2" mixed
-require_line "$mixed_out" "total files: 5" mixed
+require_line "$mixed_out" "v2 files: 4" mixed
+require_line "$mixed_out" "total files: 7" mixed
 require_line "$mixed_out" "failures: 0" mixed
+
+# A question open across three notes is a finding about the engagement, not a
+# defect in a file, so recurrence reports without failing. Both chains in the
+# mixed scope are three deep and neither one may push the failure count off zero.
+require_line "$mixed_out" "RECURRING rollback-execution-owner: open in 3 notes" mixed
+require_line "$mixed_out" "RECURRING dry-run-date: open in 3 notes" mixed
 
 # The v1 files in the mixed scope carry every shape the contract now forbids:
 # block-style lists, a nested relationship mapping, no schema key. They are legal
@@ -134,8 +140,8 @@ done
 # starts firing twice shows up as an arithmetic failure rather than a wash.
 broken_out="$(run_lint "$fixtures/broken")"
 require_line "$broken_out" "v1 files: 0" broken
-require_line "$broken_out" "v2 files: 4" broken
-require_line "$broken_out" "failures: 4" broken
+require_line "$broken_out" "v2 files: 12" broken
+require_line "$broken_out" "failures: 12" broken
 
 if bash "$lint" "$fixtures/broken" >/dev/null 2>&1; then
   echo "lint exited zero on the broken fixture" >&2
@@ -146,6 +152,14 @@ require_failure "$broken_out" "FAIL $fixtures/broken/notes/2026-03-01-block-styl
 require_failure "$broken_out" "FAIL $fixtures/broken/notes/2026-03-02-frontmatter-budget-kFtFA-Xh5P.md: frontmatter-budget:"
 require_failure "$broken_out" "FAIL $fixtures/broken/notes/2026-03-03-key-order-fdTdMPSqFs.md: frontmatter-key-order:"
 require_failure "$broken_out" "FAIL $fixtures/broken/notes/2026-03-04-unregistered-token-30z5F4kx6U.md: token-grammar:"
+require_failure "$broken_out" "FAIL $fixtures/broken/notes/2026-03-05-open-question-fields-8ddZbhkxqw.md: open-question-fields:"
+require_failure "$broken_out" "FAIL $fixtures/broken/notes/2026-03-06-deferred-tension-unpaired-oKZJNnBgR5.md: tension-deferred-pairing:"
+require_failure "$broken_out" "FAIL $fixtures/broken/notes/2026-03-07-deferred-tension-double-claim-tTwfMfnuen.md: tension-deferred-pairing:"
+require_failure "$broken_out" "FAIL $fixtures/broken/notes/2026-03-08-count-mismatch-NpLIlvzOGE.md: derived-counts:"
+require_failure "$broken_out" "FAIL $fixtures/broken/notes/2026-03-09-missing-count-key-w8I9DG6qae.md: derived-counts:"
+require_failure "$broken_out" "FAIL $fixtures/broken/notes/2026-03-10-orphan-resolution-Fb7y8W-jW6.md: open-question-resolution:"
+require_failure "$broken_out" "FAIL $fixtures/broken/notes/2026-03-11-tension-missing-stakes-diU2GZ1m5r.md: tension-fields:"
+require_failure "$broken_out" "FAIL $fixtures/broken/notes/2026-03-12-tension-bad-disposition-GAQIZYiAjU.md: tension-fields:"
 
 # Fail the block-style list and pass its inline-array equivalent, proved on the
 # same file rather than on two files that differ in other ways too. Without the
@@ -260,6 +274,32 @@ for scaffold in notes journal _memory; do
   require_text "inbox-to-memory/assets/claude-md/$scaffold.template.md" "schema: 2"
 done
 refute_text inbox-to-memory/assets/claude-md/journal.template.md "note_id: <nanoid>"
+
+# The counts are the one exception to omit-if-empty, and the reason has to travel
+# with the rule. Without it someone reads four always-present keys as redundant
+# and starts omitting the zeros, which is exactly what breaks the query.
+require_text "$contracts" "explicit exception to omit-if-empty"
+require_text "$contracts" "**Absent is not zero.**"
+
+# Never filling a missing field in is the whole design of the open-question
+# contract. A fabricated resolver sends someone to chase a person who was never
+# going to answer, which costs more than the admitted gap.
+require_text "$contracts" "A missing field is reported and never filled in."
+
+# Phrasing is judgment the lint can't reach, so it has to be taught in prose.
+heuristics=inbox-to-memory/references/extraction-heuristics.md
+require_text "$heuristics" "an answerable question, not a topic"
+require_text "$heuristics" "unacknowledged"
+
+# Prior notes are a record of what was known that day. Rewriting them to reflect a
+# later answer is the convenience most likely to get added back, and it destroys
+# the only thing the note was good for.
+require_text inbox-to-memory/SKILL.md "Process mode never edits a prior note."
+
+# The note template has to carry the field shapes, or the agent writes tokens the
+# lint rejects and learns the contract by failing.
+require_text inbox-to-memory/assets/note.template.md "[open question: <slug>]"
+require_text inbox-to-memory/assets/note.template.md "[tension: deferred]"
 
 # yq arrives as a prerequisite here and gets consumed by the contract checks in
 # #6. It is not installed by default anywhere, so the README has to say so next

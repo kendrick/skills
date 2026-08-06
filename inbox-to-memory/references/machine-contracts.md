@@ -64,7 +64,38 @@ Every inline token the skill emits is registered here with the grep that finds i
 
 The two open-question greps are disjoint: `[open question resolved:` does not contain `[open question:`, so counting one never picks up the other.
 
-Field-level requirements for these tokens live with the features that own them. This table governs the shape and the vocabulary only.
+### Token Fields
+
+Fields are pipe-delimited and named. Order is not enforced; presence is.
+
+```
+- [open question: <slug>] <answerable question>? | resolver: @<name or unknown> | blocks: <decision, or informational> | default: <what happens if nobody answers>
+- [open question resolved: <slug>] <question>? | resolved: <the answer, and who gave it>
+- [tension: deferred] <description> | stakes: <one clause> | open question: <slug>
+- [tension: resolved] <description> | stakes: <one clause> | resolved: <how it landed>
+- [tension: unacknowledged] <description> | stakes: <one clause>
+```
+
+A slug is lowercase kebab, two to five words, and identical across every note asking the same question. That stability is what lets the skill count how long something has gone unanswered.
+
+A missing field is reported and never filled in. A fabricated resolver does more damage than an admitted gap, because it sends someone to chase a person who was never going to answer.
+
+Every deferred tension names an open question in the same note, one to one. Deferring something should open a thread rather than close one, and the pairing is arithmetic, which is why the lint can check it.
+
+## Derived Counts
+
+Four keys on every v2 note, counted from body tokens and never estimated:
+
+| Key                      | Counts                                                             |
+| ------------------------ | ------------------------------------------------------------------ |
+| `open_questions`         | `[open question:` tokens                                            |
+| `resolved_questions`     | `[open question resolved:` tokens                                   |
+| `deferred_tensions`      | `[tension: deferred]` tokens                                        |
+| `unpromoted_candidates`  | candidate tokens still carrying their prefix rather than a wiki link |
+
+These four are an explicit exception to omit-if-empty: a v2 note carries all four even when the value is zero. Without the exception a legitimate zero and a missing key look identical, which defeats the query the counts exist to serve. Finding every note with unfinished business is `grep -L 'open_questions: 0'`, and that only works if the key is always there.
+
+**Absent is not zero.** A note with no counts is v1 and its unresolved state is unknown. Nothing infers zero from silence, and a query filtering on these keys has to say which generation it covers.
 
 ## What the Lint Checks
 

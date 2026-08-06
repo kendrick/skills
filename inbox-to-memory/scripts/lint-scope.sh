@@ -68,6 +68,7 @@ v1=0
 v2=0
 failures=0
 current_file=""
+declare -a body_for_index=()
 
 fail() {
   echo "FAIL $current_file: $1: $2"
@@ -171,17 +172,28 @@ check_frontmatter() {
   check_key_order "$keys" "$order"
 }
 
-# Scanning stops at Raw Content. That zone is a verbatim capture of someone else's
-# writing, and whatever brackets it happens to contain are not this skill's tokens.
-check_tokens() {
-  local file="$1"
-  local body
-  body="$(awk 'f && /^## Raw Content/ { exit } f { print } /^---$/ { c++; if (c == 2) f = 1 }' "$file")"
+# Everything token-shaped is read from here, and it stops at Raw Content. That zone
+# is a verbatim capture of someone else's writing, and whatever brackets it happens
+# to contain are not this skill's tokens.
+# HTML comments come out too. Section guidance ships commented in the templates
+# precisely so it doesn't render, and its example tokens are illustrations rather
+# than claims about this note. Stripping them here rather than per-check is what
+# keeps the token scan and the derived counts reading the same body.
+extract_body() {
+  awk '
+    f && /^## Raw Content/ { exit }
+    f && /<!--/ { in_comment = 1 }
+    f && in_comment { if (/-->/) in_comment = 0; next }
+    f { print }
+    /^---$/ { c++; if (c == 2) f = 1 }
+  ' "$1"
+}
 
+check_tokens() {
   # Wiki links go first: an unlabeled [[target]] would otherwise read as a token
   # whose name happens to be the filename.
   local scanned
-  scanned="$(printf '%s\n' "$body" | sed 's/\[\[[^]]*\]\]//g')"
+  scanned="$(sed 's/\[\[[^]]*\]\]//g' "$1")"
 
   local token
   while IFS= read -r token; do
@@ -199,12 +211,111 @@ check_tokens() {
   fi
 }
 
+# grep exits 1 on no match, and under `set -o pipefail` that would abort the run
+# on the first clean file rather than reporting a zero.
+count_matches() {
+  { grep -oE -- "$2" "$1" 2>/dev/null || true; } | wc -l | tr -d ' '
+}
+
+frontmatter_number() {
+  awk -v key="$2" '
+    NR == 1 && $0 != "---" { exit }
+    NR > 1 && $0 == "---" { exit }
+    $0 ~ "^" key ":" { sub(/^[^:]*:[[:space:]]*/, ""); print; found = 1; exit }
+    END { if (!found) print "absent" }
+  ' "$1"
+}
+
+# Slugs carry a question's identity between notes, so they have to be stable and
+# typo-visible. Two to five kebab words is short enough to retype from memory and
+# long enough that two different questions don't collide.
+SLUG_RE='^[a-z0-9]+(-[a-z0-9]+){1,4}$'
+
+check_open_questions() {
+  local body="$1"
+  local line slug
+  while IFS= read -r line; do
+    slug="$(sed -E 's/^.*\[open question: ([^]]*)\].*$/\1/' <<<"$line")"
+    if ! [[ "$slug" =~ $SLUG_RE ]]; then
+      fail open-question-slug "\`$slug\` is not a 2-to-5-word kebab slug"
+    fi
+    local field
+    for field in resolver blocks default; do
+      grep -Fq -- "| $field:" <<<"$line" || fail open-question-fields "\`$slug\` is missing \`$field\`"
+    done
+  done < <(grep -F -- '[open question:' "$body" || true)
+}
+
+check_tensions() {
+  local body="$1"
+  local line disposition
+  local -a claimed=()
+  while IFS= read -r line; do
+    disposition="$(sed -E 's/^.*\[tension: ([^]]*)\].*$/\1/' <<<"$line")"
+    case "$disposition" in
+      resolved | deferred | unacknowledged) ;;
+      *)
+        fail tension-fields "\`$disposition\` is not resolved, deferred, or unacknowledged"
+        continue
+        ;;
+    esac
+    grep -Fq -- '| stakes:' <<<"$line" || fail tension-fields "a $disposition tension is missing \`stakes\`"
+    [[ "$disposition" == resolved ]] && ! grep -Fq -- '| resolved:' <<<"$line" &&
+      fail tension-fields "a resolved tension does not record its resolution"
+
+    [[ "$disposition" != deferred ]] && continue
+
+    local slug
+    slug="$(sed -E 's/^.*\| open question: ([a-z0-9-]+).*$/\1/' <<<"$line")"
+    if [[ "$slug" == "$line" ]]; then
+      fail tension-deferred-pairing "a deferred tension names no open question"
+      continue
+    fi
+    # One to one, both ways. A slug claimed twice means two tensions are riding on
+    # one thread, and closing the question would silently close both.
+    local prior
+    for prior in ${claimed[@]+"${claimed[@]}"}; do
+      [[ "$prior" == "$slug" ]] && fail tension-deferred-pairing "two deferred tensions both claim \`$slug\`"
+    done
+    claimed+=("$slug")
+    grep -Fq -- "[open question: $slug]" "$body" ||
+      fail tension-deferred-pairing "deferred tension names \`$slug\`, which this note never opens"
+  done < <(grep -F -- '[tension:' "$body" || true)
+}
+
+check_counts() {
+  local file="$1" body="$2"
+  local key expected stated
+  for key in open_questions resolved_questions deferred_tensions unpromoted_candidates; do
+    case "$key" in
+      open_questions) expected="$(count_matches "$body" '\[open question:')" ;;
+      resolved_questions) expected="$(count_matches "$body" '\[open question resolved:')" ;;
+      deferred_tensions) expected="$(count_matches "$body" '\[tension: deferred\]')" ;;
+      unpromoted_candidates) expected="$(count_matches "$body" '\[(memory candidate:|journal candidate:|working-state candidate\])')" ;;
+    esac
+    stated="$(frontmatter_number "$file" "$key")"
+    if [[ "$stated" == "absent" ]]; then
+      fail derived-counts "\`$key\` is missing; v2 notes carry all four even at zero"
+    elif [[ "$stated" != "$expected" ]]; then
+      fail derived-counts "\`$key\` says $stated, body has $expected"
+    fi
+  done
+}
+
 shopt -s nullglob
 
-# Only files the skill itself creates. CLAUDE.md and README.md live alongside them
-# in the same directories and are hand-maintained, so they carry no schema key and
-# would otherwise inflate the v1 count with files that can never be migrated.
+work="$(mktemp -d "${TMPDIR:-/tmp}/i2m-lint.XXXXXX")"
+trap 'rm -rf "$work"' EXIT
+: >"$work/open-slugs"
+
+# Pass one classifies and caches each v2 body, because the resolution and
+# recurrence checks are scope-wide: they can't be answered from inside one file.
+v2_files=()
+index=0
 for file in "$scope"/notes/*.md "$scope"/_memory/*/*.md "$scope"/entries/*.md; do
+  # Only files the skill itself creates. CLAUDE.md and README.md live alongside
+  # them and are hand-maintained, so they carry no schema key and would otherwise
+  # inflate the v1 count with files that can never be migrated.
   case "${file##*/}" in
     CLAUDE.md | README.md) continue ;;
   esac
@@ -213,10 +324,46 @@ for file in "$scope"/notes/*.md "$scope"/_memory/*/*.md "$scope"/entries/*.md; d
     continue
   fi
   v2=$((v2 + 1))
-  current_file="$file"
-  check_frontmatter "$file"
-  check_tokens "$file"
+  v2_files+=("$file")
+  index=$((index + 1))
+  body_for_index[$index]="$work/body.$index"
+  extract_body "$file" >"$work/body.$index"
+  grep -oE -- '\[open question: [^]]*\]' "$work/body.$index" |
+    sed -E 's/\[open question: (.*)\]/\1/' | sort -u >>"$work/open-slugs" || true
 done
+
+index=0
+for file in ${v2_files[@]+"${v2_files[@]}"}; do
+  index=$((index + 1))
+  current_file="$file"
+  body="${body_for_index[$index]}"
+  check_frontmatter "$file"
+  check_tokens "$body"
+  check_open_questions "$body"
+  check_tensions "$body"
+  # Records carry no body tokens and no counts; the four keys are a note contract.
+  grep -q '^memory_type:' "$file" || check_counts "$file" "$body"
+
+  # A resolution whose slug was never opened is almost always a typo, and the cost
+  # of missing it is a thread that looks closed while the question stays live.
+  while IFS= read -r slug; do
+    grep -Fqx -- "$slug" "$work/open-slugs" ||
+      fail open-question-resolution "\`$slug\` is resolved here but never opened anywhere in scope"
+  done < <(grep -oE -- '\[open question resolved: [^]]*\]' "$body" | sed -E 's/\[open question resolved: (.*)\]/\1/' | sort -u)
+done
+
+# A question open across three or more notes has outlived anyone's intention to
+# answer it, and arithmetic is better at noticing that than memory is. Three is a
+# guess and cheap to change; revisit it after a few weeks of real use.
+#
+# This reports rather than fails. A recurring question is a finding about the
+# engagement, not a defect in a file, and process mode is what promotes it to an
+# unacknowledged tension.
+RECURRENCE_THRESHOLD=3
+while read -r occurrences slug; do
+  [[ "$occurrences" -ge "$RECURRENCE_THRESHOLD" ]] &&
+    echo "RECURRING $slug: open in $occurrences notes"
+done < <(sort "$work/open-slugs" | uniq -c | sort -rn) || true
 
 echo "scope: $scope"
 echo "v1 files: $v1"

@@ -11,7 +11,7 @@ entities: [Atlas]
 open_questions: 0
 resolved_questions: 0
 deferred_tensions: 0
-unpromoted_candidates: 0
+unpromoted_candidates: 1
 ---
 
 ## Notable Quotes

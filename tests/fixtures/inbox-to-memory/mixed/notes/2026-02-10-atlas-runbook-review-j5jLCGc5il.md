@@ -8,11 +8,11 @@ attendees: [Priya Raghavan, Marcus Dell, Kendrick Arnett]
 tags: [runbook, cutover]
 topics: [rollback, freeze-window]
 entities: [Atlas, Priya Raghavan, Marcus Dell, Northwind Billing]
-open_questions: 1
+open_questions: 2
 resolved_questions: 1
 deferred_tensions: 1
 unpromoted_candidates: 2
-related: [extends::JJuYgImRWn]
+related: [extends::zFpm-hfD5u]
 ---
 
 ## Notable Quotes
@@ -22,7 +22,8 @@ related: [extends::JJuYgImRWn]
 
 ## Tensions
 
-- [tension: deferred] Rollback execution has no named owner and the group chose to settle it after the dry run rather than in the room. — stakes: an overnight cutover failure has nobody authorized to pull the trigger | open question: rollback-execution-owner
+- [tension: deferred] Rollback execution has no named owner and the group chose to settle it after the dry run rather than in the room. | stakes: an overnight cutover failure has nobody authorized to pull the trigger | open question: rollback-execution-owner
+- [tension: unacknowledged] The dry run date has been an open question for three sessions and nobody in the room noticed it was the same question. | stakes: prep keeps happening against a rehearsal that never gets scheduled, and the first real rollback becomes the rehearsal
 
 ## Decisions
 
@@ -38,8 +39,9 @@ related: [extends::JJuYgImRWn]
 
 ## Open Questions
 
-- [open question: rollback-execution-owner] Who executes the rollback if cutover fails overnight? — resolver: @Priya Raghavan | blocks: cutover go/no-go | default: the on-call engineer improvises, which is the failure mode the runbook exists to prevent
-- [open question resolved: billing-freeze-scope] Does the billing freeze lift before the cutover date? — resolved: Finance put 2026-02-28 in writing, ahead of the cutover week
+- [open question: rollback-execution-owner] Who executes the rollback if cutover fails overnight? | resolver: @Priya Raghavan | blocks: cutover go/no-go | default: the on-call engineer improvises, which is the failure mode the runbook exists to prevent
+- [open question: dry-run-date] When does the cutover dry run actually happen? | resolver: @unknown | blocks: rollback rehearsal | default: the first rollback anyone attempts is the real one
+- [open question resolved: billing-freeze-scope] Does the billing freeze lift before the cutover date? | resolved: Finance put 2026-02-28 in writing, ahead of the cutover week
 
 ## Action Items / Memory Candidates
 

@@ -75,6 +75,22 @@ Inside the extracted sections, flag candidates **inline** using the taxonomy bel
 
 Every token the skill emits is registered in the grammar table in [references/machine-contracts.md](references/machine-contracts.md) with the grep that finds it. Register a new shape there before using it; a token invented at the point of use is one nothing can retrieve later.
 
+#### Open Question Slugs
+
+Before writing the Open Questions section, grep the scope's prior notes for slugs already in play:
+
+```bash
+grep -rhoE '\[open question( resolved)?: [^]]*\]' <scope-root>/notes/ | sort | uniq -c | sort -rn
+```
+
+Reuse an existing slug for the same question rather than minting a new one. Then, in the note you're writing:
+
+- Report each recurring open question with the number of notes it has stayed open across. That count is what you bring to the person who can close it.
+- Rewrite this note's own entries to the resolved form for anything this session answered.
+- Flag a slug open across three or more notes as `[tension: unacknowledged]`, unless the transcript shows someone naming it out loud. Chronic non-answers should be escalated by arithmetic rather than by whoever happens to notice.
+
+**Process mode never edits a prior note.** Each note is a faithful record of what was known that day, and rewriting an old one to reflect a later answer destroys the only thing it was good for. A question resolved today gets its resolution in today's note.
+
 Use the heuristics in [references/scope-decisions.md](references/scope-decisions.md) to pick a scope. The short version: project is the floor (cheapest to be wrong); client requires recurrence across projects or stakeholder-level facts; journal requires generalization beyond this client.
 
 ### Phase 4 — Dispose Source

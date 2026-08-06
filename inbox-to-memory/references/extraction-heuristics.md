@@ -30,13 +30,37 @@ A tension is any place where the conversation wasn't aligned:
 - One participant hedged (then walked back) or contradicted themselves.
 - Stated agreement masked unspoken misalignment (look for "yeah but" or topic-changes after a hard question).
 
-Document each tension as one bullet with the participants and a line ref:
+Each tension carries stakes and a disposition:
 
 ```
-- Andrew wants Phase 1 scoped tighter; Anece wants more pilot coverage in scope. (raw: L201-L218)
+- [tension: deferred] Andrew wants Phase 1 scoped tighter; Anece wants more pilot coverage. | stakes: the pilot either proves the pattern or proves nothing, and nobody has said which | open question: phase-one-scope
 ```
 
-If a tension was resolved in-session, note the resolution. If it was deferred, that's an Open Question.
+Stakes are one clause naming what breaks if this goes unresolved. Without them, tensions get ranked by how heated the exchange was rather than by what they cost, and the quiet ones lose every time.
+
+The disposition is `resolved`, `deferred`, or `unacknowledged`.
+
+**Unacknowledged is the highest-value class.** A tension everyone named and deliberately parked renders identically in prose to one nobody in the room noticed, and the second kind is the one you pay for. If the disagreement is real but nobody in the transcript treats it as a disagreement, that is unacknowledged, and saying so is most of the value of writing it down.
+
+A deferred tension names a matching open question in the same note, one to one. Deferring something should open a thread rather than end one. A resolved tension records how it landed inline.
+
+## Open Questions
+
+An open question is a contract, not a topic. Each one carries a resolver, what it blocks, and a default naming what happens if nobody ever answers:
+
+```
+- [open question: phase-one-scope] Does Phase 1 include the pilot's second cohort? | resolver: @Anece | blocks: the Phase 1 SOW | default: the SOW ships with the wider scope and the margin absorbs it
+```
+
+Phrase it as **an answerable question, not a topic**. "Pilot scope" is a topic and you can never tell whether it closed. "Does Phase 1 include the second cohort?" is answerable, and an answer visibly ends it.
+
+The `blocks` field separates idle curiosity from something holding up work. When nothing is waiting on it, say `informational` rather than inventing a dependency.
+
+The `default` field is the forcing function. A question with no stated consequence drifts, and the consequence is usually the thing that gets someone to answer.
+
+The slug is lowercase kebab, two to five words, and identical in every note asking the same question. That stability is what makes recurrence visible: the fourth time it comes up, you can see it is the fourth time and bring a number to whoever can close it.
+
+Never invent a missing field. `@unknown` is a true answer; a guessed resolver sends someone to chase a person who was never going to answer.
 
 ## Stated vs Unstated Assumptions
 
