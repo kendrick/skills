@@ -52,11 +52,15 @@ inbox-to-memory/
 │   ├── records/      # Decision, Rule, PolicyRule, Exception, Context, Journal
 │   └── ...           # note, personal, working-state, journal templates
 ├── scripts/
-│   └── lint-scope.sh # what the verify phase runs
+│   ├── lint-scope.sh     # what the verify phase runs
+│   ├── migrate-scope.sh  # brings a v1 scope onto the v2 contract
+│   └── collapse-vtt.sh   # merges VTT cues into speaker turns
 └── references/       # progressive-disclosure reading
     ├── extraction-heuristics.md
     ├── scope-decisions.md
     ├── memory-bank-schema.md
+    ├── machine-contracts.md
+    ├── migration.md
     └── retrieval-funnel.md
 ```
 
@@ -64,7 +68,8 @@ inbox-to-memory/
 
 - The skill only operates on opted-in directories (ones containing `_inbox/` plus `_memory/` or `entries/`). Anywhere else, it refuses and offers to scaffold instead.
 - IDs come from the `nanoid` CLI (`nanoid -s 10`), which must be installed globally.
-- The verify step runs `scripts/lint-scope.sh` over the scope. Today it needs nothing but bash and awk. The frontmatter checks coming next parse YAML with `yq`, so install that alongside `nanoid` (`brew install yq`). Neither ships with macOS, and a missing one fails for a reason that has nothing to do with your notes.
+- The verify step runs `scripts/lint-scope.sh` over the scope, and it parses YAML with `yq`. Install that alongside `nanoid` (`brew install yq`). Neither ships with macOS, and a missing one fails for a reason that has nothing to do with your notes.
+- Notes written before the v2 contract keep working untouched; nothing forces a migration. When you do want one, `scripts/migrate-scope.sh` rewrites frontmatter only and never touches a body. It dry-runs by default and wants a clean working tree before it writes. See [references/migration.md](references/migration.md).
 - Draining the inbox is destructive by design: after grooming, text sources are gone from `_inbox/` and binaries have moved. The content survives in the notes, but if you want pristine originals kept elsewhere, copy before you drop.
 - Nothing is ever promoted to memory automatically. Every record requires your explicit per-candidate approval, and unpromoted candidates keep their `[memory candidate: ...]` flag as a record of what was considered.
 

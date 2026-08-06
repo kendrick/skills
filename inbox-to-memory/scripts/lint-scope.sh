@@ -17,8 +17,8 @@ set -euo pipefail
 # Contract key orders. Duplicated by hand into the templates and, later, the
 # migrator; the smoke test pins all three copies to the same string so a drift
 # fails there before it reaches a scope.
-NOTE_KEY_ORDER="schema id date type summary attendees tags topics entities source_file transcript_corrections open_questions resolved_questions deferred_tensions unpromoted_candidates related"
-RECORD_KEY_ORDER="schema id memory_type title status date effective_from effective_to last_confirmed source_refs applies_to owners tags themes related exception_to supersedes superseded_by"
+NOTE_KEY_ORDER="schema body_schema id date type summary attendees tags topics entities source_file transcript_corrections open_questions resolved_questions deferred_tensions unpromoted_candidates related"
+RECORD_KEY_ORDER="schema body_schema id memory_type title status date effective_from effective_to last_confirmed source_refs applies_to owners tags themes related exception_to supersedes superseded_by"
 
 # The closed token vocabulary, as the prefixes a scan actually produces. A token
 # shape missing from this list is one nothing can retrieve later, which is the
@@ -84,6 +84,20 @@ has_schema_key() {
     NR == 1 { if ($0 == "---") { in_fm = 1; next } else { exit } }
     in_fm && $0 == "---" { exit }
     in_fm && /^schema:/ { found = 1; exit }
+    END { exit (found ? 0 : 1) }
+  ' "$1"
+}
+
+# Migration rewrites frontmatter and leaves the body exactly as it was, so a
+# migrated file is v2 above the fence and v1 below it. `body_schema: 1` is that
+# file saying so. Without it the first migration run would turn every bare line
+# anchor written in 2025 into a lint failure, and the only way to clear them
+# would be editing notes whose whole value is being a record of that day.
+has_v1_body() {
+  awk '
+    NR == 1 { if ($0 == "---") { in_fm = 1; next } else { exit } }
+    in_fm && $0 == "---" { exit }
+    in_fm && /^body_schema:[[:space:]]*1[[:space:]]*$/ { found = 1; exit }
     END { exit (found ? 0 : 1) }
   ' "$1"
 }
@@ -412,12 +426,18 @@ for file in ${v2_files[@]+"${v2_files[@]}"}; do
   current_file="$file"
   body="${body_for_index[$index]}"
   check_frontmatter "$file"
-  check_tokens "$body"
-  check_open_questions "$body"
-  check_tensions "$body"
-  check_contradictions "$body"
-  check_decisions "$body"
-  check_anchors "$body"
+
+  # The body grammar checks are the ones a v1 body cannot satisfy and was never
+  # asked to. Links and counts stay on either way: a link that resolves nowhere is
+  # broken in any generation, and the migrator computes the counts it writes.
+  if ! has_v1_body "$file"; then
+    check_tokens "$body"
+    check_open_questions "$body"
+    check_tensions "$body"
+    check_contradictions "$body"
+    check_decisions "$body"
+    check_anchors "$body"
+  fi
   check_links "$body"
   # Records carry no body tokens and no counts; the four keys are a note contract.
   grep -q '^memory_type:' "$file" || check_counts "$file" "$body"

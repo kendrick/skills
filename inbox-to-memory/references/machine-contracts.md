@@ -6,6 +6,20 @@ This document is those assumptions written as rules, and [scripts/lint-scope.sh]
 
 Everything here applies to files carrying `schema: 2` and to nothing else. Files without a `schema` key are v1, they are legal forever, and the lint never flags them. A scope holding both generations is a normal state, not a half-finished migration.
 
+## The Two Generations, and the File That Is Both
+
+Migration rewrites frontmatter and leaves the body alone, so a migrated file is v2 above the fence and v1 below it. `body_schema: 1` is how it says so, and it splits the contract in two:
+
+| Carries                        | Frontmatter contract | Body grammar |
+| ------------------------------ | -------------------- | ------------ |
+| no `schema` key                | not checked          | not checked  |
+| `schema: 2`                    | checked              | checked      |
+| `schema: 2` and `body_schema: 1` | checked              | not checked  |
+
+Without the third row the first migration run would turn every bare line anchor written in 2025 into a lint failure, and the only way to clear them would be editing notes whose entire value is being an accurate record of that day. A body-shape check therefore keys off `body_schema`, never off `schema: 2`.
+
+Links and derived counts are checked in all three of the rows the lint touches. A link resolving nowhere is broken in any generation, and the migrator computes the counts it writes rather than guessing them.
+
 ## The Frontmatter Contract
 
 **Single-line values only.** Every line in the block is either a comment or a `key: value` pair starting at column zero. Lists are inline arrays (`tags: [runbook, cutover]`); block style is a failure. Nested mappings are a failure. A value that wraps onto a second line is a failure.
@@ -19,13 +33,13 @@ The reason is grep, not taste. `grep '^tags:'` returns the whole value or it ret
 Notes:
 
 ```
-schema, id, date, type, summary, attendees, tags, topics, entities, source_file, transcript_corrections, open_questions, resolved_questions, deferred_tensions, unpromoted_candidates, related
+schema, body_schema, id, date, type, summary, attendees, tags, topics, entities, source_file, transcript_corrections, open_questions, resolved_questions, deferred_tensions, unpromoted_candidates, related
 ```
 
 Records, including journal entries:
 
 ```
-schema, id, memory_type, title, status, date, effective_from, effective_to, last_confirmed, source_refs, applies_to, owners, tags, themes, related, exception_to, supersedes, superseded_by
+schema, body_schema, id, memory_type, title, status, date, effective_from, effective_to, last_confirmed, source_refs, applies_to, owners, tags, themes, related, exception_to, supersedes, superseded_by
 ```
 
 A file is a record when it has `memory_type` and a note otherwise. `themes` belongs to journal entries and `tags` to everything else; `exception_to` only to Exception records in canonical mode.

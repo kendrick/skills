@@ -5,10 +5,11 @@ description: Process raw inputs (transcripts, meeting notes, PDFs, slide decks, 
 
 # inbox-to-memory
 
-Two modes:
+Three modes:
 
 - **Process** (default): pulls raw inputs from a `_inbox/` queue, produces one groomed markdown note per input, and proposes memory records or journal entries for the user to approve.
 - **Scaffold**: stands up the directory structure and CLAUDE.md for a new scope — a project, a client, or the cross-client journal.
+- **Migrate**: rewrites an existing scope's v1 frontmatter onto the v2 contract, leaving every body untouched.
 
 Decide the mode from the user's phrasing. When ambiguous, ask.
 
@@ -16,6 +17,7 @@ Decide the mode from the user's phrasing. When ambiguous, ask.
 | ------------------------------------------------------------------------------------------------------------------------------------ | -------- |
 | "process the inbox", "groom these notes", "drain the inbox", "crystallize this candidate", "promote to memory", "promote to journal" | process  |
 | "scaffold a new project here", "set up notes substrate", "spin up a client", "set up the journal", "create a memory bank here"       | scaffold |
+| "migrate this scope", "bring these notes onto v2", "upgrade the frontmatter", "migrate to schema 2", "get this scope onto the contract" | migrate  |
 
 ---
 
@@ -337,6 +339,35 @@ When invoked at a pre-existing project (e.g., `pursuits/atlas/`) that already ha
 
 ---
 
+## Migrate Mode
+
+Bring one opted-in scope's v1 files onto the v2 frontmatter contract. Full spec in [references/migration.md](references/migration.md).
+
+```bash
+bash <skill-path>/scripts/migrate-scope.sh <scope-root>            # dry run, writes nothing
+bash <skill-path>/scripts/migrate-scope.sh <scope-root> --apply    # writes
+```
+
+One scope per run. Files already carrying `schema: 2` are skipped, so a second run over the same scope reports everything as already migrated and changes nothing.
+
+**Show the user the dry run and get approval before `--apply`.** Tier 1 is mechanical, so it's approvable as one batch rather than per file. Every transformation in it has a single correct answer; nothing in Tier 1 is the skill's opinion.
+
+What it changes, all above the fence:
+
+- Adds `schema: 2` and `body_schema: 1`.
+- Converts block-style lists to inline arrays and reorders keys to the contract.
+- Flattens `related` mappings to `<relation>::<id>` and journal `source_refs` to `<scope-path>::<note-id>`.
+- Computes the four derived counts from body tokens. A v1 note with no tokens gets zeros, because they were counted and not assumed.
+- Sets `last_confirmed` on a record to the record's own date.
+
+**The body is copied byte for byte**, which is why a migrated file carries `body_schema: 1`. Its frontmatter is v2 and its body is still v1, that combination is legal indefinitely, and the lint's body-grammar checks skip it. Old anchors, old phrasing, and old section names all stay exactly as written.
+
+The migrator refuses to guess. A `related` entry with an id but no relation keeps its bare id and gets reported; so does any frontmatter it can't parse, any rewrite that would overrun the 20-line budget, and any sub-field the compound form has no room for. Read the "needs a human" list at the end of the run.
+
+**Requires a clean working tree** unless run with `--allow-dirty`. Every safety claim here rests on `git diff` being readable afterward, and starting dirty makes a mistake indistinguishable from whatever was already uncommitted.
+
+---
+
 ## Frontmatter Quick Reference
 
 Full shapes live in the templates, and the rules behind them in [references/machine-contracts.md](references/machine-contracts.md). Values stay on one line, lists are inline arrays, and the block closes inside the first 20 lines. Omit any key you don't need; the order below is fixed among the keys you keep.
@@ -344,13 +375,13 @@ Full shapes live in the templates, and the rules behind them in [references/mach
 **Groomed note**, in order:
 
 ```
-schema, id, date, type, summary, attendees, tags, topics, entities, source_file, transcript_corrections, open_questions, resolved_questions, deferred_tensions, unpromoted_candidates, related
+schema, body_schema, id, date, type, summary, attendees, tags, topics, entities, source_file, transcript_corrections, open_questions, resolved_questions, deferred_tensions, unpromoted_candidates, related
 ```
 
 **Memory record** (memory-bank-aligned), in order:
 
 ```
-schema, id, memory_type, title, status, date, effective_from, effective_to, last_confirmed, source_refs, applies_to, owners, tags, themes, related, exception_to, supersedes, superseded_by
+schema, body_schema, id, memory_type, title, status, date, effective_from, effective_to, last_confirmed, source_refs, applies_to, owners, tags, themes, related, exception_to, supersedes, superseded_by
 ```
 
 `status` is `proposed|accepted|superseded|deprecated|rejected`. Type-specific body fields are in [references/memory-bank-schema.md](references/memory-bank-schema.md).
@@ -405,3 +436,4 @@ The scope's `CLAUDE.md` declares the mode in its top frontmatter blockquote. Rea
 - [references/memory-bank-schema.md](references/memory-bank-schema.md) — vendored summary of the substrate schema. Inspired by, not bound to.
 - [references/retrieval-funnel.md](references/retrieval-funnel.md) — token-efficient four-stage retrieval at scale.
 - [references/machine-contracts.md](references/machine-contracts.md) — the frontmatter contract and the closed token grammar, both enforced by the lint.
+- [references/migration.md](references/migration.md) — what Tier 1 migration changes, what it refuses to guess, and the safety properties behind both.

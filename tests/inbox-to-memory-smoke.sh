@@ -70,6 +70,18 @@ require_failure() {
   }
 }
 
+# Same grep as require_failure, different claim. That one asserts a lint caught a
+# planted defect; this one asserts a script reported what it did.
+require_output() {
+  local output="$1"
+  local text="$2"
+  grep -Fq -- "$text" <(printf '%s\n' "$output") || {
+    echo "expected output not reported: $text" >&2
+    printf '%s\n' "$output" >&2
+    exit 1
+  }
+}
+
 refute_failure() {
   local output="$1"
   local needle="$2"
@@ -516,5 +528,177 @@ require_text inbox-to-memory/assets/note.template.md "[contradicts accepted: [[<
 # to nanoid or the first verify run fails for a confusing reason.
 require_text inbox-to-memory/README.md "nanoid"
 require_text inbox-to-memory/README.md "brew install yq"
+
+# ---------------------------------------------------------------------------
+# Migration, Tier 1
+# ---------------------------------------------------------------------------
+
+# Snapshot the fixtures before any migration runs. Comparing against git would
+# only tell us the tree is dirty, which it legitimately is while someone is
+# editing a fixture; this compares the files to themselves.
+fixtures_before="$(find "$fixtures" -type f -exec shasum {} + | sort)"
+
+migrator=inbox-to-memory/scripts/migrate-scope.sh
+require_file "$migrator"
+[[ -x "$migrator" ]] || {
+  echo "$migrator must be executable" >&2
+  exit 1
+}
+bash -n "$migrator"
+
+# The mode only exists if something routes to it, and the phrasing row is the
+# only thing that does.
+require_text inbox-to-memory/SKILL.md "| migrate  |"
+require_text inbox-to-memory/SKILL.md "migrate this scope"
+require_text inbox-to-memory/SKILL.md "scripts/migrate-scope.sh"
+require_text inbox-to-memory/SKILL.md "references/migration.md"
+require_file inbox-to-memory/references/migration.md
+
+# Both key orders are duplicated by hand into the lint, the templates, and now the
+# migrator. The only thing keeping the four copies honest is that a drift fails here.
+migrator_note_order="schema body_schema id date type summary attendees tags topics entities source_file transcript_corrections open_questions resolved_questions deferred_tensions unpromoted_candidates related"
+migrator_record_order="schema body_schema id memory_type title status date effective_from effective_to last_confirmed source_refs applies_to owners tags themes related exception_to supersedes superseded_by"
+require_text "$migrator" "$migrator_note_order"
+require_text "$migrator" "$migrator_record_order"
+require_text "$lint" "$migrator_note_order"
+require_text "$lint" "$migrator_record_order"
+
+# Stand up a throwaway git repo from the old-only fixture. Everything below reads
+# `git status` and `git diff` to check the promises, so the fixture has to be a
+# real repo and it can never be the checked-in one.
+mig="$(mktemp -d "${TMPDIR:-/tmp}/i2m-migrate-test.XXXXXX")"
+trap 'rm -rf "$not_a_scope" "$inline_scope" "$dismissal_scope" "$mig"' EXIT
+cp -R "$fixtures/old-only/." "$mig/"
+git -C "$mig" init -q
+git -C "$mig" add -A
+git -C "$mig" -c user.email=t@t -c user.name=t commit -qm baseline
+
+# A dry run writes nothing. Proving that with git rather than with the script's
+# own report is the point: the report is what would lie.
+dry_out="$(bash "$migrator" "$mig" 2>&1)"
+require_output "$dry_out" "dry run; nothing was written"
+[[ -z "$(git -C "$mig" status --porcelain)" ]] || {
+  echo "the dry run modified the scope" >&2
+  git -C "$mig" status --porcelain >&2
+  exit 1
+}
+
+# Every proposed change is reported, one file at a time.
+for f in \
+  notes/2025-11-04-atlas-scoping-call-3iMu15QJ_x.md \
+  notes/2025-11-18-atlas-working-session-P5spzLt4Bz.md \
+  _memory/context/legacy-billing-freeze-Hq3U2Su1gy.md \
+  _memory/decisions/one-vendor-per-region-G2k65qG3Nc.md; do
+  require_output "$dry_out" "--- $mig/$f"
+done
+
+# A dirty tree stops an apply. The whole verification story downstream is "read
+# the diff," and a diff mixing migration with uncommitted work cannot be read.
+echo scratch >"$mig/notes/scratch.md"
+if bash "$migrator" "$mig" --apply >/dev/null 2>&1; then
+  echo "the migrator applied against a dirty working tree" >&2
+  exit 1
+fi
+rm "$mig/notes/scratch.md"
+
+apply_out="$(bash "$migrator" "$mig" --apply 2>&1)"
+require_output "$apply_out" "migrated: 4"
+require_output "$apply_out" "already v2: 0"
+require_output "$apply_out" "left alone: 0"
+
+# Nothing is renamed and nothing is deleted, so every wiki link that resolved
+# before still resolves. Anything other than a plain M here breaks that.
+while read -r status _; do
+  [[ "$status" == "M" ]] || {
+    echo "migration produced a non-modification change: $status" >&2
+    git -C "$mig" status --porcelain >&2
+    exit 1
+  }
+done < <(git -C "$mig" status --porcelain)
+
+[[ "$(git -C "$mig" status --porcelain | wc -l | tr -d ' ')" == "4" ]] || {
+  echo "expected exactly four modified files after migration" >&2
+  git -C "$mig" status --porcelain >&2
+  exit 1
+}
+
+# The body is the record of what someone knew that day, and it has to come
+# through untouched to the byte. This is the assertion the whole design serves.
+for f in $(git -C "$mig" ls-files '*.md'); do
+  before="$(git -C "$mig" show "HEAD:$f" | awk 'BEGIN { c = 0 } /^---$/ { c++; if (c == 2) { f = 1; next } } f' | shasum)"
+  after="$(awk 'BEGIN { c = 0 } /^---$/ { c++; if (c == 2) { f = 1; next } } f' "$mig/$f" | shasum)"
+  [[ "$before" == "$after" ]] || {
+    echo "migration changed the body of $f" >&2
+    exit 1
+  }
+done
+
+# Filenames carry the nanoid, and the id inside has to keep matching it.
+for f in $(git -C "$mig" ls-files '*.md'); do
+  base="${f##*/}"
+  base="${base%.md}"
+  require_text "$mig/$f" "id: ${base: -10}"
+done
+
+# The migrated scope passes its own lint, and the v1 bodies underneath do not get
+# flagged for a grammar that postdates them. Both halves matter: without the
+# second, migration would hand back a scope full of new failures.
+mig_out="$(run_lint "$mig")"
+require_line "$mig_out" "v1 files: 0" migrated
+require_line "$mig_out" "v2 files: 4" migrated
+require_line "$mig_out" "failures: 0" migrated
+refute_failure "$mig_out" "anchor-form"
+require_text "$mig/notes/2025-11-04-atlas-scoping-call-3iMu15QJ_x.md" "(raw: L12)"
+require_text "$mig/notes/2025-11-04-atlas-scoping-call-3iMu15QJ_x.md" "body_schema: 1"
+
+# Counts are counted, not assumed. This note carries two memory candidates and no
+# questions, so three zeros and a two is the only correct answer.
+require_text "$mig/notes/2025-11-04-atlas-scoping-call-3iMu15QJ_x.md" "open_questions: 0"
+require_text "$mig/notes/2025-11-04-atlas-scoping-call-3iMu15QJ_x.md" "unpromoted_candidates: 2"
+
+# Block lists flatten, relationships become compound strings, and a record with
+# no confirmation history is last confirmed the day it was written.
+require_text "$mig/notes/2025-11-18-atlas-working-session-P5spzLt4Bz.md" "related: [extends::3iMu15QJ_x]"
+require_text "$mig/notes/2025-11-04-atlas-scoping-call-3iMu15QJ_x.md" "attendees: [Priya Raghavan, Marcus Dell, Kendrick Arnett]"
+require_text "$mig/_memory/decisions/one-vendor-per-region-G2k65qG3Nc.md" "date: 2025-11-04"
+require_text "$mig/_memory/decisions/one-vendor-per-region-G2k65qG3Nc.md" "last_confirmed: 2025-11-04"
+
+# A relation is the half that carries the meaning. The migrator has no way to
+# recover one that was never written down, so it keeps the bare id and says so.
+require_output "$dry_out" "\`related\` holds bare id \`G2k65qG3Nc\`"
+require_text "$mig/_memory/context/legacy-billing-freeze-Hq3U2Su1gy.md" "related: [G2k65qG3Nc]"
+
+# Running twice changes nothing. Migration is the kind of thing people rerun when
+# they lose track of whether it finished.
+second_out="$(bash "$migrator" "$mig" --allow-dirty 2>&1)"
+require_output "$second_out" "migrated: 0"
+require_output "$second_out" "already v2: 4"
+
+# The journal source ref is the one compound built from a path instead of a
+# relation, and the sub-field the compound cannot hold gets named before it goes.
+jrn="$(mktemp -d "${TMPDIR:-/tmp}/i2m-journal.XXXXXX")"
+trap 'rm -rf "$not_a_scope" "$inline_scope" "$dismissal_scope" "$mig" "$jrn"' EXIT
+cp -R "$fixtures/journal-v1/." "$jrn/"
+jrn_out="$(bash "$migrator" "$jrn" --apply --allow-dirty 2>&1)"
+require_output "$jrn_out" "migrated: 1"
+require_output "$jrn_out" "dropped \`scope: client\`"
+jrn_entry="$jrn/entries/2025-12-09-freeze-dates-need-a-writer-6SMjpofI2b.md"
+require_text "$jrn_entry" "source_refs: [11 Clients/northwind/pursuits/atlas::ZGulgExW0q]"
+refute_text "$jrn_entry" "note_id:"
+jrn_lint="$(run_lint "$jrn")"
+require_line "$jrn_lint" "failures: 0" journal-migrated
+
+# The checked-in fixtures are never migrated in place. Every migration test works
+# on a copy, and a test that forgets to copy would otherwise rewrite the fixture
+# it is asserting against and pass forever after.
+[[ "$(find "$fixtures" -type f -exec shasum {} + | sort)" == "$fixtures_before" ]] || {
+  echo "a migration test wrote to a checked-in fixture" >&2
+  exit 1
+}
+
+# The third row of the generation table is the one that makes migration possible,
+# so the contract has to state it rather than leaving it to the lint's source.
+require_text "$contracts" "body_schema"
+require_text "$contracts" "A body-shape check therefore keys off \`body_schema\`, never off \`schema: 2\`."
 
 echo "inbox-to-memory smoke: ok"
