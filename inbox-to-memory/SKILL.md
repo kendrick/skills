@@ -109,7 +109,15 @@ Never auto-promote. Every record creation requires explicit user approval per ca
 
 ### Phase 6 — Verify
 
-Final pass before reporting done:
+Run the lint over the scope first:
+
+```bash
+bash <skill-path>/scripts/lint-scope.sh <scope-root>
+```
+
+It reports how many files in the scope are v1 and how many are v2, and exits nonzero if any check fails.
+
+Then check by hand what the lint can't:
 
 - Every candidate flag in every groomed note has either been resolved to a wiki link OR retains its original prefix. No half-rewrites, no orphans.
 - Every record file has a valid `id`, a `memory_type` matching its folder, and at least one entry in `source_refs`.
