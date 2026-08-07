@@ -44,4 +44,6 @@ topics:
 
 ## Raw Content
 
-Verbatim transcript omitted from the fixture. Line refs above are illustrative.
+"Cascade Analytics flagged some concerns about the EMEA timeline," Marcus said.
+"Their legal team needs two weeks for review before we can finalize."
+"We should sync with them on the rollout plan."

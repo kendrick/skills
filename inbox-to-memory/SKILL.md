@@ -366,6 +366,45 @@ The migrator refuses to guess. A `related` entry with an id but no relation keep
 
 **Requires a clean working tree** unless run with `--allow-dirty`. Every safety claim here rests on `git diff` being readable afterward, and starting dirty makes a mistake indistinguishable from whatever was already uncommitted.
 
+### Tier 2: Summary and Entities
+
+Most v1 notes carry neither key, and filling them in is the skill's reading of a note rather than a fact about it. So Tier 2 runs through a sidecar the migrator writes and then holds you to: it emits the text you're allowed to read, you fill in a proposals file, and the apply writes back only what it can source.
+
+```bash
+# 1. write the sidecar: one extract per v1 note, plus a proposals skeleton
+bash <skill-path>/scripts/migrate-scope.sh <scope-root> --tier2-extract <dir>
+
+# 2. fill in summary and entities for each note id in <dir>/proposals.yaml
+
+# 3. dry run the merge, show it to the user, then write
+bash <skill-path>/scripts/migrate-scope.sh <scope-root> --tier2 <dir>/proposals.yaml
+bash <skill-path>/scripts/migrate-scope.sh <scope-root> --tier2 <dir>/proposals.yaml --apply
+```
+
+Step 1 writes nothing to the scope. For every note it would migrate, it drops `<note-id>.extract.md` into `<dir>` holding that note's sections down to `## Raw Content` and no further, and appends an entry to `<dir>/proposals.yaml` keyed by note id, with the file it came from and `summary: ''` / `entities: []` waiting. Records get no extract; Tier 2 is a note concept.
+
+**Generate `summary` and `entities` from the emitted extract and from nothing else.** Not the note on disk, and never raw content. The extract is the reviewed layer, it is the only text the script can hold a proposal against, and a name that appears only below the fence came out of a transcript nobody checked. Each summary is one line that asserts nothing the extract doesn't support: no date, name, decision, or outcome that isn't already up there. Each entity is a canonical name appearing in the extract verbatim.
+
+The apply enforces the half it can. An entity missing from that note's extract gets `tier2-entity-unsourced` and the note is left exactly as it was, never written halfway. A summary spanning lines gets `tier2-summary-multiline`, since it would fail `frontmatter-single-line` the moment the lint ran. Both land in the "needs a human" list with everything else.
+
+Tier 2 rides along with the Tier 1 apply rather than following it. Once a note carries `schema: 2` the migrator skips it whole, so there is no adding summaries to a scope that already migrated. Run the extract before you apply anything.
+
+**Tier 2 is approved separately from Tier 1.** A plain `--apply` writes no `summary` or `entities` key anywhere, so approving the tier you can check never ships the one you can't. Tier 2's own approval is per file or one batch, whichever the user wants: the dry run prints each proposal inside the diff for the file it belongs to, so a reviewer reads a proposed summary against the note that would get it, and can rewrite one without touching the rest.
+
+Rejecting a proposal is an absence, not a rollback. Leave a note out of the proposals file and it still migrates, because Tier 1 never waits on Tier 2, and it comes out byte-identical to what a Tier-1-only apply would have written. There is nothing to undo, because nothing was written.
+
+### Verifying a Migration
+
+```bash
+bash <skill-path>/scripts/verify-migration.sh <scope-root> --since <pre-migration-ref>
+```
+
+The closing sweep, and it stands apart from the migrator on purpose: it reads git history rather than the working tree, so it works just as well on a migration someone applied and committed last week. It lints the scope, confirms every wiki-link target the scope carried at `<ref>` still resolves (by filename first, then by the trailing ten-character id, and it says how many needed that fallback), and reads `git diff --name-status -M <ref>` for anything renamed or deleted. Failures carry `verify-lint`, `verify-link`, or `verify-rename`, so the report names what broke.
+
+Verification reports and never repairs. It prints every failure it found rather than the first, changes nothing on disk, and exits nonzero.
+
+A passing run ends by printing one paragraph carrying the scope, the date, and the run's counts, for the user to paste into the scope's patterns journal. Offer it; don't write it. Nothing under the scope is touched, `patterns-journal/` included. A failing run prints no paragraph, because a migration that didn't verify has nothing paste-ready to say.
+
 ---
 
 ## Frontmatter Quick Reference

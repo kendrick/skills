@@ -7,6 +7,12 @@
 # go. Anything needing judgment (writing a summary, naming entities, choosing a
 # relation for a bare id) is reported and left alone.
 #
+# Tier 2 covers the two judgment calls this script can enforce without making
+# them itself: summary and entities. `--tier2-extract` hands an agent each v1
+# note's extracted sections plus a proposals file to fill in; `--tier2 --apply`
+# then holds that file to what the extract actually says, refusing anything it
+# can't verify rather than trusting the agent that wrote it.
+#
 # The body is copied byte for byte, so a migrated file is v2 above the fence and
 # v1 below it. It says so with `body_schema: 1`, which is what stops the lint from
 # holding a note written in 2025 to a grammar that did not exist yet.
@@ -23,14 +29,22 @@ FRONTMATTER_LINE_BUDGET=20
 apply=0
 allow_dirty=0
 scope=""
+tier2_file=""
+tier2_extract_dir=""
 
 usage() {
   cat >&2 <<'USAGE'
 usage: migrate-scope.sh <scope-path> [--apply] [--allow-dirty]
+       migrate-scope.sh <scope-path> --tier2-extract <dir>
+       migrate-scope.sh <scope-path> --tier2 <proposals-file> --apply
 
-  <scope-path>    a directory containing _inbox/ plus _memory/ or entries/
-  --apply         write the changes; without it nothing is written
-  --allow-dirty   proceed even though the working tree has uncommitted changes
+  <scope-path>       a directory containing _inbox/ plus _memory/ or entries/
+  --apply            write the changes; without it nothing is written
+  --allow-dirty      proceed even though the working tree has uncommitted changes
+  --tier2-extract    for each v1 note, write its extracted sections and a
+                      proposals skeleton to <dir>, and write nothing to the scope
+  --tier2            merge summary/entities from a filled-in proposals file into
+                      the Tier 1 rewrite; only takes effect together with --apply
 USAGE
 }
 
@@ -38,6 +52,22 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --apply) apply=1 ;;
     --allow-dirty) allow_dirty=1 ;;
+    --tier2)
+      shift
+      [[ $# -gt 0 ]] || {
+        echo "--tier2 requires a proposals file argument" >&2
+        exit 2
+      }
+      tier2_file="$1"
+      ;;
+    --tier2-extract)
+      shift
+      [[ $# -gt 0 ]] || {
+        echo "--tier2-extract requires a directory argument" >&2
+        exit 2
+      }
+      tier2_extract_dir="$1"
+      ;;
     -h | --help)
       usage
       exit 0
@@ -77,6 +107,29 @@ command -v yq >/dev/null 2>&1 || {
   echo "yq is required and not on PATH (brew install yq)" >&2
   exit 2
 }
+
+# Extract and apply are separate runs by design (see the header comment on
+# extract_body): the extract has to exist and be reviewed before anything
+# claims to be sourced from it, so one invocation never does both.
+if [[ -n "$tier2_file" && -n "$tier2_extract_dir" ]]; then
+  echo "--tier2 and --tier2-extract do not mix in one run" >&2
+  exit 2
+fi
+
+if [[ -n "$tier2_file" ]]; then
+  [[ -f "$tier2_file" ]] || {
+    echo "tier2 proposals file not found: $tier2_file" >&2
+    exit 2
+  }
+fi
+
+if [[ -n "$tier2_extract_dir" ]]; then
+  [[ "$apply" -eq 0 ]] || {
+    echo "--tier2-extract only writes extracts; it never applies" >&2
+    exit 2
+  }
+  mkdir -p "$tier2_extract_dir"
+fi
 
 # Every safety claim this script makes rests on `git diff` being readable
 # afterward. Starting from a dirty tree makes a mistake here indistinguishable
@@ -306,6 +359,70 @@ for file in "$scope"/notes/*.md "$scope"/_memory/*/*.md "$scope"/entries/*.md; d
     extras="$extras;resolved_questions=$(count_matches "$work/body" '\[open question resolved:')"
     extras="$extras;deferred_tensions=$(count_matches "$work/body" '\[tension: deferred\]')"
     extras="$extras;unpromoted_candidates=$((unpromoted + $(count_open_contradictions "$work/body")))"
+
+    note_id="$(props_value "$work/props" id)"
+
+    if [[ -n "$tier2_extract_dir" ]]; then
+      # This is the same $work/body the counts above just read. A second read of
+      # the file here would risk a boundary that drifts from extract_body's, and
+      # the entity check below trusts this file to be that one true extract.
+      cp "$work/body" "$tier2_extract_dir/$note_id.extract.md"
+      [[ -f "$tier2_extract_dir/proposals.yaml" ]] || echo "notes:" >"$tier2_extract_dir/proposals.yaml"
+      {
+        printf '  %s:\n' "$note_id"
+        printf '    file: %s\n' "$file"
+        printf "    summary: ''\n"
+        printf '    entities: []\n'
+      } >>"$tier2_extract_dir/proposals.yaml"
+    fi
+
+    if [[ -n "$tier2_file" ]]; then
+      tier2_proposed="$(YQ_ID="$note_id" yq -o=json '.notes[env(YQ_ID)] // "absent"' "$tier2_file")"
+      if [[ "$tier2_proposed" != '"absent"' ]]; then
+        tier2_summary="$(YQ_ID="$note_id" yq -r '.notes[env(YQ_ID)].summary // ""' "$tier2_file")"
+
+        # A summary that spans lines fails frontmatter-single-line the moment the
+        # lint sees it. Catching it here, before the write, is what keeps that
+        # failure from landing in a file someone already treats as migrated.
+        if [[ "$tier2_summary" == *$'\n'* ]]; then
+          echo "  $file: tier2-summary-multiline: summary must be a single line; left alone" >>"$work/findings"
+          refused=$((refused + 1))
+          continue
+        fi
+
+        tier2_unsourced=""
+        while IFS= read -r tier2_entity; do
+          [[ -n "$tier2_entity" ]] || continue
+          tier2_matches="$(grep -Fc -- "$tier2_entity" "$work/body" 2>/dev/null || true)"
+          if [[ "${tier2_matches:-0}" -eq 0 ]]; then
+            tier2_unsourced="$tier2_entity"
+            break
+          fi
+        done < <(YQ_ID="$note_id" yq -r '.notes[env(YQ_ID)].entities[]' "$tier2_file")
+
+        # An entity absent from the extract came from raw content or from the
+        # model's own memory, neither of which belongs in a field the skill
+        # later greps as fact.
+        if [[ -n "$tier2_unsourced" ]]; then
+          echo "  $file: tier2-entity-unsourced: \"$tier2_unsourced\" does not appear in this note's Tier 2 extract; left alone" >>"$work/findings"
+          refused=$((refused + 1))
+          continue
+        fi
+
+        # Fed straight into the props file rather than through `extras`: a
+        # summary is free prose, and `extras` splits on `;`, which a summary is
+        # entitled to contain.
+        {
+          echo "summary = $tier2_summary"
+          tier2_idx=0
+          while IFS= read -r tier2_entity; do
+            [[ -n "$tier2_entity" ]] || continue
+            echo "entities.$tier2_idx = $tier2_entity"
+            tier2_idx=$((tier2_idx + 1))
+          done < <(YQ_ID="$note_id" yq -r '.notes[env(YQ_ID)].entities[]' "$tier2_file")
+        } >>"$work/props"
+      fi
+    fi
   fi
 
   # The renderer writes findings to stderr, so a crash would otherwise land in the
@@ -362,4 +479,9 @@ fi
 if [[ "$apply" -eq 0 ]]; then
   echo
   echo "dry run; nothing was written. rerun with --apply to write these changes."
+fi
+
+if [[ -n "$tier2_extract_dir" ]]; then
+  echo
+  echo "tier2 extracts: $tier2_extract_dir"
 fi

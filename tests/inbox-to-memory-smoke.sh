@@ -554,6 +554,14 @@ require_text inbox-to-memory/SKILL.md "scripts/migrate-scope.sh"
 require_text inbox-to-memory/SKILL.md "references/migration.md"
 require_file inbox-to-memory/references/migration.md
 
+# Same reasoning one level down. A flag and a sibling script nobody names in
+# SKILL.md are a tier and a sweep that never run in the field, and the
+# migration.md line they replaced used to say Tier 2 wasn't implemented at all.
+require_text inbox-to-memory/SKILL.md "--tier2-extract"
+require_text inbox-to-memory/SKILL.md "--tier2 <dir>/proposals.yaml"
+require_text inbox-to-memory/SKILL.md "scripts/verify-migration.sh"
+refute_text inbox-to-memory/references/migration.md "is not implemented here"
+
 # Both key orders are duplicated by hand into the lint, the templates, and now the
 # migrator. The only thing keeping the four copies honest is that a drift fails here.
 migrator_note_order="schema body_schema id date type summary attendees tags topics entities source_file transcript_corrections open_questions resolved_questions deferred_tensions unpromoted_candidates related"
@@ -668,6 +676,17 @@ require_text "$mig/_memory/decisions/one-vendor-per-region-G2k65qG3Nc.md" "last_
 require_output "$dry_out" "\`related\` holds bare id \`G2k65qG3Nc\`"
 require_text "$mig/_memory/context/legacy-billing-freeze-Hq3U2Su1gy.md" "related: [G2k65qG3Nc]"
 
+# This apply never passed --tier2, so nothing here should carry a summary or
+# entities key. Tier 2 is an opt-in second pass, not a wider meaning for --apply.
+for f in $(git -C "$mig" ls-files '*.md'); do
+  summary_lines="$(grep -c '^summary:' "$mig/$f" 2>/dev/null || true)"
+  entities_lines="$(grep -c '^entities:' "$mig/$f" 2>/dev/null || true)"
+  [[ "${summary_lines:-0}" -eq 0 && "${entities_lines:-0}" -eq 0 ]] || {
+    echo "a Tier-1-only apply wrote a summary or entities key into $f" >&2
+    exit 1
+  }
+done
+
 # Running twice changes nothing. Migration is the kind of thing people rerun when
 # they lose track of whether it finished.
 second_out="$(bash "$migrator" "$mig" --allow-dirty 2>&1)"
@@ -687,6 +706,438 @@ require_text "$jrn_entry" "source_refs: [11 Clients/northwind/pursuits/atlas::ZG
 refute_text "$jrn_entry" "note_id:"
 jrn_lint="$(run_lint "$jrn")"
 require_line "$jrn_lint" "failures: 0" journal-migrated
+
+# ---------------------------------------------------------------------------
+# Migration, Tier 2
+# ---------------------------------------------------------------------------
+
+# The seam T-001 planted: this note's Raw Content names a vendor, "Cascade
+# Analytics", that appears nowhere above the fence. Every C-1/C-2 assertion
+# below keys on that exact string rather than on "Marcus". Marcus is also
+# below the fence, but he's already in `attendees`, so an assertion against
+# him would pass whether or not the fence held anything back.
+seam_note="notes/2025-11-04-atlas-scoping-call-3iMu15QJ_x.md"
+seam_id="3iMu15QJ_x"
+seam_planted_name="Cascade Analytics"
+other_note="notes/2025-11-18-atlas-working-session-P5spzLt4Bz.md"
+other_id="P5spzLt4Bz"
+seam_summary="Priya and Marcus disagreed over one-vendor-per-region in EMEA, with the billing freeze and contract renewal left as open questions."
+other_summary="Priya pushed to have the exception process documented, and nobody in the room owns writing it down."
+
+# --- Extraction stops at the fence (C-1) ----------------------------------
+
+t2_extract_scope="$(mktemp -d "${TMPDIR:-/tmp}/i2m-tier2-extract.XXXXXX")"
+trap 'rm -rf "$not_a_scope" "$inline_scope" "$dismissal_scope" "$mig" "$jrn" "$t2_extract_scope"' EXIT
+cp -R "$fixtures/old-only/." "$t2_extract_scope/"
+t2x_dir="$(mktemp -d "${TMPDIR:-/tmp}/i2m-tier2-sidecar.XXXXXX")"
+trap 'rm -rf "$not_a_scope" "$inline_scope" "$dismissal_scope" "$mig" "$jrn" "$t2_extract_scope" "$t2x_dir"' EXIT
+bash "$migrator" "$t2_extract_scope" --tier2-extract "$t2x_dir" >/dev/null
+
+seam_extract="$t2x_dir/$seam_id.extract.md"
+require_file "$seam_extract"
+require_text "$seam_extract" "## Notable Quotes"
+refute_text "$seam_extract" "$seam_planted_name"
+
+# Tier 2 is a note concept; a record has no extracted sections of its own, so
+# its id never gets an extract file.
+[[ ! -e "$t2x_dir/Hq3U2Su1gy.extract.md" ]] || {
+  echo "a memory record got a tier2 extract; tier2 only reaches notes" >&2
+  exit 1
+}
+
+# --- Sourced entities, the one-line summary, and subset approval (C-2, C-3, C-4) ---
+
+# A proposals file names notes by id, matching the id already inside each
+# frontmatter block. An id needs no quoting for yq, unlike a filename that
+# carries a slash and a dot.
+subset_scope="$(mktemp -d "${TMPDIR:-/tmp}/i2m-tier2-subset.XXXXXX")"
+trap 'rm -rf "$not_a_scope" "$inline_scope" "$dismissal_scope" "$mig" "$jrn" "$t2_extract_scope" "$t2x_dir" "$subset_scope"' EXIT
+cp -R "$fixtures/old-only/." "$subset_scope/"
+git -C "$subset_scope" init -q
+git -C "$subset_scope" add -A
+git -C "$subset_scope" -c user.email=t@t -c user.name=t commit -qm baseline
+
+subset_proposals="$t2x_dir/subset-proposals.yaml"
+cat >"$subset_proposals" <<YAML
+notes:
+  $seam_id:
+    summary: '$seam_summary'
+    entities: [Priya Raghavan, Marcus Dell]
+YAML
+
+subset_out="$(bash "$migrator" "$subset_scope" --tier2 "$subset_proposals" --apply 2>&1)"
+require_output "$subset_out" "migrated: 4"
+require_output "$subset_out" "left alone: 0"
+require_text "$subset_scope/$seam_note" "summary: '$seam_summary'"
+require_text "$subset_scope/$seam_note" "entities: [Priya Raghavan, Marcus Dell]"
+
+# The proposals file names only the seam note. The other note still migrates,
+# since Tier 1 never waits on Tier 2, but carries no summary or entities key
+# because nobody proposed any for it.
+refute_text "$subset_scope/$other_note" "summary:"
+refute_text "$subset_scope/$other_note" "entities:"
+
+subset_lint="$(run_lint "$subset_scope")"
+require_line "$subset_lint" "failures: 0" tier2-subset
+
+# C-5: a note the proposals file never named comes out exactly as a
+# Tier-1-only apply would have produced it. $mig never saw a --tier2 flag.
+[[ "$(shasum "$subset_scope/$other_note" | awk '{print $1}')" \
+  == "$(shasum "$mig/$other_note" | awk '{print $1}')" ]] || {
+  echo "a note omitted from the tier2 proposals file diverged from a Tier-1-only apply" >&2
+  diff "$subset_scope/$other_note" "$mig/$other_note" >&2 || true
+  exit 1
+}
+
+# --- Grouping in the dry run, and batched approval (C-4) ------------------
+
+batched_scope="$(mktemp -d "${TMPDIR:-/tmp}/i2m-tier2-batched.XXXXXX")"
+trap 'rm -rf "$not_a_scope" "$inline_scope" "$dismissal_scope" "$mig" "$jrn" "$t2_extract_scope" "$t2x_dir" "$subset_scope" "$batched_scope"' EXIT
+cp -R "$fixtures/old-only/." "$batched_scope/"
+git -C "$batched_scope" init -q
+git -C "$batched_scope" add -A
+git -C "$batched_scope" -c user.email=t@t -c user.name=t commit -qm baseline
+
+batched_proposals="$t2x_dir/batched-proposals.yaml"
+cat >"$batched_proposals" <<YAML
+notes:
+  $seam_id:
+    summary: '$seam_summary'
+    entities: [Priya Raghavan, Marcus Dell]
+  $other_id:
+    summary: '$other_summary'
+    entities: [Priya Raghavan]
+YAML
+
+# A reviewer edits one note's proposal without touching the rest, so each one
+# has to land in the diff block for the file it belongs to, not float free at
+# the end of the report where it could be approved against the wrong note.
+batched_dry="$(bash "$migrator" "$batched_scope" --tier2 "$batched_proposals" 2>&1)"
+seam_block="$(printf '%s\n' "$batched_dry" | awk -v hdr="--- $batched_scope/$seam_note" \
+  '$0 == hdr { grab = 1; next } grab && /^--- / { exit } grab { print }')"
+other_block="$(printf '%s\n' "$batched_dry" | awk -v hdr="--- $batched_scope/$other_note" \
+  '$0 == hdr { grab = 1; next } grab && /^--- / { exit } grab { print }')"
+[[ -n "$(printf '%s\n' "$seam_block" | grep -F '+summary:' || true)" ]] || {
+  echo "the seam note's tier2 proposal did not appear grouped under its own file" >&2
+  printf '%s\n' "$batched_dry" >&2
+  exit 1
+}
+[[ -n "$(printf '%s\n' "$other_block" | grep -F '+summary:' || true)" ]] || {
+  echo "the other note's tier2 proposal did not appear grouped under its own file" >&2
+  printf '%s\n' "$batched_dry" >&2
+  exit 1
+}
+[[ -z "$(git -C "$batched_scope" status --porcelain)" ]] || {
+  echo "the tier2 dry run modified the scope" >&2
+  exit 1
+}
+
+batched_out="$(bash "$migrator" "$batched_scope" --tier2 "$batched_proposals" --apply 2>&1)"
+require_output "$batched_out" "migrated: 4"
+require_output "$batched_out" "left alone: 0"
+require_text "$batched_scope/$seam_note" "summary: '$seam_summary'"
+require_text "$batched_scope/$other_note" "summary: '$other_summary'"
+require_text "$batched_scope/$other_note" "entities: [Priya Raghavan]"
+
+batched_lint="$(run_lint "$batched_scope")"
+require_line "$batched_lint" "failures: 0" tier2-batched
+
+# --- Refusal leaves the note untouched, never partial (C-2, C-3 mechanical) ---
+
+lifecycle_scope="$(mktemp -d "${TMPDIR:-/tmp}/i2m-tier2-lifecycle.XXXXXX")"
+trap 'rm -rf "$not_a_scope" "$inline_scope" "$dismissal_scope" "$mig" "$jrn" "$t2_extract_scope" "$t2x_dir" "$subset_scope" "$batched_scope" "$lifecycle_scope"' EXIT
+cp -R "$fixtures/old-only/." "$lifecycle_scope/"
+git -C "$lifecycle_scope" init -q
+git -C "$lifecycle_scope" add -A
+git -C "$lifecycle_scope" -c user.email=t@t -c user.name=t commit -qm baseline
+
+seam_baseline_hash="$(git -C "$lifecycle_scope" show "HEAD:$seam_note" | shasum | awk '{print $1}')"
+
+unsourced_proposals="$t2x_dir/unsourced-proposals.yaml"
+cat >"$unsourced_proposals" <<YAML
+notes:
+  $seam_id:
+    summary: '$seam_summary'
+    entities: [$seam_planted_name]
+YAML
+
+unsourced_out="$(bash "$migrator" "$lifecycle_scope" --tier2 "$unsourced_proposals" --apply 2>&1)"
+require_output "$unsourced_out" "$lifecycle_scope/$seam_note: tier2-entity-unsourced: \"$seam_planted_name\""
+[[ "$(shasum "$lifecycle_scope/$seam_note" | awk '{print $1}')" == "$seam_baseline_hash" ]] || {
+  echo "an unsourced-entity refusal still modified the note" >&2
+  exit 1
+}
+refute_text "$lifecycle_scope/$seam_note" "schema:"
+
+multiline_proposals="$t2x_dir/multiline-proposals.yaml"
+cat >"$multiline_proposals" <<YAML
+notes:
+  $seam_id:
+    summary: |
+      $seam_summary
+      A second line no reviewer approved.
+    entities: []
+YAML
+
+multiline_out="$(bash "$migrator" "$lifecycle_scope" --tier2 "$multiline_proposals" --apply --allow-dirty 2>&1)"
+require_output "$multiline_out" "$lifecycle_scope/$seam_note: tier2-summary-multiline"
+[[ "$(shasum "$lifecycle_scope/$seam_note" | awk '{print $1}')" == "$seam_baseline_hash" ]] || {
+  echo "a multiline-summary refusal still modified the note" >&2
+  exit 1
+}
+refute_text "$lifecycle_scope/$seam_note" "schema:"
+
+# A corrected proposal for the same note now succeeds, proving the two
+# refusals above were about the proposal, not about the note.
+seam_proposals="$t2x_dir/seam-proposals.yaml"
+cat >"$seam_proposals" <<YAML
+notes:
+  $seam_id:
+    summary: '$seam_summary'
+    entities: [Priya Raghavan, Marcus Dell]
+YAML
+
+seam_out="$(bash "$migrator" "$lifecycle_scope" --tier2 "$seam_proposals" --apply --allow-dirty 2>&1)"
+require_output "$seam_out" "migrated: 1"
+require_text "$lifecycle_scope/$seam_note" "summary: '$seam_summary'"
+
+lifecycle_lint="$(run_lint "$lifecycle_scope")"
+require_line "$lifecycle_lint" "failures: 0" tier2-lifecycle
+
+# --- A second run over a Tier-2-applied scope stays a no-op too (C-11) ----
+
+idem_dir="$(mktemp -d "${TMPDIR:-/tmp}/i2m-tier2-idem.XXXXXX")"
+trap 'rm -rf "$not_a_scope" "$inline_scope" "$dismissal_scope" "$mig" "$jrn" "$t2_extract_scope" "$t2x_dir" "$subset_scope" "$batched_scope" "$lifecycle_scope" "$idem_dir"' EXIT
+idem_out="$(bash "$migrator" "$lifecycle_scope" --tier2-extract "$idem_dir" 2>&1)"
+require_output "$idem_out" "migrated: 0"
+require_output "$idem_out" "already v2: 4"
+[[ ! -e "$idem_dir/proposals.yaml" ]] || {
+  echo "a fully Tier-2-applied scope still produced a tier2 proposals skeleton on re-run" >&2
+  exit 1
+}
+
+# ---------------------------------------------------------------------------
+# Verification
+# ---------------------------------------------------------------------------
+
+verify=inbox-to-memory/scripts/verify-migration.sh
+require_file "$verify"
+[[ -x "$verify" ]] || {
+  echo "$verify must be executable" >&2
+  exit 1
+}
+bash -n "$verify"
+
+verify_note_a="notes/2025-11-04-atlas-scoping-call-3iMu15QJ_x.md"
+verify_note_b="notes/2025-11-18-atlas-working-session-P5spzLt4Bz.md"
+verify_record_r2="_memory/decisions/one-vendor-per-region-G2k65qG3Nc.md"
+
+# Every scenario below starts from the same shape: a fresh copy of old-only,
+# a wiki link appended to note A pointing at note B, migrated for real with
+# Tier 1 --apply and committed. The link target drops the date prefix that
+# note B's filename carries, so a lookup by exact name can't succeed and the
+# id fallback is what actually resolves it -- the shape a hand-typed
+# reference to a dated note tends to take, and the only way to exercise the
+# fallback count without renaming anything migration itself wouldn't rename.
+setup_verify_scope() {
+  local dest="$1"
+  cp -R "$fixtures/old-only/." "$dest/"
+  printf '\nSee [[atlas-working-session-P5spzLt4Bz]] for background.\n' >>"$dest/$verify_note_a"
+  git -C "$dest" init -q
+  git -C "$dest" add -A
+  git -C "$dest" -c user.email=t@t -c user.name=t commit -qm baseline
+}
+
+# The only mechanical way to make a migrated note fail its own lint: an extra
+# key the contract never named. `frontmatter-known-keys` is deterministic and
+# planting it costs one line, so the report has something exact to name.
+plant_unknown_key() {
+  local file="$1"
+  awk '{ print } /^schema: 2$/ && !p { print "bogus_key: true"; p = 1 }' "$file" >"$file.verify-tmp"
+  mv "$file.verify-tmp" "$file"
+}
+
+hash_scope() {
+  find "$1" -type f -not -path '*/.git/*' -exec shasum {} + | sort
+}
+
+# --- A clean, passing run (C-7 fallback count, C-10) ------------------------
+
+v_pass="$(mktemp -d "${TMPDIR:-/tmp}/i2m-verify-pass.XXXXXX")"
+trap 'rm -rf "$not_a_scope" "$inline_scope" "$dismissal_scope" "$mig" "$jrn" "$t2_extract_scope" "$t2x_dir" "$subset_scope" "$batched_scope" "$lifecycle_scope" "$idem_dir" "$v_pass"' EXIT
+setup_verify_scope "$v_pass"
+v_pass_since="$(git -C "$v_pass" rev-parse HEAD)"
+bash "$migrator" "$v_pass" --apply >/dev/null
+git -C "$v_pass" add -A
+git -C "$v_pass" -c user.email=t@t -c user.name=t commit -qm migrated
+
+# Planted after the migration commit -- it only has to exist for the run
+# below, not survive as part of the history verify-migration.sh diffs against.
+mkdir -p "$v_pass/patterns-journal"
+echo sentinel >"$v_pass/patterns-journal/.keep"
+
+pass_out="$(bash "$verify" "$v_pass" --since "$v_pass_since")" && pass_status=0 || pass_status=$?
+[[ "$pass_status" -eq 0 ]] || {
+  echo "verify-migration.sh failed against a clean, fully migrated scope" >&2
+  printf '%s\n' "$pass_out" >&2
+  exit 1
+}
+require_output "$pass_out" "lint failures: 0"
+require_output "$pass_out" "links checked: 1 (id fallback: 1)"
+require_output "$pass_out" "renames: 0"
+require_output "$pass_out" "deletions: 0"
+require_output "$pass_out" "failures: 0"
+require_output "$pass_out" "Verified $v_pass against $v_pass_since"
+# The summary block above prints these same numbers on a failing run too, so
+# on its own it can't pin the record to the counts of THIS run. This checks
+# the paragraph's own interior instead, where a hard-coded record would show.
+require_output "$pass_out" "0 lint failures, 1 links checked (1 by id fallback), 0 renames, 0 deletions"
+require_output "$pass_out" "Paste this paragraph into the scope's patterns journal."
+
+# The record is stdout only. Nothing under the scope repeats it, and
+# patterns-journal/ -- the place a human actually pastes it -- is untouched.
+record_leak="$(grep -rlF -- "Paste this paragraph" "$v_pass" --exclude-dir=.git 2>/dev/null || true)"
+[[ -z "$record_leak" ]] || {
+  echo "the record paragraph leaked into a file under the scope: $record_leak" >&2
+  exit 1
+}
+[[ "$(cat "$v_pass/patterns-journal/.keep")" == "sentinel" ]] || {
+  echo "a passing verify-migration.sh run touched patterns-journal/" >&2
+  exit 1
+}
+
+# --- An aborting lint still fails verification, honestly (C-6) -------------
+#
+# Resolved as a sibling, so this copy of scripts/ makes verify-migration.sh
+# run *this* stub instead of the real lint checked into the repo -- the seam
+# the abort case can only be tested through.
+scripts_copy="$(mktemp -d "${TMPDIR:-/tmp}/i2m-verify-scripts.XXXXXX")"
+trap 'rm -rf "$not_a_scope" "$inline_scope" "$dismissal_scope" "$mig" "$jrn" "$t2_extract_scope" "$t2x_dir" "$subset_scope" "$batched_scope" "$lifecycle_scope" "$idem_dir" "$v_pass" "$scripts_copy"' EXIT
+cp -R inbox-to-memory/scripts/. "$scripts_copy/"
+cat >"$scripts_copy/lint-scope.sh" <<'STUB'
+#!/usr/bin/env bash
+# Stand-in for the abort case: exits before it ever prints a summary line, so
+# a check reading for one instead of the exit status would call this clean.
+echo "stub lint: refusing on purpose" >&2
+exit 2
+STUB
+chmod +x "$scripts_copy/lint-scope.sh"
+
+abort_out="$(bash "$scripts_copy/verify-migration.sh" "$v_pass" --since "$v_pass_since" 2>&1)" && abort_status=0 || abort_status=$?
+[[ "$abort_status" -ne 0 ]] || {
+  echo "verify-migration.sh exited zero against an aborting lint" >&2
+  exit 1
+}
+require_output "$abort_out" "verify-lint: lint-scope.sh aborted with exit status 2"
+clean_lint_claim="$(printf '%s\n' "$abort_out" | grep -F "lint failures: 0" || true)"
+[[ -z "$clean_lint_claim" ]] || {
+  echo "an aborting lint got reported as a clean sweep" >&2
+  printf '%s\n' "$abort_out" >&2
+  exit 1
+}
+
+# --- A committed rename, a committed deletion, and the link that breaks with
+#     it -- distinguishing the diff-based read from a porcelain one (C-7, C-8, C-9) ---
+
+v_combo="$(mktemp -d "${TMPDIR:-/tmp}/i2m-verify-combo.XXXXXX")"
+trap 'rm -rf "$not_a_scope" "$inline_scope" "$dismissal_scope" "$mig" "$jrn" "$t2_extract_scope" "$t2x_dir" "$subset_scope" "$batched_scope" "$lifecycle_scope" "$idem_dir" "$v_pass" "$scripts_copy" "$v_combo"' EXIT
+setup_verify_scope "$v_combo"
+v_combo_since="$(git -C "$v_combo" rev-parse HEAD)"
+bash "$migrator" "$v_combo" --apply >/dev/null
+git -C "$v_combo" add -A
+git -C "$v_combo" mv "$verify_record_r2" "_memory/decisions/one-vendor-per-region-renamed-G2k65qG3Nc.md"
+git -C "$v_combo" rm -f -q "$verify_note_b"
+git -C "$v_combo" -c user.email=t@t -c user.name=t commit -qm "post-migration edits"
+
+# The whole reason this script stands alone: the migration and both edits
+# above are committed, so the working tree is clean by porcelain's read.
+[[ -z "$(git -C "$v_combo" status --porcelain)" ]] || {
+  echo "the combo scope has uncommitted changes; the rename/deletion must be committed" >&2
+  exit 1
+}
+
+combo_before="$(hash_scope "$v_combo")"
+combo_out="$(bash "$verify" "$v_combo" --since "$v_combo_since")" && combo_status=0 || combo_status=$?
+combo_after="$(hash_scope "$v_combo")"
+
+[[ "$combo_status" -ne 0 ]] || {
+  echo "verify-migration.sh exited zero on a scope with a committed rename, deletion, and broken link" >&2
+  printf '%s\n' "$combo_out" >&2
+  exit 1
+}
+[[ "$combo_before" == "$combo_after" ]] || {
+  echo "a failing verify-migration.sh run changed files under the scope" >&2
+  exit 1
+}
+require_output "$combo_out" "verify-link: \`atlas-working-session-P5spzLt4Bz\` resolves neither by name nor by id \`P5spzLt4Bz\`"
+require_output "$combo_out" "verify-rename: \`$verify_record_r2\` renamed to \`_memory/decisions/one-vendor-per-region-renamed-G2k65qG3Nc.md\`"
+require_output "$combo_out" "verify-rename: \`$verify_note_b\` deleted"
+require_output "$combo_out" "failures: 3"
+combo_record="$(printf '%s\n' "$combo_out" | grep -F "Verified $v_combo against" || true)"
+[[ -z "$combo_record" ]] || {
+  echo "a failing verify-migration.sh run still printed the record paragraph" >&2
+  exit 1
+}
+
+# --- The link's own note survives; only the ref remembers the link (C-7) ---
+#
+# v_combo above can't tell a since-ref sweep from a tree sweep: note A, which
+# carries the link, is never touched post-migration, so both readings find it.
+# Here note A stays in the tree but the sentence carrying the link is edited
+# out of its current body -- an ordinary M, not a rename or deletion, so C-8
+# stays out of it -- while note B, the link's target, is renamed away. A sweep
+# that reads the current tree finds no link at all and reports zero checked;
+# only a sweep reading the --since ref still sees it, and then has to fail
+# because the target it names no longer resolves either way.
+v_linkdrop="$(mktemp -d "${TMPDIR:-/tmp}/i2m-verify-linkdrop.XXXXXX")"
+trap 'rm -rf "$not_a_scope" "$inline_scope" "$dismissal_scope" "$mig" "$jrn" "$t2_extract_scope" "$t2x_dir" "$subset_scope" "$batched_scope" "$lifecycle_scope" "$idem_dir" "$v_pass" "$scripts_copy" "$v_combo" "$v_linkdrop"' EXIT
+setup_verify_scope "$v_linkdrop"
+v_linkdrop_since="$(git -C "$v_linkdrop" rev-parse HEAD)"
+bash "$migrator" "$v_linkdrop" --apply >/dev/null
+git -C "$v_linkdrop" add -A
+git -C "$v_linkdrop" -c user.email=t@t -c user.name=t commit -qm migrated
+
+grep -vF 'See [[atlas-working-session-P5spzLt4Bz]] for background.' \
+  "$v_linkdrop/$verify_note_a" >"$v_linkdrop/$verify_note_a.tmp"
+mv "$v_linkdrop/$verify_note_a.tmp" "$v_linkdrop/$verify_note_a"
+git -C "$v_linkdrop" mv "$verify_note_b" "notes/renamed-target.md"
+git -C "$v_linkdrop" add -A
+git -C "$v_linkdrop" -c user.email=t@t -c user.name=t commit -qm "post-migration edits"
+
+linkdrop_out="$(bash "$verify" "$v_linkdrop" --since "$v_linkdrop_since")" && linkdrop_status=0 || linkdrop_status=$?
+[[ "$linkdrop_status" -ne 0 ]] || {
+  echo "verify-migration.sh exited zero when a link only visible at --since had its target renamed away" >&2
+  printf '%s\n' "$linkdrop_out" >&2
+  exit 1
+}
+require_output "$linkdrop_out" "links checked: 1 (id fallback: 0)"
+require_output "$linkdrop_out" "verify-link: \`atlas-working-session-P5spzLt4Bz\` resolves neither by name nor by id \`P5spzLt4Bz\`"
+
+# --- One planted lint defect, named and counted (C-6, C-9) ------------------
+
+v_lintdefect="$(mktemp -d "${TMPDIR:-/tmp}/i2m-verify-lintdefect.XXXXXX")"
+trap 'rm -rf "$not_a_scope" "$inline_scope" "$dismissal_scope" "$mig" "$jrn" "$t2_extract_scope" "$t2x_dir" "$subset_scope" "$batched_scope" "$lifecycle_scope" "$idem_dir" "$v_pass" "$scripts_copy" "$v_combo" "$v_linkdrop" "$v_lintdefect"' EXIT
+setup_verify_scope "$v_lintdefect"
+v_lintdefect_since="$(git -C "$v_lintdefect" rev-parse HEAD)"
+bash "$migrator" "$v_lintdefect" --apply >/dev/null
+git -C "$v_lintdefect" add -A
+git -C "$v_lintdefect" -c user.email=t@t -c user.name=t commit -qm migrated
+plant_unknown_key "$v_lintdefect/$verify_note_a"
+
+lintdefect_before="$(hash_scope "$v_lintdefect")"
+lintdefect_out="$(bash "$verify" "$v_lintdefect" --since "$v_lintdefect_since")" && lintdefect_status=0 || lintdefect_status=$?
+lintdefect_after="$(hash_scope "$v_lintdefect")"
+
+[[ "$lintdefect_status" -ne 0 ]] || {
+  echo "verify-migration.sh exited zero against a scope with a planted lint defect" >&2
+  exit 1
+}
+[[ "$lintdefect_before" == "$lintdefect_after" ]] || {
+  echo "a failing verify-migration.sh run changed files under the scope" >&2
+  exit 1
+}
+require_output "$lintdefect_out" "lint failures: 1"
+require_output "$lintdefect_out" "verify-lint: FAIL $v_lintdefect/$verify_note_a: frontmatter-known-keys: \`bogus_key\` is in neither key order"
 
 # The checked-in fixtures are never migrated in place. Every migration test works
 # on a copy, and a test that forgets to copy would otherwise rewrite the fixture
