@@ -26,7 +26,7 @@ Links and derived counts are checked in all three of the rows the lint touches. 
 
 The reason is grep, not taste. `grep '^tags:'` returns the whole value or it returns nothing, and a diff of a changed tag is one line rather than a moved block.
 
-**The block fits in the first 20 lines of the file.** This is the number that makes a header read a contract: an agent reading 20 lines is guaranteed to have the entire frontmatter, so stage three of the funnel can stop there without ever wondering whether it truncated something. Both key orders below fit inside the budget with room left over, which means overrunning it is almost always accumulated commented-out keys rather than real content.
+**The block fits in the first 20 lines of the file.** This is the number that makes a header read a contract: an agent reading 20 lines is guaranteed to have the entire frontmatter, so stage three of the funnel can stop there without ever wondering whether it truncated something. The note order's 17 keys close on line 19, one line to spare. The record order lists 19 names and would close on line 21, but `tags` and `themes` are mutually exclusive, so a record carries at most 18 and closes on exactly line 20, with no margin at all. One commented-out key puts a full record over. Adding a name to the record order means dropping one.
 
 **Fixed key order.** Omit any key you don't need; the order is fixed among the keys that are present. Two orders, one for notes and one for records.
 
@@ -149,7 +149,10 @@ Each failure names the file and the check that caught it, so a defect whose caus
 | `frontmatter-single-line`   | A line is neither a comment nor a `key: value` pair at column zero.  |
 | `frontmatter-known-keys`    | A key appears that neither order lists.                              |
 | `frontmatter-key-order`     | Present keys are not in contract order.                              |
+| `frontmatter-key-domain`    | The block carries both `tags` and `themes`.                          |
 | `token-grammar`             | A bracketed token in the body is absent from the grammar table.      |
 | `contradiction-fields`      | A contradiction names no record, or never states what that record claims. |
+
+`frontmatter-key-domain` is checked ahead of the budget on purpose. A record carrying both keys plus most of the order runs past line 20, and the budget failure would report that overrun without ever naming the mixup underneath it.
 
 Token scanning stops at `## Raw Content`. Raw content is a verbatim capture of someone else's writing, and whatever brackets it happens to contain are not this skill's tokens.

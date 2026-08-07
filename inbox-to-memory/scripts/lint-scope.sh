@@ -153,13 +153,24 @@ check_frontmatter() {
     return
   fi
 
+  local block
+  block="$(sed -n "2,$((end - 1))p" "$file")"
+
+  # Ahead of the budget guard on purpose: every file this check exists for is
+  # 21 lines and hits that guard's `return` first if the check runs after it,
+  # which is exactly the bug this check exists to fix.
+  local tags_lines themes_lines
+  tags_lines="$(printf '%s\n' "$block" | grep -cE '^tags:' || true)"
+  themes_lines="$(printf '%s\n' "$block" | grep -cE '^themes:' || true)"
+  if [[ "$tags_lines" -gt 0 && "$themes_lines" -gt 0 ]]; then
+    fail frontmatter-key-domain "carries both \`tags\` and \`themes\`, a record's key and a journal entry's"
+    return
+  fi
+
   if [[ "$end" -gt "$FRONTMATTER_LINE_BUDGET" ]]; then
     fail frontmatter-budget "closing --- on line $end, past the $FRONTMATTER_LINE_BUDGET-line budget"
     return
   fi
-
-  local block
-  block="$(sed -n "2,$((end - 1))p" "$file")"
 
   if ! printf '%s\n' "$block" | yq '.' >/dev/null 2>&1; then
     fail frontmatter-parses "yq could not parse the block"

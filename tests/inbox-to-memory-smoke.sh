@@ -150,13 +150,14 @@ done
 
 # One defect per file, so a count is a meaningful assertion and a check that
 # starts firing twice shows up as an arithmetic failure rather than a wash. The
-# arithmetic is off by one because a contradiction has to point at something
-# accepted: the lone record in this scope is link bait, carries no defect, and is
-# the reason failures trail the file count.
+# arithmetic still lands one short of the file count: vendor-lock-window is
+# link bait for the contradiction check and stays clean; every other v2 file
+# here, including the new tags/themes record, carries exactly one planted
+# defect.
 broken_out="$(run_lint "$fixtures/broken")"
 require_line "$broken_out" "v1 files: 0" broken
-require_line "$broken_out" "v2 files: 19" broken
-require_line "$broken_out" "failures: 18" broken
+require_line "$broken_out" "v2 files: 20" broken
+require_line "$broken_out" "failures: 19" broken
 
 if bash "$lint" "$fixtures/broken" >/dev/null 2>&1; then
   echo "lint exited zero on the broken fixture" >&2
@@ -180,10 +181,52 @@ require_failure "$broken_out" "FAIL $fixtures/broken/notes/2026-03-14-bare-line-
 require_failure "$broken_out" "FAIL $fixtures/broken/notes/2026-03-15-multiline-summary-gcnwRBmRy_.md: frontmatter-single-line:"
 require_failure "$broken_out" "FAIL $fixtures/broken/notes/2026-03-16-decision-bad-reversibility-w-6dqoA-ky.md: decision-fields:"
 require_failure "$broken_out" "FAIL $fixtures/broken/notes/2026-03-18-contradiction-no-claims-19UymDD7Rt.md: contradiction-fields:"
+require_failure "$broken_out" "FAIL $fixtures/broken/_memory/decisions/tags-themes-mixup-9YpQ2xLmZk.md: frontmatter-key-domain:"
 
 # The record the flag points at is clean. Asserting that here is what keeps the
-# link bait from quietly becoming an eighteenth defect nobody planted.
+# link bait from quietly becoming a twentieth defect nobody planted.
 refute_failure "$broken_out" "vendor-lock-window-WJicoHVdFw.md"
+
+# The file that motivated this check: every RECORD_KEY_ORDER key populated,
+# tags and themes both included, with the block closing on line 21, one line
+# past the budget. check_frontmatter returns at the first fail() it hits, so
+# the mixup has to win that race, or the 21-line record this check exists for
+# keeps reporting frontmatter-budget instead.
+overrun_scope="$(mktemp -d "${TMPDIR:-/tmp}/i2m-overrun.XXXXXX")"
+trap 'rm -rf "$overrun_scope"' EXIT
+mkdir -p "$overrun_scope/_inbox" "$overrun_scope/_memory/decisions"
+overrun_file="$overrun_scope/_memory/decisions/tags-and-themes-both-populated-Kx3fQ7pRtN.md"
+cat >"$overrun_file" <<'EOF'
+---
+schema: 2
+body_schema: 1
+id: Kx3fQ7pRtN
+memory_type: Decision
+title: 'A record with every RECORD_KEY_ORDER key populated'
+status: accepted
+date: 2026-02-22
+effective_from: 2026-02-22
+effective_to: null
+last_confirmed: 2026-02-22
+source_refs: [oKZJNnBgR5]
+applies_to: [vendor-selection]
+owners: [Marcus Dell]
+tags: [vendor]
+themes: [vendor-strategy]
+related: []
+exception_to: null
+supersedes: null
+superseded_by: null
+---
+
+Body content is irrelevant here; this file's frontmatter is the reproduction from the issue.
+EOF
+
+overrun_out="$(run_lint "$overrun_scope")"
+require_line "$overrun_out" "v2 files: 1" overrun-record
+require_line "$overrun_out" "failures: 1" overrun-record
+require_failure "$overrun_out" "FAIL $overrun_file: frontmatter-key-domain: carries both \`tags\` and \`themes\`"
+refute_failure "$overrun_out" "frontmatter-budget"
 
 # V1 notes anchor to bare line numbers everywhere, and that has to stay legal. The
 # check keys off the schema, never off the shape of the reference.
@@ -516,6 +559,10 @@ for outcome in "**Amend.**" "**Supersede.**" "**Dismiss.**"; do
   require_text inbox-to-memory/SKILL.md "$outcome"
 done
 require_text inbox-to-memory/SKILL.md "**A dismissed flag stays in the note permanently.**"
+
+# The table is what a reader consults after hitting a failure, so a check
+# missing from it ships a failure name that leads nowhere.
+require_text "$contracts" "frontmatter-key-domain"
 
 # Both halves of the disagreement travel together, and the contract says why.
 require_text "$contracts" "contradiction-fields"
