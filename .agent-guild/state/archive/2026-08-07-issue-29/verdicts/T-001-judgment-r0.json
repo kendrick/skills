@@ -1,0 +1,78 @@
+{
+  "task_id": "T-001",
+  "checker": "checker-judgment",
+  "vendor": "anthropic",
+  "model": "claude-opus-5[1m]",
+  "verdict": "pass",
+  "findings": [
+    {
+      "clause_id": "C-1",
+      "severity": "blocker",
+      "description": "RULING ON THE DERIVATION AT 0 AND 2: the count agrees with its noun at every printable value. Count 1 is observed off real stdout from the constitution's recipe. Counts 0 and 2 are derived by extracting the record block verbatim (verify-migration.sh:208-219, which contains the worker's new links_noun variable and its `if [[ \"$links_checked\" -eq 1 ]]` guard) and executing it with links_checked substituted -- so the derivation runs through the variable's logic, not merely through the format string. The variable defaults to `links` and narrows to `link` only at exactly 1, so no value can produce the disagreeing form, and the singular is not hard-coded (C-1's second failing example).",
+      "evidence": "OBSERVED, recipe stdout line 11: `Verified /private/tmp/i2m-record.KjQzNd against d280d3bf... on 2026-08-07: 0 lint failures, 1 link checked (1 by id fallback), 0 renames, 0 deletions. The link count covers ...` DERIVED, `sed -n '208,219p' inbox-to-memory/scripts/verify-migration.sh` driven with substituted counters: links_checked=0 -> `0 lint failures, 0 links checked (0 by id fallback)`; links_checked=2 -> `2 links checked (2 by id fallback)`; links_checked=3 -> `3 links checked (3 by id fallback)`. Block source, verify-migration.sh:212-215: `links_noun=links` / `if [[ \"$links_checked\" -eq 1 ]]; then` / `links_noun=link` / `fi`."
+    },
+    {
+      "clause_id": "C-2",
+      "severity": "blocker",
+      "description": "The record paragraph carries no directive to the reader and remains a single physical line. Isolated from a real passing run's stdout with the suite's own `grep -F \"Verified $scope against\"` idiom, it ends on its last factual sentence about the run; neither `Paste` nor `patterns journal` appears anywhere in it.",
+      "evidence": "Isolated record from a live run: `RECORD>>>Verified /private/tmp/i2m-byte2.FEuz4i against 39b4ba1f... on 2026-08-07: 0 lint failures, 1 link checked (1 by id fallback), 0 renames, 0 deletions. The link count covers every distinct wiki-link target the scope carried at that ref, resolved against the tree as it stands now.<<<` -- `isolated record line count: 1`; `grep -qF \"Paste\"` -> no match; `grep -qF \"patterns journal\"` -> no match. Source: verify-migration.sh:217-218, one printf with a single trailing \\n."
+    },
+    {
+      "clause_id": "C-3",
+      "severity": "blocker",
+      "description": "RULING ON THE PRECEDING BLANK LINE: satisfied, on a purposive reading. The split-stream run puts instruction, blank line, record, end of output on stdout with stderr at 0 bytes, and a blank line also sits at line 8, above the instruction. C-3 is silent on that line, and its enumeration (`the paste instruction on its own line, then a blank line, then the record paragraph`) constrains what follows the instruction and where output terminates, not what may precede it. The clause's two stated purposes both argue for keeping it: the record is still the last thing printed, and a blank line above the instruction further isolates it from the summary block, which is exactly the `not adjacent text a careless selection sweeps up` hygiene C-3 asks for on the other side. It is also the status quo rather than an addition -- at HEAD the record printf already opened with \\n, so a blank line already sat between `failures: 0` and the record; the worker moved that separator up rather than inventing one. The literalist alternative would require `failures: 0` to butt directly against the instruction, which is worse by C-3's own rationale and is a change the clause never asks for. The instruction's wording also points forward correctly (`Paste the paragraph below ...`), and a genuinely failing run prints neither line.",
+      "evidence": "Split-stream stdout, numbered: `7 failures: 0` / `8 <blank>` / `9 Paste the paragraph below into the scope's patterns journal.` / `10 <blank>` / `11 Verified ... as it stands now.` -- `od -c` on the tail confirms the file ends `s t a n d s   n o w . \\n` with nothing after; `wc -c < $S.err` = 0. Failing run (link target deleted post-migration, exit=1): stdout is 9 lines ending `failures: 2`; `grep -nF \"patterns journal\"` over both streams -> instruction ABSENT; `grep -nF \"Verified $F against\"` -> record ABSENT. Source: verify-migration.sh:216 (instruction printf, `'\\nPaste the paragraph below ...\\n\\n'`) and :217 (record printf), both inside the `failures -eq 0` block."
+    },
+    {
+      "clause_id": "C-4",
+      "severity": "blocker",
+      "description": "Every removed assertion is paired with a replacement of equal or greater specificity, and the assertion count over the record rises from 5 to 9. Nothing was deleted, commented out, or loosened.",
+      "evidence": "`git diff HEAD -- tests/inbox-to-memory-smoke.sh`. Pair 1: `\"0 lint failures, 1 links checked (1 by id fallback), 0 renames, 0 deletions\"` -> `\"0 lint failures, 1 link checked (1 by id fallback), 0 renames, 0 deletions\"` (same shape, one word). Pair 2: `require_output \"$pass_out\" \"Paste this paragraph into the scope's patterns journal.\"` -> `require_line \"$pass_out\" \"Paste the paragraph below into the scope's patterns journal.\" verify-pass` at :1049 -- require_line is grep -Fqx (helper at :49), strictly stronger than a substring search. Pair 3: `record_leak=\"$(grep -rlF -- \"Paste this paragraph\" ...)\"` -> two needles, `\"Verified $v_pass against\"` at :1070 and the full instruction sentence at :1075; both match strictly smaller sets than the old fragment. Counts -- HEAD: :1037, :1041, :1042, :1046, :1123 = 5. Now: :1037, :1041, :1049, :1053-1058, :1059-1063, :1070, :1075, :1152-1156, :1160-1164 = 9. No `refute_output` helper added (all four suite hunks are at :1041 and below)."
+    },
+    {
+      "clause_id": "C-5",
+      "severity": "blocker",
+      "description": "Every needle aimed at the record is emittable by the changed script, and all four negative checks were falsified -- each fired when fed what it hunts for. The two the clause flags as at risk were both re-derived by the worker rather than left stale.",
+      "evidence": "Emittability, against observed stdout: `Verified $v_pass against $v_pass_since`, `0 lint failures, 1 link checked (1 by id fallback), 0 renames, 0 deletions`, and the whole line `Paste the paragraph below into the scope's patterns journal.` all appear verbatim in the live run; `patterns journal` is emitted on stdout line 9, so both negatives using it are live rather than stale. FALSIFICATIONS on a scratch copy, each run alone: (a) planting `Verified $v_pass against ...` into `$v_pass/patterns-journal/planted.md` -> EXIT=1, `the record paragraph leaked into a file under the scope: .../patterns-journal/planted.md`; (b) planting the instruction sentence into `$v_pass/notes/planted-instruction.md` -> EXIT=1, `the paste instruction leaked into a file under the scope: ...`; (c) appending a forged record to `$combo_out` before the :1152 extraction -> EXIT=1, `a failing verify-migration.sh run still printed the record paragraph`; (d) appending the instruction to `$combo_out` -> EXIT=1, `a failing verify-migration.sh run still printed the paste instruction`."
+    },
+    {
+      "clause_id": "C-6",
+      "severity": "blocker",
+      "description": "Both mutants make the suite exit nonzero on a record assertion. The repo itself was never mutated and `git checkout --` was never run; all mutation happened on an rsync'd scratch copy whose baseline was confirmed green first, and the copy was restored to green afterward.",
+      "evidence": "Scratch copy at /private/tmp/i2m-scratch.GTFmCG/repo (carries the worker's unstaged fix: 3 hits for links_noun, 2 for `Paste the paragraph below`). BASELINE: `bash <copy>/tests/inbox-to-memory-smoke.sh` -> `inbox-to-memory smoke: ok`, BASELINE_EXIT=0. COUNT MUTANT (printf count args hard-coded to `0 0 \"$links_noun\" 0 0 0` at :218) -> EXIT=1, `expected output not reported: 0 lint failures, 1 link checked (1 by id fallback), 0 renames, 0 deletions` -- the record's interior-count assertion at :1041. Variant with the noun also forced to `links` -> EXIT=1, same assertion. PLACEMENT MUTANT (instruction printf at :216 deleted, sentence welded onto the record format string's tail) -> EXIT=1, `lint on verify-pass did not report: Paste the paragraph below into the scope's patterns journal.` -- require_line at :1049. Restored: RESTORED_EXIT=0. Repo re-verified unmutated afterward: `git status --porcelain` shows only the two artifacts, repo suite EXIT=0."
+    },
+    {
+      "clause_id": "C-7",
+      "severity": "blocker",
+      "description": "Both hunks land inside the `failures -eq 0` record block or in its comment. The summary echos, the sweeps, the counters, the record's gate, and the exit path are all untouched, and the script still leaves the scope byte-identical. The narrow exception is not even needed: links_noun sits inside the block.",
+      "evidence": "`git diff HEAD -U0 -- inbox-to-memory/scripts/verify-migration.sh` -> exactly two hunks: `@@ -203 +203,5 @@` (the block's own comment, verify-migration.sh:201-207) and `@@ -205,2 +209,10 @@ if [[ \"$failures\" -eq 0 ]]; then` (the two printfs, now :212-218, inside the block opened at :208). No hunk touches :193-199 (the seven summary echos, byte-identical to HEAD), the sweeps, the counters, the gate at :208, or the exit at :221. `grep -n links_noun verify-migration.sh` -> 212, 214, 218 only: assigned inside the block, read once in the record printf, nowhere else. Byte identity from a live run: `scope byte-identical: YES`, `patterns-journal/.keep = sentinel`, record and instruction both `NONE` under the scope."
+    },
+    {
+      "clause_id": "C-8",
+      "severity": "blocker",
+      "description": "All three suites exit 0 on the unmutated repo.",
+      "evidence": "`bash tests/inbox-to-memory-smoke.sh && bash tests/file-issue-smoke.sh && bash tests/handoff-smoke.sh` -> `inbox-to-memory smoke: ok` / `Rendered skill: /private/tmp/handoff-rendered.tIudXH` / `Generated skill is current: /Users/karnett/repos/skills/handoff/SKILL.md`, C8_EXIT=0. Re-run after all mutation work: `inbox-to-memory smoke: ok`, EXIT=0."
+    },
+    {
+      "clause_id": "C-9",
+      "severity": "blocker",
+      "description": "The diff touches only the two artifact paths; nothing else in the tree is modified.",
+      "evidence": "`python3 .agent-guild/scripts/check-diff-scope.py inbox-to-memory/scripts/verify-migration.sh tests/inbox-to-memory-smoke.sh inbox-to-memory/references/migration.md inbox-to-memory/SKILL.md` -> `OK: 2 path(s) in scope`, C9_EXIT=0. Corroborated by `git status --porcelain`: ` M inbox-to-memory/scripts/verify-migration.sh` and ` M tests/inbox-to-memory-smoke.sh`, nothing else."
+    },
+    {
+      "clause_id": "C-10",
+      "severity": "major",
+      "description": "Both doc sentences are unedited and both still hold against a real passing run -- the expected outcome the clause names. Every claim in each was checked individually against observed stdout.",
+      "evidence": "`git diff HEAD --stat` lists only the two artifacts; neither doc file appears, so both are byte-identical to HEAD. migration.md:148: `A passing run ends by printing one paragraph carrying the scope, the date, and that run's counts, ready to paste into the scope's patterns journal. It goes to stdout and nowhere else ... A failing run prints no paragraph`. Checked -- `ends by printing`: the record is stdout's last line (line 11, od confirms nothing after its \\n); `carrying the scope, the date, and that run's counts`: all three present in the observed record; `stdout and nowhere else`: stderr 0 bytes, `record leaked under scope? NONE`, `patterns-journal/.keep = sentinel`; `A failing run prints no paragraph`: confirmed on the exit=1 run. SKILL.md:406 makes the same four claims plus `Offer it; don't write it` -- all hold identically, and the instruction line now makes the offer explicit. The instruction printing above the record is what keeps `ends by` true; neither sentence refers to it."
+    },
+    {
+      "clause_id": "C-11",
+      "severity": "blocker",
+      "description": "All three required assertions exist in the shapes the clause names, and the first two are independently load-bearing under the placement mutant -- each was isolated by neutralizing the other, and each fired on its own.",
+      "evidence": "STRUCTURE, tests/inbox-to-memory-smoke.sh: (1) record isolated with the prescribed `grep -F` idiom at :1053 (`pass_record=\"$(printf '%s\\n' \"$pass_out\" | grep -F \"Verified $v_pass against\" || true)\"`), guarded non-empty at :1054-1058, instruction's absence from that extracted line asserted at :1059-1063; (2) whole-line pin via `require_line` (grep -Fqx, helper at :49) at :1049; (3) absence from the failing combo run at :1160-1164, alongside the record-absence check now at :1152-1156. LOAD-BEARING, placement mutant on the scratch copy: with :1049 removed -> EXIT=1, `the record paragraph still tells the reader to paste it: Verified ... as it stands now. Paste the paragraph below into the scope's patterns journal.` (assertion 1 fires alone). With the :1059-1063 block removed -> EXIT=1, `lint on verify-pass did not report: Paste the paragraph below into the scope's patterns journal.` (assertion 2 fires alone). The mutation half ran on a writing checker against a scratch copy; the repo was never mutated."
+    }
+  ],
+  "timestamp": "2026-08-07T18:08:16Z",
+  "duration_ms": null,
+  "cost_usd": null
+}
