@@ -1038,14 +1038,43 @@ require_output "$pass_out" "Verified $v_pass against $v_pass_since"
 # The summary block above prints these same numbers on a failing run too, so
 # on its own it can't pin the record to the counts of THIS run. This checks
 # the paragraph's own interior instead, where a hard-coded record would show.
-require_output "$pass_out" "0 lint failures, 1 links checked (1 by id fallback), 0 renames, 0 deletions"
-require_output "$pass_out" "Paste this paragraph into the scope's patterns journal."
+require_output "$pass_out" "0 lint failures, 1 link checked (1 by id fallback), 0 renames, 0 deletions"
+
+# The paste instruction stands on its own line above the record, and
+# require_output is blind to that: it greps the whole capture, so it matches
+# either way, whether the sentence stands alone or rides the record's tail.
+# The two checks below pin the separation itself. First the instruction as a
+# whole line -- require_line is grep -Fqx, so a copy welded into the paragraph
+# will not satisfy it.
+require_line "$pass_out" "Paste the paragraph below into the scope's patterns journal." verify-pass
+# Then the record on its own, pulled out of the capture, which is where a
+# welded instruction would show. The needle is deliberately the widest
+# fragment any paste directive has to carry, so a reworded one trips it too.
+pass_record="$(printf '%s\n' "$pass_out" | grep -F "Verified $v_pass against" || true)"
+[[ -n "$pass_record" ]] || {
+  echo "a passing verify-migration.sh run printed no record paragraph" >&2
+  printf '%s\n' "$pass_out" >&2
+  exit 1
+}
+record_directive="$(printf '%s\n' "$pass_record" | grep -F "patterns journal" || true)"
+[[ -z "$record_directive" ]] || {
+  echo "the record paragraph still tells the reader to paste it: $pass_record" >&2
+  exit 1
+}
 
 # The record is stdout only. Nothing under the scope repeats it, and
 # patterns-journal/ -- the place a human actually pastes it -- is untouched.
-record_leak="$(grep -rlF -- "Paste this paragraph" "$v_pass" --exclude-dir=.git 2>/dev/null || true)"
+# Two needles because there are two lines: the record caught by its opening,
+# the instruction by its whole sentence. A needle here that went stale would
+# pass forever and read later as coverage, which is worse than no check.
+record_leak="$(grep -rlF -- "Verified $v_pass against" "$v_pass" --exclude-dir=.git 2>/dev/null || true)"
 [[ -z "$record_leak" ]] || {
   echo "the record paragraph leaked into a file under the scope: $record_leak" >&2
+  exit 1
+}
+instruction_leak="$(grep -rlF -- "Paste the paragraph below into the scope's patterns journal." "$v_pass" --exclude-dir=.git 2>/dev/null || true)"
+[[ -z "$instruction_leak" ]] || {
+  echo "the paste instruction leaked into a file under the scope: $instruction_leak" >&2
   exit 1
 }
 [[ "$(cat "$v_pass/patterns-journal/.keep")" == "sentinel" ]] || {
@@ -1123,6 +1152,14 @@ require_output "$combo_out" "failures: 3"
 combo_record="$(printf '%s\n' "$combo_out" | grep -F "Verified $v_combo against" || true)"
 [[ -z "$combo_record" ]] || {
   echo "a failing verify-migration.sh run still printed the record paragraph" >&2
+  exit 1
+}
+# The instruction prints as a line of its own, so its absence on a failing run
+# is its own claim. Without this, a regression that offered the paste line
+# above a record that correctly never came would go unnoticed.
+combo_instruction="$(printf '%s\n' "$combo_out" | grep -F "patterns journal" || true)"
+[[ -z "$combo_instruction" ]] || {
+  echo "a failing verify-migration.sh run still printed the paste instruction" >&2
   exit 1
 }
 

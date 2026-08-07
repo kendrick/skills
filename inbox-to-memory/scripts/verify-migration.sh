@@ -200,10 +200,22 @@ echo "failures: $failures"
 
 # The record is stdout-only and exists for a passing run alone: a migration
 # that did not verify has nothing paste-ready to say, and nothing here ever
-# touches patterns-journal/ or any other file.
+# touches patterns-journal/ or any other file. The paste instruction prints
+# above the paragraph rather than inside it: an instruction welded into the
+# record travels with it into the journal, where the entry then tells the
+# reader to file it somewhere it already is. Printing it first also leaves the
+# record as the last thing the run prints.
 if [[ "$failures" -eq 0 ]]; then
-  printf '\nVerified %s against %s on %s: %s lint failures, %s links checked (%s by id fallback), %s renames, %s deletions. The link count covers every distinct wiki-link target the scope carried at that ref, resolved against the tree as it stands now. Paste this paragraph into the scope'"'"'s patterns journal.\n' \
-    "$scope" "$since_ref" "$(date +%Y-%m-%d)" "$lint_failures" "$links_checked" "$links_fallback" "$renames" "$deletions"
+  # Links are the only counter here that can carry a one. The other three call
+  # `fail` when nonzero, and a failing run prints no record at all, so they
+  # only ever reach this paragraph at zero, where the plural is already right.
+  links_noun=links
+  if [[ "$links_checked" -eq 1 ]]; then
+    links_noun=link
+  fi
+  printf '\nPaste the paragraph below into the scope'"'"'s patterns journal.\n\n'
+  printf 'Verified %s against %s on %s: %s lint failures, %s %s checked (%s by id fallback), %s renames, %s deletions. The link count covers every distinct wiki-link target the scope carried at that ref, resolved against the tree as it stands now.\n' \
+    "$scope" "$since_ref" "$(date +%Y-%m-%d)" "$lint_failures" "$links_checked" "$links_noun" "$links_fallback" "$renames" "$deletions"
 fi
 
 [[ "$failures" -eq 0 ]]
