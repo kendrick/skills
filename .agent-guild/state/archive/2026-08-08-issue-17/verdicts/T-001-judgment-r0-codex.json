@@ -1,0 +1,18 @@
+{
+  "task_id": "T-001",
+  "checker": "checker-courier",
+  "vendor": "openai",
+  "model": "gpt-5.6-terra",
+  "verdict": "blocked",
+  "findings": [
+    {
+      "clause_id": "identity-validation",
+      "severity": "blocker",
+      "description": "Vendor response failed identity validation. Retry was attempted; both attempts produced verdicts with invalid checker and model fields.",
+      "evidence": "First attempt: checker='checker-judgment' (expected 'checker-courier'), model='gpt-5.6-sol' (expected 'gpt-5.6-terra'). Second attempt: checker='checker-judgment' (expected 'checker-courier'), model='gpt-5' (expected 'gpt-5.6-terra'). The vendor's codex lane did not accept the task identity requirements (checker='checker-courier', model='gpt-5.6-terra'). First response produced a 'fail' verdict arguing C-13 hard-wrapping is an automatic failure. Second response also produced a 'fail' verdict with the same reasoning. Both responses failed validation because they contained checker='checker-judgment' and incorrect model names instead of the required courier identity. Per the hard rule, after two invalid responses, this check cannot proceed to a second opinion."
+    }
+  ],
+  "timestamp": "2026-08-07T23:35:50Z",
+  "duration_ms": null,
+  "cost_usd": null
+}

@@ -1,0 +1,66 @@
+{
+  "task_id": "T-003",
+  "checker": "checker-judgment",
+  "vendor": "anthropic",
+  "model": "claude-opus-5[1m]",
+  "verdict": "pass",
+  "findings": [
+    {
+      "clause_id": "C-1",
+      "severity": "blocker",
+      "description": "The working tree's diff touches only paths inside the allowlist; nothing under inbox-to-memory/ changed.",
+      "evidence": "$ python3 .agent-guild/scripts/check-diff-scope.py _maintenance/inbox-to-memory/EVALS.md _maintenance/inbox-to-memory/eval-scope.sh tests/fixtures/inbox-to-memory/evals/\nOK: 34 path(s) in scope\nEXIT=0\n\n$ git status --porcelain\n?? _maintenance/inbox-to-memory/\n?? tests/fixtures/inbox-to-memory/evals/\n\nThe five delivered files all sit under tests/fixtures/inbox-to-memory/evals/tier2-summary-entities/; tests/fixtures/inbox-to-memory/README.md is absent from the diff, as the non-goal requires."
+    },
+    {
+      "clause_id": "C-3",
+      "severity": "blocker",
+      "description": "The fixture directory satisfies the skill's opt-in test: _inbox/ alongside _memory/.",
+      "evidence": "$ find tests/fixtures/inbox-to-memory/evals/tier2-summary-entities -type f\n.../_inbox/.gitkeep\n.../_memory/context/index-rebuild-duration-_YEL9dotcZ.md\n.../_memory/decisions/cutover-rebuild-buffer-8taS8NdrXK.md\n.../notes/2025-09-08-kestrel-cutover-planning-i59pVI65GO.md\n.../notes/2025-09-22-kestrel-rebuild-followup-bARPVZN8s6.md\n\nOpt-in rule, inbox-to-memory/SKILL.md:3: \"Only operates on opted-in directories (containing `_inbox/` plus either `_memory/` or `entries/`).\" Both halves present; _inbox/ carries only .gitkeep, which the task's spec excerpt permits for a migrate-mode fixture."
+    },
+    {
+      "clause_id": "C-8",
+      "severity": "blocker",
+      "description": "Every gradable note is v1 and emits its own extract plus a proposals.yaml entry; no note carries a schema key.",
+      "evidence": "$ bash inbox-to-memory/scripts/migrate-scope.sh tests/fixtures/inbox-to-memory/evals/tier2-summary-entities --tier2-extract <scratch>\n... tier2 extracts: <scratch>\nEXIT=0\n\n$ find <scratch> -type f\n<scratch>/bARPVZN8s6.extract.md\n<scratch>/i59pVI65GO.extract.md\n<scratch>/proposals.yaml\n\nproposals.yaml holds one entry per note, both with summary: '' and entities: []:\n  i59pVI65GO: file: .../2025-09-08-kestrel-cutover-planning-i59pVI65GO.md\n  bARPVZN8s6: file: .../2025-09-22-kestrel-rebuild-followup-bARPVZN8s6.md\n\n$ grep -rn '^schema:' tests/fixtures/inbox-to-memory/evals/tier2-summary-entities/ | wc -l\n0\n\nCorroborated by lint-scope.sh's own tally over the same scope: \"v1 files: 4 / v2 files: 0\". The trap the spec names (a gradable note at schema: 2 emitting nothing) is not present."
+    },
+    {
+      "clause_id": "C-8",
+      "severity": "blocker",
+      "description": "The emitted extract stops at ## Raw Content, verified from the file on disk rather than from the migrator's documentation.",
+      "evidence": "<scratch>/i59pVI65GO.extract.md ends at line 28 with the last memory-candidate bullet, then a single blank line; its final section heading is \"## Action Items / Memory Candidates\". The string \"Raw Content\" does not appear in either emitted extract.\n\nSource note tests/fixtures/inbox-to-memory/evals/tier2-summary-entities/notes/2025-09-08-kestrel-cutover-planning-i59pVI65GO.md:44-48 carries \"## Raw Content\" at :44 and three lines of transcript at :46-48, none of which reach the extract."
+    },
+    {
+      "clause_id": "C-8",
+      "severity": "blocker",
+      "description": "The planted contrast holds in both directions: the below-fence name and fact are absent from the extract and present in the note, while the proposable entities appear verbatim in the extract.",
+      "evidence": "String-by-string, note vs. emitted extract (grep -Fc):\n  \"Tomas Krohl\"    note:1  extract:0\n  \"November 14th\"  note:1  extract:0\n  \"four hours\"     note:1  extract:0\n  \"Tomasz Krol\"    note:3  extract:2\n  \"Elena Vasquez\"  note:3  extract:2\n\nThe plants sit below the fence: note :46 \"Tomas Krohl said the staging rebuild finished in four hours this run...\", :47 \"...the team locked the cutover for November 14th.\" \"Tomas Krohl\" is a mishearing of \"Tomasz Krol\", who is real and sourced (extract :5, :9).\n\nExercised the contrast against the migrator itself, on a copy of the fixture staged outside the repo:\n  entities: ['Tomas Krohl'] -> \"tier2-entity-unsourced: \\\"Tomas Krohl\\\" does not appear in this note's Tier 2 extract; left alone\"\n  entities: ['Elena Vasquez', 'Tomasz Krol'] -> no tier2 finding; the note migrates.\nSo the wrong proposal is machine-rejected and the right one is not, which is the contrast the fixture exists to create. The November 14th cutover date gives the summary half its unsourced fact: a plausible summary asserting it cites something the reviewed layer never said."
+    },
+    {
+      "clause_id": "C-8",
+      "severity": "blocker",
+      "description": "Both extracts carry enough substance to make a one-line summary possible, so the summary rows are scoreable in both directions.",
+      "evidence": "<scratch>/i59pVI65GO.extract.md holds six populated sections across 28 lines: two attributed quotes, a named tension (Elena's Tuesday window against Tomasz's Thursday-to-Sunday rebuild buffer), stated and unstated assumptions, two open questions, and three action/candidate bullets. A sourced one-liner is straightforward, e.g. \"Elena and Tomasz disagree on the cutover window because the index rebuild needs a multi-day buffer\" — every element traceable to extract :9.\n\n<scratch>/bARPVZN8s6.extract.md is thinner but not filler: a quote, a tension with a named unresolved deadline, two assumptions, an open question, and an action item. Also summarizable in one line."
+    },
+    {
+      "clause_id": "C-8",
+      "severity": "blocker",
+      "description": "Well-formedness part (a): lint-scope.sh exits 0 over the delivered fixture.",
+      "evidence": "$ bash inbox-to-memory/scripts/lint-scope.sh tests/fixtures/inbox-to-memory/evals/tier2-summary-entities\nscope: tests/fixtures/inbox-to-memory/evals/tier2-summary-entities\nv1 files: 4\nv2 files: 0\ntotal files: 4\nfailures: 0\nLINT_EXIT=0\n\nNoting what this does not say: v2 files is 0, so the token checks at lint-scope.sh:421-448 read none of these notes' tokens. Part (b) below is the check that actually covers them."
+    },
+    {
+      "clause_id": "C-8",
+      "severity": "blocker",
+      "description": "Well-formedness part (b): the tokens surviving the linter's own four-step extraction are all registered shapes with legal enumerated values.",
+      "evidence": "Replicated the four steps by hand over all four notes/records (no CLAUDE.md or README.md in the fixture, so :418-419's exclusion is vacuous here): extract_body per :208-216, then sed 's/\\[\\[[^]]*\\]\\]//g' per :218-222, then grep -oE '\\[[a-z][a-z0-9 -]*(:|\\])' | sort -u.\n\nSurviving tokens, whole fixture:\n  2025-09-08-...-i59pVI65GO.md: [memory candidate:\n  2025-09-22-...-bARPVZN8s6.md: (none)\n  _memory/context/index-rebuild-duration-_YEL9dotcZ.md: (none)\n  _memory/decisions/cutover-rebuild-buffer-8taS8NdrXK.md: (none)\n\nFull bracketed strings in the extracted bodies, for the enum check:\n  i59: '[ ]' (checkbox, not token-shaped — the regex requires [a-z] first), '[memory candidate: project]', '[memory candidate: client]'\n  bARPVZN8s6: '[ ]'\n\n'[memory candidate:' is row 1/2 of the ten-row grammar table at references/machine-contracts.md:69-70, and both scope values are inside the registered set (lint-scope.sh:234 admits project|client|update existing ). No token outside the table, no enumerated value outside its row.\n\nOn the boundary the task flags: the below-fence transcript at note :46-48 contains no brackets at all, so there was nothing down there to misreport. extract_body stops at :44 regardless."
+    },
+    {
+      "clause_id": "C-11",
+      "severity": "blocker",
+      "description": "All three smoke suites exit 0 with the new fixture in the tree, including the tree-wide index-file and shasum-snapshot checks.",
+      "evidence": "$ bash tests/inbox-to-memory-smoke.sh -> \"inbox-to-memory smoke: ok\", exit 0\n$ bash tests/file-issue-smoke.sh -> exit 0\n$ bash tests/handoff-smoke.sh -> exit 0\n\nDirectly confirming the two tree-wide checks the clause names:\n$ find tests/fixtures/inbox-to-memory/evals/tier2-summary-entities -iname 'MEMORY.md' -o -iname 'INDEX.md' -o -iname 'index.md' | wc -l\n0\n$ git status --porcelain (after all runs, unchanged from before)\n?? _maintenance/inbox-to-memory/\n?? tests/fixtures/inbox-to-memory/evals/\n\nThe --tier2-extract and --tier2 runs I made were staged in a scratch directory and against a copy of the fixture outside the repo, so no fixture byte moved."
+    }
+  ],
+  "timestamp": "2026-08-07T00:00:00Z",
+  "duration_ms": null,
+  "cost_usd": null
+}
