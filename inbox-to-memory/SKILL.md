@@ -425,7 +425,7 @@ schema, body_schema, id, memory_type, title, status, date, effective_from, effec
 
 `status` is `proposed|accepted|superseded|deprecated|rejected`. Type-specific body fields are in [references/memory-bank-schema.md](references/memory-bank-schema.md).
 
-Files with no `schema` key are v1. They stay legal forever, the lint never flags them, and a scope holding both generations is a supported state rather than an unfinished migration.
+Files with no `schema` key are v1. They stay legal forever, and a scope holding both generations is a supported state rather than an unfinished migration. The lint checks one thing on them, whether their wiki links resolve, because a link pointing at no file in scope is broken whichever generation wrote it.
 
 `memory_type` values depend on the scope's chosen memory mode:
 - **Lightweight** (default): `Decision | Context | Rule`. Exception is folded into Decision.

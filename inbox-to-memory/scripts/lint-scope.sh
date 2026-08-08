@@ -1,15 +1,20 @@
 #!/usr/bin/env bash
 # Walk one opted-in scope and check every v2 note and record against the machine
-# contracts in references/machine-contracts.md.
+# contracts in references/machine-contracts.md. The walk takes in v1 files as
+# well, checking their wiki links and nothing else: a link resolves against every
+# file in the scope, and that resolution never reads the file's own frontmatter.
 #
 # This ships as a script rather than prose the agent follows because most of what
 # the v2 schema promises is arithmetic: keys in a fixed order, a block that fits
 # in a header read, a closed token vocabulary. An agent asked to check that by
 # reading will report success it never verified.
 #
-# Nothing here ever flags a v1 file. Files without a `schema` key predate the
-# contract, they stay legal indefinitely, and a scope holding both generations is
-# a supported state rather than a migration someone abandoned halfway.
+# The only check here that touches a v1 file is the link check. Files without a
+# `schema` key predate the contract, they stay legal indefinitely, and a scope
+# holding both generations is a supported state rather than a migration someone
+# abandoned halfway. Links stay on because a target that resolves to no file in
+# scope is broken whichever generation wrote it, and verify-migration.sh already
+# runs that same resolution over the whole scope without ever reading `schema`.
 #
 # Requires bash, awk, and yq (brew install yq).
 set -euo pipefail
@@ -70,6 +75,7 @@ v2=0
 failures=0
 current_file=""
 declare -a body_for_index=()
+declare -a v1_body_for_index=()
 
 fail() {
   echo "FAIL $current_file: $1: $2"
@@ -409,8 +415,15 @@ trap 'rm -rf "$work"' EXIT
 
 # Pass one classifies and caches each v2 body, because the resolution and
 # recurrence checks are scope-wide: they can't be answered from inside one file.
+# It caches v1 bodies too, for a narrower reason. Only the link pass at the
+# bottom of the file reads them, and this is the one loop that visits every file,
+# so extracting here costs one walk instead of two. They go to their own
+# `body.v1.*` files and never join `open-slugs`, which is what keeps a v1
+# question out of the two scope-wide checks.
 v2_files=()
+v1_files=()
 index=0
+v1_index=0
 for file in "$scope"/notes/*.md "$scope"/_memory/*/*.md "$scope"/entries/*.md; do
   # Only files the skill itself creates. CLAUDE.md and README.md live alongside
   # them and are hand-maintained, so they carry no schema key and would otherwise
@@ -420,6 +433,10 @@ for file in "$scope"/notes/*.md "$scope"/_memory/*/*.md "$scope"/entries/*.md; d
   esac
   if ! has_schema_key "$file"; then
     v1=$((v1 + 1))
+    v1_files+=("$file")
+    v1_index=$((v1_index + 1))
+    v1_body_for_index[$v1_index]="$work/body.v1.$v1_index"
+    extract_body "$file" >"$work/body.v1.$v1_index"
     continue
   fi
   v2=$((v2 + 1))
@@ -439,8 +456,12 @@ for file in ${v2_files[@]+"${v2_files[@]}"}; do
   check_frontmatter "$file"
 
   # The body grammar checks are the ones a v1 body cannot satisfy and was never
-  # asked to. Links and counts stay on either way: a link that resolves nowhere is
-  # broken in any generation, and the migrator computes the counts it writes.
+  # asked to. Links stay on either way, and they run on files with no `schema` key
+  # too, in the pass below: a link that resolves nowhere is broken in any
+  # generation. Counts do not carry across the generation line the way links do.
+  # They run here because the migrator computed these four keys when it rewrote
+  # the frontmatter, and a file with no `schema` key carries none of them for a
+  # count to be compared against.
   if ! has_v1_body "$file"; then
     check_tokens "$body"
     check_open_questions "$body"
@@ -459,6 +480,18 @@ for file in ${v2_files[@]+"${v2_files[@]}"}; do
     grep -Fqx -- "$slug" "$work/open-slugs" ||
       fail open-question-resolution "\`$slug\` is resolved here but never opened anywhere in scope"
   done < <(grep -oE -- '\[open question resolved: [^]]*\]' "$body" | sed -E 's/\[open question resolved: (.*)\]/\1/' | sort -u)
+done
+
+# A link is broken the same way regardless of which schema generation wrote it,
+# so it's the one check the v1/v2 split above was never meant to gate. Nothing
+# else from that loop runs on these files, and their open questions never
+# joined open-slugs, so this pass can't manufacture a resolution for a v2 note
+# the way folding v1 into pass two would.
+index=0
+for file in ${v1_files[@]+"${v1_files[@]}"}; do
+  index=$((index + 1))
+  current_file="$file"
+  check_links "${v1_body_for_index[$index]}"
 done
 
 # A question open across three or more notes has outlived anyone's intention to

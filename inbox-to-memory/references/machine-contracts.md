@@ -4,21 +4,21 @@ The retrieval funnel assumes it can read a file's frontmatter cheaply and grep i
 
 This document is those assumptions written as rules, and [scripts/lint-scope.sh](../scripts/lint-scope.sh) is what enforces them.
 
-Everything here applies to files carrying `schema: 2` and to nothing else. Files without a `schema` key are v1, they are legal forever, and the lint never flags them. A scope holding both generations is a normal state, not a half-finished migration.
+Everything here applies to files carrying `schema: 2`, with one exception. Files without a `schema` key are v1, they are legal forever, and the only thing the lint checks on them is whether their wiki links resolve, since a link pointing at no file in scope is broken whichever generation wrote it. The frontmatter contract, the token grammar, the anchor rule, and the four derived counts all stop at the generation line. A scope holding both generations is a normal state, not a half-finished migration.
 
 ## The Two Generations, and the File That Is Both
 
 Migration rewrites frontmatter and leaves the body alone, so a migrated file is v2 above the fence and v1 below it. `body_schema: 1` is how it says so, and it splits the contract in two:
 
-| Carries                        | Frontmatter contract | Body grammar |
-| ------------------------------ | -------------------- | ------------ |
-| no `schema` key                | not checked          | not checked  |
-| `schema: 2`                    | checked              | checked      |
-| `schema: 2` and `body_schema: 1` | checked              | not checked  |
+| Carries                          | Frontmatter contract | Body grammar | Links   |
+| -------------------------------- | -------------------- | ------------ | ------- |
+| no `schema` key                  | not checked          | not checked  | checked |
+| `schema: 2`                      | checked              | checked      | checked |
+| `schema: 2` and `body_schema: 1` | checked              | not checked  | checked |
 
 Without the third row the first migration run would turn every bare line anchor written in 2025 into a lint failure, and the only way to clear them would be editing notes whose entire value is being an accurate record of that day. A body-shape check therefore keys off `body_schema`, never off `schema: 2`.
 
-Links and derived counts are checked in all three of the rows the lint touches. A link resolving nowhere is broken in any generation, and the migrator computes the counts it writes rather than guessing them.
+Links are the one column that runs the whole way down, because a link resolving nowhere is broken in any generation. That is not a rule invented for the lint: [scripts/verify-migration.sh](../scripts/verify-migration.sh) collects wiki targets from every markdown file in the scope's git tree and resolves each one by filename and then by its trailing ten-character id, the same order the lint uses. The word `schema` appears nowhere in it. The derived counts are part of the frontmatter contract rather than a fourth column of their own. The migrator computes those four keys when it rewrites a file rather than guessing them, so they can be checked on any note whose frontmatter contract is checked, and a file carrying no `schema` key carries nothing for them to be compared against.
 
 ## The Frontmatter Contract
 

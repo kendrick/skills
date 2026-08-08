@@ -1223,6 +1223,76 @@ lintdefect_after="$(hash_scope "$v_lintdefect")"
 require_output "$lintdefect_out" "lint failures: 1"
 require_output "$lintdefect_out" "verify-lint: FAIL $v_lintdefect/$verify_note_a: frontmatter-known-keys: \`bogus_key\` is in neither key order"
 
+# ---------------------------------------------------------------------------
+# v1 link checking (#32)
+# ---------------------------------------------------------------------------
+#
+# check_links now runs against v1 notes instead of skipping them outright.
+# Nothing above this line exercises that path, so a later refactor could
+# silently drop it again and nothing here would notice.
+
+# Body content lands above the `## Raw Content` fence: extract_body stops
+# there, so anything injected below it never reaches check_links.
+inject_above_fence() {
+  python3 - "$1" "$2" <<'PY'
+import sys
+p, block = sys.argv[1], sys.argv[2]
+t = open(p).read()
+i = t.find("## Raw Content")
+open(p, "w").write(t[:i] + "\n" + block + "\n" + t[i:])
+PY
+}
+
+# --- A broken link in a v1 note is reported ---------------------------------
+
+v1_broken_scope="$(mktemp -d "${TMPDIR:-/tmp}/i2m-v1-broken.XXXXXX")"
+trap 'rm -rf "$not_a_scope" "$inline_scope" "$dismissal_scope" "$mig" "$jrn" "$t2_extract_scope" "$t2x_dir" "$subset_scope" "$batched_scope" "$lifecycle_scope" "$idem_dir" "$v_pass" "$scripts_copy" "$v_combo" "$v_linkdrop" "$v_lintdefect" "$v1_broken_scope"' EXIT
+cp -R "$fixtures/old-only/." "$v1_broken_scope/"
+v1_broken_note="$v1_broken_scope/notes/2025-11-04-atlas-scoping-call-3iMu15QJ_x.md"
+inject_above_fence "$v1_broken_note" \
+  'See [[this-target-does-not-exist-AAAAAAAAAA]] for context.'
+
+v1_broken_out="$(run_lint "$v1_broken_scope")"
+require_failure "$v1_broken_out" "FAIL $v1_broken_note: link-broken: \`this-target-does-not-exist-AAAAAAAAAA\` resolves neither by name nor by id \`AAAAAAAAAA\`"
+require_line "$v1_broken_out" "failures: 1" v1-broken
+
+# --- A v1 link that resolves stays silent, by filename and by id alone, and
+#     the six body-grammar checks stay off a v1 body even when every one of
+#     them would fire under pass two -----------------------------------------
+#
+# `one-vendor-per-region-G2k65qG3Nc` matches a filename directly.
+# `was-renamed-away-G2k65qG3Nc` matches no filename; only the trailing
+# ten-character id resolves it, through the fallback in check_links
+# (lint-scope.sh:376-377). The rest of the block is the same six-way body
+# C-3 uses to prove token-grammar, open-question-fields, tension-fields,
+# contradiction-fields, decision-fields, and anchor-form all stay off a v1
+# file.
+
+v1_pass_scope="$(mktemp -d "${TMPDIR:-/tmp}/i2m-v1-pass.XXXXXX")"
+trap 'rm -rf "$not_a_scope" "$inline_scope" "$dismissal_scope" "$mig" "$jrn" "$t2_extract_scope" "$t2x_dir" "$subset_scope" "$batched_scope" "$lifecycle_scope" "$idem_dir" "$v_pass" "$scripts_copy" "$v_combo" "$v_linkdrop" "$v_lintdefect" "$v1_broken_scope" "$v1_pass_scope"' EXIT
+cp -R "$fixtures/old-only/." "$v1_pass_scope/"
+v1_pass_note="$v1_pass_scope/notes/2025-11-04-atlas-scoping-call-3iMu15QJ_x.md"
+inject_above_fence "$v1_pass_note" \
+'By name [[one-vendor-per-region-G2k65qG3Nc]], by id only [[was-renamed-away-G2k65qG3Nc]].
+[invented token: x] not in the grammar table.
+[open question: never-opened-anywhere] a question.
+[open question resolved: opened-by-nobody] and its answer.
+[tension: bogus-state] not resolved, deferred, or unacknowledged.
+[contradicts accepted: nothing] naming no record and no claim.
+[decision: sideways] neither one-way nor two-way, and no discarded alternatives.
+(raw: line 12)'
+
+v1_pass_out="$(run_lint "$v1_pass_scope")"
+require_line "$v1_pass_out" "failures: 0" v1-pass
+refute_failure "$v1_pass_out" "link-broken: \`one-vendor-per-region-G2k65qG3Nc\`"
+refute_failure "$v1_pass_out" "link-broken: \`was-renamed-away-G2k65qG3Nc\`"
+refute_failure "$v1_pass_out" "token-grammar"
+refute_failure "$v1_pass_out" "open-question-fields"
+refute_failure "$v1_pass_out" "tension-fields"
+refute_failure "$v1_pass_out" "contradiction-fields"
+refute_failure "$v1_pass_out" "decision-fields"
+refute_failure "$v1_pass_out" "anchor-form"
+
 # The checked-in fixtures are never migrated in place. Every migration test works
 # on a copy, and a test that forgets to copy would otherwise rewrite the fixture
 # it is asserting against and pass forever after.

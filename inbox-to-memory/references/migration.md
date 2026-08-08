@@ -8,7 +8,7 @@ The constraint that shapes everything here: a note is a record of what someone k
 
 ## Why Migrate at All
 
-V1 files are legal forever and the lint never flags them, so nothing forces this. What migration buys is the queries. `grep -L 'open_questions: 0'` finds every note with unfinished business, and a v1 note is invisible to it: absent is not zero, it's unknown. The same goes for `last_confirmed` on records and for every relationship grep that expects a compound string.
+V1 files are legal forever, and the lint's one check on them—whether their wiki links resolve—is one they pass as readily as a v2 file does, so nothing forces this. What migration buys is the queries. `grep -L 'open_questions: 0'` finds every note with unfinished business, and a v1 note is invisible to it: absent is not zero, it's unknown. The same goes for `last_confirmed` on records and for every relationship grep that expects a compound string.
 
 A scope with a long v1 tail answers every one of those questions with half the truth and no indication that it did.
 
