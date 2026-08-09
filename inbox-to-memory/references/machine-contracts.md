@@ -44,6 +44,8 @@ schema, body_schema, id, memory_type, title, status, date, effective_from, effec
 
 A file is a record when it has `memory_type` and a note otherwise. `themes` belongs to journal entries and `tags` to everything else; `exception_to` only to Exception records in canonical mode.
 
+**`last_confirmed` is written for you, and only ever forward.** [Migration](migration.md) initializes it to the record's own `date`, since a record nobody has re-confirmed was last confirmed the day it was written. After that, [scripts/stamp-confirmed.sh](../scripts/stamp-confirmed.sh) advances it whenever an inbox input restates a claim an `accepted` record already makes, to that input's date, with no sign-off prompt in front of the write. It refuses any candidate not later than what the record already holds. A file carrying no `schema` key gains the key by neither route, which is the first row of the table above rather than a rule of its own: v1 frontmatter sits outside this contract, so nothing here fits a v2 key onto it.
+
 **Compound references.** A relationship is one greppable string of the form `<relation>::<id>`, never a nested mapping:
 
 ```yaml

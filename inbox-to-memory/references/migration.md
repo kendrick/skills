@@ -34,7 +34,9 @@ Two of those deserve their reasoning written down.
 
 **Counts are counted, never guessed.** A v1 note with no tokens in it gets four zeros, and those zeros are true: the note has no open questions because it has none, not because nobody looked. The migrator runs the same body extraction the lint does, so the numbers it writes are the numbers the lint recomputes. Any drift between them fails the verification run rather than sitting in a file.
 
-**`last_confirmed` initializes to the record's own date.** A record nobody has re-confirmed was last confirmed the day it was written. Any later date would assert a review that never happened, and this field exists precisely so stale records are visible.
+**`last_confirmed` initializes to the record's own date.** A record nobody has re-confirmed was last confirmed the day it was written. Any later date would assert a review the migrator has no evidence of, and this field exists precisely so stale records are visible.
+
+Process mode supplies that evidence later. When an inbox input restates a claim an `accepted` record already makes, [scripts/stamp-confirmed.sh](../scripts/stamp-confirmed.sh) stamps the input's date onto the record without stopping to ask. It refuses to move the date backwards, which is the same argument read the other way: draining a folder of old transcripts must not age a record somebody confirmed last week.
 
 ## What It Refuses to Do
 

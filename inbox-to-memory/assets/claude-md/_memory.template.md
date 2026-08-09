@@ -27,6 +27,8 @@ Optional, in this order among the keys you keep: `effective_from`, `effective_to
 
 Values stay on one line, lists are inline arrays, and the block closes inside the first 20 lines so a header read catches all of it. Records with no `schema` key are v1 and stay legal indefinitely.
 
+`last_confirmed` says when the record's claim was last seen to hold, and it is the one field here that gets written without anybody approving it. It starts as the record's own `date`. After that, when an inbox input restates a claim an `accepted` record already makes, [`~/.claude/skills/inbox-to-memory/scripts/stamp-confirmed.sh`](~/.claude/skills/inbox-to-memory/scripts/stamp-confirmed.sh) stamps that input's date onto the record and never walks the date backwards. That write skips the sign-off described below and is the only one in `_memory/` that does; the run's verify report names every record it moved along with every one it declined to. Everything else here waits for the user, item by item.
+
 ## Filename
 
 `<slug>-<nanoid>.md` inside the type subfolder. The folder implies `memory_type`; still set the field in frontmatter for safety. Type folders in this scope: {{MEMORY_TYPE_FOLDERS}}.
