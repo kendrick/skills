@@ -1451,6 +1451,29 @@ wt_keyins_src_ln="$(printf '%s\n' "$wt_keyins_head" | grep -n '^source_refs:' | 
 wt_keyins_lint="$(run_lint "$wt_keyins")"
 require_line "$wt_keyins_lint" "failures: 0" wt-keyins
 
+# --- A scope below the repo root still gets its history read (C-7) ----------
+#
+# Every other verify test makes the scope its own git root, the one shape where
+# a scope-relative path and a repo-root-relative path are the same string. Real
+# vaults are the other shape: a client sits some directories down from the vault
+# root. Reading history with the wrong one swept zero links and still reported a
+# pass, so this asserts a non-zero count rather than an exit code.
+v_subdir="$(mktemp -d "${TMPDIR:-/tmp}/i2m-verify-subdir.XXXXXX")"
+trap 'rm -rf "$not_a_scope" "$inline_scope" "$dismissal_scope" "$mig" "$jrn" "$t2_extract_scope" "$t2x_dir" "$subset_scope" "$batched_scope" "$lifecycle_scope" "$idem_dir" "$v_pass" "$scripts_copy" "$v_combo" "$v_linkdrop" "$v_lintdefect" "$v1_broken_scope" "$v1_pass_scope" "$wt_headline" "$wt_backward" "$wt_dedupe" "$wt_status" "$wt_keyins" "$v_subdir"' EXIT
+mkdir -p "$v_subdir/clients/acme"
+cp -R "$fixtures/old-only/." "$v_subdir/clients/acme/"
+printf '\nSee [[atlas-working-session-P5spzLt4Bz]] for background.\n' >>"$v_subdir/clients/acme/$verify_note_a"
+git -C "$v_subdir" init -q
+git -C "$v_subdir" add -A
+git -C "$v_subdir" -c user.email=t@t -c user.name=t commit -qm baseline
+v_subdir_since="$(git -C "$v_subdir" rev-parse HEAD)"
+bash "$migrator" "$v_subdir/clients/acme" --apply >/dev/null
+git -C "$v_subdir" add -A
+git -C "$v_subdir" -c user.email=t@t -c user.name=t commit -qm migrated
+
+v_subdir_out="$(bash "$verify" "$v_subdir/clients/acme" --since "$v_subdir_since")"
+require_output "$v_subdir_out" "links checked: 1 (id fallback: 1)"
+
 # The checked-in fixtures are never migrated or stamped in place. Every
 # migration or write-through test works on a copy, and a test that forgets
 # to copy would otherwise rewrite the fixture it is asserting against and

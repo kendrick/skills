@@ -136,7 +136,12 @@ since_tree_targets() {
   local f
   while IFS= read -r f; do
     case "$f" in
-      *.md) git -C "$scope" show "$since_ref:$f" ;;
+      # The ./ is load-bearing. ls-tree run inside the scope prints paths
+      # relative to it, but `show ref:path` resolves from the repo root unless
+      # the path is written cwd-relative. Without it every read fails on a scope
+      # that isn't the repo root, and the sweep reports zero links checked
+      # alongside zero failures, which reads as a pass.
+      *.md) git -C "$scope" show "$since_ref:./$f" ;;
     esac
   done < <(git -C "$scope" ls-tree -r --name-only "$since_ref") |
     grep -oE '\[\[[^]|]*' | sed 's/^\[\[//' | sort -u
