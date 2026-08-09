@@ -296,8 +296,9 @@ if bash "$lint" "$not_a_scope" >/dev/null 2>&1; then
   exit 1
 fi
 
-# The skill has to name the lint, or nothing invokes it in the field.
+# The skill has to name the scripts it runs, or nothing invokes them in the field.
 require_text inbox-to-memory/SKILL.md "scripts/lint-scope.sh"
+require_text inbox-to-memory/SKILL.md "scripts/stamp-confirmed.sh"
 
 # Both key orders get pinned verbatim. They are duplicated by hand into the
 # templates, the lint, and eventually the migrator, and the only thing keeping
@@ -1293,11 +1294,136 @@ refute_failure "$v1_pass_out" "contradiction-fields"
 refute_failure "$v1_pass_out" "decision-fields"
 refute_failure "$v1_pass_out" "anchor-form"
 
-# The checked-in fixtures are never migrated in place. Every migration test works
-# on a copy, and a test that forgets to copy would otherwise rewrite the fixture
-# it is asserting against and pass forever after.
+# ---------------------------------------------------------------------------
+# last_confirmed write-through (#27)
+# ---------------------------------------------------------------------------
+#
+# The one sanctioned write into _memory/ that skips per-item sign-off, so it
+# has a script instead of a prose promise. Every case below runs the real
+# stamp-confirmed.sh against a copy of the mixed fixture, which supplies a
+# forward stamp, a backward one, an exactly-equal one, a cross-group dedupe,
+# and the v1 record the whole feature exists to leave alone.
+
+stamper=inbox-to-memory/scripts/stamp-confirmed.sh
+
+# The headline: a run naming both the v1 and the v2 record in one invocation
+# leaves the v1 record byte-identical while the v2 one moves to the
+# confirming note's date. Byte comparison, not output text — a stamper that
+# prints the right skip line while writing the file anyway would sail
+# through a check that only reads what it said.
+wt_headline="$(mktemp -d "${TMPDIR:-/tmp}/i2m-wt-headline.XXXXXX")"
+trap 'rm -rf "$not_a_scope" "$inline_scope" "$dismissal_scope" "$mig" "$jrn" "$t2_extract_scope" "$t2x_dir" "$subset_scope" "$batched_scope" "$lifecycle_scope" "$idem_dir" "$v_pass" "$scripts_copy" "$v_combo" "$v_linkdrop" "$v_lintdefect" "$v1_broken_scope" "$v1_pass_scope" "$wt_headline"' EXIT
+cp -R "$fixtures/mixed/." "$wt_headline/"
+wt_v1="$wt_headline/_memory/decisions/freeze-window-owned-by-ops-ocPwdpeY0a.md"
+wt_v2="$wt_headline/_memory/context/atlas-region-topology-mPmy8XBe5H.md"
+wt_v1_before="$(shasum "$wt_v1" | cut -d' ' -f1)"
+wt_headline_out="$(bash "$stamper" "$wt_headline" \
+  --note notes/2026-02-17-atlas-freeze-exceptions-SDy5SGVwfu.md \
+  _memory/decisions/freeze-window-owned-by-ops-ocPwdpeY0a.md \
+  _memory/context/atlas-region-topology-mPmy8XBe5H.md)"
+[[ "$wt_v1_before" == "$(shasum "$wt_v1" | cut -d' ' -f1)" ]] || {
+  echo "the v1 record was written by a run that also stamped a v2 record" >&2
+  exit 1
+}
+require_output "$wt_headline_out" "skipped: _memory/decisions/freeze-window-owned-by-ops-ocPwdpeY0a.md (no schema key, v1)"
+require_line "$wt_headline_out" "stamped: _memory/context/atlas-region-topology-mPmy8XBe5H.md 2026-02-10 -> 2026-02-17" wt-headline
+require_line "$wt_headline_out" "stamped: 1  skipped: 1" wt-headline
+[[ "$(grep '^last_confirmed:' "$wt_v2")" == "last_confirmed: 2026-02-17" ]] || {
+  echo "the v2 record did not move to the confirming note's date" >&2
+  exit 1
+}
+
+# Backward and equal both hold. Draining a backlog of old transcripts must
+# not walk a record's date back, and a note dated exactly the record's
+# current value confirms nothing new.
+wt_backward="$(mktemp -d "${TMPDIR:-/tmp}/i2m-wt-backward.XXXXXX")"
+trap 'rm -rf "$not_a_scope" "$inline_scope" "$dismissal_scope" "$mig" "$jrn" "$t2_extract_scope" "$t2x_dir" "$subset_scope" "$batched_scope" "$lifecycle_scope" "$idem_dir" "$v_pass" "$scripts_copy" "$v_combo" "$v_linkdrop" "$v_lintdefect" "$v1_broken_scope" "$v1_pass_scope" "$wt_headline" "$wt_backward"' EXIT
+cp -R "$fixtures/mixed/." "$wt_backward/"
+wt_backward_r="$wt_backward/_memory/context/atlas-region-topology-mPmy8XBe5H.md"
+wt_backward_before="$(shasum "$wt_backward_r" | cut -d' ' -f1)"
+for wt_n in 2025-12-02-atlas-steerco-ZGulgExW0q.md 2026-02-10-atlas-runbook-review-j5jLCGc5il.md; do
+  wt_backward_out="$(bash "$stamper" "$wt_backward" --note "notes/$wt_n" _memory/context/atlas-region-topology-mPmy8XBe5H.md)"
+  require_line "$wt_backward_out" "stamped: 0  skipped: 1" wt-backward
+done
+[[ "$wt_backward_before" == "$(shasum "$wt_backward_r" | cut -d' ' -f1)" ]] || {
+  echo "a backward or equal-date confirmation moved last_confirmed" >&2
+  exit 1
+}
+
+# The cross-group dedupe: two --note groups naming the same record in one
+# invocation collapse to one candidate, so the record is written once and
+# named once in the output. This is the issue's "confirmed twice in one run
+# is stamped once."
+wt_dedupe="$(mktemp -d "${TMPDIR:-/tmp}/i2m-wt-dedupe.XXXXXX")"
+trap 'rm -rf "$not_a_scope" "$inline_scope" "$dismissal_scope" "$mig" "$jrn" "$t2_extract_scope" "$t2x_dir" "$subset_scope" "$batched_scope" "$lifecycle_scope" "$idem_dir" "$v_pass" "$scripts_copy" "$v_combo" "$v_linkdrop" "$v_lintdefect" "$v1_broken_scope" "$v1_pass_scope" "$wt_headline" "$wt_backward" "$wt_dedupe"' EXIT
+cp -R "$fixtures/mixed/." "$wt_dedupe/"
+wt_dedupe_out="$(bash "$stamper" "$wt_dedupe" \
+  --note notes/2026-02-10-atlas-runbook-review-j5jLCGc5il.md _memory/context/atlas-region-topology-mPmy8XBe5H.md \
+  --note notes/2026-02-17-atlas-freeze-exceptions-SDy5SGVwfu.md _memory/context/atlas-region-topology-mPmy8XBe5H.md)"
+[[ "$(printf '%s\n' "$wt_dedupe_out" | grep -c 'atlas-region-topology')" == 1 ]] || {
+  echo "a record named by two groups in one run produced more than one output line" >&2
+  printf '%s\n' "$wt_dedupe_out" >&2
+  exit 1
+}
+require_line "$wt_dedupe_out" "stamped: _memory/context/atlas-region-topology-mPmy8XBe5H.md 2026-02-10 -> 2026-02-17" wt-dedupe
+require_line "$wt_dedupe_out" "stamped: 1  skipped: 0" wt-dedupe
+
+# The status gate: a record mutated to a non-accepted status is left alone,
+# even though it is otherwise the same record the headline case stamps.
+wt_status="$(mktemp -d "${TMPDIR:-/tmp}/i2m-wt-status.XXXXXX")"
+trap 'rm -rf "$not_a_scope" "$inline_scope" "$dismissal_scope" "$mig" "$jrn" "$t2_extract_scope" "$t2x_dir" "$subset_scope" "$batched_scope" "$lifecycle_scope" "$idem_dir" "$v_pass" "$scripts_copy" "$v_combo" "$v_linkdrop" "$v_lintdefect" "$v1_broken_scope" "$v1_pass_scope" "$wt_headline" "$wt_backward" "$wt_dedupe" "$wt_status"' EXIT
+cp -R "$fixtures/mixed/." "$wt_status/"
+wt_status_r="$wt_status/_memory/context/atlas-region-topology-mPmy8XBe5H.md"
+python3 - "$wt_status_r" <<'PY'
+import sys
+p = sys.argv[1]
+t = open(p).read()
+open(p, "w").write(t.replace("status: accepted", "status: proposed", 1))
+PY
+wt_status_before="$(shasum "$wt_status_r" | cut -d' ' -f1)"
+wt_status_out="$(bash "$stamper" "$wt_status" --note notes/2026-02-17-atlas-freeze-exceptions-SDy5SGVwfu.md _memory/context/atlas-region-topology-mPmy8XBe5H.md)"
+require_output "$wt_status_out" "skipped: _memory/context/atlas-region-topology-mPmy8XBe5H.md (status: proposed, not accepted)"
+[[ "$wt_status_before" == "$(shasum "$wt_status_r" | cut -d' ' -f1)" ]] || {
+  echo "a proposed record was stamped" >&2
+  exit 1
+}
+
+# Key insertion: a v2 record with last_confirmed removed gains it back in
+# contract position, directly after date and before source_refs, and the
+# scope still lints clean afterwards.
+wt_keyins="$(mktemp -d "${TMPDIR:-/tmp}/i2m-wt-keyins.XXXXXX")"
+trap 'rm -rf "$not_a_scope" "$inline_scope" "$dismissal_scope" "$mig" "$jrn" "$t2_extract_scope" "$t2x_dir" "$subset_scope" "$batched_scope" "$lifecycle_scope" "$idem_dir" "$v_pass" "$scripts_copy" "$v_combo" "$v_linkdrop" "$v_lintdefect" "$v1_broken_scope" "$v1_pass_scope" "$wt_headline" "$wt_backward" "$wt_dedupe" "$wt_status" "$wt_keyins"' EXIT
+cp -R "$fixtures/mixed/." "$wt_keyins/"
+wt_keyins_r="$wt_keyins/_memory/context/atlas-region-topology-mPmy8XBe5H.md"
+python3 - "$wt_keyins_r" <<'PY'
+import re, sys
+p = sys.argv[1]
+t = open(p).read()
+open(p, "w").write(re.sub(r"^last_confirmed:.*\n", "", t, count=1, flags=re.M))
+PY
+[[ "$(grep -c '^last_confirmed:' "$wt_keyins_r")" == 0 ]] || {
+  echo "the key-insertion fixture still carried last_confirmed before the run" >&2
+  exit 1
+}
+bash "$stamper" "$wt_keyins" --note notes/2026-02-17-atlas-freeze-exceptions-SDy5SGVwfu.md _memory/context/atlas-region-topology-mPmy8XBe5H.md >/dev/null
+wt_keyins_head="$(sed -n '1,20p' "$wt_keyins_r")"
+wt_keyins_date_ln="$(printf '%s\n' "$wt_keyins_head" | grep -n '^date:' | cut -d: -f1)"
+wt_keyins_lc_ln="$(printf '%s\n' "$wt_keyins_head" | grep -n '^last_confirmed:' | cut -d: -f1)"
+wt_keyins_src_ln="$(printf '%s\n' "$wt_keyins_head" | grep -n '^source_refs:' | cut -d: -f1)"
+[[ -n "$wt_keyins_lc_ln" && "$wt_keyins_lc_ln" -eq "$((wt_keyins_date_ln + 1))" && "$wt_keyins_lc_ln" -eq "$((wt_keyins_src_ln - 1))" ]] || {
+  echo "last_confirmed did not land between date: and source_refs:" >&2
+  printf '%s\n' "$wt_keyins_head" >&2
+  exit 1
+}
+wt_keyins_lint="$(run_lint "$wt_keyins")"
+require_line "$wt_keyins_lint" "failures: 0" wt-keyins
+
+# The checked-in fixtures are never migrated or stamped in place. Every
+# migration or write-through test works on a copy, and a test that forgets
+# to copy would otherwise rewrite the fixture it is asserting against and
+# pass forever after.
 [[ "$(find "$fixtures" -type f -exec shasum {} + | sort)" == "$fixtures_before" ]] || {
-  echo "a migration test wrote to a checked-in fixture" >&2
+  echo "a migration or stamping test wrote to a checked-in fixture" >&2
   exit 1
 }
 
