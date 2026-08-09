@@ -23,7 +23,7 @@ Decide the mode from the user's phrasing. When ambiguous, ask.
 
 ## Process Mode
 
-Six phases, plus a 2.5 that slots in ahead of grooming. The user reviews and approves between phase 4 and phase 5; never auto-promote.
+Six phases, plus a 2.5 that slots in ahead of grooming. The user reviews and approves between phase 4 and phase 5; never auto-promote. The one write into `_memory/` that skips that review lands in the same gap — a `last_confirmed` date stamped onto a record this run's inputs confirmed, under Stamp Confirmations below.
 
 ### Phase 1 — Detect Scope
 
@@ -64,9 +64,11 @@ For each inbox file, in order:
 4. **Read the headers of the hits.** Frontmatter, and no further. That's stage 3 of [references/retrieval-funnel.md](references/retrieval-funnel.md).
 5. **Body-read only the records whose headers suggest overlap** with something this input actually claims.
 
-**Five body reads per input, and the budget binds.** It is not a suggestion to stay near. When detection would need a sixth read to be useful, say so in the phase 6 report and leave the read undone. A budget quietly exceeded on every input is one nobody notices has stopped bounding anything. A scope where five is routinely too few is telling you its records are too granular, which is a finding worth having.
+That read answers two questions rather than one: does this input contradict what the record claims, or does it restate it? A restatement is a **confirmation** — the claim is still true, and somebody said so on the date this input carries, which is the whole of what `last_confirmed` is for. Deciding an input doesn't contradict a record means you have already read everything the second question needs, so the confirmation costs nothing past the read that was happening anyway. Keep the pairing of note to records; the stamping call below takes one group per note.
 
-Only `status: accepted` records produce flags. A `proposed` record hasn't been agreed to yet, so disagreeing with it is just discussion; a `superseded` one is already known to be wrong.
+**Five body reads per input, and the budget binds.** It is not a suggestion to stay near. When detection would need a sixth read to be useful, say so in the phase 6 report and leave the read undone. A budget quietly exceeded on every input is one nobody notices has stopped bounding anything. A scope where five is routinely too few is telling you its records are too granular, which is a finding worth having. Confirmations come out of that same budget rather than drawing one of their own. There is no second pass over the records, and no sixth read on the grounds that an input might also be confirming something.
+
+Only `status: accepted` records produce flags, and only they can be confirmed. A `proposed` record hasn't been agreed to yet, so disagreeing with it is just discussion and agreeing with it asserts nothing; a `superseded` one is already known to be wrong.
 
 Flag a conflict inline, where the triggering passage lives:
 
@@ -77,6 +79,8 @@ Flag a conflict inline, where the triggering passage lives:
 Both halves are required. The record's own claim written down beside the new statement is what lets a reader settle the disagreement without opening the record, and what makes it obvious when the two never actually disagreed.
 
 A contradiction is a first-class candidate, resolved at phase 5 sign-off like any other. Its three outcomes are in that phase.
+
+A confirmation is not a candidate and gets no flag. The record already exists and already makes the claim; the only thing that changes is the date saying when it was last seen to be true, so there is nothing for the user to sign off on and the stamp never passes through phase 5. Its trace is the date on the record itself and the phase 6 report, which names every record the run stamped and every one the stamper declined to write.
 
 ### Phase 3 — Groom Into a Single Note
 
@@ -133,6 +137,26 @@ Binary sources (`.pdf`, `.docx`, `.pptx`) move to `<scope-root>/notes/attachment
 
 Never leave a file in `_inbox/` after grooming. The inbox is a queue, not a library.
 
+### Stamp Confirmations
+
+Phase 2.5 worked out which records this run's inputs confirm. Writing the dates is mechanical, so a script does it:
+
+```bash
+bash <skill-path>/scripts/stamp-confirmed.sh <scope-root> \
+  --note <note-path> <record-path>... \
+  [--note <note-path> <record-path>...]...
+```
+
+Each `--note` group is one groomed note and the records that note confirms. The script reads the note's own `date:` and stamps it onto them. It refuses to move a date backwards, to touch a v1 file, to stamp anything that isn't `accepted`, and to insert the key where doing so would push the frontmatter past its 20-line budget; each refusal comes back as a `skipped:` line naming the reason. Paths are absolute or relative to the scope root.
+
+**One call for the whole queue, never one per input.** Hand it every group at once. Two inputs in one run can confirm the same record, and the script only gets to write that record once — taking the later of the two dates — if it sees both groups in the same invocation. A loop calling it per input has already written the first date before it hears about the second, so the same inbox writes that record once or twice and reports it differently depending on which file got read first.
+
+**A run that found no confirmations makes no call at all**, and most runs are that run. An invocation with no `--note` group is a usage error rather than a quiet no-op, so there is nothing to hand it and nothing to run.
+
+Putting the call here, after phase 4 and before phase 5, is a convention rather than something the script forces. The close of phase 3 would serve as well, since phase 4 only disposes sources and opens no gate. Fixing it in one spot is what makes two agents draining the same inbox produce the same trace, and it keeps the phase 6 report reading in phase order; the batch rule above is the part that carries real weight. It gets no phase number of its own because it is a call, not a phase of work.
+
+The script writes without stopping to ask, which is the exception spelled out in Operating Rules. Keep its output: phase 6 reports both the stamps and the skips off those lines. `--dry-run` prints the same lines and writes nothing, if you want to look first.
+
 ### Phase 5 — Propose and Crystallize (gated)
 
 Stop here. Show the user every groomed note and every flagged candidate, organized by candidate type and proposed scope. Wait for explicit per-candidate sign-off.
@@ -184,6 +208,8 @@ Then check by hand what the lint can't:
 - Every wiki-link path resolves (the target file exists at the expected location).
 - The `_inbox/` is empty.
 - Any input where the phase 2.5 read budget bound is named, along with what went unread. A budget that silently truncates detection reports the same "no conflicts" as a scope that genuinely has none.
+- Every record whose `last_confirmed` the run stamped is named, with the date it now carries. Read them off the stamper's `stamped:` lines. This report is the only durable trace of a write the user was never asked to approve.
+- Every record the stamper declined to write is named, with its reason: a v1 file, a `status` other than `accepted`, a date already at or past the note's, or an insertion that would overrun the 20-line frontmatter budget. Read them off its `skipped:` lines, which is also the scope of this list: what the stamper turned down, not everything phase 2.5 opened. The skipped v1 records are the ones nobody would otherwise learn were left behind, and a silent skip reads exactly like a record nobody confirmed.
 
 Report failures. Don't silently retry or auto-fix — those bugs hide.
 
@@ -453,6 +479,7 @@ The scope's `CLAUDE.md` declares the mode in its top frontmatter blockquote. Rea
 - **Preserve raw content as the source of truth.** Memory records cite notes; they don't replace them.
 - **One groomed note per input.** No four-file fragmentation. Sections, not separate files.
 - **Never auto-promote across scopes.** Scope is decided at flagging time, confirmed at sign-off, sticky after crystallization. If a record needs to move, the user moves it by hand. (This trades convenience for audit safety — at high enough volume, v2 may add a guarded `promote` mode.)
+- **`last_confirmed` is written without sign-off.** The gate on `_memory/` — no file written until the user approves that item — has one exception, and this is it. When an input confirms a claim an `accepted` record already makes, the run stamps the confirming note's date onto the record and names it in the phase 6 report instead of asking. Everything else stays gated: creating a record, amending one, superseding one, changing a word of what one claims. What the stamp touches is metadata rather than content — a date recording when the claim was last seen to hold, never the claim itself — which is what makes it safe to leave ungated. It stays that narrow on purpose. A prompt whose answer is always yes, in front of every input, teaches the user to approve without reading, and the gate is then worth nothing on the writes it exists for.
 - **Cross-scope references are fine.** A project note can wiki-link to a client-scope record. A client record can list project note ids in its `source_refs`. The record's _home_ (which `_memory/` it lives in) defines its scope, not its references.
 - **Stop at `## Raw Content`.** When reading a note to answer a question, read down to the raw content heading and no further. The extracted sections above it are the reviewed layer and are what you came for. Raw content is for a human reading back, and for verifying a quote you have specific reason to doubt. Reading it by default pulls a whole transcript into context to answer something the sections already answered.
 - **Never rename, resolve by id.** Files keep the name they were created with and ids never regenerate. When a wiki link's filename target is missing, resolve by id first: the last ten characters of the target are the nanoid. Report a link broken only after that fallback fails too.
