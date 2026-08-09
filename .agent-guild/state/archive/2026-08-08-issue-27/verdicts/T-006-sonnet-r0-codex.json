@@ -1,0 +1,18 @@
+{
+  "task_id": "T-006",
+  "checker": "checker-courier",
+  "verdict": "blocked",
+  "vendor": "openai",
+  "model": "gpt-5.6-terra",
+  "timestamp": "2026-08-08T00:00:00Z",
+  "duration_ms": null,
+  "cost_usd": null,
+  "findings": [
+    {
+      "clause_id": "C-15",
+      "severity": "note",
+      "description": "Codex lane call to codex exec timed out twice (120s baseline, 300s retry). Unable to obtain second opinion from gpt-5.6-terra. This is a platform issue, not a task issue.",
+      "evidence": "Codex exec commands (two attempts with timeouts) failed to return a verdict. Retry limit reached per courier protocol. The checker-of-record (Claude haiku) returned PASS on this clause; the blocked second opinion is comparison data only and does not gate the task."
+    }
+  ]
+}

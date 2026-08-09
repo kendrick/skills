@@ -1,0 +1,20 @@
+---
+task: T-003
+checker: checker-courier
+vendor: openai
+model: gpt-5.6-terra
+verdict: PASS
+checked_at: 2026-08-09T02:46:00Z
+duration_ms: None
+cost_usd: None
+---
+
+<!-- GENERATED FILE—do not hand-edit. Rendered by render-verdict.py
+from the verdict JSON, the record of record. Edit the JSON and
+re-render instead. -->
+
+## Per-clause results
+
+| clause | severity | description | evidence |
+| ------ | -------- | ------------ | -------- |
+| C-11 | minor | The two unchanged "crystallized only after user sign-off" bullets are creation-scoped rather than a complete account of all mutations to existing records, so a reader need not infer that no accepted record can change; their delegation reinforces this but is not needed to rescue them. Each added passage is its document's needed account of the no-prompt date advancement, not redundant. A useful third sweep would target immutability and mutation vocabulary, e.g. `(records?\|frontmatter\|metadata\|fields?) .*\\b(unchanged\|immutable\|frozen\|static\|set once)\\b\|\\b(diffs?\|changes?\|updates?\|sync)\\b.*\\b(records?\|memory\|metadata\|fields?)\\b`, to catch complete-sounding claims about records staying fixed or fields only being set at creation without using the current sweep's terms. | client.template.md:71; project.template.md:55; README.md:74; assets/claude-md/_memory.template.md:30; references/machine-contracts.md:47 |

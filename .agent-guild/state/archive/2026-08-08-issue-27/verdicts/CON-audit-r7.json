@@ -1,0 +1,204 @@
+{
+  "task_id": "CON-audit",
+  "checker": "auditor",
+  "vendor": "anthropic",
+  "model": "claude-opus-5[1m]",
+  "verdict": "pass",
+  "timestamp": "2026-08-09T06:55:00Z",
+  "duration_ms": null,
+  "cost_usd": null,
+  "findings": [
+    {
+      "clause_id": "C-13",
+      "severity": "pass",
+      "description": "The r6 blocker is closed. The shipped placement block separates the binding from the uses, requires both to exist and both to sit in bounds, and now FAILs all three artifacts r6's block green-lit. Re-ran the ten-artifact table plus the shipped tree: zero regressions, three false PASSes closed.",
+      "evidence": "Extracted constitution.md:456-474 verbatim, parameterized only the suite filename, and ran it against artifacts rebuilt from the real 1309-line suite (C-17's wiring require_text inserted beside the scripts/lint-scope.sh one at :300 in each). Correct artifacts, all 'inside the guard': B (banner/binding/invocations all inside) snap=587 banner=1297 bind=1298 first-use=1299 last-use=1310 cmp=1320; D (guard message reworded to name the script by filename) identical; G (message reworded to 'a migration or stamping test') identical; P (braces form ${stamper}) identical, confirming the widened pattern still matches. True failures, all 'OUTSIDE THE GUARD': F (binding hoisted beside migrator= at :588) bind=590 < ban=1300, so ban<bind fails; H (banner+binding inside, real invocations appended after the comparison) last-use=1327 > cmp=1305; O (same shape, pinned name) identical to H; shipped tree, banner empty. The three r6 false PASSes: I (banner+binding inside, body is two require_text calls, no invocation) first-use empty -> OUTSIDE; M (artifact B verbatim with the binding named scs) bind empty -> OUTSIDE; N (H with the binding named scs) bind empty -> OUTSIDE. Ran r6's superseded block side by side on those same three files to confirm the delta is real, not an artifact-construction difference: I, M and N each printed 'first-call=1298 last-call=1298' and 'inside the guard' under the old block. The assignment line carries no '$', so it can no longer stand in for an invocation, and a renamed binding now reddens with a legible signal (bind=) instead of degrading silently."
+    },
+    {
+      "clause_id": "DELTA",
+      "severity": "pass",
+      "description": "Nothing else moved. Every anchor r6 cited shifts by exactly +2 above C-13's check block and exactly +5 below it, which is the arithmetic of a 2-line preamble edit plus a 3-line growth in that one code block and nothing more.",
+      "evidence": "wc -l 683, against r6's 678. Re-located twenty r6-cited anchors by content. +2 group (everything above the C-13 check block): clause index 30-34 -> 32-36, BASELINE 'Corrections from both audits' 38 -> 40, contract output line 66 -> 68, 'sorted by resolved record path' 71 -> 73, 'Exactly one branch fires' 78 -> 80, branch row 'no schema key' 82 -> 84, 'It writes by default' 93 -> 95, C-4's unqualified sentence 177 -> 179, C-5's realpath sentence 251 -> 253, C-6's three predicates 271-273 -> 273-275, C-9's four-skip-branches sentence 376 -> 378, C-11's pre-rulings 405 -> 407, C-11's sweep 410 -> 412, C-13's pin sentence 450 -> 452. +5 group (everything below it): C-13's failing example 514 -> 519, C-14's unanchored grep 535 -> 540, C-17's grep 598 -> 603, Protected content heading 667 -> 672, Non-goals bullets 673-678 -> 678-683. The preamble's +2 is the new two-line paragraph at :17-18 naming the recurring failure mode; :14 and :16 were rewritten in place at the same line count. 18 clause headings, and the eighteen '- **severity**:' values (blocker, blocker, blocker, major, blocker, blocker, blocker, blocker, blocker, blocker, major, major, blocker, major, minor, blocker, blocker, major) still match the index table at :32-36 row for row. Tree state as required: git status --porcelain shows exactly the 18 archive task files under .agent-guild/state/archive/, and nothing under inbox-to-memory/, tests/ or _maintenance/."
+    },
+    {
+      "clause_id": "SHIPPABILITY",
+      "severity": "pass",
+      "description": "The document is sound and should go to Phase 1. The one blocker r6 filed is closed and verified; what remains is six recorded minors, none of which would change what a worker builds or what a checker decides.",
+      "evidence": "I did not take r6's battery on trust. I transcribed the script contract at constitution.md:53-95 into a working stamper in one pass — the second auditor in a row to do so from the contract alone — installed it at inbox-to-memory/scripts/stamp-confirmed.sh, and ran C-1 through C-7 and C-18 verbatim. Every pass string printed and every expected value matched r6's record exactly. The deterministic clauses that fail safe at base still do: C-14's eval-scope.sh exits 1 with 'no such eval fixture', C-17's two greps both exit 1. C-12 prints no diff and 'inventory exit=0'. C-15 returns the single genuinely-broken citation. C-16 prints 'suites exit=0', 'HEAD is the base', 'OK: 19 path(s) in scope'. C-11's sweep returns 60 hits with the reference stamper installed, 55 without, both well above the twelve-location floor the clause names. C-13's saboteur is faithful: run directly over the reference stamper it produced byte-identical output ('skipped: ...freeze-window... (v1 record, no schema key)', 'stamped: ...atlas-region-topology... 2026-02-10 -> 2026-02-17', 'stamped: 1  skipped: 1') while silently writing 'last_confirmed: 2026-02-17' into the v1 record at :7, so a red suite means the v1 hold is asserted rather than that the output shape changed. Reference stamper removed afterwards; tree clean."
+    },
+    {
+      "clause_id": "C-13",
+      "severity": "minor",
+      "description": "Carried from r5 and r6, unchanged. The `echo ` and `require_text` exclusions still drop real invocations written on those lines, and I reproduced the resulting false PASS. It stays minor because the trigger requires an idiom the suite does not use anywhere, on top of the misplacement the bound exists to catch.",
+      "evidence": "constitution.md:465-467 for the exclusions, :477 for the explanation. New artifact R: banner and binding inside the guard with `require_file \"$stamper\"` as the only in-bounds use, and both real invocations appended after the comparison as `echo \"$(bash \"$stamper\" ...)\"`. Result: 'snap=587 banner=1297 bind=1298 first-use=1299 last-use=1299 cmp=1304' -> 'inside the guard'. That is the clause's own failing example at :519 going green again. What holds it below the r6 blocker's bar: `echo \"$(...)\"` is a useless-use-of-echo that appears nowhere in the 1309-line suite, whose actual capture idiom is `out=\"$(bash \"$migrator\" ...)\"` — which the block counts correctly — so no worker following house style lands here, and no checker running the block on a normally-written section decides differently. The clause still owes the worker one sentence turning the exclusions into a rule: invoke the stamper on a plain `bash \"$stamper\" ...` line or capture it into a variable, never inside an `echo` or a `require_text`. Two adjacent behaviors I probed and am not filing: a duplicate `^stamper=` binding (artifact S) makes the test emit '[: 1298|1301: integer expression expected' and print OUTSIDE, and an indented binding (artifact T) leaves bind empty and prints OUTSIDE. Both fail safe, both toward a false FAIL with a legible signal."
+    },
+    {
+      "clause_id": "REVISION-MARKER",
+      "severity": "minor",
+      "description": "The marker is current in substance and off by one in its own count. r6's staleness finding is otherwise closed.",
+      "evidence": "constitution.md:14 now reads '**Revision r6.** Six audits have failed this document'. Seven have: CON-audit-r0 through r6 all carry `\"verdict\": \"fail\"`. The forward-compatibility sentence r6 said no longer resolved has been rewritten to a rule that always resolves ('where a marker and this section disagree, trust this section'), and :16 now carries the r4, r5 and r6 findings on C-13 in sequence. The new paragraph at :18 naming the recurring shape — a check whose pass string prints for a reason other than the property it names — is the most useful two lines in the preamble and is the right thing to have added. Cosmetic; nothing reads the count."
+    },
+    {
+      "clause_id": "SCRIPT-CONTRACT",
+      "severity": "minor",
+      "description": "Carried from r5 and r6, unchanged. The contract still does not say which spelling of the record path the output lines carry, while C-18's and C-5's anchors require relative-to-scope-root.",
+      "evidence": "constitution.md:68-70 pins `stamped: <record-path> <old-or-none> -> <new>` without defining `<record-path>`; :73 says 'sorted by resolved record path'; :253 tells the worker a dedupe 'built on `realpath` passes' case 4. A worker who prints the realpath is consistent with every sentence in the contract and fails C-18 (`grep -c '^stamped: _memory/'` returns 0 against the stated 2) and C-5 (absolute paths differ between $S and $S.b, so 'ORDER DEPENDENT' prints for the wrong reason). My reference stamper resolves to realpath for dedupe and prints relative, and passes everything. One sentence under the output block closes it: paths print relative to the scope root, whichever spelling named them."
+    },
+    {
+      "clause_id": "SCRIPT-CONTRACT",
+      "severity": "minor",
+      "description": "New, and the weakest of the six. The contract's sort key is not falsified by any check — only the order-stability it exists to produce is. A stamper that sorts output lines by whole line rather than by path satisfies every check in the document.",
+      "evidence": "constitution.md:73, 'Lines come out sorted by resolved record path, never in argument order'. My reference stamper's final `printf '%s' \"$lines\" | sort` sorts whole lines, so 'skipped:' sorts before 'stamped:' regardless of path — C-2 printed the decisions record before the context one, the reverse of r6's reference stamper. It still passed C-1 through C-7 and C-18 verbatim, order-independence included. Filed as a minor rather than a finding because the property the clause argues for at :73 — 'a report that reshuffles between two runs over the same inbox is a report nobody can diff' — is fully delivered by either sort, C-5's arity-2 comparison falsifies the argument-order implementation the rule is aimed at, and no checker would decide differently. If it is ever tightened, the cheap fix is an anchored expected-output line in C-18 rather than new prose."
+    },
+    {
+      "clause_id": "C-5",
+      "severity": "minor",
+      "description": "Carried from r3, r4, r5 and r6. The `[ -s \"$S/$R\" ]` guard catches the r2 truncation and nothing else, so it never establishes the precondition that defines case 2.",
+      "evidence": "constitution.md:225. The mutation sets the record to 2026-01-20 so both group dates are later; a neutered mutation leaves it at its fixture value of 2026-02-10, group A becomes equal rather than later, and what runs is case 3's straddle a second time while every stated pass condition still prints. I ran the block as shipped and it passed cleanly, which is exactly the problem — it also passes when the precondition is absent. The guard should be `/usr/bin/grep -q '^last_confirmed: 2026-01-20' \"$S/$R\"`, the three-predicate shape C-6 already carries at :273-275."
+    },
+    {
+      "clause_id": "C-14",
+      "severity": "minor",
+      "description": "Carried from r3 through r6. Three of the four enumeration greps carry an inline expected value and the fourth does not, so it asserts nothing.",
+      "evidence": "constitution.md:540, `/usr/bin/grep -c 'confirmation-writethrough' _maintenance/inbox-to-memory/EVALS.md`, with no trailing comment and no prose at :544 naming a count. Re-ran the block at base: the siblings returned 1, 0 and 4 exactly as the clause predicts, and this one returned 0 with nothing to compare it against. The floor is 3 — the scenario heading, the fixture list under EVALS.md:9, and the Grading row."
+    },
+    {
+      "clause_id": "C-4",
+      "severity": "minor",
+      "description": "Carried from r4 through r6. The clause's own sentence is not scoped to the branch table, so read alone it asserts a status reason for a record the table sends down the v1 row.",
+      "evidence": "constitution.md:84-85 orders 'no `schema` key -> skip, v1' above '`status` is not `accepted` -> skip, status', and :80 says 'Exactly one branch fires'. C-4 at :179 still reads 'A record whose `status` is anything other than `accepted` is never written, and is reported as skipped with a reason naming its status', unqualified. My reference stamper reports the generation for a v1 non-`accepted` record, per the table, and no check constructs that case, so it never bites. 'A `schema: 2` record whose `status` is anything other than `accepted`' closes it."
+    },
+    {
+      "clause_id": "BASELINE",
+      "severity": "minor",
+      "description": "Carried from r5 and r6. One stale count survives the revision-marker pass.",
+      "evidence": "constitution.md:40 still reads 'Corrections from both audits are folded in.' Seven audits have now corrected this section. Everything the section asserts is otherwise current: I re-derived the guard pair (fixtures_before= at tests/inbox-to-memory-smoke.sh:586, compared at :1299, inside the block at :1296-1302), the 1309-line count, the migrator wiring precedent at :600, and the mixed/ fixture's two records with the frontmatter positions the section names."
+    },
+    {
+      "clause_id": "C-1",
+      "severity": "pass",
+      "description": "Runs clean against a rebuilt conforming stamper; all four malformed invocations refuse whole and write nothing.",
+      "evidence": "Ran verbatim: 'dry-run wrote nothing', 'dry-run reported the stamp', 'exit=0', 'dry and wet output identical', 'stamped: _memory/context/atlas-region-topology-mPmy8XBe5H.md 2026-02-10 -> 2026-02-17', 'stamped: 1  skipped: 0', 'last_confirmed: 2026-02-17'. Then 'no such record: ...' exit=2, 'no such note: ...' exit=2, 'record path before any --note: ...' exit=2, '--note group names no records: ...' exit=2."
+    },
+    {
+      "clause_id": "C-2",
+      "severity": "pass",
+      "description": "Unchanged and still the sharpest script clause.",
+      "evidence": "Ran verbatim: 'skipped: _memory/decisions/freeze-window-owned-by-ops-ocPwdpeY0a.md (v1 record, no schema key)', 'stamped: _memory/context/atlas-region-topology-mPmy8XBe5H.md 2026-02-10 -> 2026-02-17', 'stamped: 1  skipped: 1', 'exit=0', 'v1 untouched'. The clause asserts both lines and no order, which is what let my line-sorted stamper pass alongside r6's path-sorted one."
+    },
+    {
+      "clause_id": "C-3",
+      "severity": "pass",
+      "description": "Unchanged and still discriminating; the resolved-candidate wording matches the branch table's rows 3 and 4.",
+      "evidence": "Ran verbatim: 'skipped: ... (2025-12-02 is not later than 2026-02-10)' / 'stamped: 0  skipped: 1' / exit=0, then '(2026-02-10 is not later than 2026-02-10)' / 'stamped: 0  skipped: 1' / exit=0, then 'held'."
+    },
+    {
+      "clause_id": "C-5",
+      "severity": "pass",
+      "description": "All four cases run as stated and the arity-2 order comparison genuinely discriminates.",
+      "evidence": "Ran verbatim: 'fixture intact', 'stamped: ... 2026-01-20 -> 2026-02-17', 'skipped: ...freeze-window... (v1 record, no schema key)', 'stamped: 1  skipped: 1', 'order-independent', grep -c = 1, 'last_confirmed: 2026-02-17'. Straddle: 'stamped: ... 2026-02-10 -> 2026-02-17', 'stamped: 1  skipped: 0', grep -c = 1 and the line is a stamp, not a skip for the December group. Cases 1 and 4: grep -c = 1, with mktemp's /var vs /private/var prefix making the realpath dedupe load-bearing exactly as :253 says."
+    },
+    {
+      "clause_id": "C-6",
+      "severity": "pass",
+      "description": "Both halves run clean and both discriminate, on the real fixture and on the constructed budget scope.",
+      "evidence": "Insertion half: 'fixture is v2, nonempty, and has no last_confirmed', 'stamped: ... none -> 2026-02-17', 'stamped: 1  skipped: 0', exit=0, and `sed -n '1,20p'` showing 'last_confirmed: 2026-02-17' on line 8 directly after 'date: 2026-01-13' and directly before 'source_refs:', lint 'failures: 0'. Budget half: the probe scope lints 'failures: 0' at 17 keys plus one frontmatter comment closing on 20, then 'skipped: _memory/context/budget-probe-AAAAAAAAAA.md (frontmatter budget: inserting last_confirmed closes --- on line 21, past the 20-line budget)', 'stamped: 0  skipped: 1', exit=0, 'held'. The real note in the probe scope is what makes 'held' mean the budget path fired rather than a usage error."
+    },
+    {
+      "clause_id": "C-7",
+      "severity": "pass",
+      "description": "Runs clean; naming the v1 and v2 records in one invocation makes the diff prove the run touched exactly one of the two files it was handed.",
+      "evidence": "Ran verbatim: `diff -r` reported one file and one line pair, '8c8 < last_confirmed: 2026-02-10 --- > last_confirmed: 2026-02-17', and 'before=failures: 0 after=failures: 0'."
+    },
+    {
+      "clause_id": "C-8",
+      "severity": "pass",
+      "description": "Unchanged; both anchors resolve and the rubric is four independently settleable propositions plus a concrete structural failure mode.",
+      "evidence": "constitution.md:371 against the shipped SKILL.md:67 budget sentence and :69 'Only `status: accepted` records produce flags.' Phase 2.5 at :53, Phase 5 at :136. Placement is handed to C-17, correctly."
+    },
+    {
+      "clause_id": "C-9",
+      "severity": "pass",
+      "description": "Unchanged; the skip enumeration is stated against the branch table rather than paraphrased, so no skip branch can fall out of the report.",
+      "evidence": "constitution.md:378, 'one of the four skip branches in the stage-2 table: v1, non-`accepted`, not-later, or over budget', against the table's four skip rows at :84-89. All four reasons appeared verbatim in my reference stamper's output across C-2, C-3, C-4, C-6 and C-18."
+    },
+    {
+      "clause_id": "C-10",
+      "severity": "pass",
+      "description": "Unchanged and still the best rubric in the document; the two-exceptions collision anchor is real and really closes the list.",
+      "evidence": "constitution.md:385-386 against SKILL.md:450 '## Operating Rules' and :459, the list's last bullet ending 'This is the one sanctioned exception to preserving raw content exactly as captured.'"
+    },
+    {
+      "clause_id": "C-11",
+      "severity": "pass",
+      "description": "The sweep runs, the two ordered questions are still the right discriminator, and the clause is honest that twelve is a floor rather than a boundary.",
+      "evidence": "Ran the sweep at constitution.md:412-413 verbatim: 55 hits on a clean tree, 60 with the reference stamper installed, against the twelve named. The two pre-rulings at :407 still match README.md:74 and assets/claude-md/_memory.template.md:65 as quoted, and the out-of-allowlist hit at scripts/migrate-scope.sh:348-349 is governed by the last non-goal."
+    },
+    {
+      "clause_id": "C-12",
+      "severity": "pass",
+      "description": "Runs clean, and pinning the literal base SHA keeps it immune to the commit-first vacuity.",
+      "evidence": "Ran verbatim: no diff, 'inventory exit=0'. All four enumerating files are in the loop, and `/bin/cat` sidesteps the ccat alias."
+    },
+    {
+      "clause_id": "C-14",
+      "severity": "pass",
+      "description": "The scenario requirements and the four enumeration anchors are sound, and the mechanical half fails safe at base.",
+      "evidence": "`bash _maintenance/inbox-to-memory/eval-scope.sh confirmation-writethrough` exits 1 with 'no such eval fixture: .../evals/confirmation-writethrough', so `staged` is empty and the check is red until the fixture ships. Enumerations at base: '^Four, all under' = 1, '^Five, all under' = 0, '^| [0-9]\\.' = 4. The `^` anchor on the Four/Five move is load-bearing against the :12 'Four prior notes' decoy."
+    },
+    {
+      "clause_id": "C-15",
+      "severity": "pass",
+      "description": "Unchanged; the sweep returns exactly the one hit the clause predicts and the hit is genuinely broken today.",
+      "evidence": "Ran verbatim: one hit, '_maintenance//inbox-to-memory/eval-scope.sh:6:inbox-to-memory-smoke.sh:1226'. Line 1226 of the suite is a divider comment; the never-migrate-a-fixture rule it claims to cite is at :1296-1298, and this job moves it again."
+    },
+    {
+      "clause_id": "C-16",
+      "severity": "pass",
+      "description": "Runs clean with the reference stamper in place; the allowlist admits the untracked stamper by filename and keeps lint-scope.sh out.",
+      "evidence": "Ran verbatim: 'suites exit=0' across all three suites, 'HEAD is the base' (git rev-parse HEAD = 924f81f7d4c9794968a2954f8152dc6ed53cc9df), 'OK: 19 path(s) in scope', 'scope exit=0'. The untracked stamper is picked up by check-diff-scope.py, so the allowlist entry is load-bearing; the 18 modified archive task files are admitted by the `.agent-guild/` entry."
+    },
+    {
+      "clause_id": "C-17",
+      "severity": "pass",
+      "description": "Unchanged; the deterministic half fails safe, the convention anchors resolve, and the convention-not-derivation requirement is settleable against the document it describes.",
+      "evidence": "Both greps at constitution.md:603-604 exit 1 at base, so the clause is red until SKILL.md is wired. Requirement 3's claim that 'phase 4 only disposes sources and opens no gate' checks out against SKILL.md's headings: Phase 4 at :128 is 'Dispose Source', Phase 5 at :136 is 'Propose and Crystallize (gated)'. The mirrored wiring precedent is at tests/inbox-to-memory-smoke.sh:600."
+    },
+    {
+      "clause_id": "C-18",
+      "severity": "pass",
+      "description": "The clause still catches what nothing else does. The anchored counts are satisfiable and the record-state assertions reach the cross-record interaction.",
+      "evidence": "Ran verbatim against the reference stamper: exit=0, four lines for four records — two stamped ('...atlas-region-topology... 2026-02-10 -> 2026-02-17' and '...r-nokey.md none -> 2026-02-17') and two skipped ('...r-proposed.md (status: proposed, not accepted)' and '...freeze-window... (v1 record, no schema key)') — closing 'stamped: 2  skipped: 2'. The two path-anchored greps returned 2 and 2, dodging the closing summary line the r4 audit caught. 'insert reported as an insert', `grep -c '^last_confirmed: 2026-02-17' r-nokey.md` = 1, 'proposed record untouched', lint 'failures: 0'. The v2 record is named by both the February and December groups and resolves to February in one line, so stage 1 runs in the same invocation as four stage-2 branches."
+    },
+    {
+      "clause_id": "SCRIPT-CONTRACT",
+      "severity": "pass",
+      "description": "The two-stage rule and its six-row branch table are exhaustive, ordered and mutually exclusive. I implemented the table literally, in bash 3.2 with parallel indexed arrays, and it satisfied C-1 through C-7 and C-18 without a special case.",
+      "evidence": "constitution.md:77-93 for the rule and table. Stage 1 collapses to one candidate per realpath taking the max note date; stage 2 walks the six rows in order. The 3.2 warning at :46 is real and correctly scoped — the keyed max-date dedupe is the only thing in the job that wants an associative array, and a linear scan over parallel arrays does it. The all-or-nothing validation rule at :105 is what forces the parse-everything-then-decide shape; a streaming implementation cannot satisfy it. I could not make stage 1 and stage 2 disagree: stage 1 never reads record state, and the budget outcome is date-independent because every ISO date is ten characters and the inserted line count is one."
+    },
+    {
+      "clause_id": "COVERAGE",
+      "severity": "pass",
+      "description": "All seven acceptance criteria map to clauses that would catch their violation, and AC7's harness — the one thing still broken at r6 — is now enforced.",
+      "evidence": "spec.md:27-33. AC1 -> C-1, C-6's insertion half, C-7, C-8, C-13, C-17, C-18, all run. AC2 -> C-2 ('v1 untouched'), C-13's saboteur (extracted and run: byte-identical output while writing last_confirmed onto the v1 record), C-18's v1 row. AC3 -> C-9's rubric, fed by the contract's per-record output lines, and exceeding AC3 by also requiring the declined list scoped to the four skip branches. AC4 -> C-8, C-17, the contract's 'It writes by default. No `--apply`' at :95, C-10, and C-14's required pass-table row on the absence of any per-record prompt; all judgment, correctly, since the absence of a prompt is not scriptable. AC5 -> C-10 with the VTT collision anchor at SKILL.md:459. AC6 -> the batch contract at :63, C-5's four cases, C-17 requirement 1, C-13's required cross-group smoke assertion, C-18's two-group record. AC7 -> C-13, whose placement bound now discriminates on all ten artifacts."
+    },
+    {
+      "clause_id": "NON-GOALS",
+      "severity": "pass",
+      "description": "Unchanged and still sound; none of the six silently excludes an acceptance criterion.",
+      "evidence": "constitution.md:678-683 walked against spec.md:27-33. The C-11 sweep does reach inbox-to-memory/scripts/migrate-scope.sh:348-349, it sits outside C-16's allowlist, and the last non-goal rules it a finding to surface rather than a task to do. tests/fixtures/inbox-to-memory/README.md:3's 'Three scopes' above four bullets is correctly held as unrelated and pre-existing."
+    },
+    {
+      "clause_id": "PROTECTED",
+      "severity": "pass",
+      "description": "Correct: no verbatim author words ship in this job, so there is no manifest to parse.",
+      "evidence": "constitution.md:672-674. The job's surface is a shell script, SKILL.md and README.md prose, a smoke-test section, and an eval fixture."
+    },
+    {
+      "clause_id": "STRUCTURE",
+      "severity": "pass",
+      "description": "The r3 structural finding stays answered. The document grew by five lines and every one of them went into the two places the orchestrator named.",
+      "evidence": "683 lines, against r6's 678, r5's 673, r4's 651 and r3's 567. The clause index at :32-36 matches all eighteen clause severities. The 'Reading this' instruction at :30 — read the script contract, then only your clauses — still holds, and the contract remains the one section a worker cannot skip."
+    }
+  ]
+}

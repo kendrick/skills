@@ -1,0 +1,174 @@
+{
+  "task_id": "CON-audit",
+  "checker": "auditor",
+  "vendor": "anthropic",
+  "model": "claude-opus-5[1m]",
+  "verdict": "fail",
+  "findings": [
+    {
+      "clause_id": "C-18",
+      "severity": "major",
+      "description": "The clause is brand new and its stated expected count is unsatisfiable: `grep -c '^stamped: '` also matches the contract's own closing line `stamped: 2  skipped: 2`, so a conforming stamper returns 3 where the check says 2. No implementation can satisfy both C-18 and the contract's closing count, and a checker-deterministic running the block verbatim FAILs correct work. Second, separate defect on the same clause: the whole assertion set (two counts plus `failures: 0`) is satisfied byte-identically by a stamper that never performs the insertion, which is precisely the cross-record interaction C-18 exists to catch.",
+      "evidence": "constitution.md:630-631 '/usr/bin/grep -c \\'^stamped: \\'   # 2' and ':636 'two `stamped:` ... two `skipped:`'. Ran C-18 verbatim against a conforming reference stamper built for this audit (passes C-1 through C-7 verbatim): output 'stamped: _memory/context/atlas-region-topology-mPmy8XBe5H.md 2026-02-10 -> 2026-02-17' / 'stamped: _memory/context/r-nokey.md none -> 2026-02-17' / 'skipped: _memory/context/r-proposed.md (status: proposed, not accepted)' / 'skipped: _memory/decisions/freeze-window-owned-by-ops-ocPwdpeY0a.md (v1 record, no schema key)' / 'stamped: 2  skipped: 2', exit=0, lint 'failures: 0'. The two greps returned 3 and 2 \u2014 3, not the stated 2, because '^stamped: ' matches the closing line too. The asymmetry is the tell: '^skipped: ' is right only by accident, since the closing line begins 'stamped:'. The contract at :64 pins that line, so 2 is unreachable. Then the second half: I built a stale-state variant that leaks `cur` across loop iterations (reads last_confirmed into a variable it never resets, a natural bash-3.2 parallel-array bug). It passes C-1, C-2, C-3, C-4, C-5, C-6 and C-7 verbatim, and against C-18 it printed exit=0, grep counts 3 and 2, closing 'stamped: 2  skipped: 2', lint 'failures: 0' \u2014 every mechanical assertion identical to the conforming run \u2014 while `_memory/context/r-nokey.md` ended the run with `grep -c '^last_confirmed:'` = 0. The only distinguishing byte is 'r-nokey.md 2026-02-10 -> 2026-02-17' instead of 'r-nokey.md none -> 2026-02-17', which the check prints and never asserts, and :620's `cp -R \"$S\" \"$S.snap\"` snapshots the scope and is then removed without ever being compared."
+    },
+    {
+      "clause_id": "C-5",
+      "severity": "major",
+      "description": "The r3 major is not closed. The arity-2 rearrangement does not discriminate: in both invocations the first-encounter order of distinct records is the same (R, then V1), so an argument-ordered stamper prints byte-identical output either way and the check prints 'order-independent'. The clause's own explanation of why the comparison works is false. Compounding it, the new stable-order requirement is stated only inside C-5, not in the script contract that the 'Reading this' section tells implementers is the one section everything depends on.",
+      "evidence": "constitution.md:225-226 'ab=... --note \"$A\" \"$R\" --note \"$B\" \"$V1\" \"$R\"' / 'ba=... --note \"$B\" \"$R\" \"$V1\" --note \"$A\" \"$R\"'. Distinct-record first-encounter order: ab gives R (group A) then V1; ba gives R (group B) then V1. Identical. Ran both against an argument-ordered variant of the reference stamper (same code, `LC_ALL=C sort` removed from the emission order): ab and ba both printed 'stamped: ...atlas-region-topology 2026-01-20 -> 2026-02-17' then 'skipped: ...freeze-window... (v1 record, no schema key)' then 'stamped: 1  skipped: 1', and the check printed 'order-independent'. The same variant is plainly argument-ordered \u2014 invoked as '--note \"$B\" \"$V1\" \"$R\"' it prints the skipped line first. The clause's claim at :243, 'an implementation emitting in argument order prints `stamped` then `skipped` in one and `skipped` then `stamped` in the other', does not hold for the invocations written. One token fixes it: move $V1 ahead of $R in the ba group, i.e. '--note \"$B\" \"$V1\" \"$R\" --note \"$A\" \"$R\"'. I ran that corrective form against both stampers \u2014 sorted: 'order-independent'; argument-ordered: 'ORDER DEPENDENT'. Separately, the contract at :47-87 pins the two line formats and the closing count and says nothing about ordering; ':59 Every outcome prints one line per distinct record' if anything suggests encounter order. The requirement lives at :204 inside a blocker about dedupe, so a worker holding C-1 and C-6 plus the contract never sees it. The closing-count expectation the brief asked about is right: both arity-2 runs close at 'stamped: 1  skipped: 1'."
+    },
+    {
+      "clause_id": "C-13",
+      "severity": "minor",
+      "description": "The r3 major is closed \u2014 the banner anchor plus the require_text exclusion make the placement check correct wherever C-17's wiring assertion lands \u2014 but one false-FAIL path survives, and it is the one the clause itself creates. The invocation set is computed over the whole file and required to end before `cmp`, while the guard's failure message that C-13 instructs the worker to reword sits after `cmp`. A rewording that names the script by filename reopens the r3 defect.",
+      "evidence": "constitution.md:452-455 (calls computed file-wide) and :457 '[ \"$last\" -lt \"$cmp\" ]'. Ran the block against four synthetic artifacts. (A) shipped tree: 'snap=586 banner= first-call= last-call= cmp=1299' -> 'OUTSIDE THE GUARD', fails safe on the empty banner as intended. (B) correct section at :1229 with C-17's wiring require_text inserted beside 'scripts/lint-scope.sh' at :300: 'snap=587 banner=1229 first-call=1232 last-call=1233 cmp=1308' -> 'inside the guard'. (C) same, wiring beside 'scripts/migrate-scope.sh' at :601: 'inside the guard'. Both r3 exposures closed. (D) same as C, with :1300's message reworded to 'a migration or stamp-confirmed.sh test wrote to a checked-in fixture' \u2014 which is what ':440 The guard's comment says \"a migration test\"; it now also covers stamping tests and must say so' asks for: 'snap=586 banner=1229 first-call=1232 last-call=1309 cmp=1308' -> 'OUTSIDE THE GUARD'. (E) the same rewording phrased 'a migration or stamping test' passes. So the exclusions are correctly scoped for require_text and column-0 comments and one line short otherwise; bounding the call search at `cmp` (awk -F: -v c=\"$cmp\" '$1 < c') closes it without touching the exclusions."
+    },
+    {
+      "clause_id": "C-5",
+      "severity": "minor",
+      "description": "Carried unfixed from r3. The '[ -s \"$S/$R\" ]' guard catches the r2 truncation and nothing else, so it does not establish the precondition that defines case 2 \u2014 that both group dates are later than the record's current value.",
+      "evidence": "constitution.md:219 '[ -s \"$S/$R\" ] && echo \"fixture intact\"'. Ran the case-2 block with the re.sub replaced by a no-op, leaving the record at its fixture value of 2026-02-10, against the conforming reference stamper: 'fixture intact', 'stamped: ...2026-02-10 -> 2026-02-17', 'skipped: ...freeze-window...', 'stamped: 1  skipped: 1', 'order-independent', grep -c = 1, 'last_confirmed: 2026-02-17'. Every stated pass condition of case 2 holds, but group A is then equal rather than later, so what ran was case 3's straddle. The exact guard is '/usr/bin/grep -q \\'^last_confirmed: 2026-01-20\\' \"$S/$R\"', the same shape r4 correctly added to C-6."
+    },
+    {
+      "clause_id": "C-14",
+      "severity": "minor",
+      "description": "Carried unfixed from r3. Three of the four enumeration greps carry an inline expected value and the fourth does not, so it asserts nothing.",
+      "evidence": "constitution.md:522 '/usr/bin/grep -c \\'confirmation-writethrough\\' _maintenance/inbox-to-memory/EVALS.md' \u2014 no trailing comment, and the prose at :526 names the Four/Five move and the five Grading rows but never this count. Ran it at 924f81f: 0. Siblings at :520, :521, :523 carry '# 0', '# 1', '# 5' and return 1, 0, 4 as the clause predicts. A satisfying scenario needs the name in its heading, in the fixture list under EVALS.md:9 and in the Grading row, so the floor is 3."
+    },
+    {
+      "clause_id": "C-4",
+      "severity": "minor",
+      "description": "Downgraded from r3's C-2 skip-precedence minor: the new branch table settles the precedence, but C-4's own sentence was not scoped to match it, so read alone it still asserts a status reason for a record the table sends down the v1 row.",
+      "evidence": "constitution.md:76-77 orders 'no `schema` key -> skip, v1' above '`status` is not `accepted` -> skip, status' and :72 says 'Exactly one branch fires'. C-4 at :171 still reads 'A record whose `status` is anything other than `accepted` is never written, and is reported as skipped with a reason naming its status', unqualified. For a v1 non-`accepted` record the table's row 1 fires and the reason names the generation. The reference stamper does exactly that. Neither check constructs the case, so it never bites; 'A `schema: 2` record whose `status` is anything other than `accepted`' closes it."
+    },
+    {
+      "clause_id": "REVISION-MARKER",
+      "severity": "minor",
+      "description": "The document's own revision bookkeeping is stale, and it misattributes all four r4 changes to r3 \u2014 the same stale-enumeration defect C-14 polices in EVALS.md and C-15 polices in cross-references.",
+      "evidence": "constitution.md:14 '**Revision r3.** Three audits have failed this document' \u2014 four have (CON-audit-r0 through r3 in .agent-guild/state/verdicts/), and there is no r4 changelog paragraph. constitution.md:595 marks C-18 '*(new in r3...)*' though no r3-era document contained it; CON-audit-r3.md's per-clause table has no C-18 row. constitution.md:277 'The third predicate is the one r3 added' \u2014 r3's audit found the gap (CON-audit-r3.md, C-6 major, 'The fix is one predicate'); r4 added the predicate. C-5's :195 note still describes only the r3 changes and does not mention the order-independence rewrite r4 made at :204 and :243. constitution.md:34 'Corrections from both audits are folded in' says two."
+    },
+    {
+      "clause_id": "C-6",
+      "severity": "pass",
+      "description": "The r3 major is closed exactly as filed, and the added predicate genuinely fires. Both halves discriminate against the conforming stamper.",
+      "evidence": "constitution.md:265-268, the three-predicate guard. Insertion half run verbatim: 'fixture is v2, nonempty, and has no last_confirmed', 'stamped: ...none -> 2026-02-17', 'stamped: 1  skipped: 0', exit=0, sed 1,20p showing 'last_confirmed: 2026-02-17' on line 8 directly after 'date: 2026-01-13' and directly before 'source_refs:', lint 'failures: 0'. Then I neutered the mutation to a no-op, everything else verbatim: the guard printed 'FIXTURE NOT IN THE STATE THIS CHECK NEEDS \u2014 THE CHECK IS VOID' and the run stopped being credited. That is the r3 vacuity closed at the point it occurred. Budget half run verbatim: probe scope lints 'failures: 0', then 'skipped: _memory/context/budget-probe-AAAAAAAAAA.md (frontmatter budget: inserting last_confirmed closes --- on line 21, past the 20-line budget)', 'stamped: 0  skipped: 1', exit=0, 'held'; the sanity insertion by hand then produced 'frontmatter-budget: closing --- on line 21, past the 20-line budget' and 'failures: 1', exactly as :334 predicts."
+    },
+    {
+      "clause_id": "C-13",
+      "severity": "pass",
+      "description": "The headline of the r3 major is closed. The banner anchor is exact, the require_text and comment exclusions are correctly scoped, and both placements of C-17's wiring assertion now pass. The saboteur still behaves as advertised.",
+      "evidence": "constitution.md:450 anchors on '^# last_confirmed write-through (#27)$'. Synthetic artifacts (B) and (C) above both print 'inside the guard' with the wiring require_text at :300 and at :601 respectively \u2014 the two placements that split r3's verdict. The shipped tree fails safe. Saboteur installed over the reference stamper on a copy of mixed/: output byte-identical to the real run ('stamped: ...atlas-region-topology 2026-02-10 -> 2026-02-17', 'skipped: ...freeze-window... (v1 record, no schema key)', 'stamped: 1  skipped: 1') and the v1 record then carried 'last_confirmed: 2026-02-17' at :7 \u2014 real behavior in every respect except the v1 hold. Restored: shasum matched, 'git status --porcelain tests/fixtures/' empty. Guard bounds re-derived: fixtures_before assigned at tests/inbox-to-memory-smoke.sh:586, compared at :1299, file ends at :1309."
+    },
+    {
+      "clause_id": "SCRIPT-CONTRACT",
+      "severity": "pass",
+      "description": "The six-row branch table closes both r3 findings against the resolution rule. It is exhaustive, ordered, and mutually exclusive over (candidate, record state), and it names the two missing-key rows the one-sentence version omitted.",
+      "evidence": "constitution.md:72-83. Rows: no schema; status not accepted; has last_confirmed and later; has last_confirmed and earlier-or-equal; no last_confirmed and fits; no last_confirmed and overruns. ':72 Exactly one branch fires, and each produces exactly one output line. In order:' supplies the precedence r3's C-2 minor asked for. I re-attacked stage 1 against stage 2 and could not make them disagree, consistent with r3: stage 1 never reads record state, and the budget outcome is date-independent (lint-scope.sh:40 FRONTMATTER_LINE_BUDGET=20, :177 keys off the closing line number; every ISO date is ten characters and the inserted line count is one). Per the brief I did not re-derive the two-stage rule's well-foundedness beyond confirming the table matches it. The one thing the contract still does not state is output ordering \u2014 filed under C-5."
+    },
+    {
+      "clause_id": "STRUCTURE",
+      "severity": "pass",
+      "description": "The r3 structural major is substantially answered, and I am not re-filing it. The clause index gives a worker the two or three clauses they hold without reading the document, the branch table turns the skimmable rule into a table, and C-18 gives it a harness. The document is longer, but the growth bought navigability rather than more prose to skim.",
+      "evidence": "constitution.md:22-30, the 'Reading this' section and clause index. I checked the index against the clause bodies: all eighteen severities match (C-4 and C-18 major in the script row; C-11 and C-12 major in the prose row; C-14 major and C-15 minor in the tests row; everything else blocker). wc -l -w: 651 / 9,972, against r3's 567 / 8,653. The r3 finding was that the unifying rule was unfalsifiable; it now has a table in the contract and a clause of its own. C-18's two defects above are about that clause's check, not about the decision to add it \u2014 the stale-cur experiment shows the interaction really is unreachable from C-2 through C-6, so the clause earns its 40 lines once its assertions bite."
+    },
+    {
+      "clause_id": "C-1",
+      "severity": "pass",
+      "description": "Runs clean against the conforming stamper; all four malformed invocations refuse whole.",
+      "evidence": "Ran verbatim: 'dry-run wrote nothing', 'dry-run reported the stamp', exit=0, 'dry and wet output identical', 'stamped: _memory/context/atlas-region-topology-mPmy8XBe5H.md 2026-02-10 -> 2026-02-17', 'stamped: 1  skipped: 0', 'last_confirmed: 2026-02-17'. Then 'no such record: ...' exit=2, 'no such note: ...' exit=2, 'record path before any --note: ...' exit=2, '--note group names no records: ...' exit=2."
+    },
+    {
+      "clause_id": "C-2",
+      "severity": "pass",
+      "description": "Unchanged and still the sharpest script clause. Ran verbatim.",
+      "evidence": "'stamped: _memory/context/atlas-region-topology-mPmy8XBe5H.md 2026-02-10 -> 2026-02-17', 'skipped: _memory/decisions/freeze-window-owned-by-ops-ocPwdpeY0a.md (v1 record, no schema key)', 'stamped: 1  skipped: 1', exit=0, 'v1 untouched'. Note the sorted emission order puts the stamped line first even though the v1 record is named first on the command line; C-2 asserts both lines and no order, so the new stable-order rule does not disturb it."
+    },
+    {
+      "clause_id": "C-3",
+      "severity": "pass",
+      "description": "Unchanged from the r3 pass and still discriminating. The resolved-candidate wording is consistent with the new branch table's rows 3 and 4.",
+      "evidence": "Ran verbatim: 'skipped: ...(2025-12-02 is not later than 2026-02-10)' / 'stamped: 0  skipped: 1' / exit=0, then '(2026-02-10 is not later than 2026-02-10)' / 'stamped: 0  skipped: 1' / exit=0, then 'held'."
+    },
+    {
+      "clause_id": "C-4",
+      "severity": "pass",
+      "description": "The check runs clean and its mutation is the correct read-then-write form. The minor above is about the clause's sentence, not this block.",
+      "evidence": "Ran verbatim: 'skipped: _memory/context/atlas-region-topology-mPmy8XBe5H.md (status: proposed, not accepted)', 'stamped: 0  skipped: 1', exit=0, 'held'."
+    },
+    {
+      "clause_id": "C-7",
+      "severity": "pass",
+      "description": "Runs clean; naming the v1 and v2 records in one invocation makes the diff prove the run touched one of the two files it was handed.",
+      "evidence": "Ran verbatim: diff -r reported one file and one line pair, '8c8 < last_confirmed: 2026-02-10 --- > last_confirmed: 2026-02-17', and 'before=failures: 0 after=failures: 0'."
+    },
+    {
+      "clause_id": "C-8",
+      "severity": "pass",
+      "description": "Unchanged; anchors still resolve and the rubric is four independently settleable propositions plus a concrete structural failure mode.",
+      "evidence": "SKILL.md:67 '**Five body reads per input, and the budget binds.**' and :69 'Only `status: accepted` records produce flags.' both verbatim where the clause says they are. Phase 2.5's per-input loop opens at SKILL.md:59. The clause still hands placement to C-17."
+    },
+    {
+      "clause_id": "C-9",
+      "severity": "pass",
+      "description": "The r3 minor is closed the right way \u2014 the skip enumeration is now stated against the branch table rather than paraphrased, so 'already current' no longer swallows the backward case the monotonic guard exists for.",
+      "evidence": "constitution.md:370 'which it then skipped on one of the four skip branches in the stage-2 table: v1, non-`accepted`, not-later, or over budget' against the table's four skip rows at :76-81. 'not-later' covers both the earlier and the equal case, which is what the reference stamper prints: 'skipped: ...(2025-12-02 is not later than 2026-02-10)'. The scoping sentence keeping the list to what the stamper declined, rather than everything phase 2.5 opened, is intact."
+    },
+    {
+      "clause_id": "C-10",
+      "severity": "pass",
+      "description": "Unchanged and still the best rubric in the document; the two-exceptions collision anchor is real and really closes the list.",
+      "evidence": "SKILL.md:450 '## Operating Rules', list ending at :459 '- **VTT raw content is collapsed, not verbatim.** ... via `scripts/collapse-vtt.sh`'. Verified both lines directly."
+    },
+    {
+      "clause_id": "C-11",
+      "severity": "pass",
+      "description": "Re-derived the sweep rather than reading the list. All twelve floor locations resolve and the two ordered questions are still the right discriminator.",
+      "evidence": "Ran the sweep at constitution.md:404-406 verbatim: 61 hits. Spot-resolved all twelve named floor locations \u2014 SKILL.md:26 ('The user reviews and approves between phase 4 and phase 5'), :138 ('Stop here. Show the user every groomed note'), :168 ('Never auto-promote. Every record creation requires explicit user approval per candidate'), :361 ('Sets `last_confirmed` on a record to the record's own date'), :455 ('Never auto-promote across scopes'); README.md:74 ('Nothing is ever promoted to memory automatically'); _memory.template.md:21 ('last_confirmed: YYYY-MM-DD') and :65 ('**Wait for user sign-off.**'); client.template.md:71; project.template.md:55; migration.md:37; retrieval-funnel.md:40. migrate-scope.sh:348-349 is exactly the reasoning comment the clause says it is and is governed by the last non-goal."
+    },
+    {
+      "clause_id": "C-12",
+      "severity": "pass",
+      "description": "Unchanged, still runs clean, still immune to the commit-first vacuity because it pins the literal base SHA.",
+      "evidence": "Ran the check verbatim at 924f81f: no diff, 'inventory exit=0'. All four enumerating files are in the loop."
+    },
+    {
+      "clause_id": "C-15",
+      "severity": "pass",
+      "description": "Unchanged; the sweep runs and returns exactly the one hit the clause predicts.",
+      "evidence": "Ran verbatim: one hit, '_maintenance//inbox-to-memory/eval-scope.sh:6:inbox-to-memory-smoke.sh:1226', against a rule that lives at tests/inbox-to-memory-smoke.sh:1296-1298."
+    },
+    {
+      "clause_id": "C-16",
+      "severity": "pass",
+      "description": "Runs clean; the allowlist admits the untracked stamper and keeps lint-scope.sh out.",
+      "evidence": "Ran the check verbatim with the reference stamper in place: 'suites exit=0', 'HEAD is the base' (git rev-parse HEAD = 924f81f7d4c9794968a2954f8152dc6ed53cc9df), 'OK: 19 path(s) in scope', 'scope exit=0'. The untracked stamper is picked up by check-diff-scope.py, so the allowlist entry is load-bearing."
+    },
+    {
+      "clause_id": "C-17",
+      "severity": "pass",
+      "description": "Unchanged from the r3 pass; the deterministic half still fails safe and the convention-not-derivation requirement is still the settleable question r3 credited it with.",
+      "evidence": "Both greps at constitution.md:585-586 return nothing at 924f81f (exit 1 each), so the clause is red until SKILL.md is wired. C-13's r4 rework makes the two clauses independent: with the wiring require_text at :300 or at :601, C-13's placement check now prints 'inside the guard' either way, so the coupling r3 filed is gone."
+    },
+    {
+      "clause_id": "COVERAGE",
+      "severity": "pass",
+      "description": "All seven acceptance criteria map to clauses that would catch their violation. I re-walked each against the shipped document rather than inheriting r3's table; the two majors above are defects in two clauses' check code, not gaps in coverage.",
+      "evidence": "spec.md:27-33. AC1 'a confirmation stamps last_confirmed on a v2 record' -> C-1 (ran it: 2026-02-10 -> 2026-02-17, exit 0), C-6 insertion path (ran it), C-7 (nothing else moves), C-8 (detection), C-13 (smoke), C-17 (SKILL.md calls it). AC2 'v1 records are skipped and never gain the field' -> C-2 (ran it: 'v1 untouched'), C-13's saboteur (installed it; reddens for a v1-write reason, not an output-shape one), C-18's v1 row. AC3 'every stamped record is named in the verify report' -> C-9's rubric, with the contract's per-record output lines at :62-64 as the raw material; C-9 exceeds AC3 by also requiring the declined list. AC4 'no confirmation prompts for per-record approval' -> C-8 ('the resulting stamp does not pass through phase 5'), C-17 (call before phase 5), the contract's 'It writes by default. No `--apply`' at :87, C-10, and C-14's required pass-table row on the absence of any per-record prompt. All judgment, correctly: the absence of a prompt is not scriptable. AC5 'operating rules name the sole sanctioned exception with reasoning' -> C-10, VTT collision anchor verified at SKILL.md:459. AC6 'a record confirmed twice in one run is stamped once' -> the batch contract at :57, C-5 cases 1-4 (ran them: one stamped line, later date, straddle collapsing to one line, realpath dedupe holding), C-17 requirement 1, C-13's required cross-group smoke assertion, C-18's two-group record. AC6's order-independence rider is the C-5 major above. AC7 'the smoke test asserts that a run over the mixed fixture leaves v1 records untouched' -> C-13's headline, saboteur and placement, with C-2 supplying the content."
+    },
+    {
+      "clause_id": "NON-GOALS",
+      "severity": "pass",
+      "description": "Unchanged and still sound; none of the six silently excludes an acceptance criterion.",
+      "evidence": "constitution.md:644-651 walked against spec.md:27-33. The C-11 sweep does reach inbox-to-memory/scripts/migrate-scope.sh:348-349, it sits outside C-16's allowlist, and :651 rules it a finding to surface rather than a task to do. tests/fixtures/inbox-to-memory/README.md:3's 'Three scopes' above four bullets is correctly held as unrelated."
+    },
+    {
+      "clause_id": "PROTECTED",
+      "severity": "pass",
+      "description": "Correct and unchanged: no verbatim author words ship in this job, so there is no manifest to parse.",
+      "evidence": "constitution.md:640-642. The job's surface is a shell script, SKILL.md and README.md prose, a smoke-test section, and an eval fixture."
+    }
+  ],
+  "timestamp": "2026-08-09T04:15:00Z",
+  "duration_ms": null,
+  "cost_usd": null
+}
