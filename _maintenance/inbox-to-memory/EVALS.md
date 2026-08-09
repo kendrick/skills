@@ -1,17 +1,18 @@
 # inbox-to-memory Evals
 
-Scenario suite for the judgment half of the skill, which is everything the lint cannot reach: contradiction handling, chronic open questions, scope proposal, and what a Tier 2 summary is allowed to say. Method follows `skill-creator`, and the `file-issue` suite next door — for each scenario, run the same prompt twice, once with the skill loaded and once without, and grade the delta. The no-skill baseline is the step that tells you whether the skill taught anything.
+Scenario suite for the judgment half of the skill, which is everything the lint cannot reach: contradiction handling, chronic open questions, scope proposal, what a Tier 2 summary is allowed to say, and telling a confirmation apart from a mention. Method follows `skill-creator`, and the `file-issue` suite next door — for each scenario, run the same prompt twice, once with the skill loaded and once without, and grade the delta. The no-skill baseline is the step that tells you whether the skill taught anything.
 
 Every run happens in a scratch copy. Nothing in this suite writes to the repo.
 
 ## Fixtures
 
-Four, all under `tests/fixtures/inbox-to-memory/evals/`. Nothing is ever run there — a scenario runs against the copy `eval-scope.sh` prints.
+Five, all under `tests/fixtures/inbox-to-memory/evals/`. Nothing is ever run there — a scenario runs against the copy `eval-scope.sh` prints.
 
 - **`contradiction-amend`** — Larkspur Supply, refund controls. An `accepted` Rule record putting a $500 approval-code threshold on every refund, a `superseded` Context record, a `proposed` Decision, and one inbox transcript that walks into all three. Two prior notes.
 - **`unacknowledged-tension`** — Meridian Freight's Dockside pilot at the Bexley Road terminal. Four prior notes, two open-question slugs live in all four, one of them named out loud in the inbox transcript and one of them never mentioned.
 - **`scope-tiers`** — Calderwood Mutual. A client root with `projects/claims-intake/` and `pursuits/underwriting-assist/` beneath it, four inbox inputs spread across three opted-in scope roots, and a client `CLAUDE.md` declaring lightweight memory mode.
 - **`tier2-summary-entities`** — a v1 Kestrel cutover scope, two notes and two records. A transcript mishearing, a locked cutover date, and a four-hour rebuild figure all sit below `## Raw Content`, where the Tier 2 extract does not reach.
+- **`confirmation-writethrough`** — Ashgrove Water's Tanager rollout at the Ferndale depot. Three prior notes and four records the pilot review walks past: an `accepted` v2 Context record it restates, an `accepted` v1 Decision it also restates, a second `accepted` v2 Context record about the same overnight job that it never restates, and a `proposed` Decision it agrees with word for word. Exactly one `last_confirmed:` line in the whole scope.
 
 ## Running a scenario
 
@@ -116,6 +117,29 @@ Without the skill: the proposals get written from the note on disk. Expect `Toma
 
 Nothing here is graded on how good the summary reads. A dull summary that is sourced passes; a sharper one carrying November 14th fails.
 
+### 5. Confirmation write-through — restated, or merely mentioned
+
+**Fixture:** `confirmation-writethrough`
+**Run from:** the staged root
+**Prompt:** "process the inbox"
+
+Approve nothing at the phase 5 gate. Nothing in this transcript needs crystallizing, and the stamp does not pass through that gate anyway, which is the behavior under test.
+
+One file in `_memory/` carries a `last_confirmed:` line going in. One should carry it coming out, with a later date on it. Every row below settles off the staged copy except the phase 6 one, so keep the run's report.
+
+| Expect | Pass condition |
+| --- | --- |
+| The stamp | `harrow-write-window-kQ2MiN7kOA.md` reads `last_confirmed: 2026-06-16`, up from `2026-05-19`, and every other line in the file is unchanged |
+| The v1 record | `handsets-not-tablets-Ho0R3o1JGL.md` is byte-identical, though Marta restates it in as many words. No `schema:` key appeared and no `last_confirmed:` line did either |
+| The record nobody restated | `harrow-route-sequence-mr1b_3yB4S.md` is byte-identical, still carries no `last_confirmed:`, and is named by no `[contradicts accepted: ...]` flag. Marta spends the middle of the meeting on who builds the day's run, Harrow's overnight job is the subject of the passage before it, and nobody says how that job orders anything |
+| The `proposed` record | `paper-worksheet-until-close-Y_fVVkE5D8.md` is byte-identical and still carries no `last_confirmed:`, though Marta says its title back almost exactly |
+| Phase 6 | Names `harrow-write-window-kQ2MiN7kOA` as stamped, and `handsets-not-tablets-Ho0R3o1JGL` as skipped for its generation. `harrow-route-sequence-mr1b_3yB4S` is in neither list |
+| No prompt | Nothing in the run asks whether to move a date, and no `last_confirmed` appears among the candidates put up at the phase 5 gate |
+
+Without the skill: nothing reads `_memory/` before writing, so no record is named anywhere in the output and no date moves. Expect Deshawn's one-to-four window written up as something this meeting established, under a findings or constraints heading of the model's own choosing, and the tablet line filed as a decision this meeting took rather than one it repeated. Diff all four records afterwards and every one is byte-identical, with `harrow-write-window-kQ2MiN7kOA` still reading `last_confirmed: 2026-05-19` and still the only file in the scope carrying the key.
+
+Four of these six rows go green for a run that writes nothing into `_memory/` at all, which is what grading restraint costs. The stamp and the phase 6 report carry the scenario. Missing the confirmation is the cheap failure; the expensive one is a run that stamps `harrow-route-sequence-mr1b_3yB4S` because Harrow, the overnight job, and drive-time sequencing are all in the transcript, and never notices that the record's own claim is the one thing nobody in the room said.
+
 ## Grading
 
 Per scenario, record `passed` plus verbatim `evidence` for each row, taken off the staged copy rather than off the transcript of the run. Every row is binary on purpose. A row that needs an argument to settle was specified badly, so fix the row rather than the grade.
@@ -126,5 +150,6 @@ Per scenario, record `passed` plus verbatim `evidence` for each row, taken off t
 | 2. Unacknowledged tension | | | | |
 | 3. Scope proposal and the tiebreak | | | | |
 | 4. Tier 2 summary and entities | | | | |
+| 5. Confirmation write-through | | | | |
 
-The delta is widest on 1 and 4, and those are the two where a baseline reads best: a groomed note that is accurate about the meeting and never opened `_memory/`, and a summary that is accurate about the day and unsourceable from the layer the migrator checks it against.
+The delta is widest on 1 and 4, and those are the two where a baseline reads best: a groomed note that is accurate about the meeting and never opened `_memory/`, and a summary that is accurate about the day and unsourceable from the layer the migrator checks it against. Scenario 5 has scenario 1's baseline and a much narrower delta, since four of its six rows pass for a run that never opens `_memory/` at all. Read the two rows that move rather than the count.
