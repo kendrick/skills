@@ -66,7 +66,7 @@ inbox-to-memory/
 
 ## Gotchas
 
-- The skill only operates on opted-in directories (ones containing `_inbox/` plus `_memory/` or `entries/`). Anywhere else, it refuses and offers to scaffold instead.
+- The skill only operates on opted-in directories: ones holding `_memory/` or `entries/`, plus an `_inbox/` either alongside those or under `notes/`. Anywhere else, it refuses and offers to scaffold instead.
 - IDs come from the `nanoid` CLI (`nanoid -s 10`), which must be installed globally.
 - The verify step runs `scripts/lint-scope.sh` over the scope, and it parses YAML with `yq`. Install that alongside `nanoid` (`brew install yq`). Neither ships with macOS, and a missing one fails for a reason that has nothing to do with your notes.
 - Notes written before the v2 contract keep working untouched; nothing forces a migration. When you do want one, `scripts/migrate-scope.sh` rewrites frontmatter only and never touches a body. It dry-runs by default and wants a clean working tree before it writes. See [references/migration.md](references/migration.md).

@@ -60,8 +60,14 @@ if [[ ! -d "$scope" ]]; then
   exit 2
 fi
 
-if [[ ! -d "$scope/_inbox" ]] || { [[ ! -d "$scope/_memory" ]] && [[ ! -d "$scope/entries" ]]; }; then
-  echo "not an opted-in scope: $scope (needs _inbox/ plus _memory/ or entries/)" >&2
+# The queue is the opt-in marker, but it doesn't sit in the same place in every
+# layout: scaffold mode puts it under notes/ for client and project scopes, and at
+# the scope root only for journals. Check exactly those two spots. Matching
+# _inbox/ at any depth would let a client root opt itself in on a queue belonging
+# to one of its own projects.
+if { [[ ! -d "$scope/_inbox" ]] && [[ ! -d "$scope/notes/_inbox" ]]; } ||
+   { [[ ! -d "$scope/_memory" ]] && [[ ! -d "$scope/entries" ]]; }; then
+  echo "not an opted-in scope: $scope (needs _inbox/ or notes/_inbox/, plus _memory/ or entries/)" >&2
   exit 2
 fi
 

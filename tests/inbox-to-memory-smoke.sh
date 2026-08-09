@@ -296,6 +296,29 @@ if bash "$lint" "$not_a_scope" >/dev/null 2>&1; then
   exit 1
 fi
 
+# Scaffold mode puts the queue under notes/ for client and project scopes, so a
+# scope shaped that way has to lint like any other. Every other fixture here is
+# flat, and that uniformity is exactly what hid the guard's assumption that the
+# queue sits at the scope root: it rejected every scaffolded vault in the field
+# while this suite stayed green.
+require_dir "$fixtures/scaffold-layout/notes/_inbox"
+require_dir "$fixtures/scaffold-layout/_memory"
+scaffold_out="$(run_lint "$fixtures/scaffold-layout")"
+require_line "$scaffold_out" "scope: $fixtures/scaffold-layout" scaffold-layout
+require_line "$scaffold_out" "v1 files: 2" scaffold-layout
+require_line "$scaffold_out" "failures: 0" scaffold-layout
+
+# The queue is looked for at the scope root and one level down, never by depth.
+# A client root owns the directories its projects sit in but not their queues,
+# so finding one below itself must not opt it in. Nested inside the temp dir
+# above so it rides that cleanup rather than adding a second EXIT trap.
+nested_root="$not_a_scope/client-with-nested-project"
+mkdir -p "$nested_root/_memory" "$nested_root/projects/p1/_inbox" "$nested_root/projects/p1/_memory"
+if bash "$lint" "$nested_root" >/dev/null 2>&1; then
+  echo "lint opted a client root in on a queue belonging to a project beneath it" >&2
+  exit 1
+fi
+
 # The skill has to name the scripts it runs, or nothing invokes them in the field.
 require_text inbox-to-memory/SKILL.md "scripts/lint-scope.sh"
 require_text inbox-to-memory/SKILL.md "scripts/stamp-confirmed.sh"
@@ -593,6 +616,16 @@ require_file "$migrator"
   exit 1
 }
 bash -n "$migrator"
+
+# The migrator has its own copy of the opt-in guard, so the scaffold layout has
+# to reach its report rather than its refusal. A dry run writes nothing, which
+# keeps this inside the no-fixture-is-modified guarantee asserted below.
+scaffold_dry="$(bash "$migrator" "$fixtures/scaffold-layout" 2>&1 || true)"
+grep -Fq 'migrated: 2' <<<"$scaffold_dry" || {
+  echo "migrator did not reach its report on a scaffold-layout scope" >&2
+  printf '%s\n' "$scaffold_dry" >&2
+  exit 1
+}
 
 # The mode only exists if something routes to it, and the phrasing row is the
 # only thing that does.

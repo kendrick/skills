@@ -38,7 +38,7 @@ usage: migrate-scope.sh <scope-path> [--apply] [--allow-dirty]
        migrate-scope.sh <scope-path> --tier2-extract <dir>
        migrate-scope.sh <scope-path> --tier2 <proposals-file> --apply
 
-  <scope-path>       a directory containing _inbox/ plus _memory/ or entries/
+  <scope-path>       a directory with _inbox/ or notes/_inbox/, plus _memory/ or entries/
   --apply            write the changes; without it nothing is written
   --allow-dirty      proceed even though the working tree has uncommitted changes
   --tier2-extract    for each v1 note, write its extracted sections and a
@@ -98,8 +98,14 @@ done
   exit 2
 }
 
-if [[ ! -d "$scope/_inbox" ]] || { [[ ! -d "$scope/_memory" ]] && [[ ! -d "$scope/entries" ]]; }; then
-  echo "not an opted-in scope: $scope (needs _inbox/ plus _memory/ or entries/)" >&2
+# The queue is the opt-in marker, but it doesn't sit in the same place in every
+# layout: scaffold mode puts it under notes/ for client and project scopes, and at
+# the scope root only for journals. Check exactly those two spots. Matching
+# _inbox/ at any depth would let a client root opt itself in on a queue belonging
+# to one of its own projects.
+if { [[ ! -d "$scope/_inbox" ]] && [[ ! -d "$scope/notes/_inbox" ]]; } ||
+   { [[ ! -d "$scope/_memory" ]] && [[ ! -d "$scope/entries" ]]; }; then
+  echo "not an opted-in scope: $scope (needs _inbox/ or notes/_inbox/, plus _memory/ or entries/)" >&2
   exit 2
 fi
 

@@ -1,6 +1,6 @@
 ---
 name: inbox-to-memory
-description: Process raw inputs (transcripts, meeting notes, PDFs, slide decks, scratch braindumps) from a `_inbox/` queue into one groomed markdown note per input, and propose memory records across three scope tiers — project, client, and a cross-client journal. Use whenever the user wants to process the inbox, groom notes, drain the inbox, crystallize a memory candidate, promote something to memory or to a journal — even if they don't say "skill" or name a file type. Also use to set up the substrate for a new project, client, or the journal — scaffold a new project here, set up notes substrate, spin up a client, set up the journal, create a memory bank here. Client and project scaffolds default to a lightweight 3-type memory schema (Decision/Context/Rule) with a canonical 4-type opt; they also produce a README, `_personal.md`, `working-state.md` (project scope), and a `patterns-journal/`. Only operates on opted-in directories (containing `_inbox/` plus either `_memory/` or `entries/`).
+description: Process raw inputs (transcripts, meeting notes, PDFs, slide decks, scratch braindumps) from a `_inbox/` queue into one groomed markdown note per input, and propose memory records across three scope tiers — project, client, and a cross-client journal. Use whenever the user wants to process the inbox, groom notes, drain the inbox, crystallize a memory candidate, promote something to memory or to a journal — even if they don't say "skill" or name a file type. Also use to set up the substrate for a new project, client, or the journal — scaffold a new project here, set up notes substrate, spin up a client, set up the journal, create a memory bank here. Client and project scaffolds default to a lightweight 3-type memory schema (Decision/Context/Rule) with a canonical 4-type opt; they also produce a README, `_personal.md`, `working-state.md` (project scope), and a `patterns-journal/`. Only operates on opted-in directories (holding `_memory/` or `entries/`, plus an `_inbox/` at that level or under `notes/`).
 ---
 
 # inbox-to-memory
@@ -27,10 +27,12 @@ Six phases, plus a 2.5 that slots in ahead of grooming. The user reviews and app
 
 ### Phase 1 — Detect Scope
 
-Walk up from the user's cwd to find the nearest opted-in directory. A directory is opted in when it contains both `_inbox/` and one of these markers:
+Walk up from the user's cwd to find the nearest opted-in directory. A directory is opted in when it carries a queue and one of these markers:
 
 - `_memory/` → project or client scope.
 - `entries/` → journal scope.
+
+The marker sits at the directory itself. The queue sits either there or one level down at `notes/_inbox/`, which is where the client and project scaffolds put it; only the journal scaffold puts it at the root. Look in exactly those two places. A queue found at any greater depth belongs to a scope nested below this one, and a client root that claimed it would start acting on its own projects' inputs.
 
 Distinguish project from client scope by path: a project sits under `pursuits/<name>/` or `projects/<name>/`; a client root is the directory that _contains_ those (and is itself opted in). Journal scope is set by the `entries/` marker.
 
