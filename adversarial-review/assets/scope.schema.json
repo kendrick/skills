@@ -1,0 +1,141 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "adversarial-review scope contract",
+  "description": "The scope contract, written to disk before any subagent is dispatched. It pins what is being reviewed (a merge-base SHA, never a moving ref), who owns which file, and what nobody may report. Keyword use stays inside the conservative set the bundled stdlib validator walks: type, properties, required, items, enum, additionalProperties. Rules a conditional would express live in check-territories.py instead, matching the kit convention that a schema states shape and a script states semantics.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "fixed_point",
+    "merge_base_sha",
+    "diff_cmd",
+    "dirty_tree_accepted",
+    "excluded",
+    "out_of_scope",
+    "depth",
+    "changed_files",
+    "territories",
+    "derivation",
+    "amendments",
+    "rounds"
+  ],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "enum": [1]
+    },
+    "fixed_point": {
+      "type": "string",
+      "description": "What the user supplied, verbatim, e.g. 'main' or a SHA. Kept for the report; never used to compute a diff."
+    },
+    "merge_base_sha": {
+      "type": "string",
+      "description": "git merge-base <fixed_point> HEAD, resolved once in preflight. Every diff in the run is computed from this SHA, so a branch moving under a multi-day round loop cannot silently change what is under review."
+    },
+    "diff_cmd": {
+      "type": "string",
+      "description": "The exact command every finder is handed. Captured once so no two territories can be reviewing different things."
+    },
+    "dirty_tree_accepted": {
+      "type": "boolean",
+      "description": "True only when the user overrode the clean-tree check. Verification evidence is meaningful only against the code the diff describes, so an override is recorded rather than assumed."
+    },
+    "excluded": {
+      "type": "array",
+      "description": "Generated trees and vendored paths held out of territory derivation.",
+      "items": { "type": "string" }
+    },
+    "out_of_scope": {
+      "type": "array",
+      "description": "Settled decisions, deliberate renames, prose-only changes. Passed verbatim to every finder as do-not-report.",
+      "items": { "type": "string" }
+    },
+    "depth": {
+      "type": "integer",
+      "enum": [0, 1, 2]
+    },
+    "changed_files": {
+      "type": "array",
+      "description": "Every path in the diff after exclusions. Each one must be owned by exactly one territory.",
+      "items": { "type": "string" }
+    },
+    "territories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "entries", "classes", "model_tier"],
+        "properties": {
+          "name": { "type": "string" },
+          "entries": {
+            "type": "array",
+            "description": "Literal repo-relative paths, or directory prefixes ending in '/'. A glob here would own nothing; check-territories.py rejects one.",
+            "items": { "type": "string" }
+          },
+          "classes": {
+            "type": "array",
+            "description": "The union of suspicion classes this territory's files triggered. A file that is both money and authz keeps both lenses.",
+            "items": { "type": "string" }
+          },
+          "model_tier": {
+            "type": "string",
+            "enum": ["haiku", "sonnet", "opus"]
+          }
+        }
+      }
+    },
+    "derivation": {
+      "type": "array",
+      "description": "One record per changed file naming the trigger rows it matched and the territory it landed in. This is what makes the same diff produce the same territories twice.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["file", "matched_rows", "territory"],
+        "properties": {
+          "file": { "type": "string" },
+          "matched_rows": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "territory": { "type": "string" }
+        }
+      }
+    },
+    "amendments": {
+      "type": "array",
+      "description": "Scope changes made mid-run, always when a later round's fix diff touched a path no territory owned. An amendment is recorded and re-validated rather than assumed.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["at", "round", "territory", "added_entries", "reason"],
+        "properties": {
+          "at": { "type": "string" },
+          "round": { "type": "integer" },
+          "territory": { "type": "string" },
+          "added_entries": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "reason": { "type": "string" }
+        }
+      }
+    },
+    "rounds": {
+      "type": "array",
+      "description": "One record per round. head_sha anchors the next round's fix diff; without it, 'territories the fix touched' has no definition and every round would intersect everything.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["round", "head_sha", "territories"],
+        "properties": {
+          "round": { "type": "integer" },
+          "head_sha": { "type": "string" },
+          "territories": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "adversarial-review ledger finding record",
+  "description": "One hypothesis a finder produced. Note what is absent: there is no disposition field. A finding's state is derived from the events appended after it, so nothing in the ledger is ever rewritten and the record of when each state landed survives. Keyword use stays inside the conservative set the bundled validator walks; cross-field rules live in ledger.py.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "record",
+    "id",
+    "round",
+    "territory",
+    "file",
+    "quoted_evidence",
+    "claim",
+    "proposed_fix",
+    "proposed_repro",
+    "claimed_severity"
+  ],
+  "properties": {
+    "record": {
+      "type": "string",
+      "enum": ["finding"]
+    },
+    "id": {
+      "type": "string",
+      "description": "F-r<round>-<territory>-<NN>, assigned by the orchestrator in the finder's report order so rank is preserved without a rank field."
+    },
+    "round": { "type": "integer" },
+    "territory": { "type": "string" },
+    "file": { "type": "string" },
+    "quoted_evidence": {
+      "type": "string",
+      "description": "Verbatim code the claim is about. A finding whose evidence is a paraphrase cannot be verified by anyone who did not already believe it."
+    },
+    "claim": {
+      "type": "string",
+      "description": "One falsifiable statement of what is wrong and why."
+    },
+    "proposed_fix": {
+      "type": "string",
+      "description": "The concrete change. Read at disposition, never shown to the verifier — a verifier who can see the proposed fix is reading the finder's reasoning."
+    },
+    "proposed_repro": {
+      "type": "string",
+      "description": "A single read-only or test-runner command that would demonstrate the claim."
+    },
+    "claimed_severity": {
+      "type": "string",
+      "description": "Two values on purpose. A finer scale invites the rank inflation this design already refused when it dropped severity promotion on agreement.",
+      "enum": ["blocking", "advisory"]
+    }
+  }
+}

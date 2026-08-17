@@ -1,0 +1,68 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "adversarial-review ledger event record",
+  "description": "One thing that happened to a finding. Events are the only way a finding's state changes, which is what keeps the ledger append-only in fact and not just in spirit. Every key is present on every event and inapplicable ones are null — a fabricated value in an evidence field would be indistinguishable from a real one later. Cross-field rules (REPRODUCED needs its command and output, NOT_REPRODUCED needs counter-evidence) live in ledger.py, since the conservative keyword set cannot express them.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "record",
+    "finding_id",
+    "disposition",
+    "actor",
+    "repro_command",
+    "observed_output",
+    "counter_evidence",
+    "reason",
+    "artifact",
+    "at"
+  ],
+  "properties": {
+    "record": {
+      "type": "string",
+      "enum": ["event"]
+    },
+    "finding_id": { "type": "string" },
+    "disposition": {
+      "type": "string",
+      "description": "The first three are verification outcomes and only REPRODUCED can block. The rest record what was then done about it.",
+      "enum": [
+        "REPRODUCED",
+        "NOT_REPRODUCED",
+        "UNVERIFIABLE",
+        "TEST_WRITTEN",
+        "ISSUE_FILED",
+        "CLOSED",
+        "QUESTION_FILED",
+        "ESCALATED"
+      ]
+    },
+    "actor": {
+      "type": "string",
+      "description": "Who produced this event, e.g. verifier-r1-money. A verification event whose actor is the finder is the failure this whole gate exists to prevent."
+    },
+    "repro_command": {
+      "type": ["string", "null"],
+      "description": "The command actually run, which may differ from the proposed one."
+    },
+    "observed_output": {
+      "type": ["string", "null"],
+      "description": "What the command actually printed. Required on REPRODUCED: an unreproduced finding with a confident summary attached is exactly the artifact this design refuses to produce."
+    },
+    "counter_evidence": {
+      "type": ["string", "null"],
+      "description": "Required on NOT_REPRODUCED. Closing a finding is a claim too, and it carries the same evidence bar."
+    },
+    "reason": {
+      "type": ["string", "null"],
+      "description": "Required on UNVERIFIABLE. Says why the check could not run — an unsafe repro command, a missing fixture, an environment the verifier cannot reach."
+    },
+    "artifact": {
+      "type": ["string", "null"],
+      "description": "The thing produced: a failing test's path, an issue URL, a filed question's path."
+    },
+    "at": {
+      "type": "string",
+      "description": "ISO-8601 UTC."
+    }
+  }
+}

@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "fixed_point": "main",
+  "merge_base_sha": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+  "diff_cmd": "git diff a1b2c3d4e5f60718293a4b5c6d7e8f9012345678..HEAD",
+  "dirty_tree_accepted": false,
+  "excluded": ["dist/", "src/generated/"],
+  "out_of_scope": [
+    "The rename of Invoice.total to Invoice.gross is deliberate and settled.",
+    "Prose-only changes to docs/pricing.md are not under review."
+  ],
+  "depth": 1,
+  "changed_files": [
+    "src/billing/invoice.py",
+    "src/billing/tax.py",
+    "src/api/tenancy.py",
+    "tests/test_invoice.py"
+  ],
+  "territories": [
+    {
+      "name": "money",
+      "entries": ["src/billing/invoice.py", "src/billing/tax.py"],
+      "classes": ["arithmetic", "test-coverage"],
+      "model_tier": "opus"
+    },
+    {
+      "name": "tenancy",
+      "entries": ["src/api/tenancy.py"],
+      "classes": ["authz", "test-coverage"],
+      "model_tier": "opus"
+    },
+    {
+      "name": "tests",
+      "entries": ["tests/test_invoice.py"],
+      "classes": ["test-coverage"],
+      "model_tier": "sonnet"
+    }
+  ],
+  "derivation": [
+    {
+      "file": "src/billing/invoice.py",
+      "matched_rows": ["money", "tests"],
+      "territory": "money"
+    },
+    {
+      "file": "src/billing/tax.py",
+      "matched_rows": ["money", "tests"],
+      "territory": "money"
+    },
+    {
+      "file": "src/api/tenancy.py",
+      "matched_rows": ["tenancy", "tests"],
+      "territory": "tenancy"
+    },
+    {
+      "file": "tests/test_invoice.py",
+      "matched_rows": ["tests"],
+      "territory": "tests"
+    }
+  ],
+  "amendments": [],
+  "rounds": [
+    {
+      "round": 1,
+      "head_sha": "9f8e7d6c5b4a39281706f5e4d3c2b1a098765432",
+      "territories": ["money", "tenancy", "tests"]
+    }
+  ]
+}

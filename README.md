@@ -55,6 +55,14 @@ Co-authors READMEs—this one included—whether brand-new, long-neglected, at t
 npx skills add kendrick/skills --skill readme-coauthorship
 ```
 
+### [adversarial-review](adversarial-review/README.md)
+
+Reviews a diff by treating every finding as a hypothesis rather than a result. It partitions the changed files into non-overlapping territories—money, authz, state transitions, schema, budgets—sends one finder at each in parallel, then hands every claim to a fresh agent that never saw the reasoning behind it and is told to break it. Only a finding that survives that can block a merge, and blocking findings get a failing test written from the reproduction command before anyone writes the fix. It keeps going after the fixes land, re-reviewing exactly the territories a fix touched, because fixes written under review pressure are where the next round of bugs comes from. Reach for it before merging something you'd rather not get wrong—and type its name, since it won't fire on its own.
+
+```bash
+npx skills add kendrick/skills --skill adversarial-review
+```
+
 ### [handoff](handoff/README.md)
 
 Use `handoff` to write a handoff before ending a coding-agent session, either to a file on your machine or to a document panel when you are working on the web. It restores unfinished tasks and context in a fresh session when conversation history would lose the detail needed to finish the work. See the [handoff guide](handoff/README.md) for Claude Code, Codex, and GitHub Copilot CLI invocation details.
@@ -65,9 +73,9 @@ npx skills add kendrick/skills --skill handoff
 
 ## Repository Layout
 
-- [databricks-api/](databricks-api/), [file-issue/](file-issue/), [inbox-to-memory/](inbox-to-memory/), [readme-coauthorship/](readme-coauthorship/), [handoff/](handoff/): the skills, one directory each
+- [databricks-api/](databricks-api/), [file-issue/](file-issue/), [inbox-to-memory/](inbox-to-memory/), [readme-coauthorship/](readme-coauthorship/), [handoff/](handoff/), [adversarial-review/](adversarial-review/): the skills, one directory each
 - [\_docs/](_docs/): research notes behind the skills, like the [readme-coauthorship writeup](_docs/readme-coauthorship-research.md) and the [issue-authorship survey](_docs/file-issue-research.md)
-- [\_maintenance/](_maintenance/): maintainer tooling, one subdirectory per skill that needs it: the refresh workflow that keeps `databricks-api` synced with upstream Databricks docs, the upstream sync behind `handoff`, and the decision ledger and evals behind `file-issue`
+- [\_maintenance/](_maintenance/): maintainer tooling, one subdirectory per skill that needs it: the refresh workflow that keeps `databricks-api` synced with upstream Databricks docs, the upstream sync behind `handoff`, and the decision ledgers and evals behind `file-issue` and `adversarial-review`
 
 ## Contributing
 

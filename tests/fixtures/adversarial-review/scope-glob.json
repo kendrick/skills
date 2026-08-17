@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "fixed_point": "main",
+  "merge_base_sha": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+  "diff_cmd": "git diff a1b2c3d4e5f60718293a4b5c6d7e8f9012345678..HEAD",
+  "dirty_tree_accepted": false,
+  "excluded": [],
+  "out_of_scope": [],
+  "depth": 1,
+  "changed_files": ["src/billing/invoice.py"],
+  "territories": [
+    {
+      "name": "money",
+      "entries": ["src/billing/*.py"],
+      "classes": ["arithmetic"],
+      "model_tier": "opus"
+    }
+  ],
+  "derivation": [
+    {
+      "file": "src/billing/invoice.py",
+      "matched_rows": ["money"],
+      "territory": "money"
+    }
+  ],
+  "amendments": [],
+  "rounds": [
+    {
+      "round": 1,
+      "head_sha": "9f8e7d6c5b4a39281706f5e4d3c2b1a098765432",
+      "territories": ["money"]
+    }
+  ]
+}
