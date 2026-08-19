@@ -115,7 +115,7 @@ For an open question, use `inbox-to-memory`'s own detection rule: a directory ho
 
 ## Step 7 — Round Loop
 
-Record each round's `head_sha` in the scope contract as that round fans out. Once fixes land:
+Record each round's `head_sha` in the scope contract as that round fans out. Fixes must be committed before this step runs: `intersect` compares commits, so an uncommitted fix is invisible to it—the loop prints nothing, exits clean, and the highest-suspicion code in the run was never reviewed. Re-run the preflight cleanliness check (`git status --porcelain`) before every fan-out, with the same stop and the same recorded override as Step 1. Once fixes are committed:
 
 ```
 git diff <prev_round_head_sha>..HEAD --name-only \
