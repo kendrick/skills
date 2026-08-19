@@ -96,7 +96,7 @@ Only REPRODUCED can block. A finding nobody could reproduce is not a small findi
 
 ## Step 6 — Disposition
 
-Routing is mechanical. Nothing here is a judgment call, which is the point: a gate that can be argued with is a gate that gets argued with at the end of a long review.
+Routing is mechanical. Nothing here is a judgment call, which is the point: a gate that can be argued with is a gate that gets argued with at the end of a long review. Blocking and advisory are the finding's `claimed_severity`, exactly as the finder recorded it—set before verification ran, and not reopened here. A severity fixed before anyone had a stake in the routing is what lets the table stay mechanical.
 
 | State | Route |
 |---|---|
