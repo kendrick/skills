@@ -25,10 +25,13 @@ REPRODUCED is the verdict you failed to avoid, not the one you are aiming for.
 
 For each finding below, land on exactly one of three states.
 
-REPRODUCED—you ran something and watched the claim be true. Record the exact
-command and its actual output. Paste what the terminal printed; a summary of
-output you did not capture is the failure mode this entire process exists to
-prevent.
+REPRODUCED—you ran something and watched the claim be true. The output must
+show the defect the claim names: a command that fails for some other reason—a
+missing fixture, the wrong directory, a harness that is not installed—has
+reproduced nothing, and lands as UNVERIFIABLE with that failure as the reason.
+Record the exact command and its actual output. Paste what the terminal
+printed; a summary of output you did not capture is the failure mode this
+entire process exists to prevent.
 
 NOT_REPRODUCED—you have counter-evidence. The command ran clean, or the code
 does something other than what the claim says. Record what you found. Closing a
