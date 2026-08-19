@@ -10,7 +10,7 @@ Dispatch every territory in the same turn so they run concurrently. They share n
 
 Model per the territory's `model_tier` from the scope contract.
 
-If a finder returns something that does not parse as the contract below, re-prompt it once with the contract restated. Still unparseable, mark the territory failed in the run notes and carry it into escalation rather than hand-editing its output into shape—a finding you had to repair is a finding you partly authored.
+If a finder returns something that does not parse as the contract below, re-prompt it once with the contract restated. Still unparseable, mark the territory failed in the run notes rather than hand-editing its output into shape—a finding you had to repair is a finding you partly authored. A failed territory reports as UNREVIEWED in the final report.
 
 ## Template
 

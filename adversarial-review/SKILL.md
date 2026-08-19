@@ -67,7 +67,7 @@ Read [references/finder-prompt.md](references/finder-prompt.md) and instantiate 
 
 Save each finder's returned JSON verbatim to `RUN_DIR/findings/round-<N>-<territory>.json`. Verbatim matters—an output you tidied is an output you partly authored.
 
-**Done when:** every territory has a findings file that parses against the finder contract. A territory that failed twice is marked failed and carried into Step 7's escalation rather than repaired by hand.
+**Done when:** every territory has a findings file that parses against the finder contract. A territory that failed twice is marked failed rather than repaired by hand: it reports as UNREVIEWED in Step 8, and where `escalation.md` gets written it appears there too, as a territory that never reported.
 
 ## Step 4 — Ledger
 
@@ -129,7 +129,7 @@ Re-run Steps 3 through 6 for the printed territories only, at `--round N+1`, wit
 
 A non-zero exit from `intersect` means the fix touched a path no territory owns. Amend the scope contract—add the path to the nearest territory with a recorded `amendments` entry, re-run `validate`—and then fan out. A blind spot that appears mid-run is exactly what should stop and get written down.
 
-The loop ends when `intersect` prints nothing, or when a round produces zero REPRODUCED findings in the territories it re-reviewed. At `--max-rounds` with blockers still landing, write `RUN_DIR/escalation.md` naming the unresolved finding ids and what each still needs, record `ESCALATED` for each, and stop. Three rounds of new blockers means something structural is wrong with the change, and a fourth automated round is less use than a human reading the escalation.
+The loop ends when `intersect` prints nothing, or when a round produces zero REPRODUCED findings in the territories it re-reviewed. At `--max-rounds` with blockers still landing, write `RUN_DIR/escalation.md` naming the unresolved finding ids and what each still needs, record `ESCALATED` for each, and stop. Any failed territory gets its own section there: a territory that never reported is a different kind of unknown than a blocker that will not die, and the reader should know which they are looking at. Three rounds of new blockers means something structural is wrong with the change, and a fourth automated round is less use than a human reading the escalation.
 
 **Done when:** the loop exited by the rule above, or `escalation.md` exists and every unresolved finding is named in it.
 
@@ -137,7 +137,7 @@ The loop ends when `intersect` prints nothing, or when a round produces zero REP
 
 Report per territory. There is deliberately no single cross-territory verdict: one axis passing must never mask another failing, and a combined verdict is exactly the artifact that lets it.
 
-For each territory give its verdict, its findings with terminal dispositions, and the one line its finder wrote about what works. Then the run-level facts: rounds taken, what each round's fixes introduced, tests written, issues filed, questions filed.
+For each territory give its verdict, its findings with terminal dispositions, and the one line its finder wrote about what works. A territory whose finder failed carries the verdict UNREVIEWED—nobody managed to look, which must never read like somebody looked and found nothing. Then the run-level facts: rounds taken, what each round's fixes introduced, tests written, issues filed, questions filed.
 
 Surface any `calibration:` line `ledger.py state` produced. A territory whose findings were mostly UNVERIFIABLE is telling you its hunt items generate untestable claims—worth fixing in the trigger table before the next run, and deliberately not a trigger for re-fanning-out, since termination has to stay mechanical.
 
