@@ -10,7 +10,7 @@ This skill routes each artifact type to a profile that says which public standar
 
 ## How It Works
 
-Four house rules sit above four public standards—Diátaxis, Google developer style, ASD-STE100 principles, and Kohl's Global English—and every artifact dispatches to a profile that names which of the four apply to it.
+Four house rules sit above four public standards: [Diátaxis](https://diataxis.fr/start-here/), [Google developer style](https://developers.google.com/style), [ASD-STE100](https://www.techwriter.ai/s1000d/writing-for-s1000d/simplified-technical-english) principles, and [Kohl's Global English](https://books.google.com/books?id=r0AiqqRBPF0C&printsec=frontcover#v=onepage&q&f=false). Every artifact dispatches to a profile that names which of the four apply to it.
 
 - **Dispatch.** The artifact type picks a profile: commit messages and code comments ship today; PR descriptions, API reference, and README-style docs fall back to the global rules and layers until their profiles are written.
 - **Draft.** Write under the dispatched profile, or under the fallback globals when no profile exists yet.

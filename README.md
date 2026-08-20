@@ -73,7 +73,7 @@ npx skills add kendrick/skills --skill handoff
 
 ### [technical-writing](technical-writing/README.md)
 
-Routes developer-facing prose—commit messages, code comments, PR descriptions, API reference, READMEs—to a profile that names which public standards apply: Diátaxis, Google developer style, ASD-STE100 principles, and Kohl's Global English. Two profiles ship today, commit messages and code comments; the rest fall back to the global rules until their profiles are written. Every draft ends in a mandatory audit: a self-check, then whatever prose-audit skill and house rules your setup provides. Reach for it when a commit message, comment, or doc needs to read like a person actually wrote it.
+Routes developer-facing prose—commit messages, code comments, PR descriptions, API reference, READMEs—to a profile that names which public standards apply: [Diátaxis](https://diataxis.fr/start-here/), [Google developer style](https://developers.google.com/style), [ASD-STE100](https://www.techwriter.ai/s1000d/writing-for-s1000d/simplified-technical-english) principles, and [Kohl's Global English](https://books.google.com/books?id=r0AiqqRBPF0C&printsec=frontcover#v=onepage&q&f=false). Two profiles ship today, commit messages and code comments; the rest fall back to the global rules until their profiles are written. Every draft ends in a mandatory audit: a self-check, then whatever prose-audit skill and house rules your setup provides. Reach for it when a commit message, comment, or doc needs to read like a person actually wrote it.
 
 ```bash
 npx skills add kendrick/skills --skill technical-writing
