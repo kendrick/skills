@@ -128,7 +128,21 @@ Where the repo's label taxonomy has a ready-for-agent-style label, apply it only
 
 **Done when:** every gate passes and every unmet default has been named.
 
-## Step 7 — Write Guard
+## Step 7 — Polish
+
+Depth 0 skips this step entirely. A one-line body does not earn a dispatch and an audit; go straight to the write guard.
+
+At Depths 1 and 2, where the `technical-writing` skill is installed, invoke it via the Skill tool on the drafted issue body and follow what it loads. It supplies instructions, not a rewritten body, so the revision is yours to make. Where it isn't installed, ship the draft unchanged—absence degrades to current behavior, never to an error or a stall. `technical-writing` owns any downstream prose auditor, so never reach past it to one directly.
+
+Keep the body as it entered this step. Without that copy, nothing below is checkable afterward.
+
+The pass changes wording only. Section structure, the title's harvested prefix convention, commands, paths, error output, and every fact the Step 6 gates passed survive it; where a revision would alter one, keep the original. Acceptance criteria may be reworded, but every symbol and condition inside them survives, and a criterion that comes out unfalsifiable has failed the pass rather than passed it.
+
+This is not the delegation Step 3 rules out. The interview carries the depth governor—judgment this skill owns, and lost the moment another skill runs it. A wording pass has no governor to lose. The audit is mechanical, and where the skill is missing the cost is polish, not correctness.
+
+**Done when:** the body has been revised under `technical-writing`, or its absence is noted and the draft stands, or Depth 0 skipped the pass.
+
+## Step 8 — Write Guard
 
 Check for duplicates first, with `gh search issues` against the title terms and any error signature. Rank candidates by error-signature overlap, then title and description similarity, then shared component.
 

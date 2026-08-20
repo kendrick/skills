@@ -4,11 +4,10 @@
 # cut (unslop, disable-model-invocation, a router that enumerates its own
 # steps), and a well-meaning edit is exactly how they come back.
 #
-# Two pins are EXPECTED TO FAIL right now: the `## Example` requires on both
-# reference files. Those sections are harvested from real eval runs later in
-# the implementation plan and deliberately don't exist yet. Do not stub them
-# to turn this script green — that would make the pins pass while verifying
-# nothing.
+# The `## Example` pins on both reference files are satisfied by sections
+# harvested from real eval runs. Never stub one to turn this script green: a
+# placeholder satisfies the pin while verifying nothing, which is what the
+# `pending-harvest` refute below exists to catch.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -73,6 +72,17 @@ for f in technical-writing/references/pr-descriptions.md technical-writing/refer
   }
 done
 
+# A second, separate loop (kept apart from the one above so this stays
+# additions-only) for the three profiles the issue-body/release-notes/how-to
+# rows point at. Same deal: the dispatch table falls back to globals until
+# real need justifies writing these.
+for f in technical-writing/references/issue-bodies.md technical-writing/references/release-notes.md technical-writing/references/how-to.md; do
+  [[ ! -e "$f" ]] || {
+    echo "deferred profile shipped early, contradicting the dispatch table's fallback: $f" >&2
+    exit 1
+  }
+done
+
 # --- SKILL.md decisions --------------------------------------------------
 
 refute_text technical-writing/SKILL.md "disable-model-invocation"
@@ -93,6 +103,11 @@ require_text technical-writing/SKILL.md "never for anything addressed to a perso
 # names no auditor at all, so it must not acquire that dependency by any name.
 refute_text technical-writing/SKILL.md "unslop"
 refute_text technical-writing/SKILL.md "humanizer"
+
+# One-way coupling: file-issue names technical-writing (the caller names the
+# callee), never the reverse. A mutual reference would let an agent ping-pong
+# between the two skills, so this router must never mention file-issue.
+refute_text technical-writing/SKILL.md "file-issue"
 
 # Step 2 must still name a concrete action. "Run an audit" with no formal
 # invocation is how the step decays into a self-assessment that always passes.
@@ -132,6 +147,18 @@ for term in "Diátaxis" "Diataxis" "one mode"; do
 done
 
 require_text technical-writing/SKILL.md "not yet written"
+
+# Whole-row pins on the four new/changed dispatch rows: a reword must not be
+# able to silently drop the globals-only fallback or grow a profile link
+# before the profile exists.
+require_text technical-writing/SKILL.md "| Issue body, drafted or filed | not yet written — globals above | STE, Google, Global English |"
+require_text technical-writing/SKILL.md "| Release notes, changelog, migration guide | not yet written — globals above | All four |"
+require_text technical-writing/SKILL.md "| How-to guides, walkthroughs | not yet written — globals above | All four; how-to mode |"
+require_text technical-writing/SKILL.md "| README, docs | not yet written — globals above | All four |"
+
+# The old combined row must be gone — proves the split happened rather than
+# the new rows just sitting alongside a stale one.
+refute_text technical-writing/SKILL.md "| README, guides, docs |"
 
 # --- Anti-drift pins on the verbatim CLAUDE.md migrations ---------------
 # These passages are copied word-for-word from the user's ~/.claude/CLAUDE.md,
@@ -177,5 +204,15 @@ require_text _maintenance/technical-writing/PROVENANCE.md "MIT, Copyright (c) 20
 # --- Root README pin --------------------------------------------------
 
 require_text README.md "npx skills add kendrick/skills --skill technical-writing"
+
+# --- Size ceiling -----------------------------------------------------
+# The self-imposed byte ceiling was raised from 6.5 KB to 7 KB when the new
+# dispatch rows landed. Upstream is an 11,522-byte monolith; this router
+# stays well under it because the profiles carry what's artifact-specific.
+skill_size="$(wc -c < technical-writing/SKILL.md)"
+(( skill_size <= 7000 )) || {
+  echo "technical-writing/SKILL.md is $skill_size bytes, over the 7000-byte ceiling" >&2
+  exit 1
+}
 
 echo "all pins passed"

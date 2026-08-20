@@ -37,6 +37,7 @@ The research also killed one feature and one statistic before either reached the
 | Issue forms rank above Markdown templates | Q9 | Not taste. Across 100 projects and 1.9M+ issues, YAML forms specifically reduced time-to-resolution, reopenings, and discussion length relative to Markdown templates. |
 | Preflight `gh auth status`, fail loud | local | A rendered draft looks like a filed issue. Silently degrading is how someone believes they reported a bug they did not report. |
 | Creation only, never edit, close, or triage | local | Those are different jobs with different risk profiles. A skill that can close issues needs guards this one does not have. |
+| Prose pass delegates to `technical-writing`; the interview still never delegates | local | The interview carries the depth governor, judgment this skill owns and loses the moment another skill runs it. The prose pass has no governor to lose—it is a mechanical audit, and where the sibling skill is missing the run degrades to shipping the draft unchanged, not to a broken one. `technical-writing` also owns the downstream prose-auditor invocation, so file-issue routes to one skill instead of two. |
 
 ## What the Research Removed
 
@@ -53,3 +54,4 @@ The research also killed one feature and one statistic before either reached the
 - **Open-source scope.** The bug-report findings explicitly disclaim transfer to closed-source projects, which have no patches and rarely surface stack traces. The skill's project-type conditionals on error output are the mitigation.
 - **GitHub only.** Detection, creation, and duplicate search all assume `gh`. Linear and Jira would each need their own reference file and their own creation path. Left out until someone needs it.
 - **No multi-issue path at all.** Deliberate, but it means a user who wanted decomposition gets a recommendation instead of a result. The escape hatch hands over the interview output so the work is not lost.
+- **The prose pass is a flat cost, not an opt-in one.** At Depth 1 and above on a machine with both skills installed, every run now pays a dispatch to `technical-writing` plus whatever auditor round trip that skill performs. If that proves annoying in practice, the fix is a future opt-out flag, not a weaker step.

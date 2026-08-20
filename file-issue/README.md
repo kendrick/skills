@@ -24,6 +24,8 @@ One word moves it either direction, or use `--deep` and `--fast`. Every question
 
 If the answers keep spawning new workstreams, meaning seven-plus independent acceptance criteria or four-plus components, it stops and says this is a spec rather than an issue, then hands you off instead of producing one enormous ticket.
 
+Where the technical-writing skill is installed, the finished draft takes one prose pass through it before rendering; where it isn't, the draft ships as-is.
+
 Nothing gets posted without showing you the rendered issue first.
 
 ## Install
@@ -54,7 +56,7 @@ Needs the [GitHub CLI](https://cli.github.com) authenticated. Without it the ski
 
 ```
 file-issue/
-├── SKILL.md          # the skill — detect, depth, elicit, draft, check, guard
+├── SKILL.md          # the skill — detect, depth, elicit, draft, check, polish, guard
 ├── assets/           # used only when the repo has no template of its own
 │   ├── bug.template.md
 │   ├── feature.template.md

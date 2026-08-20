@@ -80,6 +80,17 @@ refute_text file-issue/SKILL.md "references/elicit"
 refute_text file-issue/SKILL.md "/grill-me"
 refute_text file-issue/SKILL.md "grill-with-docs"
 
+# Prose pass: a soft dependency on technical-writing that degrades to current
+# behavior when absent. A step, not a gate — no evidence-map row. It must not
+# weaken the no-delegation rule above: technical-writing owns any downstream
+# prose auditor, so file-issue never names one directly.
+require_text file-issue/SKILL.md "## Step 7 — Polish"
+require_text file-issue/SKILL.md "## Step 8 — Write Guard"
+require_text file-issue/SKILL.md "invoke it via the Skill tool on the drafted issue body"
+require_text file-issue/SKILL.md "ship the draft unchanged"
+require_text file-issue/SKILL.md "Depth 0 skips this step"
+refute_text file-issue/SKILL.md "humanizer"
+
 # Escape hatch numbers are load-bearing and uncalibrated; changing them should
 # be a deliberate act that fails this test first.
 require_text file-issue/SKILL.md "**≥7 independent acceptance criteria**"

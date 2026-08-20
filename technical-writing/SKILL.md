@@ -31,8 +31,11 @@ Four public standards stacked under four house rules, aimed at prose a tired eng
 | Commit message | [references/commit-messages.md](references/commit-messages.md) | STE, Google, Global English — no Diátaxis |
 | Code comments, writing or auditing | [references/comments.md](references/comments.md) | All four; Diátaxis via the mode mapping |
 | PR description | not yet written — globals above | STE, Google, Global English |
+| Issue body, drafted or filed | not yet written — globals above | STE, Google, Global English |
 | API reference, docblock sets | not yet written — globals above | All four; reference mode, dry |
-| README, guides, docs | not yet written — globals above | All four |
+| README, docs | not yet written — globals above | All four |
+| How-to guides, walkthroughs | not yet written — globals above | All four; how-to mode |
+| Release notes, changelog, migration guide | not yet written — globals above | All four |
 | Changeset, workshop brief | no profile planned — globals above | STE, Google, Global English |
 
 Read the profile fresh at dispatch; a remembered summary drifts from what it says, which is why it's a file.
