@@ -1,10 +1,3 @@
 _maintenance/databricks-api/refresh-report*.md
 
-# Live guild state is per-machine and mutable: task statuses flip on every
-# dispatch, verdicts are transient, and two sessions running at once would
-# collide here. Archived runs are the opposite, immutable history worth
-# carrying, so they travel while the working state stays local.
-.agent-guild/state/*
-!.agent-guild/state/archive/
-
 __pycache__/
