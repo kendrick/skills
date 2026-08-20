@@ -11,7 +11,7 @@
 
 Agent skills you install on individually or all at once.
 
-Five skills live here right now: one for driving Databricks APIs, one for turning meeting artifacts into durable notes, one for writing READMEs, one for writing GitHub issues, and one for carrying unfinished coding-agent work into a fresh session. Each sits in its own directory with a full guide, loads into your LLM harness the same way, and works independently of the rest.
+Seven skills live here right now: one for driving Databricks APIs, one for turning meeting artifacts into durable notes, one for writing READMEs, one for writing GitHub issues, one for carrying unfinished coding-agent work into a fresh session, one for reviewing a diff adversarially, and one for the prose developers write around their code. Each sits in its own directory with a full guide, loads into your LLM harness the same way, and works independently of the rest.
 
 ## Install
 
@@ -71,9 +71,17 @@ Use `handoff` to write a handoff before ending a coding-agent session, either to
 npx skills add kendrick/skills --skill handoff
 ```
 
+### [technical-writing](technical-writing/README.md)
+
+Routes developer-facing prose—commit messages, code comments, PR descriptions, API reference, READMEs—to a profile that names which public standards apply: Diátaxis, Google developer style, ASD-STE100 principles, and Kohl's Global English. Two profiles ship today, commit messages and code comments; the rest fall back to the global rules until their profiles are written. Every draft ends in a mandatory audit: a self-check, then whatever prose-audit skill and house rules your setup provides. Reach for it when a commit message, comment, or doc needs to read like a person actually wrote it.
+
+```bash
+npx skills add kendrick/skills --skill technical-writing
+```
+
 ## Repository Layout
 
-- [databricks-api/](databricks-api/), [file-issue/](file-issue/), [inbox-to-memory/](inbox-to-memory/), [readme-coauthorship/](readme-coauthorship/), [handoff/](handoff/), [adversarial-review/](adversarial-review/): the skills, one directory each
+- [databricks-api/](databricks-api/), [file-issue/](file-issue/), [inbox-to-memory/](inbox-to-memory/), [readme-coauthorship/](readme-coauthorship/), [handoff/](handoff/), [adversarial-review/](adversarial-review/), [technical-writing/](technical-writing/): the skills, one directory each
 - [\_docs/](_docs/): research notes behind the skills, like the [readme-coauthorship writeup](_docs/readme-coauthorship-research.md) and the [issue-authorship survey](_docs/file-issue-research.md)
 - [\_maintenance/](_maintenance/): maintainer tooling, one subdirectory per skill that needs it: the refresh workflow that keeps `databricks-api` synced with upstream Databricks docs, the upstream sync behind `handoff`, and the decision ledgers and evals behind `file-issue` and `adversarial-review`
 
