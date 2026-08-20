@@ -4,6 +4,7 @@
 | --- | --- | --- | --- | --- |
 | 2026-08-20 | cursor/plugins `pstack/skills/technical-writing/SKILL.md` | `b047069f4f3a73e87dd1f11f7913386d25876b91` | <https://raw.githubusercontent.com/cursor/plugins/main/pstack/skills/technical-writing/SKILL.md> | 11,522 bytes |
 | 2026-08-20 | `~/.claude/CLAUDE.md`, sections "Commit messages" and "Code comments" | migrated verbatim into `technical-writing/references/commit-messages.md` and `references/comments.md` | local file, not a URL | n/a |
+| 2026-08-20 | `~/.claude/CLAUDE.md`, the trailer rule under "Commit messages" and the line-wrapping rule under "Prose" | both are scoped to PR descriptions as well as commits, so they are migrated verbatim a second time into `technical-writing/references/pr-descriptions.md` | local file, not a URL | n/a |
 
 The governing license for the upstream snapshot is `pstack/LICENSE`, not any license at the `cursor/plugins` repository root — the root carries no license file at all. That file is MIT, Copyright (c) 2026 Lauren Tan. `pstack` is Tan's personal plugin, vendored into `cursor/plugins`; credit for the skill is to her, not to Cursor the company. The verbatim copy in `upstream/` sits next to this notice, which satisfies MIT's notice-retention condition.
 
@@ -19,6 +20,7 @@ The CLAUDE.md row above is a second, independent source and carries no license q
 - **Upstream's "Vary the rhythm" section dropped.** PROSE.md's Plain Speech covers most of the same ground. The one strand it doesn't cover — deliberate sentence-length mixing — is recorded here as a known gap and a candidate for a future PROSE.md addition, not for this skill.
 - **Cursor-repo specifics dropped**: the tabs-for-snippets convention and the instruction to add offenders to unslop's abstract-metaphor rule don't apply outside that repo.
 - **A code-comments profile added.** Upstream never wrote one; `references/comments.md` is new.
+- **A PR-descriptions profile added.** Upstream gives PR descriptions one line — every layer except Diátaxis applies to them — and no content guidance at all, so `references/pr-descriptions.md` is written from scratch rather than adapted. Its two hard rules are the same CLAUDE.md sentences `commit-messages.md` carries, copied deliberately because the router sends a run to exactly one profile and each has to stand alone; the smoke test pins both copies. Those two rules also gained a shared rider banning AI-attribution footers, which is this skill's own extension rather than CLAUDE.md's wording, pinned in both profiles for the same reason.
 - **STE dictionary and numbered-rule conformance are explicitly out of scope**, principles only — same scope upstream keeps.
 
 Record later differences from upstream here before updating snapshots.

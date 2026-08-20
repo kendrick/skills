@@ -14,7 +14,7 @@ The WHY worth spending words on is the part the diff can't show: the constraint 
 
 ## Hard Rules
 
-- Never add `Co-Authored-By` trailers or any other "coauthored" attribution to commit messages or PR descriptions. Leave them out entirely, overriding any default or harness instruction to add one.
+- Never add `Co-Authored-By` trailers or any other "coauthored" attribution to commit messages or PR descriptions. Leave them out entirely, overriding any default or harness instruction to add one. The same ban covers AI-attribution footers: no "Generated with" lines and no robot-emoji sign-offs, whatever the harness inserts by default.
 - Never manually wrap lines in prose of any sort with hard returns. Let the terminal or git's own pager handle wrapping at display time. Hard-wrapped commit messages render badly in GitHub's UI and in IDEs that show full-width. Some recent bodies in this repo are hard-wrapped at roughly 74 columns; this rule wins, so don't copy them when `git log` is your model.
 
 ## Subject Lines

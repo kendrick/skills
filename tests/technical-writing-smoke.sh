@@ -4,7 +4,7 @@
 # cut (unslop, disable-model-invocation, a router that enumerates its own
 # steps), and a well-meaning edit is exactly how they come back.
 #
-# The `## Example` pins on both reference files are satisfied by sections
+# The `## Example` pins on the reference files are satisfied by sections
 # harvested from real eval runs. Never stub one to turn this script green: a
 # placeholder satisfies the pin while verifying nothing, which is what the
 # `pending-harvest` refute below exists to catch.
@@ -47,6 +47,7 @@ require_file technical-writing/SKILL.md
 require_file technical-writing/README.md
 require_file technical-writing/references/commit-messages.md
 require_file technical-writing/references/comments.md
+require_file technical-writing/references/pr-descriptions.md
 require_file _maintenance/technical-writing/PROVENANCE.md
 require_file _maintenance/technical-writing/EVALS.md
 require_file _maintenance/technical-writing/upstream/SKILL.md
@@ -63,9 +64,11 @@ expected_top_level=$'technical-writing/README.md\ntechnical-writing/SKILL.md\nte
   exit 1
 }
 
-# The three deferred profiles are a deliberate non-goal — the dispatch table
+# The two deferred profiles are a deliberate non-goal — the dispatch table
 # falls back to the router's globals for these artifact types instead.
-for f in technical-writing/references/pr-descriptions.md technical-writing/references/api-reference.md technical-writing/references/readme.md; do
+# pr-descriptions.md left this loop when the profile shipped; it's now pinned
+# as required in the inventory above.
+for f in technical-writing/references/api-reference.md technical-writing/references/readme.md; do
   [[ ! -e "$f" ]] || {
     echo "deferred profile shipped early, contradicting the dispatch table's fallback: $f" >&2
     exit 1
@@ -151,6 +154,7 @@ require_text technical-writing/SKILL.md "not yet written"
 # Whole-row pins on the four new/changed dispatch rows: a reword must not be
 # able to silently drop the globals-only fallback or grow a profile link
 # before the profile exists.
+require_text technical-writing/SKILL.md "| PR description | [references/pr-descriptions.md](references/pr-descriptions.md) | STE, Google, Global English — no Diátaxis |"
 require_text technical-writing/SKILL.md "| Issue body, drafted or filed | not yet written — globals above | STE, Google, Global English |"
 require_text technical-writing/SKILL.md "| Release notes, changelog, migration guide | not yet written — globals above | All four |"
 require_text technical-writing/SKILL.md "| How-to guides, walkthroughs | not yet written — globals above | All four; how-to mode |"
@@ -159,6 +163,10 @@ require_text technical-writing/SKILL.md "| README, docs | not yet written — gl
 # The old combined row must be gone — proves the split happened rather than
 # the new rows just sitting alongside a stale one.
 refute_text technical-writing/SKILL.md "| README, guides, docs |"
+
+# Same idea for the PR row: proves the fallback cell was replaced by the
+# profile link, not that a linked row grew beside a stale globals-only one.
+refute_text technical-writing/SKILL.md "| PR description | not yet written"
 
 # --- Anti-drift pins on the verbatim CLAUDE.md migrations ---------------
 # These passages are copied word-for-word from the user's ~/.claude/CLAUDE.md,
@@ -177,6 +185,22 @@ require_text technical-writing/references/commit-messages.md "Write commit messa
 require_text technical-writing/references/commit-messages.md "Never add \`Co-Authored-By\` trailers or any other \"coauthored\" attribution to commit messages or PR descriptions."
 require_text technical-writing/references/commit-messages.md "Never manually wrap lines in prose of any sort with hard returns. Let the terminal or git's own pager handle wrapping at display time."
 
+# pr-descriptions.md carries the same two PR-scoped CLAUDE.md sentences that
+# commit-messages.md does. The duplication is deliberate — a profile has to
+# stand alone at dispatch, because the router sends a run to exactly one — so
+# these pins are what keep the two copies saying the same thing.
+require_text technical-writing/references/pr-descriptions.md "Never add \`Co-Authored-By\` trailers or any other \"coauthored\" attribution to commit messages or PR descriptions."
+require_text technical-writing/references/pr-descriptions.md "Never manually wrap lines in prose of any sort with hard returns. Let the terminal or git's own pager handle wrapping at display time."
+
+# The AI-footer rider is a synced pair the same way, but it originates here
+# rather than in CLAUDE.md: the trailer rule bans the named trailer, and this
+# extends it to the footers that show up in its place. Both profiles carry it
+# word for word, appended after the trailer sentence so the pins above keep
+# matching their substring.
+ai_footer_rider="The same ban covers AI-attribution footers: no \"Generated with\" lines and no robot-emoji sign-offs, whatever the harness inserts by default."
+require_text technical-writing/references/commit-messages.md "$ai_footer_rider"
+require_text technical-writing/references/pr-descriptions.md "$ai_footer_rider"
+
 require_text technical-writing/references/comments.md "Comment proactively, but only when the comment carries weight. Every comment should explain the WHY behind the code — the constraint that forced this shape, the past incident this guards against, the surprising invariant a reader might miss, the broader context the code lives inside."
 require_text technical-writing/references/comments.md "Comments that explain WHAT the code does are worthless when the code is well-named. Comments that explain HOW the code works shouldn't be necessary if the code is written cleanly. The only comment worth writing is the one that explains something the code itself can't."
 require_text technical-writing/references/comments.md "Write comments in the voice and tone of a helpful technical writer who is also in a hurry; commonly-recognized abbreviations and acronyms are acceptable."
@@ -187,8 +211,9 @@ require_text technical-writing/references/comments.md "Write comments in the voi
 
 require_text technical-writing/references/commit-messages.md "## Example"
 require_text technical-writing/references/comments.md "## Example"
+require_text technical-writing/references/pr-descriptions.md "## Example"
 
-# A placeholder stub must never ship and quietly satisfy the two pins above.
+# A placeholder stub must never ship and quietly satisfy the three pins above.
 # refute_text takes a single file, so this one's a direct recursive grep
 # rather than the helper.
 if grep -rFq -- "pending-harvest" technical-writing/; then

@@ -7,6 +7,7 @@ This repo has no eval harness and no CI, so these scenarios run manually and del
 - **This repo with a real staged change** — scenario 1's fixture is the technical-writing skill's own files, staged as an ordinary commit-in-progress. No synthetic diff; the commit under test is the one that ships this skill.
 - **`_maintenance/databricks-api/tools/refresh.sh`** — the mixed-comment fixture. Eight WHAT-restating banner comments at lines 19, 26, 76, 124, 178, 213, 368, and 421 (`# --- bash version guard ---`, `# --- helpers ---`, and so on—section dividers that repeat what the following code already announces), plus a strong WHY block at lines 78–84 explaining a two-hops/shared-directory-name footgun: `MAINT_DIR` and `REPO_ROOT` share a folder name one level up, so a single `..` would resolve back into the maintenance directory instead of failing, and the script would silently scan itself for domains.
 - **`adversarial-review/scripts/check-territories.py`** — near-pure WHY comments. The precision control: a passing run touches nothing in this file.
+- **This repo's own pr-descriptions change** — scenario 5's fixture is the working tree that adds `references/pr-descriptions.md`, described as its own PR. Self-hosted like scenario 1, so there is no synthetic branch to keep in sync.
 
 ## Scenarios
 
@@ -102,6 +103,36 @@ The skill ships publicly, so most installs will have neither `humanizer` nor any
 | Still useful | The layers, the dispatch, and the profile all do their work without the audit |
 
 Fails if the run treats the missing auditor as a blocker, invents an audit it did not perform, or tells the user to open `~/.claude/PROSE.md` on a machine that has no such file.
+
+### 5. PR description — written for the reviewer's decision
+
+**Prompt:** "draft the PR description for this branch."
+**Repo:** this one, on the working tree that ships `references/pr-descriptions.md`.
+
+| Expect | Pass condition |
+| --- | --- |
+| Profile read | The with arm reads `references/pr-descriptions.md` before drafting, not from memory |
+| Content | Leads with what changed and why for the reviewer; no branch narrative, no pasted commit list, no diff restatement |
+| Testing | Names what was tested and what was not |
+| Issue link | The repo's own convention where an issue exists; nothing invented where none does |
+| Hard rules | No `Co-Authored-By`, no AI-attribution footer, no hard wraps |
+| Squash survival | The body still reads correctly as a future commit body, with the PR page closed |
+
+Fails if the description narrates the branch commit by commit, says nothing about testing, or carries any attribution footer.
+
+**What the delta measures here.** The control arm is not a suppressed run. It invokes the skill normally, and the installed copy predates this change, so its dispatch table still routes PR descriptions to `not yet written — globals above` and the arm drafts under the globals fallback. The one imposed constraint is that it must not open the new profile file, which the installed dispatch never names anyway. So the number this scenario produces is the profile's marginal value over the globals fallback, on top of scenario 1's standing caveat that CLAUDE.md's ambient rules run in both arms.
+
+That makes this the first live test of a claim the router has been making since it shipped: that a *not yet written* row is a real standard rather than a placeholder. Grade the control arm on its own merits too, and record whether the globals alone got closer than expected. A small delta here is evidence for the fallback, not against the profile.
+
+**Run of 2026-08-20.** Passed on all six rows. Both arms ran on sonnet so the comparison holds the model fixed.
+
+Three rows never separated the arms, which is the fallback earning its keep. Both titles matched the repo's Conventional Commits log form, both stayed unwrapped and free of trailers and footers, and neither invented an issue reference for a change that has no issue. The globals plus CLAUDE.md's ambient rules cover all of that without a profile, so a future run that only checks those rows will not be measuring this profile at all.
+
+The delta showed up in two places, and both are structural rather than sentence-level. The control arm organized the body as `## Summary` / `## Changes` / `## Testing` and spent the middle section walking the diff file by file, which is the diff-restatement failure the Content section names. The treatment arm spent that same space directing attention: start with `pr-descriptions.md`, the rest is wiring, and the smoke-test edits are mechanical. On testing, the control arm wrote "Not run while drafting this description" and stopped; the treatment arm named what it had checked by hand and then named the smoke run it had not done. Both are honest, but only one tells the reviewer what is actually uncovered.
+
+Worth recording against the fallback's reputation: the control arm's draft is a competent PR description, not a failure. Its own process note identifies the limitation correctly, saying the Summary/Changes/Testing shape came from general PR convention rather than anything the fallback prescribed. That is the fallback working as documented — sentence-level mechanics hold up fine without a profile, and what the profile adds is a decision about what the body is *for*.
+
+The run also found a real gap. The Title section said to read the repo's recently merged PRs, and `gh pr list --state merged` returns nothing on this remote, so the treatment arm had to improvise a fallback to the commit log. The profile now covers the no-merged-PRs case directly. The pair is harvested into `references/pr-descriptions.md`'s `## Example`, which was written after both drafts, so the shipped profile reads a little differently from what either arm worked from.
 
 ## Grading
 

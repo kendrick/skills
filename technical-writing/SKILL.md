@@ -30,7 +30,7 @@ Four public standards stacked under four house rules, aimed at prose a tired eng
 | --- | --- | --- |
 | Commit message | [references/commit-messages.md](references/commit-messages.md) | STE, Google, Global English — no Diátaxis |
 | Code comments, writing or auditing | [references/comments.md](references/comments.md) | All four; Diátaxis via the mode mapping |
-| PR description | not yet written — globals above | STE, Google, Global English |
+| PR description | [references/pr-descriptions.md](references/pr-descriptions.md) | STE, Google, Global English — no Diátaxis |
 | Issue body, drafted or filed | not yet written — globals above | STE, Google, Global English |
 | API reference, docblock sets | not yet written — globals above | All four; reference mode, dry |
 | README, docs | not yet written — globals above | All four |
@@ -60,6 +60,7 @@ Register gates the audit. The profile states the artifact's register and the aud
 
 - [references/commit-messages.md](references/commit-messages.md) — register, content, per-repo subject-line conventions, layers
 - [references/comments.md](references/comments.md) — when a comment earns its place, mode mapping, auditing existing comments
+- [references/pr-descriptions.md](references/pr-descriptions.md) — reviewer-first content, testing disclosure, squash-merge survival
 - House prose rules, where your setup defines them — read fresh at Step 2, never summarized
 
 ## Sources
