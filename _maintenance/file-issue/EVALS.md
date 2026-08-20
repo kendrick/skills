@@ -120,6 +120,8 @@ Two ways to fail: producing one enormous issue anyway, or starting to decompose 
 
 Fails if the pass runs before the gates, if file-issue reaches past technical-writing to an auditor, or if the pass rewrites a command or drops a symbol from a criterion.
 
+*Runner note: invoking a skill through the Skill tool loads the published copy under `~/.agents/skills/`, never this working tree. Either publish first or tell the runner to read `file-issue/SKILL.md` from the repo and follow that, and say which one you did. A run that skips this choice measures the previous release while appearing to test the change, which is how the first run of this scenario nearly went.*
+
 **Run of 2026-08-20, `--dry-run`, against a real defect in this repo.** Depth 1 announced; `technical-writing` invoked via the Skill tool rather than narrated; ordering correct, with the pass after all six gates and before the duplicate search; no reach-past, and `humanizer` fired once from inside `technical-writing` where that skill claims the invocation. Commands, paths, and line numbers came through byte-identical. The Depth 0 control skipped Step 7 with no dispatch.
 
 Three defects in the step's wording surfaced and are fixed: it said the skill returns a revised body when a skill only loads instructions into the same context, which had the runner reinterpreting "apply what comes back" before it could act; the protected list omitted acceptance criteria, so a reword slipped through against a row that demanded byte-identity; and nothing required keeping the pre-pass body, which is what makes the preservation rows checkable at all. The rationale paragraph also moved to the end of the step after the runner reported reading it twice looking for an instruction.
