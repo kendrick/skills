@@ -70,6 +70,12 @@ refute_text handoff/SKILL.md ".agents/handoff"
 # Resume stops for the user instead of working. The refute matters most: this
 # instruction arrived by inheriting harpb's "keep going", so a sync is exactly
 # how it comes back.
+# Both ends offer the user a session name, because Claude Code derives one from
+# the project directory and only the user can change it. The write side must pass
+# the name to /clear: a bare clear carries the old name onto the resumed session.
+require_text handoff/SKILL.md "Name this session: /rename <slug>"
+require_text handoff/SKILL.md "Clear this session: /clear <name for the work just finished>"
+
 require_text handoff/SKILL.md "it does not start the work"
 require_text handoff/SKILL.md "the response stops for the user's answer"
 refute_text handoff/SKILL.md "Continuing:"
