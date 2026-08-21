@@ -47,12 +47,12 @@ On a file destination, print this pointer and stop working:
 
 ```text
 Handoff written: <path>
-Clear this session: /clear <name for the work just finished>
+Clear this session: /clear <Title Case Name> ☑️
 Then invoke: handoff <YYYY-MM-DD-HHMM>-<slug>
 (Temp storage: your OS may sweep this file eventually.)
 ```
 
-Propose that name from the session you just wrote up, not from the handoff. Claude Code's `/clear <name>` labels the outgoing session so `/resume` can find it later. A bare `/clear` carries the current name onto the next session instead. On a host that clears without taking a name, print the plain instruction to clear and invoke.
+Propose that name from the session you just wrote up, not from the handoff. Title Case it and end it with `☑️`, the mark of work that is finished and parked. Where this session already carries a `📍` name from a handoff it picked up, keep that name, drop the pin, and add the check. Claude Code's `/clear <name>` labels the outgoing session so `/resume` can find it later. A bare `/clear` carries the current name onto the next session instead. On a host that clears without taking a name, print the plain instruction to clear and invoke.
 
 ## Write a Prompt Handoff
 
@@ -82,13 +82,13 @@ Recreate every unfinished task using your platform's task or plan tool, preservi
 - Codex: when `update_plan` is available, rebuild the list there and mark the in-progress step.
 - No task tool available: restate the tasks as a checklist at the top of your first response and track them there for the rest of the session.
 
-A resumed session keeps whatever name its host gave it, usually the project directory. That name tells the user nothing when several sessions are open. Where the host names sessions and only the user can rename one, propose a name for the work ahead and put the rename line in the brief below. Use the document's slug unless the work has a clearer name. Where the user has already named this session, keep that name and drop the line.
+A resumed session keeps whatever name its host gave it, usually the project directory. That name tells the user nothing when several sessions are open. Where the host names sessions and only the user can rename one, propose a name for the work ahead and put the rename line in the brief below. Title Case it and lead with `📍`, which marks the session carrying live work. Build the name from the document's slug unless the work has a clearer one. Where the user has already named this session, keep that name and drop the line.
 
 Stop there. Rebuilding the task list gets you oriented; it does not start the work. Do not edit files, run commands that change state, or begin the in-progress task. Brief the user and ask:
 
 ```text
 Resumed from <filename or pasted document> — N tasks restored.
-Name this session: /rename <slug>
+Name this session: /rename 📍 <Title Case Name>
 
 Goal: <one line from Goal.>
 Done: <one line from Done.>

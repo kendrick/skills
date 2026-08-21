@@ -33,12 +33,12 @@ The response gives you the exact handoff ID to use next:
 
 ```text
 Handoff written: /var/folders/9k/…/T/agent-handoff/skills/2026-07-24-1530-sitelink-probes.md
-Clear this session: /clear probe-harness-extraction
+Clear this session: /clear Probe Harness Extraction ☑️
 Then invoke: handoff 2026-07-24-1530-sitelink-probes
 (Temp storage: your OS may sweep this file eventually.)
 ```
 
-The name in that `/clear` belongs to the session you are leaving, so you can find it again in `/resume`. A bare `/clear` does the opposite. It carries the current name onto the fresh session, which would name the resumed work after the work you just finished.
+The name in that `/clear` belongs to the session you are leaving, so you can find it again in `/resume`. The `☑️` marks it as parked, which is what lets your eye skip it. A bare `/clear` does the opposite. It carries the current name onto the fresh session, which would name the resumed work after the work you just finished.
 
 ## Hand Off One Task
 
@@ -77,7 +77,7 @@ Resuming does not start the work. Whichever source you use, the skill reads the 
 
 ```text
 Resumed from 2026-07-24-1530-sitelink-probes.md — 4 tasks restored.
-Name this session: /rename sitelink-probes
+Name this session: /rename 📍 Sitelink Probes
 
 Goal: convert the sitelink probes to validation scenarios.
 Done: probe harness extracted, 12 fixtures ported.
@@ -86,7 +86,7 @@ Next up: wire the scenario runner into the CI matrix.
 Start on "wire the scenario runner into the CI matrix"?
 ```
 
-That second line exists because Claude Code names a session after the project directory. Open four sessions on one repo and you get four near-identical names. The skill cannot rename a session itself, so it proposes one and hands you the command. The handoff's slug is the default, and the skill offers something sharper when the work has a clearer name. Name the session yourself and the line disappears, because the skill keeps a name you chose. Typing `/rename` with no argument works too: Claude reads the conversation, which at that point is the handoff document, and picks the name itself.
+That second line exists because Claude Code names a session after the project directory. Open four sessions on one repo and you get four near-identical names. The skill cannot rename a session itself, so it proposes one and hands you the command. The `📍` marks the session carrying live work, the counterpart to the `☑️` that the write side parks a finished session under. Across a row of open windows, that is the difference between reading four near-identical names and skipping straight to the pinned one. Name the session yourself and the line disappears, because the skill keeps a name you chose.
 
 You get the state back and still decide what happens next, which matters because you cleared the session and may have moved on since. To skip the question, say so in the invocation itself:
 
