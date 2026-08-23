@@ -1,0 +1,50 @@
+# jd-file Skill Rationale
+
+## Why This Exists
+
+Filing something into this vault and recording that it happened are one act, not two connected by a hope that someone remembers to sync them. Every choice below either protects that—the register write happens inside the filing action, not after it—or explains a boundary the skill deliberately doesn't cross: creating structure, guessing at ambiguous drift, or trying to serve a Johnny.Decimal dialect this vault doesn't speak.
+
+## Where the Evidence Comes From
+
+The ground truth behind every substrate-shape claim below—the three trees, their roots, and the day-one drift seeded to prove the validator catches it—comes from a scan of the Obsidian vault, the office document tree, and the code-repo tree, captured in `00.02 Vault Conventions.md`. Structural ideas adapted from prior art are credited in [`_maintenance/jd/SOURCES.md`](../jd/SOURCES.md), which also lists the Johnny.Decimal topics that informed the design and the date each was consulted. The full prior-art analysis is [`_docs/jd-ngerakines-plugin-report.md`](../../_docs/jd-ngerakines-plugin-report.md). Rows below marked `scan` trace to that vault scan; rows marked `local` are this user's own call about this vault.
+
+## Decision Ledger
+
+| Decision | Source | Reason |
+| --- | --- | --- |
+| Two skills, not three | local | Filing and register-writing are one motion—every filing action writes its own register line—so a separate index-maintenance skill would have had no operation to call its own. The repair half of that job, fixing an entry once drift is found, belongs to reconciliation, which is `jd-audit`'s territory. |
+| Ask/act ladder and confidence tiers embedded here, not hoisted to a shared policy file | local | A shared file would save roughly fifteen lines, and the content that matters—what counts as a clean match, what counts as guessing—is domain-specific; a generic version flattens to "ask before risky things," which decides nothing. A missing prose-polish dependency degrades safely to shipping a draft unchanged; a missing policy file has no equivalent safe mode, so every consumer would need the core rules embedded anyway just to fail safe on its own. Revisit when a third consumer exists and the embedded copies have drifted in ways that matter—not before. If this skill's body outgrows its 200-line budget first, this section is the pre-designated first thing to extract, which would settle the question by size pressure rather than by argument. |
+| The register is a new note, `00.01 JDex.md`, not an evolution of the constitution at `00.00` | scan | `00.00 Johnny Decimal Index.md` is a philosophy document—why the system is shaped this way—and routine filing has no business editing philosophy every time an ID gets used. Splitting the register out keeps each document's edit frequency honest: the constitution changes rarely and on purpose, the register changes constantly. |
+| Standard zeros (`AC.00` management items) are never proposed | scan | This vault doesn't speak that dialect. `00.00` is vault-wide meta and `15.00` is ordinary content, not a management slot, so a skill that expected or suggested one would be teaching a convention the system doesn't have. |
+| Multi-system `SYS.AC.ID` addressing is out of scope for v1 | scan | This is one system. Adding a second changes the shape of the conventions schema itself—every regex, every root table—rather than adding one more value inside it, so it's a v2 decision, not a flag left half-wired in v1. |
+| Task management left out entirely | local | The prior art bolts a full todo.txt-alike onto its inbox processor. This user runs tasks through TickTick, so a task layer here would duplicate a tool that already works. |
+| The conventions note lives in the vault, not this skills repo—full decision in `jd-audit` RATIONALE |—| Cross-reference. The short version: the validator and this skill's prose need to parse one definition, and keeping it in the vault means it syncs to every machine and stays readable by consumers that aren't this repo at all. |
+| Fuzzy matching for the split-name check, considered and deferred—full decision in `jd-audit` RATIONALE |—| Cross-reference. The check belongs to the validator's `drift-split-name`, not to filing. |
+| The depth invariant is "no fourth numbered tier," not "nothing nested below an ID"—full decision in `jd-audit` RATIONALE |—| Cross-reference. Worth reading in full if a future fix ever looks like "just require everything inside an ID folder"—that's the prior art's rule, and it's wrong for this vault. |
+| Public release would need a bootstrap skill plus schema hardening for substrate shapes this vault doesn't use | local | Notes-per-ID with frontmatter keys, and pure-filesystem JD with no vault at all, are both real ways to run this system, and v1 handles neither. Deferred until a real second user exists, on the same ledger pattern as the policy-embedding decision above: revisit when the cost of staying personal tooling actually shows up, not before. |
+
+## Portability Debt
+
+v1 is deliberately personal tooling, built against one vault, one office tree, and one code tree, on one user's machines. The seam test for whether that stays true: could a different Johnny.Decimal system be supported by writing only a new conventions note and a new register, with no change to either skill's prose? Where the answer is no, that's not a fact about this user's vault—it's either a gap in the conventions schema, something the TOML block should have been able to express and can't yet, or this vault's own dialect leaking into skill prose where a rule should have been read from the block instead.
+
+This heading stays here on purpose. Entries get added during review as they're found—the point isn't to front-load a complete list, it's to keep the seam visible so a future reviewer has somewhere to write down the leak they just spotted instead of shrugging past it.
+
+The build itself turned up seven, recorded here on the day they were found, 2026-08-22.
+
+**Exceptions can only be targeted by path.** Suppression matches the pair (check ID, path), but the drift checks are naturally keyed by AC.ID, and `drift-split-name` by a normalized label that has no filesystem path at all. The validator works around this by putting the label in the finding's `path` field, which makes an exception targeting a split possible but reads as a lie about what that field holds. A second system with different split conventions inherits the workaround.
+
+**The ID grammar has no notion of a file extension.** Most IDs are folders, but a few are files—`00.00`, and now `00.01` and `00.02`—and matching the grammar against a filename leaves the `.md` attached, which then reads as a name mismatch against the register's clean label. The validator strips the extension for file-typed IDs. That rule lives in code, not in the block, so a system whose IDs are all notes rather than folders is relying on an undeclared behavior.
+
+**No substrate shape covers a stray file in a `flat-ids` root.** The code tree has no category tier, so a loose file there fits neither `hygiene-area-file` nor `hygiene-category-file` as declared. It is currently reported as the latter on the reasoning that a flat-ids root plays the structural role a category folder plays elsewhere. That is an interpretation the schema does not state.
+
+**Scope's direction in the drift checks is implicit.** A substrate's `scope` declares which areas it carries, but the block does not say whether that gates the register side, the filesystem side, or both. The validator lets it suppress `drift-orphaned` only, on the reasoning that scope can explain why something is absent but can never explain away something physically present. Defensible, undeclared.
+
+**Attachments have three competing answers and no winner.** The constitution prescribes `_attachments/`, Obsidian's own config says `./attachments`, and the client scopes use `notes/attachments/`. The block currently records the Obsidian-aligned value because it is what actually happens when a file is dragged in. Until the user rules, every skill that files a binary is acting on a guess.
+
+**The constitution is a prose dependency nothing parses.** Only its category list is read. Its decision framework and its item-creation test are prose that `jd-file` Steps 2 and 3 genuinely depend on, so editing that prose in Obsidian changes skill behavior with no version bump and no check to catch it. This is the one entry here with no obvious fix as data—the framework is judgment, and encoding it would flatten the thing that makes it useful.
+
+**Nothing checks the skills' own prose against the vault.** Renumbering the two system notes left seventeen stale references across both `SKILL.md` files, both READMEs, both rationales, and `SOURCES.md` — every one of them naming a file that no longer existed. The validator did not catch it, because it audits the vault and not the repo. The smoke tests did not catch it, because they pin decisions in the prose rather than the facts the prose asserts. It was found by eye, which is the failure mode this whole system exists to remove.
+
+A check for it would want to be cheap and narrow: extract the `AC.ID Label` strings the skills quote, and confirm each still resolves in the register. That leaves the many claims a skill makes that no register can confirm, so it is a partial answer, not a solution.
+
+**Half the block has no automated consumer.** `[rules].inbox_path`, `id_allocation`, `[substrate_selection]`, `[naming]`, and `[attachments]` are read by `jd-file` and checked by nothing. That is by design—the block is a shared dialect, not a validator config—but it means a typo in those keys surfaces as a skill behaving oddly rather than as a failing check.
