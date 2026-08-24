@@ -48,6 +48,7 @@ require_file technical-writing/README.md
 require_file technical-writing/references/commit-messages.md
 require_file technical-writing/references/comments.md
 require_file technical-writing/references/pr-descriptions.md
+require_file technical-writing/references/readme.md
 require_file _maintenance/technical-writing/PROVENANCE.md
 require_file _maintenance/technical-writing/EVALS.md
 require_file _maintenance/technical-writing/upstream/SKILL.md
@@ -64,11 +65,13 @@ expected_top_level=$'technical-writing/README.md\ntechnical-writing/SKILL.md\nte
   exit 1
 }
 
-# The two deferred profiles are a deliberate non-goal — the dispatch table
-# falls back to the router's globals for these artifact types instead.
-# pr-descriptions.md left this loop when the profile shipped; it's now pinned
-# as required in the inventory above.
-for f in technical-writing/references/api-reference.md technical-writing/references/readme.md; do
+# The deferred profile is a deliberate non-goal—the dispatch table falls
+# back to the router's globals for this artifact type instead.
+# pr-descriptions.md left this loop when its profile shipped, and readme.md
+# followed when readme-coauthorship's polish step created the real need the
+# fallback was waiting on; both are now pinned as required in the inventory
+# above.
+for f in technical-writing/references/api-reference.md; do
   [[ ! -e "$f" ]] || {
     echo "deferred profile shipped early, contradicting the dispatch table's fallback: $f" >&2
     exit 1
@@ -111,6 +114,16 @@ refute_text technical-writing/SKILL.md "humanizer"
 # callee), never the reverse. A mutual reference would let an agent ping-pong
 # between the two skills, so this router must never mention file-issue.
 refute_text technical-writing/SKILL.md "file-issue"
+
+# Same rule for readme-coauthorship, which also calls in via its polish step —
+# but a whole-file refute can't work here, because the description legitimately
+# names it once for boundary routing ("Authoring a whole README belongs to
+# readme-coauthorship"). Pin the count at exactly one so the body stays silent.
+rc_mentions="$(grep -o 'readme-coauthorship' technical-writing/SKILL.md | wc -l | tr -d ' ')"
+[[ "$rc_mentions" == "1" ]] || {
+  echo "technical-writing/SKILL.md must name readme-coauthorship exactly once (the description's boundary routing), found: $rc_mentions" >&2
+  exit 1
+}
 
 # Step 2 must still name a concrete action. "Run an audit" with no formal
 # invocation is how the step decays into a self-assessment that always passes.
@@ -158,7 +171,7 @@ require_text technical-writing/SKILL.md "| PR description | [references/pr-descr
 require_text technical-writing/SKILL.md "| Issue body, drafted or filed | not yet written — globals above | STE, Google, Global English |"
 require_text technical-writing/SKILL.md "| Release notes, changelog, migration guide | not yet written — globals above | All four |"
 require_text technical-writing/SKILL.md "| How-to guides, walkthroughs | not yet written — globals above | All four; how-to mode |"
-require_text technical-writing/SKILL.md "| README, docs | not yet written — globals above | All four |"
+require_text technical-writing/SKILL.md "| README, docs | [references/readme.md](references/readme.md) | All four; Diátaxis via the mode mapping |"
 
 # The old combined row must be gone — proves the split happened rather than
 # the new rows just sitting alongside a stale one.
@@ -167,6 +180,9 @@ refute_text technical-writing/SKILL.md "| README, guides, docs |"
 # Same idea for the PR row: proves the fallback cell was replaced by the
 # profile link, not that a linked row grew beside a stale globals-only one.
 refute_text technical-writing/SKILL.md "| PR description | not yet written"
+
+# And for the README row, when its profile shipped.
+refute_text technical-writing/SKILL.md "| README, docs | not yet written"
 
 # --- Anti-drift pins on the verbatim CLAUDE.md migrations ---------------
 # These passages are copied word-for-word from the user's ~/.claude/CLAUDE.md,
@@ -212,6 +228,14 @@ require_text technical-writing/references/comments.md "Write comments in the voi
 require_text technical-writing/references/commit-messages.md "## Example"
 require_text technical-writing/references/comments.md "## Example"
 require_text technical-writing/references/pr-descriptions.md "## Example"
+require_text technical-writing/references/readme.md "## Example"
+
+# The README profile's two load-bearing structures: the per-section mode
+# mapping (the reason the profile exists at all), and the existing-voice rule,
+# pinned as a whole sentence because it's the line a well-meaning "tighten the
+# register" edit would flatten first.
+require_text technical-writing/references/readme.md "## Mode Mapping"
+require_text technical-writing/references/readme.md "Where the README already carries an author's voice—emoji headers, first person, dry humor—that voice is the register: fix what reads two ways and leave how it sounds alone."
 
 # A placeholder stub must never ship and quietly satisfy the three pins above.
 # refute_text takes a single file, so this one's a direct recursive grep
@@ -232,11 +256,13 @@ require_text README.md "npx skills add kendrick/skills --skill technical-writing
 
 # --- Size ceiling -----------------------------------------------------
 # The self-imposed byte ceiling was raised from 6.5 KB to 7 KB when the new
-# dispatch rows landed. Upstream is an 11,522-byte monolith; this router
-# stays well under it because the profiles carry what's artifact-specific.
+# dispatch rows landed, then to 7.3 KB when the README profile's row and
+# Further Reading bullet landed. Upstream is an 11,522-byte monolith; this
+# router stays well under it because the profiles carry what's
+# artifact-specific.
 skill_size="$(wc -c < technical-writing/SKILL.md)"
-(( skill_size <= 7000 )) || {
-  echo "technical-writing/SKILL.md is $skill_size bytes, over the 7000-byte ceiling" >&2
+(( skill_size <= 7300 )) || {
+  echo "technical-writing/SKILL.md is $skill_size bytes, over the 7300-byte ceiling" >&2
   exit 1
 }
 
