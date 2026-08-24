@@ -9,9 +9,15 @@
 
 # skills
 
-Agent skills you install on individually or all at once.
+Agent skills you can install individually or all at once.
 
-Eight skills live here right now: one for driving Databricks APIs, one for turning meeting artifacts into durable notes, one for writing READMEs, one for writing GitHub issues, one for carrying unfinished coding-agent work into a fresh session, one for reviewing a diff adversarially, one for the prose developers write around their code, and one that makes the agent restate its last message plainly. Each sits in its own directory with a full guide, loads into your LLM harness the same way, and works independently of the rest.
+Ten skills live here right now. One drives the Databricks APIs. Three keep your working life filed: meeting exhaust into durable notes, Johnny.Decimal filing, and the audit that keeps that system honest. Four cover the writing developers do around code: READMEs, GitHub issues, commit-and-PR prose, and a plain restatement when a message didn't land. One reviews diffs adversarially, and one carries unfinished coding-agent work into a fresh session. Each sits in its own directory with a full guide, loads into your LLM harness the same way, and works independently of the rest.
+
+- [Install](#install)
+- [The Skills](#the-skills): [databricks-api](#databricks-api) · [file-issue](#file-issue) · [inbox-to-memory](#inbox-to-memory) · [jd-file](#jd-file) · [jd-audit](#jd-audit) · [readme-coauthorship](#readme-coauthorship) · [adversarial-review](#adversarial-review) · [handoff](#handoff) · [technical-writing](#technical-writing) · [eli5](#eli5)
+- [Repository Layout](#repository-layout)
+- [Contributing](#contributing)
+- [License](#license)
 
 ## Install
 
@@ -45,6 +51,22 @@ Drop your meeting exhaust—transcripts, slide decks, PDFs, half-finished scratc
 
 ```bash
 npx skills add kendrick/skills --skill inbox-to-memory
+```
+
+### [jd-file](jd-file/README.md)
+
+Gives an incoming thing its Johnny.Decimal number, puts it in the right tree, and writes the register line in the same motion, so the index can't quietly fall behind the folders. It reads the vault's own conventions file for the grammar instead of hardcoding rules, follows the precedent a category already sets, and scales its caution to the stakes: a clean match files without a question, a new ID gets a confirm, and a new area or category never happens without you saying so. Reach for it when something arrives—a PDF, a deck, a client, a whole project—and you don't know where it lives.
+
+```bash
+npx skills add kendrick/skills --skill jd-file
+```
+
+### [jd-audit](jd-audit/README.md)
+
+Checks a Johnny.Decimal system for drift and walks you through reconciling what it finds. The comparison itself is a standard-library Python script reading the same conventions file jd-file reads, because a diff wants a diff tool, not a fresh act of judgment every run. Severity tracks how much judgment a finding still needs: the register and the folders disagreeing is an error, a name recurring under two IDs is a warning that asks for a call, and a link another machine owns is informational. Reconciliation decisions stay yours, and filing new things belongs to jd-file. Reach for it when your numbering feels off or your index has drifted from your folders.
+
+```bash
+npx skills add kendrick/skills --skill jd-audit
 ```
 
 ### [readme-coauthorship](readme-coauthorship/)
@@ -89,9 +111,10 @@ npx skills add kendrick/skills --skill eli5
 
 ## Repository Layout
 
-- [databricks-api/](databricks-api/), [file-issue/](file-issue/), [inbox-to-memory/](inbox-to-memory/), [readme-coauthorship/](readme-coauthorship/), [handoff/](handoff/), [adversarial-review/](adversarial-review/), [technical-writing/](technical-writing/), [eli5/](eli5/): the skills, one directory each
+- [databricks-api/](databricks-api/), [file-issue/](file-issue/), [inbox-to-memory/](inbox-to-memory/), [jd-file/](jd-file/), [jd-audit/](jd-audit/), [readme-coauthorship/](readme-coauthorship/), [handoff/](handoff/), [adversarial-review/](adversarial-review/), [technical-writing/](technical-writing/), [eli5/](eli5/): the skills, one directory each
 - [\_docs/](_docs/): research notes behind the skills, like the [readme-coauthorship writeup](_docs/readme-coauthorship-research.md) and the [issue-authorship survey](_docs/file-issue-research.md)
-- [\_maintenance/](_maintenance/): maintainer tooling, one subdirectory per skill that needs it: the refresh workflow that keeps `databricks-api` synced with upstream Databricks docs, the upstream sync behind `handoff`, and the decision ledgers and evals behind `file-issue` and `adversarial-review`
+- [\_maintenance/](_maintenance/): maintainer tooling, one subdirectory per skill that needs it: the refresh workflow that keeps `databricks-api` synced with upstream Databricks docs, the upstream sync behind `handoff`, and the decision ledgers, evals, and provenance records behind the rest
+- [tests/](tests/): smoke scripts that pin each skill's load-bearing decisions; each runs standalone from the repo root, like `bash tests/technical-writing-smoke.sh`
 
 ## Contributing
 
