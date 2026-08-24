@@ -10,7 +10,7 @@ This skill encodes that craft. It scans the repo before asking anything and refu
 
 ## How It Works
 
-Every run resolves four choices up front, then follows the same pipeline: harvest repo facts, fill a brief, generate, validate.
+Every run resolves four choices up front, then follows the same pipeline: harvest repo facts, fill a brief, generate, polish, validate.
 
 - Mode — guided asks up to eight targeted questions; autopilot infers everything from the repo and asks nothing past setup.
 - Scope — a root README gets the full funnel; a nested one stays scoped to its directory and links up.
@@ -24,10 +24,12 @@ At the end it can offer a companion AGENTS.md or llms.txt, so build-and-test min
 The preferred route is the `skills` CLI:
 
 ```bash
-npx skills add https://github.com/kendrick/skills
+npx skills add kendrick/skills --skill readme-coauthorship
 ```
 
-Prefer to manage it by hand? Clone the collection and copy this directory in:
+Nothing else is required. One optional piece makes the polish step stronger: where the [technical-writing](../technical-writing/) skill is installed, the drafted README takes a pass through its per-section prose standard—warm hook, imperative quickstart, dry reference tables. Without it, the voice and anti-slop rules built into this skill are the whole gate, and nothing breaks.
+
+To manage it by hand, clone the collection and copy this directory in:
 
 ```bash
 git clone git@github.com:kendrick/skills.git
@@ -48,7 +50,7 @@ The first thing any run does is settle the four axes above; anything your phrasi
 
 ```
 readme-coauthorship/
-├── SKILL.md          # the skill — six steps, all four axes
+├── SKILL.md          # the skill — seven steps, all four axes
 └── references/       # loaded per-branch at generate time
     ├── elicitation.md
     ├── readme-craft.md

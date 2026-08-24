@@ -1,6 +1,6 @@
 # Agent Companions — AGENTS.md, CLAUDE.md, llms.txt
 
-Loaded at Step 6 only when the user accepts a companion. The division of labor: the README stays human and warm; operational minutiae that would clutter it — build steps, test commands, conventions — moves here.
+Loaded at Step 7 only when the user accepts a companion. The division of labor: the README stays human and warm; operational minutiae that would clutter it — build steps, test commands, conventions — moves here.
 
 ## AGENTS.md
 

@@ -5,7 +5,7 @@ description: "Co-author README files — create a brand-new README.md, enhance a
 
 # readme-coauthorship
 
-Co-author a README in five steps — setup, harvest, brief, generate, validate — plus an optional companions step. Four axes set at the start steer every run: mode (guided or autopilot), scope (root or nested), posture (create, enhance, or rewrite), and output (in place or draft).
+Co-author a README in six steps — setup, harvest, brief, generate, polish, validate — plus an optional companions step. Four axes set at the start steer every run: mode (guided or autopilot), scope (root or nested), posture (create, enhance, or rewrite), and output (in place or draft).
 
 ## Step 1 — Orient and Ask the Setup Question
 
@@ -107,7 +107,15 @@ Write the result to the Step 1 output path.
 
 **Done when:** the draft exists at the chosen path and every section traces to a brief slot or harvest row.
 
-## Step 5 — Validate
+## Step 5 — Polish
+
+Where the `technical-writing` skill is installed, invoke it via the Skill tool on the drafted README and follow what it loads. It supplies instructions, not a rewritten file, so the revision is yours to make. Where it isn't installed, the draft stands as written—absence degrades to current behavior, never to an error or a stall. `technical-writing` owns any downstream prose auditor, so never reach past it to one directly.
+
+The pass changes wording only. Funnel order, section set, badges, commands, paths, and every fact tracing to a harvest row survive it; where a revision would alter one, keep the original. Enhance posture: passages Step 4 preserved verbatim stay verbatim—the pass touches only what Step 4 rewrote.
+
+**Done when:** the draft has been revised under `technical-writing`, or its absence is noted and the draft stands.
+
+## Step 6 — Validate
 
 Check the draft against every item; fix and re-check failures:
 
@@ -127,7 +135,7 @@ Check the draft against every item; fix and re-check failures:
 
 **Done when:** all 13 items are checked and each failure is fixed-and-rechecked or reported with a reason.
 
-## Step 6 — Companions
+## Step 7 — Companions
 
 - **Nested scope:** the root README should link down to this one. Guided: offer to add the link — editing the root is its own consent. Autopilot: name it as a follow-up in the wrap-up and touch nothing.
 - **Both scopes:** a companion AGENTS.md (or llms.txt for docs-heavy projects) keeps agent-facing minutiae out of the human README. Guided: offer it; on acceptance, read [references/agent-companions.md](references/agent-companions.md) and build it. Autopilot: name it as a follow-up in the wrap-up and create nothing — setup was the last question.
