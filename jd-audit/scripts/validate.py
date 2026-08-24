@@ -295,10 +295,18 @@ def scope_covers(acid: str, scope: list[str]) -> bool:
 
 class WalkContext:
     def __init__(self, substrate_id: str, root: Path, ignore_names: set[str],
-                 tiers: dict, active, findings: list[Finding]):
+                 tiers: dict, active, findings: list[Finding],
+                 scaffold_names: set[str] | None = None):
         self.substrate_id = substrate_id
         self.root = root
         self.ignore_names = ignore_names
+        # Scaffolded files (e.g. the Overview.md jd-file drops into every new
+        # ID) don't count as payload for hygiene-empty -- an ID holding only
+        # its own scaffold is still a reservation. Deliberately not folded
+        # into ignore_names, which would prune these files from every walk
+        # and hide their wiki-links from link-broken. walk_id_interior
+        # consults this set at exactly one place, the payload check.
+        self.scaffold_names = scaffold_names or set()
         self.tiers = tiers
         self.active = active
         self.findings = findings
@@ -421,7 +429,7 @@ def walk_id_interior(id_path: Path, acid: str, ctx: WalkContext, numbered_depth_
             # -- normal and deliberately deep in this system. Silent.
         if entry.is_dir(follow_symlinks=False):
             subdirs.append(entry.path)
-        else:
+        elif name not in ctx.scaffold_names:
             has_payload = True
 
     if not has_payload:
@@ -1226,6 +1234,7 @@ def run(args) -> int:
     ignore_names = set(data.get("ignore", {}).get("names", []))
     ignore_top_level = set(data.get("ignore", {}).get("vault_top_level", []))
     numbered_depth_below_id = bool(data.get("rules", {}).get("numbered_depth_below_id", False))
+    scaffold_names = set(data.get("rules", {}).get("scaffold_names", []))
 
     substrates = data.get("substrate", [])
     substrates_by_id = {s["id"]: s for s in substrates}
@@ -1245,7 +1254,8 @@ def run(args) -> int:
                             f"its structure, hygiene, and drift checks are skipped")
             continue
 
-        ctx = WalkContext(sid, root, ignore_names, patterns["grammar"], active, findings)
+        ctx = WalkContext(sid, root, ignore_names, patterns["grammar"], active, findings,
+                          scaffold_names=scaffold_names)
         shape = sub["shape"]
         if shape == "areas":
             walk_vault_shaped(root, ctx, ignore_top_level, numbered_depth_below_id)
