@@ -109,7 +109,7 @@ Write the result to the Step 1 output path.
 
 ## Step 5 — Polish
 
-Where the `technical-writing` skill is installed, invoke it via the Skill tool on the drafted README and follow what it loads. It supplies instructions, not a rewritten file, so the revision is yours to make. Where it isn't installed, the draft stands as written—absence degrades to current behavior, never to an error or a stall. `technical-writing` owns any downstream prose auditor, so never reach past it to one directly.
+Where the `technical-writing` skill is installed, invoke it via the Skill tool on the drafted README and follow what it loads. The dispatch happens here, at polish time, even when an earlier turn already loaded the skill—that invocation served a different artifact, and a profile is fresh only at its own dispatch. It supplies instructions, not a rewritten file, so the revision is yours to make. Where it isn't installed, the draft stands as written—absence degrades to current behavior, never to an error or a stall. `technical-writing` owns any downstream prose auditor, so never reach past it to one directly.
 
 The pass changes wording only. Funnel order, section set, badges, commands, paths, and every fact tracing to a harvest row survive it; where a revision would alter one, keep the original. Enhance posture: passages Step 4 preserved verbatim stay verbatim—the pass touches only what Step 4 rewrote.
 

@@ -65,6 +65,11 @@ require_text readme-coauthorship/SKILL.md "## Step 7 — Companions"
 
 require_text readme-coauthorship/SKILL.md "invoke it via the Skill tool on the drafted README"
 require_text readme-coauthorship/SKILL.md "the draft stands"
+
+# Polish-time dispatch. The first live run showed a warm session rationalizing
+# its way past the re-dispatch because the router was already in context, which
+# is exactly the drift "read the profile fresh" exists to prevent.
+require_text readme-coauthorship/SKILL.md "The dispatch happens here, at polish time, even when an earlier turn already loaded the skill"
 require_text readme-coauthorship/SKILL.md "never reach past it to one directly"
 refute_text readme-coauthorship/SKILL.md "humanizer"
 refute_text readme-coauthorship/SKILL.md "unslop"
