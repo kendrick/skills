@@ -43,9 +43,14 @@ Needs `00.02 Vault Conventions.md` to already exist in the target vault—this s
 ```
 jd-file/
 ├── SKILL.md                          # orient, classify, decide the ID, pick the substrate, write the register line, then file
-└── references/
-    ├── id-assignment.md              # minting a number without proposing a category
-    └── substrate-selection.md        # which of the three trees a thing belongs in
+├── assets/
+│   ├── overview.template.md          # scaffolded as Overview.md inside every newly minted vault ID
+│   └── moc-rollups.md                # Dataview block a category map carries outside its generated markers
+├── references/
+│   ├── id-assignment.md              # minting a number without proposing a category
+│   └── substrate-selection.md        # which of the three trees a thing belongs in
+└── scripts/
+    └── build_moc.py                  # regenerates a category map's table between its markers
 ```
 
 ## Gotchas
@@ -55,6 +60,8 @@ jd-file/
 - Refuses to auto-repair. When the register and the substrates disagree about what exists, jd-file reports the conflict and stops; it never guesses which side is stale.
 - No fourth numbered tier, not "nothing nested below an ID." Depth below an ID—client memory folders, nested git repos, whatever a scope needs—is normal and expected; jd-file only pushes back on a folder that tries to number itself `AC.ID.NN`.
 - Doesn't propose `AC.00` management items. This vault's dialect doesn't use standard zeros, so jd-file won't invent one to be tidy.
+- The Rollups sections in scaffolded notes need Obsidian's Dataview plugin. On a machine without it they render as visible query text—ugly, not broken—while everything above them is plain markdown and works everywhere.
+- `obsidian-markdown`, `obsidian-bases`, and `obsidian-cli`, which Step 5 invokes for Obsidian mechanics, are external skills installed from [kepano/obsidian-skills](https://github.com/kepano/obsidian-skills), not part of this repo.
 
 ## License
 

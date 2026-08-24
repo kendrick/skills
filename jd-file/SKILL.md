@@ -100,11 +100,15 @@ The **purpose clause** states what the ID is for—the sentence a future filer r
 
 Then create the folder in each listed substrate, with the identical name, and put the thing inside. Notes a person writes by hand inside an ID are Title Case with no number, since the folder already carries the number; notes another skill manages keep their generated names untouched. `[naming]` is the authority on both. Cross-substrate references take the absolute percent-encoded form `[links]` describes, and they break silently on rename—one more reason the name was settled in Step 4.
 
+In the vault substrate only, create `Overview.md` inside the new ID folder from [assets/overview.template.md](assets/overview.template.md), filling the placeholders from the ID just minted. Numbering stops at the ID, so this note is what a reader orients by in the depth below it, and it gets created in the same motion as the ID itself—an overview left for a human to add later is the give-it-a-number-now, record-it-later split all over again. `Overview.md` is skill-managed, so it keeps its generated name; the Title Case rule above is for hand-authored notes. Never copy the purpose clause into it—the note's own callout says why. On machines without Dataview, the Rollups section renders as visible query text. That is deliberate: the same file syncs to every machine, and everything above that section is plain markdown. Skip the note in the office and code trees, where its queries mean nothing.
+
+Filing into an ID that already holds an `Overview.md` appends one line to its `## Log`: `- **YYYY-MM-DD** — filed <filename>`. Append only—never rewrite existing lines, never touch other sections. The Log records what this skill did, not what the ID contains. An inventory would go stale the first time a human adds a file by hand—the register anti-pattern one level down.
+
 When the category is one `[moc].categories` names, run `scripts/build_moc.py --vault VAULT` right after creating the folder—minting the ID is what makes the map stale. The map is generated, so it's safe to rewrite—there's no confirmation tier here. Regenerating touches only the block between the markers, leaving the prose around it untouched. Contrast the register above, written by hand before the folder exists.
 
 Obsidian syntax, frontmatter mechanics, and vault CLI usage belong to `obsidian-markdown`, `obsidian-bases`, and `obsidian-cli`. Invoke them.
 
-**Done when:** the register line exists, matches `[register].entry`, sits under the correct headings, and its purpose clause would settle the next arrival without naming any current file; every substrate folder listed on that line exists with the identical name; the thing is inside one of them; and, for a category `[moc].categories` names, its map table includes the new ID.
+**Done when:** the register line exists, matches `[register].entry`, sits under the correct headings, and its purpose clause would settle the next arrival without naming any current file; every substrate folder listed on that line exists with the identical name; the thing is inside one of them; a newly minted ID's vault folder holds an `Overview.md` built from the template; and, for a category `[moc].categories` names, its map table includes the new ID.
 
 ## Anti-Patterns
 
@@ -134,7 +138,7 @@ Obsidian syntax, frontmatter mechanics, and vault CLI usage belong to `obsidian-
 <VAULT>/30-39 Home & House/32 Property & Records/32.02 Vehicles/
 ```
 
-The note inside it, hand-authored and so Title Case with no number: `Auto Insurance.md`. The PDF goes to that ID's own `_attachments/` folder, per the constitution's attachment rule for ID-specific files.
+The note inside it, hand-authored and so Title Case with no number: `Auto Insurance.md`. Beside it, the scaffolded `Overview.md`, its Log opening with `- **2026-08-23** — created`. The PDF goes to that ID's own `_attachments/` folder, per the constitution's attachment rule for ID-specific files.
 
 The register entry, written before any of that exists, under `## 30-39 Home & House` → `### 32 Property & Records`:
 
