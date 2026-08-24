@@ -103,6 +103,8 @@ Suppression matches on the pair (`check`, `path`) by exact string equality, with
 
 Apply only what the user confirmed, then run the same command again for fresh ground truth and show the new count line beside the old one. Re-running is what separates a fix from a claimed fix.
 
+After reconciliation, offer to run `jd-file`'s `scripts/build_moc.py --vault VAULT_ROOT` over `[moc].categories` as routine maintenance—one confirmation for the whole regeneration, the same safe-with-confirmation tier `moc-stale` carries. The maps' cross-substrate cells are probes of trees this validator never walks. A folder created in the office tree since the last regeneration reads as a dash until the builder runs again, and nothing else refreshes it. The offer stands whether or not `moc-stale` fired—that check compares only ID sets and is deliberately blind to the cells this run exists to refresh. Regeneration stays the builder's job—the validator itself never writes a map it audits.
+
 Every finding that disappeared must be explained by a change you made or an exception you wrote. One that vanished for neither reason means the walk saw something different this time—report that rather than banking it as progress.
 
 **Done when:** the before and after count lines are both shown, every closed finding is accounted for, and everything still open is listed as an outstanding user decision.

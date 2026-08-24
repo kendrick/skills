@@ -9,6 +9,11 @@ Columns, labels, and which categories carry a map all come from the [moc]
 table in the conventions note. Nothing about the shape of the table is decided
 here, so changing what it shows is a config edit rather than a code edit.
 
+The generated table carries only what this builder alone can know: the ID set
+and the cross-substrate links. Vault-local volatile facts -- status, last
+touched -- belong to a Dataview block outside the markers (see
+assets/moc-rollups.md), computed at render instead of stored stale here.
+
 Rows come from the folders, never from the file being rewritten: the point is
 to make the table agree with the disk, so reading the old table as input would
 let a stale row perpetuate itself.
@@ -50,15 +55,6 @@ def roots_for_host(data: dict, host: str) -> dict:
     return {k: [Path(p) for p in v] for k, v in entry.items() if isinstance(v, list)}
 
 
-def status_of(id_dir: Path, data: dict) -> str:
-    anchor = id_dir / data.get("status", {}).get("anchor_note", "README.md")
-    prop = data.get("status", {}).get("property", "status")
-    if not anchor.exists():
-        return "—"
-    m = re.search(rf"^{re.escape(prop)}:\s*(\S+)", anchor.read_text(encoding="utf-8"), re.M)
-    return m.group(1) if m else "—"
-
-
 def furl(p: Path) -> str:
     return "file://" + quote(str(p))
 
@@ -69,14 +65,17 @@ def cell(col: str, jd: str, name: str, folder: str, id_dir: Path,
         return jd
     if col == "name":
         return f"**{name}**"
-    if col == "status":
-        return status_of(id_dir, data)
     if col == "vault":
         return f"[notes]({quote(folder)}/)"
-    if col == "updated":
-        newest = max((f.stat().st_mtime for f in id_dir.rglob("*") if f.is_file()),
-                     default=0)
-        return __import__("datetime").date.fromtimestamp(newest).isoformat() if newest else "—"
+    # Every other column must name a substrate. status and updated used to be
+    # columns here; they moved to the Dataview rollups block because a stored
+    # snapshot of a vault-local fact goes stale the moment the builder writes it. Failing
+    # loudly beats rendering a silent dash column from an outdated config.
+    if col not in {s.get("id") for s in data.get("substrate", [])}:
+        sys.exit(f"[moc].columns names '{col}', which is neither a built-in "
+                 f"(id, name, vault) nor a declared substrate. status/updated "
+                 f"columns moved to the Dataview rollups block outside the "
+                 f"markers; drop '{col}' from the config.")
     # office and code resolve through this host's roots. A substrate that does
     # not carry the category, or a folder that was never made, both read as a
     # dash -- the map says where material is, not where it could hypothetically go.

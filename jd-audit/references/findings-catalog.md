@@ -213,6 +213,6 @@ A target matching no configured root usually means a root is missing from `[host
 
 The check compares only the set of IDs the table lists against the set the folders hold. It deliberately ignores link text and status values, cosmetic differences that don't change whether the map is still telling the truth. Matching on those too would make it cry wolf over an ordinary rename or status flip.
 
-**Reconcile by.** Regenerating, never hand-editing. Run `jd-file`'s `scripts/build_moc.py --vault VAULT_ROOT` and the table matches the folders again. Editing between the markers by hand is wasted work—the next regeneration discards it. Editing outside them is exactly what that space is for.
+**Reconcile by.** Regenerating, never hand-editing. Run `jd-file`'s `scripts/build_moc.py --vault VAULT_ROOT` and the table matches the folders again. Editing between the markers by hand is wasted work—the next regeneration discards it. Editing outside them is exactly what that space is for. Worth running even when this check stayed quiet—the cross-substrate cells are probes of trees the validator never walks, and only regeneration refreshes them. `jd-audit` Step 5 offers exactly that.
 
 **Tier.** Safe with confirmation. Regeneration is idempotent and touches only the block between the markers. Unlike every other finding in this catalog, the fix here isn't a judgment call for the user—it's `jd-file`'s builder, run again.
