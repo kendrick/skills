@@ -26,5 +26,5 @@ When sibling directories already carry READMEs, mirror their section names and o
 
 ## Obligations Upward
 
-- The root README (or its project-structure map) should link down to this file. Adding that link is Step 6's companion offer — a separate consent, since it edits a file outside the target.
-- If the repo already uses nested AGENTS.md files (nearest-file-wins), note in Step 6 that this directory could mirror one; follow [agent-companions.md](agent-companions.md) if accepted.
+- The root README (or its project-structure map) should link down to this file. Adding that link is Step 7's companion offer — a separate consent, since it edits a file outside the target.
+- If the repo already uses nested AGENTS.md files (nearest-file-wins), note in Step 7 that this directory could mirror one; follow [agent-companions.md](agent-companions.md) if accepted.

@@ -35,7 +35,7 @@ Deliver information directly and let the phrasing carry the warmth. Don't overus
 
 ## Anti-Slop Rules
 
-These rules apply to the README content this skill generates — not to SKILL.md or the files in references/, which are agent-facing scaffolding and stay terse and imperative. Self-apply while drafting; the Step 5 voice check is the gate. Distilled from Wikipedia's "Signs of AI writing":
+These rules apply to the README content this skill generates — not to SKILL.md or the files in references/, which are agent-facing scaffolding and stay terse and imperative. Self-apply while drafting; the Step 6 voice check is the gate. Distilled from Wikipedia's "Signs of AI writing":
 
 - **Name the concrete benefit, not its vibe.** No significance inflation: a feature never "marks a pivotal step" or "underscores a commitment" — it does something specific; say that.
 - **Cut promotional adjectives with no referent.** "Powerful", "seamless", "blazing-fast", "robust" claim nothing. Replace each with the fact that earned it ("parses 1GB logs in ~4s") or drop it.
