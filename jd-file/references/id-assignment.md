@@ -56,4 +56,6 @@ Name an ID for the durable subject, never for the artifact that triggered its cr
 
 Before committing a label, check whether that same name already exists under a different number anywhere—the register, and every substrate. One name under two numbers is a split, and a split is invisible to any check that joins on numbers, so it survives until a human notices two folders with the same name in different categories. Catching it at mint time costs one search.
 
+That search only counts if it sees the whole tree. The substrates carry nested git repositories and their own ignore files, and a search that honors those ignore rules comes back clean on a name that is sitting right there. Pass `rg -uu`, or the equivalent in whatever tool you have. Then read the exit code before believing the silence. A tool that is missing or that failed exits nonzero and prints nothing, and empty stdout looks exactly like an honest zero matches.
+
 Match the category's existing naming convention rather than an external standard. If client IDs there are bare company names, the next one is a bare company name.
