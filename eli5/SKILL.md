@@ -1,5 +1,5 @@
 ---
-name: huh
+name: eli5
 description: Restate the last message in plain language—shorter, no jargon.
 disable-model-invocation: true
 argument-hint: '[the part that did not land | empty for the whole last response]'
