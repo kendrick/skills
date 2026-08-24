@@ -49,7 +49,7 @@ npx skills add kendrick/skills --skill inbox-to-memory
 
 ### [readme-coauthorship](readme-coauthorship/)
 
-Co-authors READMEs—this one included—whether brand-new, long-neglected, at the repo root, or buried in a monorepo. It scans the repo before asking anything, refuses to fabricate what it can't verify, and structures what it writes as a funnel from general to specific. Runs guided (a short wizard of targeted questions) or autopilot (infers everything from repo metadata). Reach for it to write a README from scratch or refresh one that's drifted.
+Co-authors READMEs—this one included—whether brand-new, long-neglected, at the repo root, or buried in a monorepo. It scans the repo before asking anything, refuses to fabricate what it can't verify, and structures what it writes as a funnel from general to specific. Runs guided (a short wizard of targeted questions) or autopilot (infers everything from repo metadata). Where the technical-writing skill is installed, the draft takes a polish pass through its README profile before validation. Reach for it to write a README from scratch or refresh one that's drifted.
 
 ```bash
 npx skills add kendrick/skills --skill readme-coauthorship
@@ -73,7 +73,7 @@ npx skills add kendrick/skills --skill handoff
 
 ### [technical-writing](technical-writing/README.md)
 
-Routes developer-facing prose—commit messages, code comments, PR descriptions, API reference, READMEs—to a profile that names which public standards apply: [Diátaxis](https://diataxis.fr/start-here/), [Google developer style](https://developers.google.com/style), [ASD-STE100](https://www.techwriter.ai/s1000d/writing-for-s1000d/simplified-technical-english) principles, and [Kohl's Global English](https://books.google.com/books?id=r0AiqqRBPF0C&printsec=frontcover#v=onepage&q&f=false). Two profiles ship today, commit messages and code comments; the rest fall back to the global rules until their profiles are written. Every draft ends in a mandatory audit: a self-check, then whatever prose-audit skill and house rules your setup provides. Reach for it when a commit message, comment, or doc needs to read like a person actually wrote it.
+Routes developer-facing prose—commit messages, code comments, PR descriptions, API reference, READMEs—to a profile that names which public standards apply: [Diátaxis](https://diataxis.fr/start-here/), [Google developer style](https://developers.google.com/style), [ASD-STE100](https://www.techwriter.ai/s1000d/writing-for-s1000d/simplified-technical-english) principles, and [Kohl's Global English](https://books.google.com/books?id=r0AiqqRBPF0C&printsec=frontcover#v=onepage&q&f=false). Four profiles ship today: commit messages, code comments, PR descriptions, and README prose; the rest fall back to the global rules until their profiles are written. Every draft ends in a mandatory audit: a self-check, then whatever prose-audit skill and house rules your setup provides. Reach for it when a commit message, comment, or doc needs to read like a person actually wrote it.
 
 ```bash
 npx skills add kendrick/skills --skill technical-writing
