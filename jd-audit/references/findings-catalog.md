@@ -172,6 +172,8 @@ The damage is delayed rather than immediate. The constitution is what a person r
 
 Emptiness is evidence that a folder is unused; it is never evidence that it is unneeded. A folder can be empty because nothing has landed there yet, or because it is a destination something else routes to—an inbox that ambiguous items get parked in, a cold archive that dead content moves to—and a directory listing cannot tell those two cases apart. Before proposing retirement of any specific folder, check whether the conventions block, the constitution's routing or maintenance guidance, or a skill's own steps name it as a destination; a folder that turns up in any of those is load-bearing no matter how empty it looks.
 
+Files named in `[rules].scaffold_names` don't count as payload. `jd-file` drops an `Overview.md` into every ID it mints, so without that key the check would go dark the moment scaffolding ships—every reservation would look occupied by its own furniture. One wrinkle is accepted on purpose. Once a human writes real content into a scaffold note, the ID is occupied in spirit, but the check still reports it. For an info-severity finding whose tier is never automatic, a mild false positive beats a silent false negative.
+
 **Reconcile by.** Leaving it. If a reservation is genuinely abandoned, retiring it is a deletion and a renumbering, and it should be raised as one—on its own, with the reason it's safe stated for that specific folder, never bundled with the rest of the info list just because they're all empty.
 
 **Tier.** Never automatic. Empty IDs come off one at a time, each as its own user decision with its own reason—agreeing to retire "the empty ones" approves the shape of a sweep, not every folder caught inside it, so a bulk sweep of the info list is the single most destructive action this catalog can lead to, and the finding carries no evidence that anything is wrong.
@@ -211,6 +213,6 @@ A target matching no configured root usually means a root is missing from `[host
 
 The check compares only the set of IDs the table lists against the set the folders hold. It deliberately ignores link text and status values, cosmetic differences that don't change whether the map is still telling the truth. Matching on those too would make it cry wolf over an ordinary rename or status flip.
 
-**Reconcile by.** Regenerating, never hand-editing. Run `jd-file`'s `scripts/build_moc.py --vault VAULT_ROOT` and the table matches the folders again. Editing between the markers by hand is wasted work—the next regeneration discards it. Editing outside them is exactly what that space is for.
+**Reconcile by.** Regenerating, never hand-editing. Run `jd-file`'s `scripts/build_moc.py --vault VAULT_ROOT` and the table matches the folders again. Editing between the markers by hand is wasted work—the next regeneration discards it. Editing outside them is exactly what that space is for. Worth running even when this check stayed quiet—the cross-substrate cells are probes of trees the validator never walks, and only regeneration refreshes them. `jd-audit` Step 5 offers exactly that.
 
 **Tier.** Safe with confirmation. Regeneration is idempotent and touches only the block between the markers. Unlike every other finding in this catalog, the fix here isn't a judgment call for the user—it's `jd-file`'s builder, run again.

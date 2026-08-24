@@ -296,7 +296,39 @@ assert len(findings) == 2, f"links: expected exactly 2 findings total (1 broken 
 print("links: OK (link-broken/error x1, link-unverifiable/info x1, resolving link silent)")
 PY
 
-# --- 8. bad-schema: unrecognized schema_version, exit 2, refuses to run -
+# --- 8. scaffold-empty: hygiene-empty sees through scaffold_names -------
+
+conv="$(stage_fixture scaffold-empty)"
+out="$work_dir/scaffold-empty.out.json"; err="$work_dir/scaffold-empty.err"
+set +e
+run_validator_json "$conv" "$out" "$err"; code=$?
+set -e
+assert_exit_code scaffold-empty 0 "$code" "$err"
+python3 - "$out" <<'PY'
+import sys
+sys.path.insert(0, sys.argv[1].rsplit("/", 1)[0])
+from jd_audit_helpers import load_findings, where
+
+findings = load_findings(sys.argv[1])
+
+# 11.01 holds only the Overview.md that jd-file scaffolds at mint. With
+# [rules].scaffold_names = ["Overview.md"], the note doesn't count as payload,
+# so the reservation stays visible.
+empty = where(findings, check="hygiene-empty", severity="info", id="11.01")
+assert empty, f"scaffold-empty: expected hygiene-empty/info for 11.01 (only its scaffold inside); findings={findings}"
+
+# REFUTE: 11.02 holds the same scaffold plus a real note, so it must be silent.
+occupied = where(findings, check="hygiene-empty", id="11.02")
+assert not occupied, f"scaffold-empty: 11.02 holds real payload beside its scaffold and must not report hygiene-empty; findings={occupied}"
+
+# REFUTE: scaffold_names must not hide Overview.md from the other checks the
+# way ignore_names would -- the walk still saw the file, so nothing else fires.
+assert len(findings) == 1, f"scaffold-empty: expected exactly 1 finding (hygiene-empty on 11.01); got {len(findings)}: {findings}"
+
+print("scaffold-empty: OK (hygiene-empty fired on the scaffold-only ID, silent on the occupied one)")
+PY
+
+# --- 9. bad-schema: unrecognized schema_version, exit 2, refuses to run -
 
 conv="$(stage_fixture bad-schema)"
 out="$work_dir/bad-schema.out"; err="$work_dir/bad-schema.err"
