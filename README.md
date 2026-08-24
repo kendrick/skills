@@ -79,17 +79,17 @@ Routes developer-facing prose—commit messages, code comments, PR descriptions,
 npx skills add kendrick/skills --skill technical-writing
 ```
 
-### [huh](huh/README.md)
+### [eli5](eli5/README.md)
 
-Type `/huh` when the agent's last message didn't land, and it says it again—shorter, no jargon, like one human talking to another. Pass the confusing part as an argument (`/huh the part about cache invalidation`) to re-pitch just that piece; bare `/huh` re-pitches the whole response, including what the tool activity concluded. The restatement follows a distilled ASD-STE100 (one idea per sentence, imperative mood, one meaning per word), adds no new claims, and only ever fires when you type it. A mashup of `bro` from Lauren Tan's pstack and `wait-what` from Matt Pocock's skills, both MIT.
+Type `/eli5` when the agent's last message didn't land, and it says it again—shorter, no jargon, like one human talking to another. Pass the confusing part as an argument (`/eli5 the part about cache invalidation`) to re-pitch just that piece; bare `/eli5` re-pitches the whole response, including what the tool activity concluded. The restatement follows a distilled ASD-STE100 (one idea per sentence, imperative mood, one meaning per word), adds no new claims, and only ever fires when you type it. A mashup of `bro` from Lauren Tan's pstack and `wait-what` from Matt Pocock's skills, both MIT.
 
 ```bash
-npx skills add kendrick/skills --skill huh
+npx skills add kendrick/skills --skill eli5
 ```
 
 ## Repository Layout
 
-- [databricks-api/](databricks-api/), [file-issue/](file-issue/), [inbox-to-memory/](inbox-to-memory/), [readme-coauthorship/](readme-coauthorship/), [handoff/](handoff/), [adversarial-review/](adversarial-review/), [technical-writing/](technical-writing/), [huh/](huh/): the skills, one directory each
+- [databricks-api/](databricks-api/), [file-issue/](file-issue/), [inbox-to-memory/](inbox-to-memory/), [readme-coauthorship/](readme-coauthorship/), [handoff/](handoff/), [adversarial-review/](adversarial-review/), [technical-writing/](technical-writing/), [eli5/](eli5/): the skills, one directory each
 - [\_docs/](_docs/): research notes behind the skills, like the [readme-coauthorship writeup](_docs/readme-coauthorship-research.md) and the [issue-authorship survey](_docs/file-issue-research.md)
 - [\_maintenance/](_maintenance/): maintainer tooling, one subdirectory per skill that needs it: the refresh workflow that keeps `databricks-api` synced with upstream Databricks docs, the upstream sync behind `handoff`, and the decision ledgers and evals behind `file-issue` and `adversarial-review`
 
