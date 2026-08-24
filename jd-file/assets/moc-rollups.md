@@ -1,8 +1,9 @@
 <!-- Paste into a category's map file, OUTSIDE the generated begin/end markers.
      The block computes at render what the generated table must not store: vault-local
      facts that change constantly. moc-stale never reads it (it has no markers).
-     "touched" is each Overview note's own mtime. jd-file's Log appends keep it
-     current for skill filings; hand-edits elsewhere in the ID don't move it. -->
+     status reads from each ID's README.md, the [status] anchor note -- adjust
+     file.name if your vault anchors elsewhere. The depth guard keeps nested
+     READMEs (memory scaffolds run deep) out of the rows. -->
 
 ## Rollups
 
@@ -15,6 +16,7 @@ TABLE WITHOUT ID
   status,
   dateformat(file.mtime, "yyyy-MM-dd") AS touched
 WHERE startswith(file.folder, this.file.folder)
-  AND file.name = "Overview"
+  AND file.name = "README"
+  AND length(split(file.folder, "/")) = length(split(this.file.folder, "/")) + 1
 SORT file.folder ASC
 ```
