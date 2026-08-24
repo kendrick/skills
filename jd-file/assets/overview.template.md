@@ -1,9 +1,5 @@
 ---
 type: overview
-status: active
-started: {{YYYY-MM-DD}}
-target:
-closed:
 stakeholders:
 tags:
   - overview
