@@ -23,7 +23,9 @@ fi
 
 awk '
   function flush() {
-    if (speaker != "") print "[" start "] " speaker ": " text
+    # The trailing blank line is what makes a turn a markdown paragraph. With a
+    # single newline, every renderer runs the whole transcript together as one.
+    if (speaker != "") print "[" start "] " speaker ": " text "\n"
     speaker = ""; text = ""
   }
   /^WEBVTT/ || /^NOTE/ || /^[[:space:]]*$/ { next }
