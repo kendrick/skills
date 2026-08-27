@@ -52,7 +52,7 @@ Arithmetic, announced, overridable in one word.
 | **1** | Everything not caught by 0 or 2. The default. |
 | **2** | Any one of: a breaking change; the ask names two or more components; it touches auth, security, or PII; the issue is destined for a coding agent; the repo has `CODEOWNERS` or ≥5 contributors in the last 90 days. |
 
-Repo complexity sets a floor rather than a ceiling. A solo repo with no CI and no templates caps at Depth 1 unless the user forces higher. A repo with `CODEOWNERS` never runs Depth 0 on anything but a genuine typo.
+Repo complexity sets a floor rather than a ceiling, and the solo-repo cap scopes to it alone: a solo repo with no CI and no templates caps at Depth 1 only when repo complexity was the sole Depth 2 trigger. A breaking change, a multi-component ask, an ask touching auth, security, or PII, or an issue destined for a coding agent fires Depth 2 in any repo—those are properties of the ask and the workflow, and the shape of the tree cannot talk them back down. A repo with `CODEOWNERS` never runs Depth 0 on anything but a genuine typo.
 
 Pick the issue type on the same signals: a defect in existing behavior → bug; new or changed capability → feature; anything else that ships → task; a question to answer rather than work to do → spike. Map "enhancement" and "improvement" to feature unless the repo's labels distinguish them.
 

@@ -70,6 +70,13 @@ require_text file-issue/SKILL.md "\`--deep\` pins Depth 2, \`--fast\` pins Depth
 require_text file-issue/SKILL.md "Depth 1 — 4 gaps to fill."
 require_text file-issue/SKILL.md "Every question names the empty slot it fills."
 
+# The solo-repo cap scopes to the repo-shape trigger (#18). Three Depth 2
+# triggers are properties of the ask and one of the workflow; the shape of the
+# tree must not talk them back down, or an agent-destined ask in a solo repo
+# loses the code probe on exactly the issues that need file pointers.
+require_text file-issue/SKILL.md "only when repo complexity was the sole Depth 2 trigger"
+refute_text file-issue/SKILL.md "caps at Depth 1 unless the user forces higher"
+
 # Elicit stays inline and stays contract-shaped. Both halves matter: inline is
 # the decision, the contract is what keeps it extractable later.
 require_text file-issue/SKILL.md "## Step 3 — Elicit"
