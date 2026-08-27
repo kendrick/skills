@@ -125,6 +125,18 @@ require_text file-issue/SKILL.md "exercise the change, not merely pass beside it
 require_text file-issue/SKILL.md "declaring its prerequisite as a blocker, or by naming the issue where verification lands"
 require_text file-issue/SKILL.md "what preparatory change would make the work small and verifiable on its own"
 
+# Parent and Blocked-by slots (#19). A prerequisite smuggled into prose sends
+# an agent to run a file another ticket has yet to create, so every template
+# carries both slots, Blocked by resolves to references or an explicit "None"
+# rather than a blank, and gate 6 checks named artifacts against the repo.
+for f in file-issue/assets/bug.template.md file-issue/assets/feature.template.md file-issue/assets/task.template.md file-issue/assets/spike.template.md; do
+  require_text "$f" "**Parent:**"
+  require_text "$f" "**Blocked by:**"
+  require_text "$f" 'states "None" outright'
+  require_text "$f" "drop the line"
+done
+require_text file-issue/SKILL.md "fails unless that artifact is declared on the Blocked by line"
+
 # Every gate in the self-check needs a row in the evidence map, or the tiering
 # claim in the README is false.
 require_text file-issue/references/evidence-map.md "Stranger test"
@@ -132,6 +144,8 @@ require_text file-issue/references/evidence-map.md "Runnable repro"
 require_text file-issue/references/evidence-map.md "Agent-readiness"
 # The verify-alone row is practitioner-backed, not measured, and must say so.
 require_text file-issue/references/evidence-map.md "Verify-alone, agent-targeted issues"
+# The existing-artifact row is convention, not measured, and must say so.
+require_text file-issue/references/evidence-map.md "Requiring the artifact on the Blocked by line makes the prerequisite recoverable by the one audience that cannot ask. Dependency links are universal tracker practice; nothing measures them. | [C] |"
 require_text file-issue/references/evidence-map.md "practitioner consensus and \`to-tickets\`' central rule; no study measures its effect on agent outcomes. | [P] |"
 require_text file-issue/references/evidence-map.md "Things Deliberately Not in the Rubric"
 

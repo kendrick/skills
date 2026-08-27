@@ -16,6 +16,19 @@ Strip every HTML comment before rendering the draft.
 <!-- Phrase the title as the question, not the topic. "Can we migrate off X
 without downtime?" beats "Investigate X migration." -->
 
+**Parent:** <the spec, ticket, or discussion this issue comes from>
+
+**Blocked by:** <each issue or artifact that must land first, or "None">
+
+<!--
+[default] Provenance and prerequisites. Parent links the origin—the cheapest
+context transfer there is; drop the line when there is no origin to link.
+Blocked by lists every prerequisite that must land before work can start, or
+states "None" outright. A spike is rarely blocked; when this one is, the
+blocker is usually the decision another spike exists to make. Otherwise drop
+the line rather than shipping it blank.
+-->
+
 ## Question to Answer
 
 <!--

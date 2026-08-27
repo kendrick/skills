@@ -15,6 +15,7 @@ Tiers: **[E]** measured, **[P]** practitioner consensus or official docs, **[C]*
 | ≥1 falsifiable acceptance criterion | Binary acceptance criteria are one of GitHub's three named elements of a well-scoped agent task. The measured quality attribute is testability and the absence of referential ambiguity — ambiguous pronouns show a strong negative effect on downstream model-building. | [P] gate, [E] mechanism | Q3, Q6 |
 | Agent-readiness, agent-targeted issues | The only evidence tying issue text directly to outcome. Verification command and environment setup are what an agent needs that a colleague does not — a teammate reuses tacit local knowledge; an agent in an ephemeral sandbox has none. Single-interpretation phrasing matters because a human asks in standup and an agent commits to one guess. | [E]+[P] | Q6 |
 | Verify-alone, agent-targeted issues | An issue can pass every other gate and still be a horizontal slice: the agent finishes, cannot verify, and reports done regardless. Vertical slicing—every change lands green and demonstrable on its own—is practitioner consensus and `to-tickets`' central rule; no study measures its effect on agent outcomes. | [P] | — |
+| Existing-artifact check, agent-targeted issues | An issue sliced from a spec routinely names a verification command another slice has yet to create, and an agent in a fresh sandbox will try to run it. Requiring the artifact on the Blocked by line makes the prerequisite recoverable by the one audience that cannot ask. Dependency links are universal tracker practice; nothing measures them. | [C] | — |
 
 ## Defaults
 
@@ -26,6 +27,7 @@ Surfaced, never blocking.
 | Non-goals | Shape Up: under-specified projects grow because nothing bounds them. Practitioner testimony only; no measured effect on scope creep or review churn. Doubles as a bound on an agent's change surface. | [P] | Q5 |
 | Convention-matching labels | Conforming to a repo's detected template is [E]-backed. Which specific labels a project uses is its own convention. | [E] conformance, [C] specifics | Q9, Q7 |
 | Environment metadata | Ranked near zero by developers: OS 4%, product 5%, component 3%, severity 0%. Cheap to collect, so collect it — but never hold an issue for it. Value is project-type dependent and rises for native and mobile. | [E], low | Q1 |
+| Parent and Blocked by slots | Provenance and prerequisites are two things the stranger audience cannot recover: a dropped spec link throws away the cheapest context transfer available, and an undeclared prerequisite strands the run. Universal tracker practice, unmeasured. | [C] | — |
 
 ## Things Deliberately Not in the Rubric
 

@@ -116,7 +116,7 @@ Gates:
 3. **Observed and expected stated separately.** Bugs only.
 4. **Error output** where the failure produces any. Bugs only; drop it for silent visual defects rather than padding.
 5. **At least one falsifiable acceptance criterion.** All types. A criterion a reviewer cannot fail is not one.
-6. **Agent-readiness**, when the issue is agent-targeted: single-interpretation problem statement, binary criteria, a runnable verification command, environment pointers, file hints, explicit done-criteria, non-goals. The verification command has to exercise the change, not merely pass beside it—an agent that finishes and cannot verify reports done regardless. A change that genuinely cannot be verified alone passes only by declaring its prerequisite as a blocker, or by naming the issue where verification lands.
+6. **Agent-readiness**, when the issue is agent-targeted: single-interpretation problem statement, binary criteria, a runnable verification command, environment pointers, file hints, explicit done-criteria, non-goals. The verification command has to exercise the change, not merely pass beside it—an agent that finishes and cannot verify reports done regardless. A change that genuinely cannot be verified alone passes only by declaring its prerequisite as a blocker, or by naming the issue where verification lands. The same test runs on every named artifact: a verification command or file pointer naming something the repo does not yet hold fails unless that artifact is declared on the Blocked by line—an agent will otherwise try to run a file another ticket has yet to create.
 
 Defaults: non-goals when scope is ambiguous; Ko-structured title; labels matching observed repo convention; environment metadata.
 
