@@ -114,11 +114,25 @@ require_text file-issue/SKILL.md "gh auth status"
   exit 1
 }
 
+# Gate 6's verify-alone condition (#24). An agent-targeted issue whose
+# verification command does not exercise the change lets the agent finish,
+# fail to verify, and report done regardless; the only exit is a declared
+# blocker or a named later issue. The gate stays conditioned on agent-targeted,
+# so issues that are not stay unaffected, and the Depth 2 probe carries the
+# prefactor question that makes the condition passable.
+require_text file-issue/SKILL.md "**Agent-readiness**, when the issue is agent-targeted"
+require_text file-issue/SKILL.md "exercise the change, not merely pass beside it"
+require_text file-issue/SKILL.md "declaring its prerequisite as a blocker, or by naming the issue where verification lands"
+require_text file-issue/SKILL.md "what preparatory change would make the work small and verifiable on its own"
+
 # Every gate in the self-check needs a row in the evidence map, or the tiering
 # claim in the README is false.
 require_text file-issue/references/evidence-map.md "Stranger test"
 require_text file-issue/references/evidence-map.md "Runnable repro"
 require_text file-issue/references/evidence-map.md "Agent-readiness"
+# The verify-alone row is practitioner-backed, not measured, and must say so.
+require_text file-issue/references/evidence-map.md "Verify-alone, agent-targeted issues"
+require_text file-issue/references/evidence-map.md "practitioner consensus and \`to-tickets\`' central rule; no study measures its effect on agent outcomes. | [P] |"
 require_text file-issue/references/evidence-map.md "Things Deliberately Not in the Rubric"
 
 # The uncited Gherkin statistic is marketing. It may appear only in the evidence
