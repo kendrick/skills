@@ -36,9 +36,11 @@ Harvest at the same time. This is where the agent-readiness gate gets its answer
 | --- | --- |
 | `gh issue list --limit 10 --state all` | label taxonomy, title prefixes, task-list use, whether issues get assigned to agents |
 | `AGENTS.md`, `CLAUDE.md`, `.github/copilot-instructions.md` | build, test, and convention commands |
-| Manifest scripts (`package.json`, `Makefile`, `pyproject.toml`, `Cargo.toml`) | the exact verification command |
+| Manifest scripts (`package.json`, `Makefile`, `pyproject.toml`, `Cargo.toml`); no manifest → runnable scripts under `tests/` or `scripts/`, then the commands `.github/workflows/` runs, then `absent` | the exact verification command |
 | `.github/workflows/`, `CODEOWNERS` | repo complexity |
 | `git shortlog -sne --since='90 days ago'` | contributor count |
+
+The verification row is a ladder like the template one, first hit wins. A repo with no manifest still answers mechanically: shell scripts under `tests/` name the command (`bash tests/<component>-smoke.sh`, picking the script named for the component under change), and the steps a CI workflow runs name it where the scripts don't. `absent` is the answer only after every rung misses.
 
 **Done when:** the template source is named and every harvest row holds a concrete value or an explicit `absent`.
 
