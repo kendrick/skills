@@ -88,10 +88,10 @@ Run the interview yourself. Delegating it to an external interrogation skill los
 
 Some asks are not one issue. Check before drafting:
 
-- **≥7 independent acceptance criteria**, or
-- **≥4 distinct components** named across the answers.
+- **≥4 distinct components** named across the answers, or
+- **the work does not fit one fresh context** — the files a stranger must read, the change they must make, and the verification they must run add up to more than one cold session can hold. Fit is a property of the work, so no rewording of the criteria moves it.
 
-Either one alone fires. On a fire, stop at a recommendation: name the spec path (`/to-spec` then `/to-tickets` where installed, otherwise write a spec first and come back per slice) and hand over what the interview already produced so none of it is wasted. Neither compress the ask into one bloated issue nor start decomposing it here.
+Either one alone fires. A long acceptance-criteria list is a smell that forces the fit question, never a trigger by itself: seven criteria can be four failure modes of one rule written apart, and whether they collapse on a rephrase says nothing about the size of the work. On a fire, stop at a recommendation: name the spec path (`/to-spec` then `/to-tickets` where installed, otherwise write a spec first and come back per slice) and hand over what the interview already produced so none of it is wasted. Neither compress the ask into one bloated issue nor start decomposing it here.
 
 **Done when:** the ask is confirmed to be a single issue, or the handoff has been offered and nothing has been posted.
 

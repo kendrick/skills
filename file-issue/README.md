@@ -22,7 +22,7 @@ Then it picks an interrogation depth, arithmetically, and tells you which one:
 
 One word moves it either direction, or use `--deep` and `--fast`. Every question names the gap it's filling, which means "why are you asking me this" always has an answer.
 
-If the answers keep spawning new workstreams, meaning seven-plus independent acceptance criteria or four-plus components, it stops and says this is a spec rather than an issue, then hands you off instead of producing one enormous ticket.
+If the answers keep spawning new workstreams—four-plus components, or more work than one fresh agent context can hold—it stops and says this is a spec rather than an issue, then hands you off instead of producing one enormous ticket.
 
 Where the technical-writing skill is installed, the finished draft takes one prose pass through it before rendering; where it isn't, the draft ships as-is.
 
