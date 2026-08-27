@@ -80,7 +80,7 @@ Rules that hold at every depth:
 - Every question names the empty slot it fills. No named gap, no question.
 - Front-load by evidence value: steps to reproduce first, then error output, then observed-versus-expected. Reproduction steps are what developers rank highest and what reporters find hardest to supply, so ask for the expensive thing while attention is highest.
 - Every question is skippable. A declined answer resolves its slot to `unknown` and the interview moves on.
-- Never re-ask what Step 1 harvested. The verification command comes from the manifest, not from the user.
+- Never re-ask what Step 1 harvested. The verification command comes from the repo, not from the user.
 
 Run the interview yourself. Delegating it to an external interrogation skill loses the depth governor, which is the whole point, and a client repo may not have that skill installed anyway.
 
