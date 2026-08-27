@@ -14,6 +14,19 @@ Name the capability and who it serves. Match any title prefix convention the
 harvest observed.
 -->
 
+**Parent:** <the spec, ticket, or discussion this issue comes from>
+
+**Blocked by:** <each issue or artifact that must land first, or "None">
+
+<!--
+[default] Provenance and prerequisites. Parent links the origin—the cheapest
+context transfer there is; drop the line when there is no origin to link.
+Blocked by lists every prerequisite that must land before work can start, or
+states "None" outright. On an agent-targeted issue, keep the "None": an absent
+list reads as unexamined, not as empty. Otherwise drop the line rather than
+shipping it blank.
+-->
+
 ## Problem
 
 <!--
