@@ -129,6 +129,24 @@ git diff --stat
 
 Migrate one scope, read the diff, then move to the next. A vault-wide run offers nothing a per-scope run doesn't, and it makes the diff too large to actually read, which is the only real check on any of this.
 
+## Reflowing Raw Zones
+
+A separate migration for a separate defect. `collapse-vtt.sh` once separated speaker turns with a single newline, and markdown renders consecutive non-blank lines as one paragraph, so every transcript groomed before the fix shows its whole raw zone as a single wall of text. `scripts/reflow-raw.sh` repairs those notes in place:
+
+```bash
+# see what would change
+bash inbox-to-memory/scripts/reflow-raw.sh <scope-root>
+
+# write it
+bash inbox-to-memory/scripts/reflow-raw.sh <scope-root> --apply
+```
+
+It inserts a blank line between turns and touches nothing else about the transcript: the same words in the same order, only the whitespace differs. Because the reflow moves every line number below the fence, it then rewrites each `(raw: "..." L<n>)` anchor above the fence by finding the snippet in the reflowed zone, never by adding an offset—snippet-anchored relocation survives a turn that was merged or split, and arithmetic does not. A snippet it cannot place on exactly one zone line, and any bare `(raw: L<n>)` with no snippet to anchor to, is reported under "needs a human" and left byte-identical.
+
+The generation rules are the same as Tier 1's, applied to the body instead of the frontmatter: a note with no `schema` key, or carrying `body_schema: 1`, has a v1 body and is skipped and counted. A raw zone that is not wall-to-wall speaker turns was never collapsed VTT—pasted decks and documents carry their own paragraph breaks—and is left alone. Rerunning on a migrated scope changes nothing, so an interrupted run is safe to repeat.
+
+Anything outside the note that resolves these line numbers — a `<blob-url>#L<n>` source link, most commonly — resolves against the file's real line count, so generate those links after the reflow has run, not before.
+
 ## Verification
 
 ```bash

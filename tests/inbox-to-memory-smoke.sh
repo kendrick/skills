@@ -547,9 +547,15 @@ vtt=inbox-to-memory/scripts/collapse-vtt.sh
 require_file "$vtt"
 require_text inbox-to-memory/SKILL.md "one sanctioned exception to preserving raw content"
 collapsed="$(bash "$vtt" "$fixtures/steerco-excerpt.vtt")"
-[[ "$(printf '%s\n' "$collapsed" | wc -l | tr -d ' ')" == "3" ]] || {
-  echo "six cues from three speakers' turns should collapse to three lines" >&2
+[[ "$(printf '%s\n' "$collapsed" | wc -l | tr -d ' ')" == "5" ]] || {
+  echo "six cues from three speakers' turns should collapse to three turns separated by blank lines" >&2
   printf '%s\n' "$collapsed" >&2
+  exit 1
+}
+# One blank line after every turn, the last included: a turn is a markdown
+# paragraph, and a single newline renders the whole transcript as one (#48).
+[[ "$(bash "$vtt" "$fixtures/steerco-excerpt.vtt" | grep -c '^$')" == "3" ]] || {
+  echo "each collapsed turn should be followed by a blank line" >&2
   exit 1
 }
 require_line "$collapsed" "[00:00:01] Priya Raghavan: Cutover is a date, not a readiness state, and that is the problem." vtt
@@ -557,6 +563,115 @@ require_line "$collapsed" "[00:00:06] Marcus Dell: Finance gave us a date. It is
 # The last turn exercises the other speaker form and a continuation line with no
 # speaker of its own, which is where a naive collapser drops half a sentence.
 require_line "$collapsed" "[00:00:11] Priya Raghavan: Third meeting, same question, still nobody's name on it." vtt
+
+# ---------------------------------------------------------------------------
+# Raw-zone reflow (#48)
+# ---------------------------------------------------------------------------
+
+# Notes groomed before the blank-line separator existed carry raw zones that
+# render as one paragraph. The reflow migration repairs them in place and
+# re-anchors the L refs the reflow moves, so it ships beside the collapser and
+# is named where the collapser is documented.
+reflow=inbox-to-memory/scripts/reflow-raw.sh
+require_file "$reflow"
+[[ -x "$reflow" ]] || {
+  echo "$reflow must be executable" >&2
+  exit 1
+}
+bash -n "$reflow"
+require_text inbox-to-memory/SKILL.md "scripts/reflow-raw.sh"
+require_text inbox-to-memory/references/migration.md "reflow-raw.sh"
+
+# Same throwaway-repo pattern as the migrator: the dry-run promise and the
+# one-file-modified claim are both read off git, so the fixture has to be a
+# real repo and never the checked-in one. Cleaned up explicitly at the end of
+# this section rather than joining the cumulative trap chain below.
+rfl="$(mktemp -d "${TMPDIR:-/tmp}/i2m-reflow-test.XXXXXX")"
+cp -R "$fixtures/reflow/." "$rfl/"
+git -C "$rfl" init -q
+git -C "$rfl" add -A
+git -C "$rfl" -c user.email=t@t -c user.name=t commit -qm baseline
+
+# A dry run writes nothing, proven by git rather than by the script's report.
+rfl_dry="$(bash "$reflow" "$rfl" 2>&1)"
+require_output "$rfl_dry" "dry run; nothing was written"
+[[ -z "$(git -C "$rfl" status --porcelain)" ]] || {
+  echo "the reflow dry run modified the scope" >&2
+  git -C "$rfl" status --porcelain >&2
+  exit 1
+}
+
+rfl_apply="$(bash "$reflow" "$rfl" --apply 2>&1)"
+require_output "$rfl_apply" "reflowed: 1"
+require_output "$rfl_apply" "refs rewritten: 3"
+require_output "$rfl_apply" "left alone: 1"
+require_output "$rfl_apply" "v1 bodies skipped: 2"
+
+# Exactly one file changes: the v2 note with a collapsed-VTT zone. The v1
+# note, the migrated-frontmatter note, and the pasted document are untouched.
+[[ "$(git -C "$rfl" status --porcelain | wc -l | tr -d ' ')" == "1" ]] || {
+  echo "reflow should modify exactly one file in the reflow fixture" >&2
+  git -C "$rfl" status --porcelain >&2
+  exit 1
+}
+
+rfl_note="$rfl/notes/2026-06-02-harbor-cutover-walkthrough-mHq8rT2wLp.md"
+
+# Only whitespace changes below the fence: same words, same order. Flatten the
+# zone to one word per line on both sides and diff.
+diff <(sed -n '/## Raw Content/,$p' "$fixtures/reflow/notes/2026-06-02-harbor-cutover-walkthrough-mHq8rT2wLp.md" | tr -s '[:space:]' '\n' | grep -v '^$') \
+  <(sed -n '/## Raw Content/,$p' "$rfl_note" | tr -s '[:space:]' '\n' | grep -v '^$') || {
+  echo "reflow changed the words of the transcript, not just its whitespace" >&2
+  exit 1
+}
+
+# Every rewritten ref lands on the line that now holds its snippet. All three
+# refs must survive the rewrite for this loop to mean anything.
+[[ "$(grep -cE '\(raw: "[^"]*",? L[0-9]+\)' "$rfl_note")" == "3" ]] || {
+  echo "expected three snippet-carrying refs in the reflowed note" >&2
+  exit 1
+}
+while IFS=$'\t' read -r snippet ln; do
+  sed -n "${ln}p" "$rfl_note" | grep -Fq -- "$snippet" || {
+    echo "ref L$ln does not land on its snippet: $snippet" >&2
+    sed -n "${ln}p" "$rfl_note" >&2
+    exit 1
+  }
+done < <(grep -oE '\(raw: "[^"]*",? L[0-9]+\)' "$rfl_note" | sed -E 's/^\(raw: "(.*)",? L([0-9]+)\)$/\1\t\2/')
+
+# Idempotent: a second apply on the committed result changes nothing.
+git -C "$rfl" add -A
+git -C "$rfl" -c user.email=t@t -c user.name=t commit -qm reflowed
+rfl_again="$(bash "$reflow" "$rfl" --apply 2>&1)"
+require_output "$rfl_again" "reflowed: 0"
+require_output "$rfl_again" "already reflowed: 1"
+[[ -z "$(git -C "$rfl" status --porcelain)" ]] || {
+  echo "a second reflow apply modified an already-migrated scope" >&2
+  exit 1
+}
+
+# The migrated scope still lints clean.
+rfl_lint="$(run_lint "$rfl")"
+require_line "$rfl_lint" "failures: 0" reflowed
+
+# The edge fixture holds the three refs the script must refuse to guess at: a
+# snippet on two zone lines, a snippet on none, and a bare L ref with no
+# snippet at all. Each is reported and left byte-identical while the zone
+# itself still gains its blank line.
+rfe="$(mktemp -d "${TMPDIR:-/tmp}/i2m-reflow-edge.XXXXXX")"
+cp -R "$fixtures/reflow-edge/." "$rfe/"
+rfe_out="$(bash "$reflow" "$rfe" --apply --allow-dirty 2>&1)"
+require_output "$rfe_out" "reflowed: 1"
+require_output "$rfe_out" "refs rewritten: 0"
+require_output "$rfe_out" 'snippet "final walkthrough" sits on 2 zone lines; its L ref was left alone'
+require_output "$rfe_out" 'snippet "in the filing cabinet" is not in the reflowed raw zone; its L ref was left alone'
+require_output "$rfe_out" 'bare ref `(raw: L23)` carries no snippet to anchor to; left alone'
+rfe_note="$rfe/notes/2026-02-11-walkthrough-scheduling-eJ7hL4xWgs.md"
+require_text "$rfe_note" '(raw: "final walkthrough" L22)'
+require_text "$rfe_note" '(raw: "in the filing cabinet" L23)'
+require_text "$rfe_note" '(raw: L23)'
+
+rm -rf "$rfl" "$rfe"
 
 # The half number is the point. Phases 3 through 6 have carried those numbers
 # since v1, and every scaffold that says "phase 5 sign-off" has to keep pointing
