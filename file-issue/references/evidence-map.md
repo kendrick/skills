@@ -14,6 +14,7 @@ Tiers: **[E]** measured, **[P]** practitioner consensus or official docs, **[C]*
 | Error output where applicable | 57% developer importance. Reports with stack traces get fixed sooner across all three studied projects and are likelier to reach a FIXED resolution. | [E] | Q1 |
 | ≥1 falsifiable acceptance criterion | Binary acceptance criteria are one of GitHub's three named elements of a well-scoped agent task. The measured quality attribute is testability and the absence of referential ambiguity — ambiguous pronouns show a strong negative effect on downstream model-building. | [P] gate, [E] mechanism | Q3, Q6 |
 | Agent-readiness, agent-targeted issues | The only evidence tying issue text directly to outcome. Verification command and environment setup are what an agent needs that a colleague does not — a teammate reuses tacit local knowledge; an agent in an ephemeral sandbox has none. Single-interpretation phrasing matters because a human asks in standup and an agent commits to one guess. | [E]+[P] | Q6 |
+| Verify-alone, agent-targeted issues | An issue can pass every other gate and still be a horizontal slice: the agent finishes, cannot verify, and reports done regardless. Vertical slicing—every change lands green and demonstrable on its own—is practitioner consensus and `to-tickets`' central rule; no study measures its effect on agent outcomes. | [P] | — |
 
 ## Defaults
 

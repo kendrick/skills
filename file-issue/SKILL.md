@@ -58,7 +58,7 @@ Pick the issue type on the same signals: a defect in existing behavior → bug; 
 
 Announce the result in one line — `Depth 1 — 4 gaps to fill.` — then keep going. The announcement is the user's correction point.
 
-Depth 2 additionally earns a targeted code probe: locate the component the ask names and capture real file paths. Those paths become the issue's file pointers, and they sharpen every question that follows.
+Depth 2 additionally earns a targeted code probe: locate the component the ask names and capture real file paths. Those paths become the issue's file pointers, and they sharpen every question that follows. The probe also asks what preparatory change would make the work small and verifiable on its own. A prefactor named in the issue is the usual way through gate 6's verify-alone condition; slicing prefactors into issues of their own stays with `to-tickets`.
 
 **Done when:** depth and issue type are both fixed, and the depth line has been said out loud.
 
@@ -116,7 +116,7 @@ Gates:
 3. **Observed and expected stated separately.** Bugs only.
 4. **Error output** where the failure produces any. Bugs only; drop it for silent visual defects rather than padding.
 5. **At least one falsifiable acceptance criterion.** All types. A criterion a reviewer cannot fail is not one.
-6. **Agent-readiness**, when the issue is agent-targeted: single-interpretation problem statement, binary criteria, a runnable verification command, environment pointers, file hints, explicit done-criteria, non-goals.
+6. **Agent-readiness**, when the issue is agent-targeted: single-interpretation problem statement, binary criteria, a runnable verification command, environment pointers, file hints, explicit done-criteria, non-goals. The verification command has to exercise the change, not merely pass beside it—an agent that finishes and cannot verify reports done regardless. A change that genuinely cannot be verified alone passes only by declaring its prerequisite as a blocker, or by naming the issue where verification lands.
 
 Defaults: non-goals when scope is ambiguous; Ko-structured title; labels matching observed repo convention; environment metadata.
 
