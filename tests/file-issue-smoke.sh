@@ -104,10 +104,14 @@ require_text file-issue/SKILL.md "ship the draft unchanged"
 require_text file-issue/SKILL.md "Depth 0 skips this step"
 refute_text file-issue/SKILL.md "humanizer"
 
-# Escape hatch numbers are load-bearing and uncalibrated; changing them should
-# be a deliberate act that fails this test first.
-require_text file-issue/SKILL.md "**≥7 independent acceptance criteria**"
+# The size check anchors on properties the drafting agent cannot move by
+# rephrasing (#22): components and context fit. The criteria count is a smell
+# that forces the fit question, never a trigger — eight criteria collapse to
+# six on a rephrase, so a count trigger measured the write-up, not the work.
 require_text file-issue/SKILL.md "**≥4 distinct components**"
+require_text file-issue/SKILL.md "**the work does not fit one fresh context**"
+require_text file-issue/SKILL.md "smell that forces the fit question, never a trigger"
+refute_text file-issue/SKILL.md "≥7 independent acceptance criteria"
 
 # Duplicates are surfaced, never blocked. This is the evidence-contradicted
 # feature most likely to get "fixed" back in by someone who assumes blocking is

@@ -95,7 +95,7 @@ Asking the user for the test command is the failure mode this scenario exists to
 | Expect | Pass condition |
 | --- | --- |
 | Depth | 2 |
-| Escape hatch | Fires — ≥7 criteria or ≥4 components |
+| Escape hatch | Fires — five components, and the ask overflows one fresh context |
 | Output | Stops, says why, recommends the spec path |
 | Posted | Nothing |
 | Interview output | Handed over, not discarded |
