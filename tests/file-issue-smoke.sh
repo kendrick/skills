@@ -70,6 +70,12 @@ require_text file-issue/SKILL.md "\`--deep\` pins Depth 2, \`--fast\` pins Depth
 require_text file-issue/SKILL.md "Depth 1 — 4 gaps to fill."
 require_text file-issue/SKILL.md "Every question names the empty slot it fills."
 
+# The verification-command harvest falls through past manifests (#25). A repo
+# whose test surface is shell scripts—this one—must yield its smoke command
+# mechanically, not by inference from a directory the table never mentions.
+require_text file-issue/SKILL.md "no manifest → runnable scripts under \`tests/\` or \`scripts/\`"
+require_text file-issue/SKILL.md "\`absent\` is the answer only after every rung misses"
+
 # The solo-repo cap scopes to the repo-shape trigger (#18). Three Depth 2
 # triggers are properties of the ask and one of the workflow; the shape of the
 # tree must not talk them back down, or an agent-destined ask in a solo repo

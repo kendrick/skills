@@ -36,9 +36,11 @@ Harvest at the same time. This is where the agent-readiness gate gets its answer
 | --- | --- |
 | `gh issue list --limit 10 --state all` | label taxonomy, title prefixes, task-list use, whether issues get assigned to agents |
 | `AGENTS.md`, `CLAUDE.md`, `.github/copilot-instructions.md` | build, test, and convention commands |
-| Manifest scripts (`package.json`, `Makefile`, `pyproject.toml`, `Cargo.toml`) | the exact verification command |
+| Manifest scripts (`package.json`, `Makefile`, `pyproject.toml`, `Cargo.toml`); no manifest → runnable scripts under `tests/` or `scripts/`, then the commands `.github/workflows/` runs, then `absent` | the exact verification command |
 | `.github/workflows/`, `CODEOWNERS` | repo complexity |
 | `git shortlog -sne --since='90 days ago'` | contributor count |
+
+The verification row is a ladder like the template one, first hit wins. A repo with no manifest still answers mechanically: shell scripts under `tests/` name the command (`bash tests/<component>-smoke.sh`, picking the script named for the component under change), and the steps a CI workflow runs name it where the scripts don't. `absent` is the answer only after every rung misses.
 
 **Done when:** the template source is named and every harvest row holds a concrete value or an explicit `absent`.
 
@@ -78,7 +80,7 @@ Rules that hold at every depth:
 - Every question names the empty slot it fills. No named gap, no question.
 - Front-load by evidence value: steps to reproduce first, then error output, then observed-versus-expected. Reproduction steps are what developers rank highest and what reporters find hardest to supply, so ask for the expensive thing while attention is highest.
 - Every question is skippable. A declined answer resolves its slot to `unknown` and the interview moves on.
-- Never re-ask what Step 1 harvested. The verification command comes from the manifest, not from the user.
+- Never re-ask what Step 1 harvested. The verification command comes from the repo, not from the user.
 
 Run the interview yourself. Delegating it to an external interrogation skill loses the depth governor, which is the whole point, and a client repo may not have that skill installed anyway.
 
