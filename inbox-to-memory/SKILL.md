@@ -457,7 +457,7 @@ Files with no `schema` key are v1. They stay legal forever, and a scope holding 
 
 `memory_type` values depend on the scope's chosen memory mode:
 - **Lightweight** (default): `Decision | Context | Rule`. Exception is folded into Decision.
-- **Canonical**: `Decision | PolicyRule | Exception | Context`. Matches `kendrick-at-slalom/memory-bank` exactly.
+- **Canonical**: `Decision | PolicyRule | Exception | Context`. Matches the upstream reference architecture exactly.
 
 The scope's `CLAUDE.md` declares the mode in its top frontmatter blockquote. Read it before flagging candidates so the suggested type uses the right vocabulary.
 
@@ -493,7 +493,7 @@ The scope's `CLAUDE.md` declares the mode in its top frontmatter blockquote. Rea
 
 - The user has a single ad-hoc note they want to write directly. The skill is for queue-driven processing, not freeform composition.
 - The cwd is not inside an opted-in directory and the user hasn't asked to scaffold one. Do not silently create memory infrastructure where none was intended.
-- The user is asking about memory records for an existing skill or code repo. This skill targets consulting notes in an Obsidian vault. For code-repo memory, see [`kendrick-at-slalom/memory-bank`](https://github.com/kendrick-at-slalom/memory-bank).
+- The user is asking about memory records for an existing skill or code repo. This skill targets consulting notes in an Obsidian vault. Code-repo memory wants the memory-bank reference architecture this skill borrows from, not this skill.
 
 ---
 

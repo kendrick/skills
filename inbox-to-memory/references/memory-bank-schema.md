@@ -1,13 +1,13 @@
 # memory-bank Schema (vendored summary)
 
-This skill aligns with the schema published at [`kendrick-at-slalom/memory-bank`](https://github.com/kendrick-at-slalom/memory-bank). Inspired by, not bound to — if that repo evolves, this document goes stale and gets updated manually.
+This skill vendors its record types from a memory-bank reference architecture: structured project memory that both people and agents can query, descended from the architecture decision record as Nygard framed it and extended past the decision itself into standing rules, sanctioned exceptions, and environmental context. Inspired by, not bound to. The upstream is maintained separately, so this document goes stale when that architecture moves and gets updated by hand.
 
 ## Mode Selection
 
 Two modes for client and project scope, picked once at scaffold time and recorded in the scope's `CLAUDE.md`:
 
 - **Lightweight** (default) — 3 types: `Decision`, `Context`, `Rule`. Exception is dropped; edge cases fold into Decision. Files live in `_memory/decisions/`, `_memory/context/`, `_memory/rules/`. Optimized for adoption: smaller surface, less debate about whether something is an Exception or a Decision.
-- **Canonical** — 4 types: `Decision`, `PolicyRule`, `Exception`, `Context`. Matches `kendrick-at-slalom/memory-bank` exactly. Files live in `_memory/decisions/`, `_memory/policy-rules/`, `_memory/exceptions/`, `_memory/context/`. Use when the engagement needs strict alignment with the canonical schema or genuinely needs to separate sanctioned deviations from base decisions.
+- **Canonical** — 4 types: `Decision`, `PolicyRule`, `Exception`, `Context`. Matches the upstream reference architecture exactly. Files live in `_memory/decisions/`, `_memory/policy-rules/`, `_memory/exceptions/`, `_memory/context/`. Use when the engagement needs strict alignment with the canonical schema or genuinely needs to separate sanctioned deviations from base decisions.
 
 Switch happens at scaffold time. Existing 4-type substrates keep working without migration — process mode reads the chosen mode from the scope's `CLAUDE.md` and flags candidates against whichever type set is in effect.
 
