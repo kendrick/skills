@@ -49,7 +49,7 @@ GROUP BY file.link
 
 ```dataview
 TABLE date, status
-FROM #decision
-WHERE startswith(file.folder, this.file.folder)
+WHERE (memory_type = "Decision" OR contains(file.tags, "#decision"))
+  AND startswith(file.folder, this.file.folder)
 SORT date DESC
 ```
