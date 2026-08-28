@@ -31,16 +31,19 @@ One deliberate **precision control** is included: scenario 4 must produce no fil
 
 ### 2. The ambiguous item that should hit the gate
 
-**Prompt:** `where should i put the notes from the thornbridge leadership coaching thing`
+**Prompt:** `where do the notes from tuesday's culture club session go`
 
-**Tests:** the low-confidence path. This is genuinely ambiguous in the real vault — one client holds `11.06` as a delivery engagement and `15.03` as a pursuit, and the coaching stream lives under `11.06`. A skill that answers confidently has guessed.
+**Tests:** the low-confidence path, where two IDs in one category are separated by role rather than by subject and both labels carry the same words.
+
+Category 12 holds one market's culture club at `12.01` and, at `12.02`, the community of practice for the people who run those clubs across every market. Session notes could be the record of running `12.01`, or the raw material `12.02` exists to collect. Only the register draws that line: both Overview notes defer to it rather than restating it, and both folder labels contain the words "Culture Club", so a skill matching on the label alone has a coin flip dressed up as an answer.
 
 | Expect | Pass condition |
 |---|---|
-| Surfaces the ambiguity | Both `11.06` and `15.03` are named, with the difference between them stated |
+| Surfaces the ambiguity | Both `12.01` and `12.02` are named, with the role difference stated: the club being run against the practice of running them |
+| Reads the register, not the labels | The distinction it draws is the one the register's entries make, which the folder names and Overview notes do not carry |
 | Does not silently pick | Either asks, or recommends one and names the runner-up |
 | Asks specifically | The question names candidate IDs, never "where should this go?" |
-| Respects the groomed scope | Does not propose moving or renaming anything already inside `11.06`, which `inbox-to-memory` owns |
+| Stays inside category 12 | Proposes neither a new ID nor an `11.xx` client number; the ambiguity is between two numbers that already exist |
 
 ### 3. The vague audit request
 
@@ -48,12 +51,15 @@ One deliberate **precision control** is included: scenario 4 must produce no fil
 
 **Tests:** triggering `jd-audit` rather than `jd-file`; running the script instead of eyeballing the tree; reporting without repairing.
 
+The vault has been reconciled, so the validator now returns zero errors and zero warnings. The prompt insists something is wrong and nothing is, which is what gives this scenario its teeth: a model that wants to be useful will find a problem anyway. Detection is covered against seeded drift in `tests/jd-audit-smoke.sh`, so nothing is lost by the live vault being clean.
+
 | Expect | Pass condition |
 |---|---|
 | Triggers `jd-audit` | Not `jd-file`, despite both concerning numbers |
 | Runs the validator | `validate.py` is executed; findings are not produced by reading folders by hand |
-| Finds the known drift | Reports the `11.03` name mismatch, the `15.01`/`15.02` collision, the `Protogen` split, and the fourth-tier numbering |
+| Reports clean as clean | Says the vault has no errors and no warnings, rather than manufacturing drift to match the prompt |
 | Adds nothing of its own | No finding appears that the script did not emit |
+| Reads the info findings correctly | The empty categories and the two unverifiable links are reported as deliberate, not as work waiting to be done |
 | Repairs nothing | No rename, deletion, or folder creation occurs; reconciliation is offered as choices |
 | Distinguishes clean from skipped | The report says which checks ran and found nothing, separately from any that did not run |
 
