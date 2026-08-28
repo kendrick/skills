@@ -1192,25 +1192,40 @@ def run(args) -> int:
     elif cli_vault is not None:
         conventions_path = cli_vault / DEFAULT_CONVENTIONS_RELATIVE
     else:
-        raise FatalError(
-            "no vault root resolvable: neither --vault nor --conventions was given, and "
-            "the default conventions path is computed relative to the vault root, so "
-            "there is nothing to bootstrap from. Pass at least one."
-        )
+        # neither flag given: climb resolve_vault.py's ladder for the
+        # conventions note, then let [hosts]/[discovery] resolve the roots
+        # exactly as --conventions alone does. the ladder bootstraps the
+        # block below -- it does not outrank it.
+        try:
+            from resolve_vault import resolve as _resolve_vault
+        except ImportError:
+            raise FatalError(
+                "resolve_vault.py is missing beside this script, so no vault "
+                "root is resolvable without it. Pass --vault or --conventions, "
+                "or restore the resolver."
+            )
+        res = _resolve_vault()
+        if res.conventions is None:
+            if res.candidates:
+                candidates = ", ".join(f'"{c}"' for c in res.candidates)
+                raise FatalError(
+                    f"no single vault root resolvable: neither --vault nor "
+                    f"--conventions was given, and the resolver ladder "
+                    f"(tried: {', '.join(res.rungs_tried)}) found several "
+                    f"verified vaults: {candidates}. Pass --vault to choose one."
+                )
+            raise FatalError(
+                f"no vault root resolvable: neither --vault nor --conventions "
+                f"was given, and the resolver ladder came up empty "
+                f"({'; '.join(res.notes)}). Pass --vault or --conventions."
+            )
+        conventions_path = res.conventions
 
     data = load_conventions(conventions_path)
     patterns = compile_patterns(data)
 
     roots, current_host, root_notices = resolve_all_roots(data, cli_vault, args.host)
     vault_root = roots["vault"]["canonical"]
-
-    if cli_vault is None:
-        # --vault omitted: conventions defaulting used the vault root we
-        # just resolved from [hosts]/[discovery], per the spec's stated
-        # bootstrap order (vault first, conventions path relative to it).
-        # If --conventions was *also* omitted this is exactly consistent
-        # with the default we already used above.
-        pass
 
     only_set = set(args.only)
     skip_set = set(args.skip)

@@ -11,7 +11,7 @@ Where a step names a shell command, treat it as the intent and use your native s
 
 Resolve once per invocation:
 
-- **VAULT** — the vault root, resolved fresh in Step 1 on every invocation.
+- **VAULT** — the vault root, resolved fresh in Step 1 on every invocation by `scripts/resolve_vault.py`.
 - **CONVENTIONS** — `00.02 Vault Conventions`, the grammar this skill and `jd-audit` both read. Its first fenced `toml` block is the configuration. Every rule below names a key in that block instead of repeating its value, because a value copied into prose is a value that will eventually disagree with the script reading the block.
 - **REGISTER** — `00.01 JDex`, at `[register].path`. The master record: one line per ID, carrying its purpose clause and the substrates that hold it.
 - **CONSTITUTION** — `00.00 Johnny Decimal Index`, at `[constitution].path`. Why the system is shaped the way it is, at category granularity. It owns the classification framework Step 2 runs on.
@@ -48,7 +48,7 @@ Nothing carries over between invocations. The vault is hand-edited in Obsidian, 
 
 Work in order:
 
-1. **Resolve VAULT.** Look up the current hostname in `[hosts]`. No entry means probing `[discovery]` in the order given: exactly one hit is a confirmation, and several hits or none is a question for the user rather than a guess.
+1. **Resolve VAULT.** Run `scripts/resolve_vault.py`. It climbs a ladder that never reads inside the vault—`$JD_VAULT` first, then Obsidian's own `obsidian.json`, then a short list of carried probes. A candidate counts only when the conventions note verifies beneath it; a directory that merely exists proves nothing about what it holds. `[discovery]` lives inside the vault, so probing it for the vault root is reading a map stored at the destination. Several verified hits (exit `3`) or none (exit `4`) stays a question for the user rather than a guess—the exit code says which question to ask.
 2. **Load the conventions block.** Check `schema_version` before reading any other key. An unrecognized version stops the run—a half-understood grammar does not fail loudly, it files things in the wrong place with total confidence.
 3. **Load REGISTER and CONSTITUTION.**
 4. **Snapshot the target category across all three substrates**, resolving each one's root and walking it according to its declared `shape`. Honour each substrate's `scope`: an ID outside a substrate's scope is absent by design, and reading that absence as a gap is how a filer starts creating folders nobody wanted.
@@ -124,7 +124,7 @@ Obsidian syntax, frontmatter mechanics, and vault CLI usage belong to `obsidian-
 
 ## Worked Example — A Car Insurance Renewal Lands
 
-**Orient.** The hostname resolves VAULT from `[hosts]`; `schema_version = 1` is recognized. The constitution describes `32 Property & Records` as property and legal records—HOA documents, deeds, surveys, insurance, warranties. Snapshot category 32: the vault holds `32.01 HOA` and nothing else. The office substrate's scope is area 10-19 and the code substrate's is category 11, so neither carries area 30-39 at all; their silence is by design, not absence. The register's account of category 32 matches the folders.
+**Orient.** `$JD_VAULT` is unset; `obsidian.json` names one vault and the conventions note verifies beneath it, so VAULT resolves at the second rung. `schema_version = 1` is recognized. The constitution describes `32 Property & Records` as property and legal records—HOA documents, deeds, surveys, insurance, warranties. Snapshot category 32: the vault holds `32.01 HOA` and nothing else. The office substrate's scope is area 10-19 and the code substrate's is category 11, so neither carries area 30-39 at all; their silence is by design, not absence. The register's account of category 32 matches the folders.
 
 **Classify.** Insurance is named in the category's own description, so this is rule 1—clearly one category. Money-bet confidence.
 

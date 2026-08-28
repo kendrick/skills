@@ -17,7 +17,7 @@ Resolve once per invocation:
 - **ASK** — the text following the invocation. (Claude Code exposes this as `$ARGUMENTS`; on other agents it is the rest of the user's message.) It narrows the run to a check, a group, or an area. Empty means the full sweep.
 - **VALIDATOR** — `scripts/validate.py`, resolved against this skill's own directory.
 - **VAULT_ROOT** — pass as `--vault` only when the user names a path or the script cannot resolve one itself. The script does host lookup and discovery from the conventions block; a path supplied from memory is a path nobody checked.
-- **CONVENTIONS** — `<VAULT_ROOT>/00-09 Admin & Meta/00 System/00.02 Vault Conventions.md`. This is the script's default, so `--conventions` is needed only when the note lives elsewhere.
+- **CONVENTIONS** — `<VAULT_ROOT>/00-09 Admin & Meta/00 System/00.02 Vault Conventions.md`. Required whenever `--vault` is absent, unless the resolver ladder (`$JD_VAULT`, `obsidian.json`, carried probes in `scripts/resolve_vault.py`) settles a root first—the default path is computed from a root the script may not have yet.
 - **Flags**, passed through: `--only CHECK` and `--skip CHECK` (both repeatable), `--host NAME`, `--json`.
 
 ## Step 1 — Orient
@@ -46,7 +46,7 @@ scripts/validate.py [--vault VAULT_ROOT] [--only CHECK]... [--skip CHECK]...
 |---|---|---|
 | 0 | no errors | continue to Step 3; warnings and info still get the full report |
 | 1 | one or more errors | continue to Step 3; this is the expected first-run result on a drifted vault |
-| 2 | fatal—unknown schema version, unreadable conventions, or no resolvable vault root | report the script's own message verbatim and stop |
+| 2 | fatal—unknown schema version, unreadable conventions, or the resolver ladder found no single vault root | report the script's own message verbatim and stop |
 
 Exit `2` means the run has no ground truth to report. An unrecognized `schema_version` says the conventions block changed shape, and parsing it by hand to carry on anyway produces precisely the half-understood read the exit code exists to prevent. Repair the note or ask the user which vault they meant, then re-run.
 
