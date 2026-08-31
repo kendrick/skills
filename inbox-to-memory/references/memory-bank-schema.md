@@ -115,7 +115,7 @@ See [retrieval-funnel.md](retrieval-funnel.md) for the four-stage querying patte
 
 - Sequential namespaced IDs (`<namespace>-ADR-<n>`). This skill uses nanoid because three-scope nesting with sequential IDs creates ordering conflicts.
 - The `uuid` field (RFC 4122). Obsidian resolves wiki-links by filename; `uuid` adds no value here.
-- `applies_to` taxonomies bound to services and domains. Consulting-note `applies_to` is free vocabulary.
+- `applies_to` taxonomies bound to services and domains, where a value outside the enumerated set is invalid. Consulting-note `applies_to` stays free vocabulary. The optional `<facet>::<value>` prefix in [machine-contracts.md](machine-contracts.md) is a different thing, and this skill does adopt it: the prefix names the dimension a value belongs to and leaves the value itself open, so any string may still follow the `::`.
 - The hydrator agent's six-phase scaffold-via-CLI workflow. This skill's process+scaffold modes serve a different ergonomic.
 
 When in doubt, follow this document. If a memory-bank pattern not covered here would obviously improve this skill, raise it with the user before adopting.

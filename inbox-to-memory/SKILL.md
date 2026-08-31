@@ -331,6 +331,7 @@ Each generated CLAUDE.md (client and project) carries a `## Deltas` section with
 - `### Active stakeholders` — project-specific roster.
 - `### Alias table` — project-specific aliases, optionally pointing to client-level Context records.
 - `### Tag namespace (suggested)` — project-specific tags.
+- `### applies_to facets` — optional per-scope dimension prefixes for memory-record `applies_to` values.
 - `### Pre-existing content` — optional, only when a project subdirectory predates the substrate.
 
 The alias table is load-bearing for grooming accuracy. It covers everything that reaches a note under more than one spelling: transcript mishears, nicknames, abbreviations, and OCR variants off slides and PDFs. The form is `canonical <- [variant, variant]`.
