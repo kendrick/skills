@@ -1,5 +1,6 @@
 ---
 type: overview
+scaffold_digest: "{{sha256:<hex> of the filled body—stamped at mint time}}"
 stakeholders:
 tags:
   - overview
