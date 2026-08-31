@@ -342,4 +342,103 @@ grep -qi "schema" <<<"$combined" || fail "bad-schema: exit code was 2 as expecte
 $combined"
 echo "bad-schema: OK (exit 2, refused to run, mentions schema)"
 
+# --- 10. overview-stamp: report is inert, write hits only the candidate, twice is a no-op
+
+conv="$(stage_fixture overview-stamp)"
+vault="${conv%/*/*/*}"
+stamper="jd-audit/scripts/stamp_overviews.py"
+
+# A reporting default that quietly writes is the failure that would matter
+# most here, and only a before/after comparison catches it -- the assertions
+# on stdout below can't tell a report from a write that also happened to
+# print the right lines.
+before_hashes="$work_dir/overview-stamp.before.sha"
+(cd "$vault" && find . -type f -print0 | sort -z | xargs -0 shasum) >"$before_hashes"
+
+out="$work_dir/overview-stamp.report.out"; err="$work_dir/overview-stamp.report.err"
+set +e
+python3 "$stamper" --vault "$vault" >"$out" 2>"$err"
+code=$?
+set -e
+assert_exit_code overview-stamp-report 1 "$code" "$err"
+
+grep -qF 'candidate: 10-19 Work/11 Clients/11.01 Marrow Creek Logistics/Overview.md' "$out" \
+  || fail "overview-stamp: report mode should name 11.01 as the only untouched Overview"
+grep -qF 'skipped: 10-19 Work/11 Clients/11.02 Thistlebound Editorial/Overview.md: content under ## Context' "$out" \
+  || fail "overview-stamp: 11.02 should be skipped for content under ## Context"
+grep -qF 'skipped: 10-19 Work/11 Clients/11.03 Salt & Anchor Charters/Overview.md: Next action is filled in' "$out" \
+  || fail "overview-stamp: 11.03 should be skipped for a filled-in Next action"
+grep -qF 'skipped: 10-19 Work/11 Clients/11.04 Copperline Metalworks/Overview.md: hand-written line in ## Log' "$out" \
+  || fail "overview-stamp: 11.04 should be skipped for a hand-written Log line"
+grep -qF 'skipped: 10-19 Work/11 Clients/11.06 Halyard Cold Storage/Overview.md: digest no longer matches the body' "$out" \
+  || fail "overview-stamp: 11.06 should be skipped for a stale digest"
+# REFUTE: 11.05 is already stamped and matching, so it must never reach the
+# report -- silence is the assertion, not an omission from the fixture.
+grep -q '11\.05' "$out" \
+  && fail "overview-stamp: 11.05 is already stamped and matching -- it must stay off the report entirely
+$(cat "$out")"
+
+after_hashes="$work_dir/overview-stamp.after-report.sha"
+(cd "$vault" && find . -type f -print0 | sort -z | xargs -0 shasum) >"$after_hashes"
+diff -u "$before_hashes" "$after_hashes" >/dev/null \
+  || fail "overview-stamp: report mode wrote to the vault -- diff follows
+$(diff -u "$before_hashes" "$after_hashes" || true)"
+
+out="$work_dir/overview-stamp.write.out"; err="$work_dir/overview-stamp.write.err"
+set +e
+python3 "$stamper" --vault "$vault" --write >"$out" 2>"$err"
+code=$?
+set -e
+assert_exit_code overview-stamp-write 1 "$code" "$err"
+
+grep -qF 'stamped: 10-19 Work/11 Clients/11.01 Marrow Creek Logistics/Overview.md' "$out" \
+  || fail "overview-stamp: write mode should stamp 11.01 and name it"
+
+# Importing the shared module rather than recomputing a hash locally is what
+# makes "the digest matches what jd-file writes" true by construction instead
+# of by coincidence -- a second implementation here would drift from the code
+# and could agree with a wrong change.
+python3 - "$vault" <<'PY'
+import sys
+
+vault = sys.argv[1]
+sys.path.insert(0, "jd-audit/scripts")
+from scaffold_digest import compute, stored
+
+path = f"{vault}/10-19 Work/11 Clients/11.01 Marrow Creek Logistics/Overview.md"
+with open(path, encoding="utf-8", newline="") as f:
+    text = f.read()
+assert stored(text) == compute(text), "11.01: stored digest does not match the body stamp_overviews.py just wrote"
+print("overview-stamp write: OK (11.01's stored digest matches compute())")
+PY
+
+# The only line this diff may carry is 11.01's own hash changing -- anything
+# else means --write touched a file it should have left alone, including the
+# already-matching 11.05 or one of the four still-skipped Overviews.
+after_write_hashes="$work_dir/overview-stamp.after-write.sha"
+(cd "$vault" && find . -type f -print0 | sort -z | xargs -0 shasum) >"$after_write_hashes"
+diff_out="$(diff "$before_hashes" "$after_write_hashes" || true)"
+changed="$(grep -E '^[<>]' <<<"$diff_out" || true)"
+bad="$(grep -v '11\.01' <<<"$changed" || true)"
+[[ -z "$bad" ]] || fail "overview-stamp: write mode touched more than 11.01 -- diff follows
+$diff_out"
+
+# The pass is one-time by intent, but nothing stops someone running it twice,
+# and the second run must be a no-op rather than a re-stamp.
+out="$work_dir/overview-stamp.write2.out"; err="$work_dir/overview-stamp.write2.err"
+set +e
+python3 "$stamper" --vault "$vault" --write >"$out" 2>"$err"
+code=$?
+set -e
+assert_exit_code overview-stamp-write-again 1 "$code" "$err"
+
+grep -q '^stamped:' "$out" \
+  && fail "overview-stamp: a second --write re-stamped something -- must be a no-op
+$(cat "$out")"
+grep -qF 'summary: stamped 0, skipped 4, already matching 2' "$out" \
+  || fail "overview-stamp: second --write should report stamped 0, already matching 2
+$(cat "$out")"
+
+echo "overview-stamp: OK (report mode inert, write mode stamps only 11.01 via the shared digest module, second write is a no-op)"
+
 echo "== all jd-audit-smoke assertions passed =="
