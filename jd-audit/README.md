@@ -47,6 +47,7 @@ jd-audit/
 ├── scripts/
 │   ├── resolve_vault.py              # finds the vault root without reading anything inside it
 │   ├── scaffold_digest.py            # computes and stamps the scaffold_digest a scaffolded file carries
+│   ├── stamp_overviews.py            # one-time pass: stamps untouched Overviews, reports the rest
 │   └── validate.py                   # stdlib-only checker; 00.02 Vault Conventions.md is its schema
 └── references/
     └── findings-catalog.md      # what each check means and how to reconcile it
@@ -58,6 +59,7 @@ jd-audit/
 - Standard library only, no network calls. `scripts/validate.py` runs headless off a filesystem scan and one TOML block, so it works the same on a plane as it does at a desk.
 - A fourth numbered tier gets flagged (`structure-deep-numbering`); ordinary unnumbered nesting below an ID—client memory folders, nested git repos ten levels down—doesn't, and won't, because that depth is how this vault's client scopes actually work.
 - Split names are warnings, not errors. Two IDs sharing one normalized label get surfaced for a decision, since some recurring names are legitimate.
+- `scripts/stamp_overviews.py` is a one-time pass, not part of an audit. It reports by default and writes only under `--write`. It never re-stamps an Overview whose digest stopped matching, and everything it declines to stamp lands on the report for you to rule on.
 - An unreadable or version-mismatched conventions note stops the run instead of falling back to a best guess—a half-understood config file is more dangerous than a script that refuses to start.
 
 ## License

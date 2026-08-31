@@ -113,6 +113,7 @@ Every finding that disappeared must be explained by a change you made or an exce
 
 - [references/findings-catalog.md](references/findings-catalog.md) — read at Step 3 for each check that fired, and again at Step 4 before proposing any reconciliation
 - [scripts/validate.py](scripts/validate.py) — read when a check's behavior is genuinely in question and the catalog does not settle it
+- [scripts/stamp_overviews.py](scripts/stamp_overviews.py) — the one-time stamping pass; run it once per vault before the validator starts reading digests, never as part of an audit
 
 ## Sources
 
