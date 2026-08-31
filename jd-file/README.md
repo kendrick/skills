@@ -50,7 +50,9 @@ jd-file/
 │   ├── id-assignment.md              # minting a number without proposing a category
 │   └── substrate-selection.md        # which of the three trees a thing belongs in
 └── scripts/
-    └── build_moc.py                  # regenerates a category map's table between its markers
+    ├── build_moc.py                  # regenerates a category map's table between its markers
+    ├── resolve_vault.py              # finds the vault root without reading anything inside it
+    └── scaffold_digest.py            # computes and stamps the scaffold_digest an Overview carries
 ```
 
 ## Gotchas

@@ -45,7 +45,9 @@ Needs Python 3.11 or later on the machine running it—`scripts/validate.py` is 
 jd-audit/
 ├── SKILL.md                     # orient, run the validator, report, reconcile, apply and re-run
 ├── scripts/
-│   └── validate.py              # stdlib-only checker; 00.02 Vault Conventions.md is its schema
+│   ├── resolve_vault.py              # finds the vault root without reading anything inside it
+│   ├── scaffold_digest.py            # computes and stamps the scaffold_digest a scaffolded file carries
+│   └── validate.py                   # stdlib-only checker; 00.02 Vault Conventions.md is its schema
 └── references/
     └── findings-catalog.md      # what each check means and how to reconcile it
 ```

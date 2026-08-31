@@ -52,9 +52,10 @@ inbox-to-memory/
 │   ├── records/      # Decision, Rule, PolicyRule, Exception, Context, Journal
 │   └── ...           # note, personal, working-state, journal templates
 ├── scripts/
-│   ├── lint-scope.sh     # what the verify phase runs
-│   ├── migrate-scope.sh  # brings a v1 scope onto the v2 contract
-│   └── collapse-vtt.sh   # merges VTT cues into speaker turns
+│   ├── scaffold_digest.py  # computes and stamps the scaffold_digest a scaffolded file carries
+│   ├── lint-scope.sh       # what the verify phase runs
+│   ├── migrate-scope.sh    # brings a v1 scope onto the v2 contract
+│   └── collapse-vtt.sh     # merges VTT cues into speaker turns
 └── references/       # progressive-disclosure reading
     ├── extraction-heuristics.md
     ├── scope-decisions.md
