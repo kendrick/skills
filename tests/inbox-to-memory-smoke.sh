@@ -323,6 +323,11 @@ fi
 require_text inbox-to-memory/SKILL.md "scripts/lint-scope.sh"
 require_text inbox-to-memory/SKILL.md "scripts/stamp-confirmed.sh"
 
+# Scaffold mode has to name the script it runs to stamp a minted file, because
+# an agent that hand-computes the hash instead is the exact drift this key
+# exists to catch.
+require_text inbox-to-memory/SKILL.md "scripts/scaffold_digest.py --stamp"
+
 # Both key orders get pinned verbatim. They are duplicated by hand into the
 # templates, the lint, and eventually the migrator, and the only thing keeping
 # those three copies honest is that changing the order fails here first.
@@ -405,6 +410,136 @@ for scaffold in notes journal _memory; do
   require_text "inbox-to-memory/assets/claude-md/$scaffold.template.md" "schema: 2"
 done
 refute_text inbox-to-memory/assets/claude-md/journal.template.md "note_id: <nanoid>"
+
+# ---------------------------------------------------------------------------
+# Scaffold digest (#58)
+# ---------------------------------------------------------------------------
+
+# scaffold_digest.py refuses a file with no frontmatter block (exit 2), so a
+# template that loses its opening fence or its scaffold_digest key silently
+# stops being stampable, and scaffold mode would mint files nothing can verify.
+scaffold_templates=(
+  inbox-to-memory/assets/claude-md/client.template.md
+  inbox-to-memory/assets/claude-md/project.template.md
+  inbox-to-memory/assets/claude-md/notes.template.md
+  inbox-to-memory/assets/claude-md/_memory.template.md
+  inbox-to-memory/assets/claude-md/patterns-journal.template.md
+  inbox-to-memory/assets/claude-md/journal.template.md
+  inbox-to-memory/assets/readme/client.template.md
+  inbox-to-memory/assets/readme/project.template.md
+  inbox-to-memory/assets/readme/notes.template.md
+  inbox-to-memory/assets/readme/_memory.template.md
+  inbox-to-memory/assets/personal.template.md
+  inbox-to-memory/assets/working-state.template.md
+  inbox-to-memory/assets/patterns-journal/journal.template.md
+)
+for template in "${scaffold_templates[@]}"; do
+  require_file "$template"
+  [[ "$(head -n1 "$template")" == "---" ]] || {
+    echo "$template does not open on a bare --- frontmatter fence" >&2
+    exit 1
+  }
+  require_text "$template" "scaffold_digest:"
+done
+
+# Stand the templates up as a real scope, the same move #6 makes for
+# note.template.md and the record templates, but for the CLAUDE.md/README
+# scaffolds and the placeholders scaffold mode substitutes into them.
+digest_script=inbox-to-memory/scripts/scaffold_digest.py
+require_file "$digest_script"
+
+# One substitution table for placeholders that don't vary by memory mode, and
+# two more for the ones that do. Slashes inside a replacement value are
+# sed-escaped, since the substitutions themselves are sed programs.
+scaffold_subs_common=(
+  's/{{ClientName}}/Riverton Analytics/g'
+  's/{{ProjectName}}/Atlas Cutover/g'
+  's/{{ScopeName}}/Riverton Analytics/g'
+  's/{{Pursuit|Project}}/Project/g'
+  's/{{pursuit|project}}/project/g'
+  's/{{pursuits|projects}}/projects/g'
+  's/{{NOTE_TYPE_ENUM}}/scoping-call | working-session | stakeholder-call | internal | reading | braindump | transcript | status/g'
+  's/{{stakeholder-list}}/<!-- Fill in: stakeholder-list -->/g'
+  's/{{tag-list}}/<!-- Fill in: tag-list -->/g'
+  's/{{engagement-list}}/<!-- Fill in: engagement-list -->/g'
+  's/{{type-enum-values}}/<!-- Fill in: type-enum-values -->/g'
+  's/{{one-sentence-project-description}}/A cutover project for Riverton Analytics./g'
+  's/{{date}}/2026-08-31/g'
+  's/{{MEMORY_TYPE_LIST}}/- Decision -- a decision made and its discarded alternatives./g'
+  's/{{MEMORY_TYPE_SUMMARY}}/Decisions, Context, and Rules, one record per file./g'
+)
+scaffold_subs_lightweight=(
+  's/{{MEMORY_MODE}}/lightweight/g'
+  's/{{MEMORY_TYPES}}/Decision, Context, Rule/g'
+  's/{{MEMORY_TYPE_ENUM}}/Decision | Context | Rule/g'
+  's/{{MEMORY_TYPE_FOLDERS}}/decisions\/, context\/, rules\//g'
+  's/{{RULES_FOLDER}}/rules/g'
+)
+scaffold_subs_canonical=(
+  's/{{MEMORY_MODE}}/canonical/g'
+  's/{{MEMORY_TYPES}}/Decision, PolicyRule, Exception, Context/g'
+  's/{{MEMORY_TYPE_ENUM}}/Decision | PolicyRule | Exception | Context/g'
+  's/{{MEMORY_TYPE_FOLDERS}}/decisions\/, policy-rules\/, exceptions\/, context\//g'
+  's/{{RULES_FOLDER}}/policy-rules/g'
+)
+
+apply_scaffold_subs() {
+  local src="$1" dest="$2"
+  shift 2
+  local sed_args=()
+  for expr in "${scaffold_subs_common[@]}" "$@"; do
+    sed_args+=(-e "$expr")
+  done
+  sed "${sed_args[@]}" "$src" >"$dest"
+}
+
+sd_scope="$(mktemp -d "${TMPDIR:-/tmp}/i2m-scaffold-digest.XXXXXX")"
+trap 'rm -rf "$not_a_scope" "$inline_scope" "$dismissal_scope" "$tpl_scope" "$sd_scope"' EXIT
+sd_files=()
+for template in "${scaffold_templates[@]}"; do
+  rel="${template#inbox-to-memory/assets/}"
+  dest="$sd_scope/${rel//\//_}"
+  apply_scaffold_subs "$template" "$dest" "${scaffold_subs_lightweight[@]}"
+  sd_files+=("$dest")
+done
+
+# A substituted scaffold has to stamp and then check clean: scaffold mode's
+# own output is self-consistent at birth, which is the whole reason --stamp
+# runs at mint time instead of leaving the key for a human to fill in.
+python3 "$digest_script" --stamp "${sd_files[@]}" >/dev/null || {
+  echo "scaffold_digest.py --stamp failed against a freshly substituted template set" >&2
+  exit 1
+}
+python3 "$digest_script" --check "${sd_files[@]}" >/dev/null || {
+  echo "scaffold_digest.py --check rejected templates it had just stamped" >&2
+  exit 1
+}
+
+# The digest has to actually discriminate, or a check that passes no matter
+# what would silence the whole mechanism -- the same reasoning
+# tests/jd-file-overview-smoke.sh:8-15 gives for the Overview scaffold.
+printf '\nan edit nobody stamped\n' >>"${sd_files[0]}"
+if python3 "$digest_script" --check "${sd_files[0]}" >/dev/null 2>&1; then
+  echo "scaffold_digest.py --check passed against ${sd_files[0]} after an unstamped edit" >&2
+  exit 1
+fi
+
+# The memory mode lives in the substituted body, not the frontmatter, so the
+# two modes have to be distinguishable by digest alone -- that's the
+# mechanism behind the canonical-mode acceptance criterion.
+mem_template=inbox-to-memory/assets/claude-md/_memory.template.md
+mem_light="$sd_scope/_memory-lightweight.md"
+mem_canonical="$sd_scope/_memory-canonical.md"
+apply_scaffold_subs "$mem_template" "$mem_light" "${scaffold_subs_lightweight[@]}"
+apply_scaffold_subs "$mem_template" "$mem_canonical" "${scaffold_subs_canonical[@]}"
+python3 "$digest_script" --stamp "$mem_light" "$mem_canonical" >/dev/null
+
+light_digest="$(grep '^scaffold_digest:' "$mem_light")"
+canonical_digest="$(grep '^scaffold_digest:' "$mem_canonical")"
+[[ "$light_digest" != "$canonical_digest" ]] || {
+  echo "lightweight and canonical substitutions of _memory.template.md stamped the same digest" >&2
+  exit 1
+}
 
 # The counts are the one exception to omit-if-empty, and the reason has to travel
 # with the rule. Without it someone reads four always-present keys as redundant

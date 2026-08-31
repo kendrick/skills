@@ -1,3 +1,7 @@
+---
+scaffold_digest: "{{sha256:<hex> of the filled body—stamped at scaffold time}}"
+---
+
 # Memory
 
 Structured records of decisions made, facts observed, and rules in force for this scope.

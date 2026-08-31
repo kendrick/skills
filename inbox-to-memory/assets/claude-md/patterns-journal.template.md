@@ -1,3 +1,7 @@
+---
+scaffold_digest: "{{sha256:<hex> of the filled body—stamped at scaffold time}}"
+---
+
 # Patterns Journal: Agent Conventions
 
 > **Purpose of this directory:** Capture observations from the engagement as they happen, before they're polished or categorized. The journal is the field notebook that eventually feeds the cross-client journal and informs deliverable synthesis.

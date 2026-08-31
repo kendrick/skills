@@ -316,6 +316,20 @@ The CLAUDE.md and README templates use double-curly placeholders. Substitute the
 
 Leave placeholders that the user defers as `<!-- Fill in: ... -->` comments rather than blanks — that way they're easy to grep for later.
 
+### Stamping the Scaffold
+
+Every markdown file this mode generates carries a `scaffold_digest` in its frontmatter: a hash of the body it was written with. Stamp them by running the script, rather than computing the hash inline:
+
+```bash
+python3 <skill-path>/scripts/scaffold_digest.py --stamp <every generated .md>
+```
+
+`jd-file` stamps the Overviews it mints and `jd-audit` re-hashes every scaffolded file to decide what counts as furniture. All three skills carry byte-identical copies of that script, because a boundary drawn one byte differently in any copy marks every stamped file as edited. Frontmatter stays out of the hash because Obsidian rewrites it unprompted—adding tags, touching timestamps—and none of that is a person writing content.
+
+`README.md` and `CLAUDE.md` are furniture in a scaffold and real content everywhere else, so their names can never answer whether anyone has written here. A file whose digest still matches is one nobody has touched, and an ID holding only such files is empty no matter how many files it holds.
+
+Stamp last, once every body is final—substitutions resolved and the Deltas section filled or left as `<!-- Fill in -->` comments. Stamp before that and the next check reads this skill's own writing as a human edit. Skip files that carry no frontmatter. They need no digest: `.gitkeep` is furniture by its name alone, which is how `jd-audit` already reads it.
+
 ### The Deltas Convention
 
 Each generated CLAUDE.md (client and project) carries a `## Deltas` section with a fixed structural shape, not free-form. The shape:
@@ -353,7 +367,7 @@ No `MEMORY.md` or `INDEX.md` summary file in any `_memory/` directory. Filenames
 
 ### Idempotency
 
-If the target directory already contains an opted-in structure (matching markers), do **not** clobber. Report "already scaffolded at <path>" and offer to regenerate just the CLAUDE.md set. If the user agrees, write regenerated content to `CLAUDE.md.new` (and `README.md.new`, etc.) rather than overwriting — they may have customizations to merge by hand.
+If the target directory already contains an opted-in structure (matching markers), do **not** clobber. Report "already scaffolded at <path>" and offer to regenerate just the CLAUDE.md set. If the user agrees, write regenerated content to `CLAUDE.md.new` (and `README.md.new`, etc.) rather than overwriting — they may have customizations to merge by hand. Stamp the `.new` files the same way and leave the originals untouched. If the user has written into one, its digest stops matching, and that mismatch is the signal `jd-audit` reads.
 
 ### Existing-directory Regeneration
 
@@ -364,7 +378,8 @@ When invoked at a pre-existing project (e.g., `pursuits/atlas/`) that already ha
 3. Add any missing top-level files (`README.md`, `_personal.md`, `working-state.md` for projects, `patterns-journal/{CLAUDE.md,journal.md}`) without clobbering existing content.
 4. Regenerate `CLAUDE.md` from the project template (write to `CLAUDE.md.new` if the existing file has been edited beyond template substitution).
 5. Ask the user for **deltas** — active stakeholders, custom tag namespace, custom `type:` enum values, transcription-error mappings. Append them under the regenerated `## Deltas` section.
-6. If the pre-existing `_memory/` uses a different mode than the user requests (e.g., existing canonical 4-type vs. requested lightweight), report the mismatch and ask before changing anything. Do not auto-migrate.
+6. Stamp every file this run wrote—the regenerated `CLAUDE.md` or `CLAUDE.md.new`, plus anything added in step 3. The Deltas append in step 5 changes the body, so stamping before that records a digest the file already no longer matches.
+7. If the pre-existing `_memory/` uses a different mode than the user requests (e.g., existing canonical 4-type vs. requested lightweight), report the mismatch and ask before changing anything. Do not auto-migrate.
 
 ---
 

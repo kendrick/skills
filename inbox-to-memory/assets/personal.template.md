@@ -1,3 +1,7 @@
+---
+scaffold_digest: "{{sha256:<hex> of the filled body—stamped at scaffold time}}"
+---
+
 # Personal Notes — {{ScopeName}}
 
 > **Purpose:** Capture personal goals for this engagement, the strategy for achieving them, and private observations that shouldn't live in shared artifacts but should still inform how the work gets done.

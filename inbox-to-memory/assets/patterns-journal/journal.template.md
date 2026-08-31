@@ -1,3 +1,7 @@
+---
+scaffold_digest: "{{sha256:<hex> of the filled body—stamped at scaffold time}}"
+---
+
 # Patterns Journal — {{ScopeName}}
 
 Running observations from this engagement. Reverse-chronological — newest at the top.
