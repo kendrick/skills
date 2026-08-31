@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # Pin the writer-half of #57's scaffold_digest contract: the template carries
-# the key, SKILL.md's Step 5 documents both the mint-time stamp and the
-# post-Log-append re-stamp, and the digest algorithm they describe is actually
-# implementable and actually discriminates.
+# the key, and SKILL.md's Step 5 tells the agent to stamp at mint time and to
+# re-stamp after a Log append. The script those instructions name is what
+# actually computes the digest, and the round-trip below proves it
+# discriminates on a real Overview.
 #
 # A naive pass here would just grep for the string "scaffold_digest" anywhere
 # in the two files and call it done -- that would go green even if the prose
 # described a digest that never changes, or a template with the key spelled
-# in a comment nobody reads. Pinning the exact contract sentences catches
+# in a comment nobody reads. Pinning the instruction to run the script catches
 # prose drift; the round-trip in section 5 catches the case where the key
 # exists but nothing actually recomputes or discriminates on it -- without
 # the mismatch assert in step (c), a no-op digest would still pass every
@@ -50,10 +51,14 @@ require_text "$template" 'scaffold_digest:'
 require_text "$template" 'sha256:'
 echo "template-key: OK (scaffold_digest and sha256 both present)"
 
-# --- 2. Algorithm prose pinned in SKILL.md ---------------------------------
+# --- 2. Mint-time stamp pinned in SKILL.md ---------------------------------
 
-require_text "$skill" 'strip the frontmatter, normalize CRLF to LF, SHA-256 the remaining bytes, store as `sha256:<hex>`'
-echo "algorithm-prose: OK (mint-time algorithm sentence pinned)"
+# The pin is the pointer, not the algorithm. Step 5 used to spell the hash out
+# in prose, which made it a fourth place the rule was written down; the script
+# is the authority now, so what has to survive an edit is the instruction to
+# run it.
+require_text "$skill" 'scripts/scaffold_digest.py --stamp'
+echo "mint-stamp-prose: OK (Step 5 points at the script)"
 
 # --- 3. Re-stamp rule pinned in SKILL.md -----------------------------------
 
@@ -70,19 +75,19 @@ echo "done-when: OK (Step 5 done-when clause pinned)"
 overview_path="$work_dir/Overview.md"
 
 python3 - "$overview_path" <<'PY'
-import hashlib
 import re
 import sys
 
 path = sys.argv[1]
 
-# Reference implementation from the issue: split on the closing delimiter's
-# own "---\n" line, so the hashed body starts right after it -- the closing
-# delimiter and its newline are excluded, the blank line after it and the
-# file's trailing newline are both included, untrimmed.
-def scaffold_digest(text):
-    body = text.replace("\r\n", "\n").split("---\n", 2)[2]
-    return "sha256:" + hashlib.sha256(body.encode("utf-8")).hexdigest()
+# Exercise the shipped script, not a copy of it. This file used to carry its
+# own implementation of the algorithm, which made it one more place the rule
+# could drift; jd-file/scripts/scaffold_digest.py is the authority now, and a
+# round-trip that reimplemented it would pass while the real writer was broken.
+# The digest's exact byte range is pinned by a known-answer vector in
+# tests/scaffold-digest-smoke.sh.
+sys.path.insert(0, "jd-file/scripts")
+from scaffold_digest import compute as scaffold_digest
 
 def render(digest, log_extra=""):
     return (
