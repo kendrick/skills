@@ -62,6 +62,18 @@ source_refs: [11 Clients/northwind/pursuits/atlas::JJuYgImRWn]
 
 The scope path is relative to the vault root. It is there for a human skimming where a pattern came from; the id is what resolves the file, which is why a moved note doesn't break the reference. Finding every entry sourced from one note is then `grep -F '::JJuYgImRWn'` rather than a YAML parse.
 
+`applies_to` values may carry the same shape a third time, `<facet>::<value>`, naming the dimension a value belongs to:
+
+```yaml
+applies_to: [regions::emea, systems::billing, topics::invoice-disputes]
+```
+
+This third shape is optional and stays that way. An unprefixed value is legal forever: `applies_to: [billing]` parses, passes the lint, and answers `applies_to:.*billing` exactly as it always has. Faceted and unfaceted records therefore sit in one scope with no migration between them, and a scope that adopts facets can backfill its older records, some of them, or none.
+
+Reach for a facet once a scope's values start spanning dimensions and the flat namespace stops narrowing. `billing` names a system and also turns up in topics, so one grep returns both. At fifty records a reader separates them by eye. At several thousand the same search returns hundreds of candidates, and nothing reports a problem. Prefixed, `grep 'systems::billing'` pins one dimension at any size, still on one line and still without a YAML parse.
+
+The facet names belong to the scope rather than to this contract. A scope declares its own in its `CLAUDE.md` Deltas, the way it already declares its tag namespace and its `type:` values.
+
 ## The Token Grammar
 
 Every inline token the skill emits is registered here with the grep that finds it. A token shape absent from this table is a lint failure on a v2 file. New extraction ideas get a row here first; inventing syntax at the point of use produces something nothing can retrieve later.

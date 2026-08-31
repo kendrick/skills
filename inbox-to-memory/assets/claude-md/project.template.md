@@ -94,6 +94,15 @@ Project-specific tags layered on top of the client-wide namespace.
 
 {{tag-list}}
 
+### applies_to Facets
+
+Optional dimension prefixes on memory-record `applies_to` values, shape `<facet>::<value>`. Reach for this once flat values from different dimensions start colliding in one grep, where a search for a system also pulls back topics that happen to share the word. Unprefixed values stay legal, and faceted and unfaceted records can sit side by side in the same scope, so this can be adopted late and backfilled partly or never. The facet names are this {{pursuit|project}}'s to choose, not the skill's.
+
+<!-- Fill in once flat values start colliding across dimensions:
+products, regions, systems, sites, topics   # topics is the catch-all
+applies_to: [regions::emea, systems::billing, topics::invoice-disputes]
+-->
+
 ### Pre-existing Content
 
 <!-- Optional, only when a project subdirectory predates this substrate. Note any legacy folders (e.g., `pending_notes/`) and how they should be treated (e.g., "out of scope for the inbox queue; move into notes/_inbox/ to groom by hand"). -->

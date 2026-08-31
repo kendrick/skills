@@ -363,6 +363,12 @@ done
 # reachable from SKILL.md rather than sitting in the directory unmentioned.
 require_text inbox-to-memory/SKILL.md "references/machine-contracts.md"
 
+# The facet shape <facet>::<value> is optional; nothing enforces it in lint or
+# templates, so this doc is the only place the convention lives. Lose it here and
+# the practice silently evaporates.
+require_text "$contracts" '<facet>::<value>'
+require_text "$contracts" 'applies_to: [regions::emea, systems::billing, topics::invoice-disputes]'
+
 # Lint the shipped templates by standing them up as a scope. A template that
 # doesn't satisfy the contract emits files that don't either, and the placeholders
 # have to survive a YAML parse for that check to mean anything.

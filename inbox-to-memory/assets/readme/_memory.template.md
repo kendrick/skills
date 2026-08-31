@@ -33,6 +33,7 @@ Glob _memory/**/*coaching*                   # anything with "coaching" in the s
 Grep "^status: accepted" _memory/decisions/
 Grep "applies_to:.*commerce" _memory/
 Grep "tags:.*architect" _memory/{{RULES_FOLDER}}/
+Grep "applies_to:.*systems::billing" _memory/
 ```
 
 **3. Read bodies only for the handful that survive steps 1 and 2.** Bodies are for humans — rationale, context, exceptions. Frontmatter is the retrieval surface.

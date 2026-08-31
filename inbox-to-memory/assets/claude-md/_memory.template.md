@@ -51,6 +51,7 @@ Glob _memory/**/*V1StGXR8Z5*                   # resolve a specific nanoid ref
 Grep "^status: accepted" _memory/decisions/
 Grep "tags:.*compliance" _memory/
 Grep "applies_to:.*commerce" _memory/context/
+Grep "applies_to:.*systems::billing" _memory/
 ```
 
 **Stage 3: frontmatter-only read.** Use `Read` with `limit: 15` to pull just the YAML header (~300 tokens per record). Only on candidates that survived stages 1 and 2.
