@@ -1,3 +1,7 @@
+---
+scaffold_digest: "{{sha256:<hex> of the filled body—stamped at scaffold time}}"
+---
+
 # Notes
 
 Meeting notes, transcripts, reading notes, and braindumps. The entry point for raw content that feeds `_memory/` records, `patterns-journal/` candidates, and deliverable synthesis.

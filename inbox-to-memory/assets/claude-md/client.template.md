@@ -1,3 +1,7 @@
+---
+scaffold_digest: "{{sha256:<hex> of the filled body—stamped at scaffold time}}"
+---
+
 # Claude Context — {{ClientName}}
 
 > **Purpose of this file:** Client-wide grounding for Claude Code sessions in this repo. Everything below applies to all work in this directory, regardless of which subdirectory you're in. Project and pursuit `CLAUDE.md` files add area-specific conventions on top of this foundation.

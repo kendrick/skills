@@ -1,3 +1,7 @@
+---
+scaffold_digest: "{{sha256:<hex> of the filled body—stamped at scaffold time}}"
+---
+
 # Cross-client Journal
 
 Reflective pattern capture spanning every client engagement. Note and memory processing here uses the same [`inbox-to-memory`](~/.claude/skills/inbox-to-memory/SKILL.md) skill, in journal scope.

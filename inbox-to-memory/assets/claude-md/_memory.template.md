@@ -1,3 +1,7 @@
+---
+scaffold_digest: "{{sha256:<hex> of the filled body—stamped at scaffold time}}"
+---
+
 # Memory: Agent Conventions
 
 > **Audience:** Claude working in this directory.

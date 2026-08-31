@@ -1,3 +1,7 @@
+---
+scaffold_digest: "{{sha256:<hex> of the filled body—stamped at scaffold time}}"
+---
+
 # Working State
 
 > **Purpose:** The narrative layer — current state, decisions in motion, open questions, active hypotheses, and what's next. The bridge between conversations and the standing record of where things are. Update at the end of each working session.
