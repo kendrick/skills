@@ -29,6 +29,15 @@ Surfaced, never blocking.
 | Environment metadata | Ranked near zero by developers: OS 4%, product 5%, component 3%, severity 0%. Cheap to collect, so collect it — but never hold an issue for it. Value is project-type dependent and rises for native and mobile. | [E], low | Q1 |
 | Parent and Blocked by slots | Provenance and prerequisites are two things the stranger audience cannot recover: a dropped spec link throws away the cheapest context transfer available, and an undeclared prerequisite strands the run. Universal tracker practice, unmeasured. | [C] | — |
 
+## Question Ordering
+
+Step 3's front-loading orders. Neither is a gate—nothing blocks on an ordering—but the bug order is the best-evidenced behavior in the skill and the feature order is deliberately unevidenced, so both belong here.
+
+| Item | Claim | Tier | Where |
+| --- | --- | --- | --- |
+| Bug front-load order | Steps to reproduce rank first on developer importance (83%) and are what reporters find hardest to supply; error output (57%) and observed-versus-expected follow—the same figures the gate rows above trace to. | [E] | Q1 |
+| Feature and task front-load order | Collisions between stated rules rank first, then unstated behavior at boundaries. A collision is a defect already present in the ask, so resolving it changes the design rather than the wording. Surfaced by one real run of the skill; nothing measures it. | [C] | — |
+
 ## Things Deliberately Not in the Rubric
 
 | Not included | Why |

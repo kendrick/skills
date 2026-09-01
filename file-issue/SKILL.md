@@ -78,7 +78,9 @@ Rules that hold at every depth:
 
 - One question at a time. Batched questions read as a form, and forms get form-quality answers.
 - Every question names the empty slot it fills. No named gap, no question.
-- Front-load by evidence value: steps to reproduce first, then error output, then observed-versus-expected. Reproduction steps are what developers rank highest and what reporters find hardest to supply, so ask for the expensive thing while attention is highest.
+- Front-load by evidence value, in the order the issue type sets:
+  - **Bugs:** steps to reproduce first, then error output, then observed-versus-expected. Reproduction steps are what developers rank highest and what reporters find hardest to supply, so ask for the expensive thing while attention is highest.
+  - **Features and tasks:** collisions between stated rules first, then unstated behavior at boundaries, then whatever slots are still empty. To find a collision, take the rules the ask already states and check them in pairs. Where two rules call for different outcomes on one input both govern, ask which rule wins. Each rule reads fine alone, so a collision marks the ask as genuinely incomplete rather than merely terse—the answer changes the design, not the wording.
 - Every question is skippable. A declined answer resolves its slot to `unknown` and the interview moves on.
 - Never re-ask what Step 1 harvested. The verification command comes from the repo, not from the user.
 

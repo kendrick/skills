@@ -89,6 +89,15 @@ require_text file-issue/SKILL.md "## Step 3 — Elicit"
 require_text file-issue/SKILL.md "**Exit:** the moment the rubric in Step 6 becomes satisfiable."
 refute_text file-issue/SKILL.md "references/elicit"
 
+# Step 3's front-loading order splits by issue type (#23). The bug order is
+# measured and stays as is; the feature order is convention—collisions between
+# stated rules rank first because that is where a spec is genuinely incomplete
+# rather than merely terse. Pinning both keeps an edit to one from silently
+# taking the other with it.
+require_text file-issue/SKILL.md "steps to reproduce first, then error output, then observed-versus-expected"
+require_text file-issue/SKILL.md "collisions between stated rules first, then unstated behavior at boundaries"
+require_text file-issue/references/evidence-map.md "Surfaced by one real run of the skill; nothing measures it. | [C] |"
+
 # No runtime delegation to an external interrogation skill.
 refute_text file-issue/SKILL.md "/grill-me"
 refute_text file-issue/SKILL.md "grill-with-docs"
