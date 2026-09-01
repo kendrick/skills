@@ -7,6 +7,7 @@ closed:
 stakeholders:
 tags:
   - overview
+scaffold_digest: "sha256:4da7ea8a51b1fb8d59a7acbbb9680641892e059d8524a0b68b1c0165ace5afe7"
 ---
 
 # 11.01 Riverton Analytics

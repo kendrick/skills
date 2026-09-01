@@ -296,17 +296,22 @@ def scope_covers(acid: str, scope: list[str]) -> bool:
 class WalkContext:
     def __init__(self, substrate_id: str, root: Path, ignore_names: set[str],
                  tiers: dict, active, findings: list[Finding],
-                 scaffold_names: set[str] | None = None):
+                 scaffold_names: set[str] | None = None, digest=None):
         self.substrate_id = substrate_id
         self.root = root
         self.ignore_names = ignore_names
-        # Scaffolded files (e.g. the Overview.md jd-file drops into every new
-        # ID) don't count as payload for hygiene-empty -- an ID holding only
-        # its own scaffold is still a reservation. Deliberately not folded
-        # into ignore_names, which would prune these files from every walk
-        # and hide their wiki-links from link-broken. walk_id_interior
-        # consults this set at exactly one place, the payload check.
+        # Scaffolded files (the Overview.md jd-file mints, the CLAUDE.md and
+        # README.md inbox-to-memory writes) don't count as payload for
+        # hygiene-empty -- an ID holding only its own scaffold is still a
+        # reservation. A basename can't settle that on its own: README.md is
+        # furniture inside a scaffold and a person's own note everywhere
+        # else, so this set is only a pre-filter and is_furniture decides.
+        # Deliberately not folded into ignore_names, which would prune these
+        # files from every walk and hide their wiki-links from link-broken.
         self.scaffold_names = scaffold_names or set()
+        # (compute, stored) from the vendored scaffold_digest, or None when
+        # the dialect scaffolds nothing at all. Wired up in run().
+        self._digest = digest
         self.tiers = tiers
         self.active = active
         self.findings = findings
@@ -316,6 +321,35 @@ class WalkContext:
         # the vault substrate, which is the only one with full category
         # coverage -- office and code are scoped to a slice of the system.)
         self.actual_categories: dict[str, dict] = {}
+
+    def is_furniture(self, path: str, name: str) -> bool:
+        """True when `name` is scaffolding nobody has written into yet.
+
+        Both halves do work. The name list is a cheap pre-filter, so only a
+        file that could be furniture at all is ever opened. A groomed
+        session note settles as payload with no read. The digest decides,
+        which is what makes README.md and CLAUDE.md safe to list: a
+        hand-written one carries no digest and stays payload wherever it
+        sits.
+
+        Every way of failing to prove furniture returns False. A file that
+        can't be read, isn't shaped like a stamped note, or whose digest has
+        gone stale is payload. Calling payload furniture would make an
+        occupied ID report empty, which is the same silent failure this
+        check exists to catch.
+        """
+        if name not in self.scaffold_names or self._digest is None:
+            return False
+        compute, stored = self._digest
+        try:
+            with open(path, encoding="utf-8", newline="") as f:
+                text = f.read()
+            # stored() answers None when the key is absent, which never
+            # equals a digest -- an unstamped file is payload by the same
+            # comparison that catches an edited one.
+            return stored(text) == compute(text)
+        except (OSError, UnicodeDecodeError, ValueError):
+            return False
 
     def disp(self, p: Path) -> str:
         try:
@@ -367,14 +401,20 @@ def scandir_pruned(path: Path, ignore_names: set[str]):
         return []
 
 
-def subtree_has_file(start_dirs: list[str], ignore_names: set[str]) -> bool:
-    """DFS with a stack, stopping at the first real file anywhere below.
+def subtree_has_file(start_dirs: list[str], ctx: WalkContext) -> bool:
+    """DFS with a stack, stopping at the first payload file anywhere below.
 
     Client scopes run ten directories deep with their own git repos --
     walking the whole thing just to answer "is this ID empty" would be
     wasteful. In practice the first file (a README, a lockfile, anything)
     is found within the first couple of directories, so this short-circuits
     almost immediately rather than actually touching thousands of files.
+
+    Scaffolding is the exception that shortcut needs. An inbox-to-memory
+    scope puts a CLAUDE.md two directories down, so ending the walk at the
+    first *file* would call every freshly scaffolded ID occupied. Only a
+    file that fails the furniture test ends the descent. Proving furniture
+    costs a read, bounded by the handful of basenames the dialect scaffolds.
 
     Unlike the tier-level directory checks elsewhere in this file, this
     descent does not follow symlinks: a repo with a symlink pointing back
@@ -387,11 +427,11 @@ def subtree_has_file(start_dirs: list[str], ignore_names: set[str]) -> bool:
         try:
             with os.scandir(d) as it:
                 for e in it:
-                    if e.name in ignore_names:
+                    if e.name in ctx.ignore_names:
                         continue
                     if e.is_dir(follow_symlinks=False):
                         stack.append(e.path)
-                    else:
+                    elif not ctx.is_furniture(e.path, e.name):
                         return True
         except OSError:
             continue
@@ -402,6 +442,7 @@ def walk_id_interior(id_path: Path, acid: str, ctx: WalkContext, numbered_depth_
     direct = scandir_pruned(id_path, ctx.ignore_names)
     has_payload = False
     subdirs: list[str] = []
+    maybe_furniture: list[tuple[str, str]] = []
 
     for entry in direct:
         name = entry.name
@@ -429,11 +470,21 @@ def walk_id_interior(id_path: Path, acid: str, ctx: WalkContext, numbered_depth_
             # -- normal and deliberately deep in this system. Silent.
         if entry.is_dir(follow_symlinks=False):
             subdirs.append(entry.path)
-        elif name not in ctx.scaffold_names:
+        elif name in ctx.scaffold_names:
+            # Deferred, not decided: proving furniture means opening the
+            # file, and an ID holding any ordinary file is answered without
+            # opening anything.
+            maybe_furniture.append((entry.path, name))
+        else:
             has_payload = True
 
+    # Reads start here, inside an ID that already looks empty, the only case
+    # where the answer is still in doubt.
     if not has_payload:
-        has_payload = subtree_has_file(subdirs, ctx.ignore_names)
+        has_payload = any(not ctx.is_furniture(p, n) for p, n in maybe_furniture)
+
+    if not has_payload:
+        has_payload = subtree_has_file(subdirs, ctx)
 
     if not has_payload:
         ctx.add("hygiene-empty", "info", f"ID '{acid}' holds no payload files",
@@ -1251,6 +1302,24 @@ def run(args) -> int:
     numbered_depth_below_id = bool(data.get("rules", {}).get("numbered_depth_below_id", False))
     scaffold_names = set(data.get("rules", {}).get("scaffold_names", []))
 
+    # Imported rather than reimplemented. Three skills write this key and
+    # validate.py is the only reader. A second copy of the rule here would
+    # mark every stamped file as edited, silencing hygiene-empty everywhere
+    # with no error and no trace. Loaded only when the dialect names
+    # scaffold files, so a vault that scaffolds nothing doesn't need the
+    # module on disk.
+    digest = None
+    if scaffold_names:
+        try:
+            from scaffold_digest import compute, stored
+        except ImportError:
+            raise FatalError(
+                "scaffold_digest.py is missing beside this script, so a "
+                "scaffolded file cannot be told apart from one someone has "
+                "written in. Restore it, or drop [rules].scaffold_names."
+            )
+        digest = (compute, stored)
+
     substrates = data.get("substrate", [])
     substrates_by_id = {s["id"]: s for s in substrates}
     available_substrates = {sid for sid, r in roots.items() if r is not None}
@@ -1270,7 +1339,7 @@ def run(args) -> int:
             continue
 
         ctx = WalkContext(sid, root, ignore_names, patterns["grammar"], active, findings,
-                          scaffold_names=scaffold_names)
+                          scaffold_names=scaffold_names, digest=digest)
         shape = sub["shape"]
         if shape == "areas":
             walk_vault_shaped(root, ctx, ignore_top_level, numbered_depth_below_id)

@@ -296,7 +296,7 @@ assert len(findings) == 2, f"links: expected exactly 2 findings total (1 broken 
 print("links: OK (link-broken/error x1, link-unverifiable/info x1, resolving link silent)")
 PY
 
-# --- 8. scaffold-empty: hygiene-empty sees through scaffold_names -------
+# --- 8. scaffold-empty: hygiene-empty reads digests, not basenames ------
 
 conv="$(stage_fixture scaffold-empty)"
 out="$work_dir/scaffold-empty.out.json"; err="$work_dir/scaffold-empty.err"
@@ -311,21 +311,39 @@ from jd_audit_helpers import load_findings, where
 
 findings = load_findings(sys.argv[1])
 
-# 11.01 holds only the Overview.md that jd-file scaffolds at mint. With
-# [rules].scaffold_names = ["Overview.md"], the note doesn't count as payload,
-# so the reservation stays visible.
+# 11.01 holds only the Overview.md that jd-file scaffolds at mint, stamped and
+# untouched. Its scaffold_digest still matches its body, so the note is
+# furniture and the reservation stays visible.
 empty = where(findings, check="hygiene-empty", severity="info", id="11.01")
-assert empty, f"scaffold-empty: expected hygiene-empty/info for 11.01 (only its scaffold inside); findings={findings}"
+assert empty, f"scaffold-empty: expected hygiene-empty/info for 11.01 (only its stamped scaffold inside); findings={findings}"
+
+# 11.03 is the case a name list could never get right: a stamped Overview plus
+# a whole untouched inbox-to-memory client scaffold, whose CLAUDE.md and
+# README.md sit two directories down. Nothing here was written by a person.
+empty_scaffolded = where(findings, check="hygiene-empty", severity="info", id="11.03")
+assert empty_scaffolded, f"scaffold-empty: expected hygiene-empty/info for 11.03 (stamped inbox-to-memory scaffold, nothing written); findings={findings}"
 
 # REFUTE: 11.02 holds the same scaffold plus a real note, so it must be silent.
 occupied = where(findings, check="hygiene-empty", id="11.02")
 assert not occupied, f"scaffold-empty: 11.02 holds real payload beside its scaffold and must not report hygiene-empty; findings={occupied}"
 
-# REFUTE: scaffold_names must not hide Overview.md from the other checks the
-# way ignore_names would -- the walk still saw the file, so nothing else fires.
-assert len(findings) == 1, f"scaffold-empty: expected exactly 1 finding (hygiene-empty on 11.01); got {len(findings)}: {findings}"
+# REFUTE: 11.04 carries the identical scaffold to 11.03, except someone wrote
+# into _memory/README.md after it was stamped. The basename is still listed;
+# only the broken digest separates the two IDs, which is the whole point.
+edited = where(findings, check="hygiene-empty", id="11.04")
+assert not edited, f"scaffold-empty: 11.04 has an edited scaffold body (stale digest) and must not report hygiene-empty; findings={edited}"
 
-print("scaffold-empty: OK (hygiene-empty fired on the scaffold-only ID, silent on the occupied one)")
+# REFUTE: 11.05 holds one CLAUDE.md with frontmatter but no scaffold_digest at
+# all. A listed basename is not enough -- an unstamped file is payload, which
+# is what keeps hand-written READMEs and CLAUDE.md files safe to list.
+unstamped = where(findings, check="hygiene-empty", id="11.05")
+assert not unstamped, f"scaffold-empty: 11.05 holds an unstamped CLAUDE.md, which is payload; findings={unstamped}"
+
+# REFUTE: scaffold_names must not hide these files from the other checks the
+# way ignore_names would -- the walk still saw them, so nothing else fires.
+assert len(findings) == 2, f"scaffold-empty: expected exactly 2 findings (hygiene-empty on 11.01 and 11.03); got {len(findings)}: {findings}"
+
+print("scaffold-empty: OK (fired on both stamped-only IDs; silent on the real note, the edited scaffold, and the unstamped file)")
 PY
 
 # --- 9. bad-schema: unrecognized schema_version, exit 2, refuses to run -
