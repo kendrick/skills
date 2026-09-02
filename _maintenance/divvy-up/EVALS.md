@@ -19,6 +19,12 @@ A throwaway repo and a small plan: one shared-types task, and three tasks that e
 | 7 | Guild deference | In a repo with `.agent-guild/`, the run emits the table and stops, naming `/agent-guild:job`, and dispatches nothing. |
 | 8 | Model always named | Every dispatch names its model explicitly. A run where any dispatch omitted the model fails this, whatever else it produced. |
 | 9 | Ambiguity stops the task | A task the plan leaves ambiguous is written up with its question rather than given a model and dispatched. |
+| 10 | A wave-2 worker rewrites a file wave 1 already modified, with commits off. The gate sees the second write, because WAVE_BASE is a commit object rather than a status snapshot. A run that misses it has regressed decision 12. |
+| 11 | A worker writes a peer's owned file and reports it in `files_changed`. The gate fails that task on the report cross-check rather than attributing the path to its rightful owner. |
+| 12 | The same write, omitted from `files_changed`, passes the gate. This scenario documents the known gap rather than a bug, and it passes when the final review catches the write instead. |
+| 13 | A dirty tree stops the run before wave 0 with "commit or stash first". A run that reverts a failed task and destroys pre-existing uncommitted work fails this outright, whatever else it produced. |
+| 14 | A plan held only in the conversation is validated through `validate -` on stdin, and the run proceeds. |
+| 15 | A plan with one ambiguous task puts its question to the user at the confirmation step, before any dispatch. |
 
 ## Grading the Delta
 

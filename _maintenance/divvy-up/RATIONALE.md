@@ -24,6 +24,9 @@ Three sources, one keeper mechanism each:
 | 8 | Ambiguity stops the task and reaches the user; failure re-dispatches alone one rung up, once, then stops | Guild's escalation ladder without its per-tier retry counters. | [P] |
 | 9 | No run directory and no ledger. The plan file's `## Waves` table is the only artifact | Run-state tracking is what makes the guild the guild, and disjoint ownership already gives the recovery story: a failed task rolls back by reverting the paths it owns. | [C] |
 | 10 | A failed task's owned paths are reverted before the retry | A re-dispatch onto a half-written tree makes the second agent debug the first one's leftovers instead of doing the task. | [P] |
+| 11 | A dirty tree stops the run before wave 0, overridable with the exposed paths named | Decision 10's revert is bounded by nothing on a tree that was already dirty, so it destroys uncommitted work the run never wrote. Found by a Codex review of the PR that shipped this skill, which rated it P1; by this repo's own severity rules it is P0, since it is lossy on a user's files. Matches `adversarial-review`'s "commit or stash first" preflight. | [E] |
+| 12 | WAVE_BASE is a commit object from `git stash create`, never a `git status` snapshot | Status text cannot see a second write. Wave 1 leaving a file at ` M path` and a wave-2 worker rewriting that same file produce identical snapshots, so the set difference is empty and the clobber passes the gate. Reproduced on a scratch repo before the fix landed. `git stash create` writes a commit of the tree without touching the working tree or the index, and returns empty on a clean tree, which is the HEAD fallback. Surfaced by the same review. | [E] |
+| 13 | Each report's `files_changed` is checked against that task's own `owns` | `owners` answers which task owns a path, never which agent wrote it, so a worker writing a peer's owned file leaves a path the gate attributes to its rightful owner and passes. The report cross-check catches the honest stray. It rests on the worker's own account, which is a Known Limitation rather than a proof. Surfaced by the same review. | [E] |
 
 ## Deliberately Not Built
 
@@ -42,4 +45,5 @@ Three sources, one keeper mechanism each:
 - The model ladder names Claude models and does not port to other hosts.
 - Sub-file ownership is out of scope, so a plan needing it must split the file or serialize the tasks.
 - The gate trusts that the repo's verification command actually exercises the change.
+- **Writes are attributed by self-report, not by git.** Git records that a file changed and never which of two concurrent agents changed it. A worker that writes a peer's owned file and omits it from `files_changed` passes the gate. Per-wave commits keep it recoverable and the final review can still catch it. Closing it properly means one git worktree per worker, which changes the skill's shape enough to be a different design rather than a fix.
 - No scenario in EVALS.md has been run live yet, so every row there is [P] until it is not.

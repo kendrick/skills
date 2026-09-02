@@ -149,6 +149,30 @@ refute_text divvy-up/SKILL.md "be careful"
 # hold them; the retry rule here is fixed at one re-dispatch, one rung up.
 refute_text divvy-up/SKILL.md "retry counter"
 
+# The three defects a Codex review found on the shipping PR. Each was reproduced
+# before it was fixed, and each fix is one sentence away from being edited back
+# out, so they are pinned by the string that carries the rule.
+
+# A revert bounded by nothing destroys uncommitted work the run never wrote.
+require_text divvy-up/SKILL.md "commit or stash first"
+require_text divvy-up/README.md "clean tree before it dispatches"
+
+# A status snapshot cannot see a second write that leaves the same status line.
+require_text divvy-up/SKILL.md "git stash create"
+require_text divvy-up/SKILL.md "status text cannot see a second write"
+refute_text divvy-up/SKILL.md "otherwise a snapshot of \`git status"
+
+# `owners` answers who owns a path, never who wrote it.
+require_text divvy-up/SKILL.md "never which agent wrote it"
+require_text divvy-up/SKILL.md "files_changed"
+require_text divvy-up/references/worker-prompt.md "report every path you touched"
+
+# A conversation-only plan still gets proved, through stdin.
+require_text divvy-up/SKILL.md "validate -"
+
+# Step 1's questions reach the user before a dispatch spends a rung on them.
+require_text divvy-up/SKILL.md "before asking anything else"
+
 # --- Functional checks. Cheap, deterministic, no subagents. ---
 
 fixtures=tests/fixtures/divvy-up

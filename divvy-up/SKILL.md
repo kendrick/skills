@@ -54,11 +54,13 @@ Orchestrator work is not a dispatch. Deriving the plan, gating a wave, and readi
 
 A task goes in the lowest wave where it shares no owned path with a peer already in that wave, and every task it depends on sits in an earlier wave. Apply MAX as a cap on wave size.
 
-Write the result into PLAN under a `## Waves` heading, as a pipe table with the header `Wave | Task | Files owned | Model | Done when` (print it instead when the plan lives only in the conversation). Then:
+Write the result into PLAN under a `## Waves` heading, as a pipe table with the header `Wave | Task | Files owned | Model | Done when`. Then:
 
 ```
 divvy-up/scripts/check-waves.py validate <PLAN>
 ```
+
+A plan that lives only in the conversation has no pathname to hand the validator, so print the table for the user and pipe the same text through `validate -`, which reads a plan on stdin. Every wave is proved the same way whether or not the plan reached disk.
 
 A non-zero exit is a hard stop, not a warning. Overlapping owners inside one wave remove the single property the whole design rests on, and a fan-out on top of that overlap produces a diff nobody can attribute. Its `serialized:` lines are the healthy case: two tasks that touch one tree, held in different waves.
 
@@ -72,9 +74,13 @@ When GUILD, stop here. Print `Run /agent-guild:job <PLAN>` and say plainly that 
 
 When PLAN is still being shaped—plan mode, or the user has not approved it—stop after the table. Waves computed over a moving plan expire the moment it moves.
 
-Otherwise ask once, in one question: execute wave 0, and commit after each passing wave. Drop the commit half when `--commit` already answered it.
+Put every question Step 1 recorded to the user before asking anything else, and settle each one. An ambiguous task that reaches a dispatch spends a rung and comes back `stopped`, by which time its peers have already written the tree it was guessing about.
 
-**Done when:** the user has approved executing wave 0 and COMMIT is settled, or the run stopped at the guild handoff or the unapproved plan.
+Check the tree with `git status --porcelain`. A dirty tree stops the run with "commit or stash first": Step 6 recovers a failed task by reverting the paths it owns, and against pre-existing uncommitted work that revert destroys something the skill never wrote. Where the user overrides deliberately, say which paths are exposed before continuing.
+
+Then ask once, in one question: execute wave 0, and commit after each passing wave. Drop the commit half when `--commit` already answered it.
+
+**Done when:** every recorded question is answered, the tree is clean or the override was taken with its exposed paths named, and the user has approved executing wave 0 with COMMIT settled—or the run stopped at the guild handoff or the unapproved plan.
 
 ## Step 5 — Dispatch a wave
 
@@ -84,7 +90,11 @@ Name each dispatch's model explicitly. An omitted model inherits the session's, 
 
 Save every returned JSON report verbatim. Step 6 reads these as evidence of what happened, and a summarized report is evidence of what the orchestrator thought happened.
 
-Before the dispatch goes out, record **WAVE_BASE**: `git rev-parse HEAD` when COMMIT is set, otherwise a snapshot of `git status --porcelain --untracked-files=all`. Step 6 attributes writes against it, and without it a later wave inherits every earlier wave's paths.
+Before the dispatch goes out, record **WAVE_BASE** as a commit object: `git stash create`, falling back to `git rev-parse HEAD` when that prints nothing because the tree is clean. `git stash create` writes a commit of the current tree without touching the working tree or the index, which is what makes it safe to run mid-run.
+
+Record the wave's untracked paths beside it, from `git ls-files --others --exclude-standard`, since `git stash create` ignores untracked files.
+
+A commit object rather than a status snapshot, because status text cannot see a second write. When wave 1 leaves a file at ` M path` and a wave-2 worker rewrites that same file, both snapshots hold the identical line, the difference between them is empty, and the clobber the gate exists to catch passes it silently.
 
 **Done when:** WAVE_BASE is recorded, every task in the wave was dispatched in one message at its routed model, and every report is saved verbatim.
 
@@ -98,9 +108,11 @@ Three checks, then a route.
    divvy-up/scripts/check-waves.py owners <PLAN> --wave N
    ```
 
-   Derive the paths against WAVE_BASE, not against the working tree as a whole. With COMMIT set, that is `git diff --name-only <WAVE_BASE>` together with `git ls-files --others --exclude-standard`, since a diff alone never mentions a file a subagent created. With COMMIT unset, earlier waves are still sitting uncommitted, so take the paths a fresh `git status --porcelain --untracked-files=all` reports that the snapshot did not—reading the whole dirty tree instead fails wave 2 for every path wave 1 legitimately owned.
+   Derive the paths against WAVE_BASE, not against the working tree as a whole, and the same way whether or not COMMIT is set: `git diff --name-only <WAVE_BASE>` for tracked content, plus whatever `git ls-files --others --exclude-standard` now reports that the wave's untracked list did not. Reading the whole dirty tree instead fails wave 2 for every path wave 1 legitimately owned.
 
-   A path written outside its task's `owns` fails that task. An agent that wrote outside its territory may have clobbered a peer in the same wave, and that damage is invisible in a passing test suite.
+   A path no task in the wave owns fails the run. That is a write into territory nobody claimed, and it is invisible in a passing test suite.
+
+   Then check each report's `files_changed` against that task's own `owns`, and fail any task claiming a path it does not own. `owners` answers which task owns a path, never which agent wrote it, so a worker that writes a peer's owned file leaves a path the gate happily attributes to its rightful owner. The report cross-check is what catches that case, and it rests on the worker's own account of what it touched—see Known Limitations for what stays uncovered.
 
 2. **Verification.** Find the repo's own command on disk rather than asking for it: manifest scripts first (`package.json`, `Makefile`, `pyproject.toml`, `Cargo.toml`), then runnable scripts under `tests/` or `scripts/`, then whatever `.github/workflows/` runs.
 
@@ -115,7 +127,7 @@ Then route each task:
 | `failed`, or failed the gate | Revert that task's owned paths, then re-dispatch it alone one rung up with the failure attached. |
 | Failed twice | Stop the run and report. |
 
-Revert before the retry. A re-dispatch onto a half-written tree hands the second agent the first one's leftovers to debug, and it will spend its budget there instead of on the task.
+Revert before the retry. A re-dispatch onto a half-written tree hands the second agent the first one's leftovers to debug, and it will spend its budget there instead of on the task. The revert is bounded by the clean tree Step 4 required and by WAVE_BASE, so it only ever discards writes this run made.
 
 **Done when:** every task in the wave is passing, or has been reverted and retried one rung up, or the run stopped after a second failure; and the wave is committed when COMMIT is set.
 

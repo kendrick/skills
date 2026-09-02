@@ -25,11 +25,12 @@ Files you own. Write only these, and nothing outside them:
 
 {{OWNS}}
 
-The orchestrator checks this after you finish, attributing every path the
-wave wrote against your ownership list. A write outside it fails your task
-even if the change itself is correct. A peer subagent is writing into this
-same tree at this same moment, and a stray write from you can clobber work
-it already did—work you never saw and have no way to reconcile with.
+The orchestrator checks this after you finish, against your ownership list and
+against the `files_changed` you report below. A write outside it fails your
+task even if the change itself is correct, so report every path you touched
+rather than only the ones you meant to. A peer subagent is writing into this
+same tree at this same moment, and a stray write from you can clobber work it
+already did—work you never saw and have no way to reconcile with.
 
 The contract you code against—the shared types, interface, schema, or
 migration a prior wave already landed:
