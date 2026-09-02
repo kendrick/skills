@@ -21,13 +21,13 @@ Four artifacts. The first two are universal; the last two are the bar a new skil
 
 ## Invocation
 
-`disable-model-invocation: true` makes a skill user-invoked, which strips its description from the agent's reach and costs zero context. Choose by the asymmetry: when a misfire is expensive and a miss costs the user one word, take user-invoked. `adversarial-review`, `handoff`, `eli5`, and `wave-plan` are user-invoked for that reason, and each says so in its own body. Everything else carries a trigger-bearing description.
+`disable-model-invocation: true` makes a skill user-invoked, which strips its description from the agent's reach and costs zero context. Choose by the asymmetry: when a misfire is expensive and a miss costs the user one word, take user-invoked. `adversarial-review`, `handoff`, `eli5`, and `divvy-up` are user-invoked for that reason, and each says so in its own body. Everything else carries a trigger-bearing description.
 
 A description that summarizes the workflow becomes a shortcut the model takes instead of reading the body. Write triggers, and let the steps live in the file.
 
 ## Vendoring
 
-Shared code is copied byte-identically with a provenance comment naming the source, the date, and the rule that upstream is authoritative: fix the bug there, then re-copy. `scaffold_digest.py` lives in three skills this way, and `paths_overlap` runs in both `adversarial-review` and `wave-plan`.
+Shared code is copied byte-identically with a provenance comment naming the source, the date, and the rule that upstream is authoritative: fix the bug there, then re-copy. `scaffold_digest.py` lives in three skills this way, and `paths_overlap` runs in both `adversarial-review` and `divvy-up`.
 
 Copy the docstrings with the code. They record the incidents that set each rule, and a reader who trims them re-introduces the bug they describe.
 
@@ -46,7 +46,7 @@ Two kinds of assertion, and the second is the one people forget. `require_text` 
 **There is no CI.** Tests run by hand from the repo root:
 
 ```bash
-bash tests/wave-plan-smoke.sh
+bash tests/divvy-up-smoke.sh
 ```
 
 Run every suite a change could touch, not only the one named for the skill. A vendored-predicate edit reaches two suites.
@@ -62,7 +62,7 @@ Comment the WHY. A comment that restates well-named code costs a reader attentio
 
 ## Commits and branches
 
-Conventional Commits, scope is the skill name: `feat(wave-plan):`, `fix(jd-file):`, `docs(inbox-to-memory):`. Lowercase after the colon, no trailing period, imperative mood. Bodies and PR descriptions are never hard-wrapped, and carry no attribution trailer or generated-by footer.
+Conventional Commits, scope is the skill name: `feat(divvy-up):`, `fix(jd-file):`, `docs(inbox-to-memory):`. Lowercase after the colon, no trailing period, imperative mood. Bodies and PR descriptions are never hard-wrapped, and carry no attribution trailer or generated-by footer.
 
 Branch before committing when on `main`. Push when the user asks.
 
