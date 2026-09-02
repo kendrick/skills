@@ -182,13 +182,34 @@ def load_plan(path, label):
 
 
 def split_row(line):
-    """Cells of one pipe-table row, stripped.
+    r"""Cells of one pipe-table row, stripped, honouring Markdown's `\|` escape.
 
     A row is fenced by pipes, so splitting leaves an empty string at each end.
     split_row drops those two and nothing else. An empty cell in the middle is a
     real problem the caller has to see, and discarding it would turn a missing
-    owner into a column-count complaint pointing at the wrong row."""
-    cells = line.strip().split("|")
+    owner into a column-count complaint pointing at the wrong row.
+
+    An escaped pipe stays inside its cell and arrives unescaped. A done-when is
+    routinely an acceptance command, and a shell pipeline written the only way
+    Markdown allows (`printf x \| grep x`) otherwise splits into extra columns
+    and fails a plan the planner wrote correctly. Validation is a hard stop, so
+    that reads as the whole run refusing an ordinary pipeline."""
+    cells, cell, i = [], [], 0
+    body = line.strip()
+    while i < len(body):
+        ch = body[i]
+        if ch == "\\" and i + 1 < len(body) and body[i + 1] == "|":
+            cell.append("|")
+            i += 2
+            continue
+        if ch == "|":
+            cells.append("".join(cell))
+            cell = []
+            i += 1
+            continue
+        cell.append(ch)
+        i += 1
+    cells.append("".join(cell))
     if cells and not cells[0].strip():
         cells = cells[1:]
     if cells and not cells[-1].strip():

@@ -25,6 +25,11 @@ A throwaway repo and a small plan: one shared-types task, and three tasks that e
 | 13 | A dirty tree stops the run before wave 0 with "commit or stash first". A run that reverts a failed task and destroys pre-existing uncommitted work fails this outright, whatever else it produced. |
 | 14 | A plan held only in the conversation is validated through `validate -` on stdin, and the run proceeds. |
 | 15 | A plan with one ambiguous task puts its question to the user at the confirmation step, before any dispatch. |
+| 16 | A tracked plan file gets its Waves table written, and the run still reaches wave 0. A run that stops on its own edit has regressed decision 14. |
+| 17 | Wave 1 creates an untracked file and a wave-2 worker rewrites it, with commits off. The gate sees the second write. |
+| 18 | A plan held only in the conversation reaches the ownership gate, because the table was written to a temporary file before dispatch rather than only piped to the validator. |
+| 19 | A task assigned `fable` that fails its first attempt stops the run instead of escalating or retrying. |
+| 20 | A plan whose done-when contains an escaped pipe validates and dispatches. |
 
 ## Grading the Delta
 

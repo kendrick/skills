@@ -52,6 +52,8 @@ Orchestrator work is not a dispatch. Deriving the plan, gating a wave, and readi
 
 ## Step 3 — Wave
 
+Check `git status --porcelain` before writing anything. A dirty tree stops the run with "commit or stash first": Step 6 recovers a failed task by reverting the paths it owns, and against pre-existing uncommitted work that revert destroys something this run never wrote. Where the user overrides deliberately, name the exposed paths. The check runs here, ahead of the table, because writing the table into a tracked plan file is itself a modification—checking after that edit would stop every ordinary run on the skill's own change.
+
 A task goes in the lowest wave where it shares no owned path with a peer already in that wave, and every task it depends on sits in an earlier wave. Apply MAX as a cap on wave size.
 
 Write the result into PLAN under a `## Waves` heading, as a pipe table with the header `Wave | Task | Files owned | Model | Done when`. Then:
@@ -60,7 +62,7 @@ Write the result into PLAN under a `## Waves` heading, as a pipe table with the 
 divvy-up/scripts/check-waves.py validate <PLAN>
 ```
 
-A plan that lives only in the conversation has no pathname to hand the validator, so print the table for the user and pipe the same text through `validate -`, which reads a plan on stdin. Every wave is proved the same way whether or not the plan reached disk.
+A plan that lives only in the conversation still needs a pathname, because Step 6's `owners` takes its changed paths on stdin and refuses `-`. Write the table to a temporary file, use that path for the rest of the run, and print the table for the user as well. Validating through `validate -` and dispatching anyway strands the run: workers modify the tree, and the mandatory ownership check then has no plan to read.
 
 A non-zero exit is a hard stop, not a warning. Overlapping owners inside one wave remove the single property the whole design rests on, and a fan-out on top of that overlap produces a diff nobody can attribute. Its `serialized:` lines are the healthy case: two tasks that touch one tree, held in different waves.
 
@@ -76,11 +78,9 @@ When PLAN is still being shaped—plan mode, or the user has not approved it—s
 
 Put every question Step 1 recorded to the user before asking anything else, and settle each one. An ambiguous task that reaches a dispatch spends a rung and comes back `stopped`, by which time its peers have already written the tree it was guessing about.
 
-Check the tree with `git status --porcelain`. A dirty tree stops the run with "commit or stash first": Step 6 recovers a failed task by reverting the paths it owns, and against pre-existing uncommitted work that revert destroys something the skill never wrote. Where the user overrides deliberately, say which paths are exposed before continuing.
+Ask once, in one question: execute wave 0, and commit after each passing wave. Drop the commit half when `--commit` already answered it.
 
-Then ask once, in one question: execute wave 0, and commit after each passing wave. Drop the commit half when `--commit` already answered it.
-
-**Done when:** every recorded question is answered, the tree is clean or the override was taken with its exposed paths named, and the user has approved executing wave 0 with COMMIT settled—or the run stopped at the guild handoff or the unapproved plan.
+**Done when:** every recorded question is answered, and the user has approved executing wave 0 with COMMIT settled—or the run stopped at the guild handoff or the unapproved plan.
 
 ## Step 5 — Dispatch a wave
 
@@ -92,7 +92,7 @@ Save every returned JSON report verbatim. Step 6 reads these as evidence of what
 
 Before the dispatch goes out, record **WAVE_BASE** as a commit object: `git stash create`, falling back to `git rev-parse HEAD` when that prints nothing because the tree is clean. `git stash create` writes a commit of the current tree without touching the working tree or the index, which is what makes it safe to run mid-run.
 
-Record the wave's untracked paths beside it, from `git ls-files --others --exclude-standard`, since `git stash create` ignores untracked files.
+Record the wave's untracked files beside it as content, not as names: each path from `git ls-files --others --exclude-standard` with its `git hash-object`. `git stash create` ignores untracked files even under `--include-untracked`, so nothing else covers them, and a name-only list repeats the defect below in the untracked half—wave 1 creates a file, a wave-2 worker rewrites it, both lists hold the same path, and the clobber is invisible.
 
 A commit object rather than a status snapshot, because status text cannot see a second write. When wave 1 leaves a file at ` M path` and a wave-2 worker rewrites that same file, both snapshots hold the identical line, the difference between them is empty, and the clobber the gate exists to catch passes it silently.
 
@@ -108,7 +108,7 @@ Three checks, then a route.
    divvy-up/scripts/check-waves.py owners <PLAN> --wave N
    ```
 
-   Derive the paths against WAVE_BASE, not against the working tree as a whole, and the same way whether or not COMMIT is set: `git diff --name-only <WAVE_BASE>` for tracked content, plus whatever `git ls-files --others --exclude-standard` now reports that the wave's untracked list did not. Reading the whole dirty tree instead fails wave 2 for every path wave 1 legitimately owned.
+   Derive the paths against WAVE_BASE, not against the working tree as a whole, and the same way whether or not COMMIT is set: `git diff --name-only <WAVE_BASE>` for tracked content, plus every untracked path whose `git hash-object` differs from the wave's manifest, is missing from it, or has since disappeared. Reading the whole dirty tree instead fails wave 2 for every path wave 1 legitimately owned.
 
    A path no task in the wave owns fails the run. That is a write into territory nobody claimed, and it is invisible in a passing test suite.
 
@@ -125,6 +125,7 @@ Then route each task:
 | Passing | Move to the next wave, committing first when COMMIT is set. |
 | `stopped` | Collect the question and put it to the user once the rest of the wave lands. |
 | `failed`, or failed the gate | Revert that task's owned paths, then re-dispatch it alone one rung up with the failure attached. |
+| Failed on `fable` | Revert its owned paths and stop the run. `fable` is the top rung, so nothing is left to escalate to, and a retry at the same rung spends the budget to learn the same thing. |
 | Failed twice | Stop the run and report. |
 
 Revert before the retry. A re-dispatch onto a half-written tree hands the second agent the first one's leftovers to debug, and it will spend its budget there instead of on the task. The revert is bounded by the clean tree Step 4 required and by WAVE_BASE, so it only ever discards writes this run made.

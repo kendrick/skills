@@ -173,6 +173,26 @@ require_text divvy-up/SKILL.md "validate -"
 # Step 1's questions reach the user before a dispatch spends a rung on them.
 require_text divvy-up/SKILL.md "before asking anything else"
 
+# The second review round. Three of these were regressions introduced by the
+# first round's fixes, which is why each is pinned by the string that states
+# the rule rather than by the behavior being absent.
+
+# The clean-tree check must precede the table write, or the skill's own edit to
+# a tracked plan file stops every ordinary run.
+require_text divvy-up/SKILL.md "before writing anything"
+require_text divvy-up/SKILL.md "ahead of the table"
+
+# `owners` refuses `-`, so a conversation-only plan needs a real pathname before
+# any worker touches the tree.
+require_text divvy-up/SKILL.md "Write the table to a temporary file"
+refute_text divvy-up/SKILL.md "pipe the same text through"
+
+# Untracked baseline is content, not names: the tracked-half defect again.
+require_text divvy-up/SKILL.md "git hash-object"
+
+# `fable` is the top rung and has no escalation target.
+require_text divvy-up/SKILL.md "Failed on \`fable\`"
+
 # --- Functional checks. Cheap, deterministic, no subagents. ---
 
 fixtures=tests/fixtures/divvy-up
@@ -228,6 +248,26 @@ missing_status=$?
 set -e
 [[ "$missing_status" == "3" ]] || {
   echo "a missing plan file should exit 3, got: $missing_status" >&2
+  exit 1
+}
+
+cat > "$tmp/pipe.md" <<'PLAN'
+## Waves
+
+| Wave | Task | Files owned | Model | Done when |
+|---|---|---|---|---|
+| 0 | probe | src/a.py | sonnet | `printf x \| grep x` exits 0 |
+PLAN
+
+python3 "$waves" validate "$tmp/pipe.md" >/dev/null || {
+  echo "an escaped pipe inside a cell must stay in that cell, not split a column" >&2
+  exit 1
+}
+
+# The script must not warn on import; a SyntaxWarning on every invocation is
+# noise a caller cannot silence.
+python3 -W error::SyntaxWarning -c "import ast,sys; ast.parse(open('divvy-up/scripts/check-waves.py').read())" || {
+  echo "check-waves.py raises a SyntaxWarning" >&2
   exit 1
 }
 
