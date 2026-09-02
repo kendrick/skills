@@ -126,7 +126,7 @@ npx skills add kendrick/skills --skill eli5
 
 ## Contributing
 
-Contributions are welcome and the process is informal: open an issue or a PR. There's no template to fill out and no CLA to sign. If you're adding a skill, a `SKILL.md` and a short `README.md` in its own directory is all it takes to match the others.
+Contributions are welcome and the process is informal: open an issue or a PR. There's no template to fill out and no CLA to sign. If you're adding a skill, `AGENTS.md` describes what one ships: a `SKILL.md` and a `README.md` in its own directory, a decision ledger under `_maintenance/`, and a smoke test under `tests/`. The first two are the skill; the last two are what keep it honest as it changes.
 
 ## License
 

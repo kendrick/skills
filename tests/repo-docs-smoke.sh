@@ -70,37 +70,60 @@ require_text AGENTS.md "a skill lands alone"
 # the other direction: a reviewer reads them and skips a finding, so an entry
 # that has quietly become false suppresses a real one. ---
 
-# Every skill AGENTS.md excuses for having no ledger must actually have none.
-# An entry that quietly became false suppresses a real finding.
-for skill in databricks-api eli5 inbox-to-memory technical-writing; do
-  require_text AGENTS.md "\`$skill\`"
-  if [[ -f "_maintenance/$skill/RATIONALE.md" ]]; then
-    echo "AGENTS.md lists $skill as carrying no ledger, but _maintenance/$skill/RATIONALE.md exists" >&2
+# Read the exception sets out of the prose rather than restating them here.
+# An earlier version asserted only that each excepted skill's name appeared
+# somewhere in AGENTS.md, which any unrelated mention satisfied: deleting a
+# skill from the exception clause left the suite green while the exception it
+# claimed to pin was gone.
+exception_line="$(grep -F 'carry no `RATIONALE.md`' AGENTS.md | head -1)"
+[[ -n "$exception_line" ]] || {
+  echo "AGENTS.md no longer states which skills carry no RATIONALE.md" >&2
+  exit 1
+}
+
+names_in() { grep -oE '`[a-z0-9-]+`' <<<"$1" | tr -d '`'; }
+
+no_ledger="$(names_in "$(sed 's/ carry no .*//' <<<"$exception_line")")"
+no_test="$(names_in "$(sed -e 's/.*carry no `RATIONALE.md`, and //' -e 's/ have no smoke test.*//' <<<"$exception_line")")"
+
+[[ -n "$no_ledger" && -n "$no_test" ]] || {
+  echo "could not read the exception sets out of: $exception_line" >&2
+  exit 1
+}
+
+# Every skill the prose excuses must actually lack the artifact it is excused for.
+for skill in $no_ledger; do
+  [[ -d "$skill" ]] || {
+    echo "AGENTS.md excuses '$skill' from carrying a ledger, but no such skill exists" >&2
     exit 1
-  fi
+  }
+  [[ -f "_maintenance/$skill/RATIONALE.md" ]] && {
+    echo "AGENTS.md says $skill carries no ledger, but _maintenance/$skill/RATIONALE.md exists" >&2
+    exit 1
+  }
 done
 
-# And the two it excuses for having no smoke test.
-for skill in databricks-api eli5; do
-  if [[ -f "tests/$skill-smoke.sh" ]]; then
-    echo "AGENTS.md lists $skill as having no smoke test, but tests/$skill-smoke.sh exists" >&2
+for skill in $no_test; do
+  [[ -f "tests/$skill-smoke.sh" ]] && {
+    echo "AGENTS.md says $skill has no smoke test, but tests/$skill-smoke.sh exists" >&2
     exit 1
-  fi
+  }
 done
 
-# The inverse: every other skill must carry the ledger the bar requires, so a
-# new skill cannot land without one by quietly going unmentioned.
+# And every skill it does not excuse must meet the bar, so a new one cannot land
+# without a ledger by going unmentioned.
 for skill_md in */SKILL.md; do
   skill="$(dirname "$skill_md")"
-  case "$skill" in databricks-api|eli5|inbox-to-memory|technical-writing) continue ;; esac
+  grep -qx "$skill" <<<"$no_ledger" && continue
   [[ -f "_maintenance/$skill/RATIONALE.md" ]] || {
     echo "$skill is held to the full bar but has no _maintenance/$skill/RATIONALE.md" >&2
     exit 1
   }
 done
 
-# The rule that a skill ships only two files at its top level, checked against
-# every skill rather than asserted once per suite.
+# A skill ships two files at its top level, and its directories are the three
+# AGENTS.md names. The router is the one exception, and the prose has to say so.
+require_text AGENTS.md "\`databricks-api\` is the exception"
 for skill_md in */SKILL.md; do
   skill="$(dirname "$skill_md")"
   count="$(find "$skill" -maxdepth 1 -type f | wc -l | tr -d ' ')"
@@ -108,6 +131,17 @@ for skill_md in */SKILL.md; do
     echo "$skill/ ships $count files at its top level; AGENTS.md allows SKILL.md and README.md" >&2
     exit 1
   }
+  [[ "$skill" == "databricks-api" ]] && continue
+  while IFS= read -r sub; do
+    [[ -z "$sub" ]] && continue
+    case "$(basename "$sub")" in
+      references|scripts|assets) ;;
+      *)
+        echo "$sub is not one of the references/, scripts/, or assets/ directories AGENTS.md allows" >&2
+        exit 1
+        ;;
+    esac
+  done < <(find "$skill" -maxdepth 1 -mindepth 1 -type d)
 done
 
 echo "repo-docs smoke: OK"

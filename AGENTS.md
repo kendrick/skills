@@ -13,7 +13,7 @@ Four artifacts. The first two are universal; the last two are the bar a new skil
 - `_maintenance/<skill>/RATIONALE.md` — the decision ledger. Every contested choice gets a row saying why, tiered `[E]` measured, `[P]` reasoned from prior art, `[C]` convention. Sections: Where This Came From, Decision Ledger, Deliberately Not Built, Known Limitations.
 - `tests/<skill>-smoke.sh` — the pin. Runs standalone from the repo root.
 
-`SKILL.md` and `README.md` are the only files at a skill's top level. Everything else goes in `references/`, `scripts/`, or `assets/`.
+`SKILL.md` and `README.md` are the only files at a skill's top level, and everything else goes in `references/`, `scripts/`, or `assets/`. `databricks-api` is the exception: it is a router, and each domain it routes to is a directory of its own.
 
 `_maintenance/<skill>/EVALS.md` joins them where a skill needs live subagents to prove it works, since a smoke test cannot. `PROVENANCE.md` joins them where a skill is derived from an upstream project, as `handoff` and `technical-writing` are.
 
