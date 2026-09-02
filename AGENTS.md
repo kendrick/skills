@@ -17,7 +17,7 @@ Four artifacts. The first two are universal; the last two are the bar a new skil
 
 `_maintenance/<skill>/EVALS.md` joins them where a skill needs live subagents to prove it works, since a smoke test cannot. `PROVENANCE.md` joins them where a skill is derived from an upstream project, as `handoff` and `technical-writing` are.
 
-`databricks-api` and `eli5` carry no maintenance directory, and `inbox-to-memory` and `technical-writing` carry evals without a ledger. Hold new work to the full bar; leave the older skills alone until someone is changing them anyway.
+Four skills predate the bar. `databricks-api`, `eli5`, `inbox-to-memory`, and `technical-writing` carry no `RATIONALE.md`, and `databricks-api` and `eli5` have no smoke test. Hold new work to the full bar; leave those alone until someone is changing them anyway.
 
 ## Invocation
 
