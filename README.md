@@ -122,11 +122,11 @@ npx skills add kendrick/skills --skill eli5
 - [databricks-api/](databricks-api/), [file-issue/](file-issue/), [inbox-to-memory/](inbox-to-memory/), [jd-file/](jd-file/), [jd-audit/](jd-audit/), [readme-coauthorship/](readme-coauthorship/), [handoff/](handoff/), [adversarial-review/](adversarial-review/), [divvy-up/](divvy-up/), [technical-writing/](technical-writing/), [eli5/](eli5/): the skills, one directory each
 - [\_docs/](_docs/): research notes behind the skills, like the [readme-coauthorship writeup](_docs/readme-coauthorship-research.md) and the [issue-authorship survey](_docs/file-issue-research.md)
 - [\_maintenance/](_maintenance/): maintainer tooling, one subdirectory per skill that needs it: the refresh workflow that keeps `databricks-api` synced with upstream Databricks docs, the upstream sync behind `handoff`, the check that holds the `jd` pair's prose to the vault register, and the decision ledgers, evals, and provenance records behind the rest
-- [tests/](tests/): smoke scripts that pin each skill's load-bearing decisions; each runs standalone from the repo root, like `bash tests/technical-writing-smoke.sh`
+- [tests/](tests/): smoke scripts that pin the load-bearing decisions in each skill and in the repo's agent docs; each runs standalone from the repo root, like `bash tests/technical-writing-smoke.sh`
 
 ## Contributing
 
-Contributions are welcome and the process is informal: open an issue or a PR. There's no template to fill out and no CLA to sign. If you're adding a skill, a `SKILL.md` and a short `README.md` in its own directory is all it takes to match the others.
+Contributions are welcome and the process is informal: open an issue or a PR. There's no template to fill out and no CLA to sign. If you're adding a skill, `AGENTS.md` describes what one ships: a `SKILL.md` and a `README.md` in its own directory, a decision ledger under `_maintenance/`, and a smoke test under `tests/`. The first two are the skill; the last two are what keep it honest as it changes.
 
 ## License
 
