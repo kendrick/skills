@@ -68,17 +68,17 @@ Branch before committing when on `main`. Push when the user asks.
 
 ---
 
-# Review guidelines
+## Code Review Rules
 
 For an agent reviewing a pull request against this repo. You are reviewing the diff, not the repo, so a pre-existing problem the diff did not touch belongs in a comment at most.
 
-## Scope
+### Scope
 
 Review what the diff changes, plus anything the diff makes wrong. That second half is where the real findings are here, because this repo's documents cross-reference each other: a step in a `SKILL.md` naming a script flag, a `README.md` describing a mechanism, a smoke test pinning a string, a ledger row justifying a choice. A change to one leaves the other three describing something that no longer exists, and every one of those is a live defect rather than a style note.
 
 Out of scope: the choice of what to build, taste disagreements with a decision that has a ledger row, vendored code that matches its upstream, and prose style that follows the house rules above.
 
-## Severity
+### Severity
 
 **P0 — blocks merge.** The change makes an agent do the wrong thing at runtime. A script that fails on valid input or passes on invalid input. A step that contradicts another document in the same skill. A smoke test that passes while the behavior it names is gone. A `SKILL.md` claiming something its script does not implement. A vendored copy that has drifted from its upstream. Anything that would make a skill destructive or lossy on a user's files.
 
@@ -86,9 +86,11 @@ Out of scope: the choice of what to build, taste disagreements with a decision t
 
 **P2 — non-blocking.** Consistency and craft. Wording that drifts from sibling skills, a heading shape that doesn't match, a comment explaining what rather than why, a test assertion that would pass on unrelated prose.
 
+Codex surfaces P0 and P1 on a pull request and holds P2 back, so the third band is for a reviewer running somewhere that shows everything.
+
 Rank findings most severe first. No quota: zero findings is a real answer, and a manufactured P2 spends the author's attention for nothing.
 
-## Evidence
+### Evidence
 
 Every finding names the file and line, quotes the text it is about, and states what breaks. A claim about a comment, a docstring, or a commit message is a claim about the code, so verify it against the code.
 
@@ -100,7 +102,7 @@ bash tests/<skill>-smoke.sh
 
 A finding you cannot reproduce is reported as unverified, with what you tried, rather than dropped or promoted.
 
-## What to check, by artifact
+### What to check, by artifact
 
 **A new or changed `SKILL.md`.** Frontmatter matches the invocation the body describes. Steps end on completion criteria a reader could fail the agent against. The description carries triggers rather than a summary of the steps. Every file, flag, and command it names exists at this commit.
 
@@ -112,7 +114,7 @@ A finding you cannot reproduce is reported as unverified, with what you tried, r
 
 **A ledger.** Every contested choice in the diff has a row. A row's tier matches its evidence: `[E]` means something was measured, so a row claiming `[E]` for reasoning is itself a finding.
 
-## What not to flag
+### What not to flag
 
 - Vendored code that matches its upstream. Divergence is the bug; duplication is the design.
 - Em dashes chained flush against the text, title-case headings, and lists that keep their bullets. These are house style.
@@ -120,7 +122,7 @@ A finding you cannot reproduce is reported as unverified, with what you tried, r
 - Missing tests or ledgers on the skills named above as predating the bar, unless the diff is already changing that skill.
 - The absence of CI.
 
-## Output
+### Output
 
 Group findings by severity, most severe first. For each: the file and line, one sentence saying what is wrong, the quoted evidence, and the command that shows it where one exists. Close with what you ran and what you could not check.
 
