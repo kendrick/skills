@@ -193,6 +193,20 @@ require_text divvy-up/SKILL.md "git hash-object"
 # `fable` is the top rung and has no escalation target.
 require_text divvy-up/SKILL.md "Failed on \`fable\`"
 
+# Third review round. Both of these are gaps the worker contract opened rather
+# than defects in the gate, and both are one deleted paragraph from returning.
+
+# Workers share one index. A worker commit stages its peers' half-written work
+# and moves HEAD out from under the revert that undoes a failed task.
+require_text divvy-up/references/worker-prompt.md "leave every git write to the orchestrator"
+require_text divvy-up/references/worker-prompt.md "outlive its own"
+require_text divvy-up/SKILL.md "Every git write belongs to you"
+
+# `stopped` had no rollback and no resume, so a stopped task satisfied no branch
+# of Step 6's completion rule.
+require_text divvy-up/SKILL.md "re-dispatch the task alone at the same rung"
+require_text divvy-up/SKILL.md "no worker has committed anything"
+
 # --- Functional checks. Cheap, deterministic, no subagents. ---
 
 fixtures=tests/fixtures/divvy-up

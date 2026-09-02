@@ -86,6 +86,8 @@ Ask once, in one question: execute wave 0, and commit after each passing wave. D
 
 Read `references/worker-prompt.md` and instantiate it once per task in the wave. Dispatch every one of them in a SINGLE message so they run concurrently—one dispatch per message is exactly the serialization the wave exists to remove, and it looks identical in the transcript.
 
+Every git write belongs to you, not to a worker. Workers write files; you stage, commit, and branch. A worker that commits stages its peers' half-written changes along with its own and moves HEAD out from under Step 6's revert, so a failed task survives its own rollback. Say so in the dispatch: a repo's own agent docs are usually written for an agent working alone, and this one is not.
+
 Name each dispatch's model explicitly. An omitted model inherits the session's, which is usually the most expensive one available, and the routing silently evaporates while the run still looks correct.
 
 Save every returned JSON report verbatim. Step 6 reads these as evidence of what happened, and a summarized report is evidence of what the orchestrator thought happened.
@@ -123,14 +125,14 @@ Then route each task:
 | Result | Route |
 |---|---|
 | Passing | Move to the next wave, committing first when COMMIT is set. |
-| `stopped` | Collect the question and put it to the user once the rest of the wave lands. |
+| `stopped` | Revert that task's owned paths, then hold its question. Put every held question to the user once the rest of the wave lands, then re-dispatch the task alone at the same rung with the answer attached. Same rung, because it stopped for want of an answer rather than for want of a better model. Reverting first matters as much as it does for a failure: partial work built toward a guess the worker declined to make is worse than an empty tree. |
 | `failed`, or failed the gate | Revert that task's owned paths, then re-dispatch it alone one rung up with the failure attached. |
 | Failed on `fable` | Revert its owned paths and stop the run. `fable` is the top rung, so nothing is left to escalate to, and a retry at the same rung spends the budget to learn the same thing. |
 | Failed twice | Stop the run and report. |
 
 Revert before the retry. A re-dispatch onto a half-written tree hands the second agent the first one's leftovers to debug, and it will spend its budget there instead of on the task. The revert is bounded by the clean tree Step 4 required and by WAVE_BASE, so it only ever discards writes this run made.
 
-**Done when:** every task in the wave is passing, or has been reverted and retried one rung up, or the run stopped after a second failure; and the wave is committed when COMMIT is set.
+**Done when:** every task in the wave is passing; or was reverted and retried one rung up; or was reverted, answered, and re-dispatched at its own rung; or the run stopped after a second failure or on a `fable` task. The wave is committed when COMMIT is set, and no worker has committed anything.
 
 ## Step 7 — Review
 

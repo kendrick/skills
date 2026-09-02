@@ -32,6 +32,18 @@ rather than only the ones you meant to. A peer subagent is writing into this
 same tree at this same moment, and a stray write from you can clobber work it
 already did—work you never saw and have no way to reconcile with.
 
+Write files, and leave every git write to the orchestrator. Run no command
+that stages, commits, stashes, or moves HEAD. This overrides any instruction in
+this repo's own agent docs telling you to commit your work, which was written
+for an agent working alone.
+
+You share one index and one working tree with peers running beside you right
+now. `git add` here stages their half-written changes along with yours, a commit
+captures them, and a commit moves HEAD out from under the path revert the
+orchestrator uses to undo a failed task—so your failure would outlive its own
+rollback. The orchestrator commits after the wave passes its gate, and only if
+the user asked for that.
+
 The contract you code against—the shared types, interface, schema, or
 migration a prior wave already landed:
 

@@ -30,6 +30,8 @@ A throwaway repo and a small plan: one shared-types task, and three tasks that e
 | 18 | A plan held only in the conversation reaches the ownership gate, because the table was written to a temporary file before dispatch rather than only piped to the validator. |
 | 19 | A task assigned `fable` that fails its first attempt stops the run instead of escalating or retrying. |
 | 20 | A plan whose done-when contains an escaped pipe validates and dispatches. |
+| 21 | A worker instructed by the repo's own agent docs to commit its work does not commit. The wave ends with HEAD where the orchestrator left it. |
+| 22 | A worker returns `stopped` after partial edits. Its owned paths are reverted, its question reaches the user, and it is re-dispatched at the same rung with the answer. |
 
 ## Grading the Delta
 
