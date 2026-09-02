@@ -11,10 +11,10 @@
 
 Agent skills you can install individually or all at once.
 
-Ten skills live here right now. One drives the Databricks APIs. Three keep your working life filed: meeting exhaust into durable notes, Johnny.Decimal filing, and the audit that keeps that system honest. Four cover the writing developers do around code: READMEs, GitHub issues, commit-and-PR prose, and a plain restatement when a message didn't land. One reviews diffs adversarially, and one carries unfinished coding-agent work into a fresh session. Each sits in its own directory with a full guide, loads into your LLM harness the same way, and works independently of the rest.
+Eleven skills live here right now. One drives the Databricks APIs. Three keep your working life filed: meeting exhaust into durable notes, Johnny.Decimal filing, and the audit that keeps that system honest. Four cover the writing developers do around code: READMEs, GitHub issues, commit-and-PR prose, and a plain restatement when a message didn't land. The last three attach to a coding session: one reviews a diff adversarially, one runs an approved plan as waves of parallel subagents, and one carries unfinished work into a fresh session. Each sits in its own directory with a full guide, loads into your LLM harness the same way, and works independently of the rest.
 
 - [Install](#install)
-- [The Skills](#the-skills): [databricks-api](#databricks-api) · [file-issue](#file-issue) · [inbox-to-memory](#inbox-to-memory) · [jd-file](#jd-file) · [jd-audit](#jd-audit) · [readme-coauthorship](#readme-coauthorship) · [adversarial-review](#adversarial-review) · [handoff](#handoff) · [technical-writing](#technical-writing) · [eli5](#eli5)
+- [The Skills](#the-skills): [databricks-api](#databricks-api) · [file-issue](#file-issue) · [inbox-to-memory](#inbox-to-memory) · [jd-file](#jd-file) · [jd-audit](#jd-audit) · [readme-coauthorship](#readme-coauthorship) · [adversarial-review](#adversarial-review) · [divvy-up](#divvy-up) · [handoff](#handoff) · [technical-writing](#technical-writing) · [eli5](#eli5)
 - [Repository Layout](#repository-layout)
 - [Contributing](#contributing)
 - [License](#license)
@@ -85,6 +85,14 @@ Reviews a diff by treating every finding as a hypothesis rather than a result. I
 npx skills add kendrick/skills --skill adversarial-review
 ```
 
+### [divvy-up](divvy-up/README.md)
+
+Runs an implementation plan you've already approved as waves of parallel subagents rather than one task at a time. One mechanism makes that safe: every task declares the exact files it owns, and a script proves that no two tasks in the same wave own the same path before anything is dispatched. An overlap stops the run rather than warning about it, because two agents editing one file in one working tree lose a write and neither of them reports it. Each task also goes to the cheapest model that can do it correctly, and the savings hold because deriving the tasks, gating each wave, and reading the merged diff at the end all stay on the session model. Delegation that also delegates the judgment of whether the work came back right doesn't save you anything. Reach for it when a plan is settled and its tasks can be carved into disjoint files—and type its name, since it won't fire on its own.
+
+```bash
+npx skills add kendrick/skills --skill divvy-up
+```
+
 ### [handoff](handoff/README.md)
 
 Use `handoff` to write a handoff before ending a coding-agent session, either to a file on your machine or to a document panel when you are working on the web. It restores unfinished tasks and context in a fresh session when conversation history would lose the detail needed to finish the work. See the [handoff guide](handoff/README.md) for Claude Code, Codex, and GitHub Copilot CLI invocation details.
@@ -111,7 +119,7 @@ npx skills add kendrick/skills --skill eli5
 
 ## Repository Layout
 
-- [databricks-api/](databricks-api/), [file-issue/](file-issue/), [inbox-to-memory/](inbox-to-memory/), [jd-file/](jd-file/), [jd-audit/](jd-audit/), [readme-coauthorship/](readme-coauthorship/), [handoff/](handoff/), [adversarial-review/](adversarial-review/), [technical-writing/](technical-writing/), [eli5/](eli5/): the skills, one directory each
+- [databricks-api/](databricks-api/), [file-issue/](file-issue/), [inbox-to-memory/](inbox-to-memory/), [jd-file/](jd-file/), [jd-audit/](jd-audit/), [readme-coauthorship/](readme-coauthorship/), [handoff/](handoff/), [adversarial-review/](adversarial-review/), [divvy-up/](divvy-up/), [technical-writing/](technical-writing/), [eli5/](eli5/): the skills, one directory each
 - [\_docs/](_docs/): research notes behind the skills, like the [readme-coauthorship writeup](_docs/readme-coauthorship-research.md) and the [issue-authorship survey](_docs/file-issue-research.md)
 - [\_maintenance/](_maintenance/): maintainer tooling, one subdirectory per skill that needs it: the refresh workflow that keeps `databricks-api` synced with upstream Databricks docs, the upstream sync behind `handoff`, the check that holds the `jd` pair's prose to the vault register, and the decision ledgers, evals, and provenance records behind the rest
 - [tests/](tests/): smoke scripts that pin each skill's load-bearing decisions; each runs standalone from the repo root, like `bash tests/technical-writing-smoke.sh`
