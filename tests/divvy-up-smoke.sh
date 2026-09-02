@@ -207,6 +207,19 @@ require_text divvy-up/SKILL.md "Every git write belongs to you"
 require_text divvy-up/SKILL.md "re-dispatch the task alone at the same rung"
 require_text divvy-up/SKILL.md "no worker has committed anything"
 
+# Fourth review round.
+
+# `git hash-object` without -w prints a hash and stores nothing, so the manifest
+# could name a file it had no bytes to restore.
+require_text divvy-up/SKILL.md "git hash-object -w"
+require_text divvy-up/SKILL.md "git cat-file -p"
+refute_text divvy-up/SKILL.md "with its \`git hash-object\`."
+
+# An entry naming an existing directory without its trailing slash owns nothing
+# beneath itself, and only the repo-root branch of the predicate catches it.
+require_text divvy-up/scripts/check-waves.py "def repo_root_for"
+require_text divvy-up/scripts/check-waves.py "owns_entry_problem(entry, repo_root)"
+
 # --- Functional checks. Cheap, deterministic, no subagents. ---
 
 fixtures=tests/fixtures/divvy-up
@@ -282,6 +295,37 @@ python3 "$waves" validate "$tmp/pipe.md" >/dev/null || {
 # noise a caller cannot silence.
 python3 -W error::SyntaxWarning -c "import ast,sys; ast.parse(open('divvy-up/scripts/check-waves.py').read())" || {
   echo "check-waves.py raises a SyntaxWarning" >&2
+  exit 1
+}
+
+# A slashless entry naming a directory that exists must stop before dispatch,
+# not come back as an unowned path after the wave has written the tree.
+cat > "$tmp/noslash.md" <<'PLAN'
+## Waves
+
+| Wave | Task | Files owned | Model | Done when |
+|---|---|---|---|---|
+| 0 | api | divvy-up | sonnet | it builds |
+PLAN
+
+noslash_err="$(python3 "$waves" validate "$tmp/noslash.md" 2>&1 >/dev/null || true)"
+grep -Fq "lacks the trailing" <<<"$noslash_err" || {
+  echo "a slashless existing directory must be refused: $noslash_err" >&2
+  exit 1
+}
+
+# A task's whole job is often to create the tree it owns, so a path that does
+# not exist yet must still validate.
+cat > "$tmp/newtree.md" <<'PLAN'
+## Waves
+
+| Wave | Task | Files owned | Model | Done when |
+|---|---|---|---|---|
+| 0 | api | brand-new/tree/ | sonnet | it builds |
+PLAN
+
+python3 "$waves" validate "$tmp/newtree.md" >/dev/null || {
+  echo "an owned path that does not exist yet must still validate" >&2
   exit 1
 }
 

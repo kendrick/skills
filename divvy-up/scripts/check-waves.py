@@ -323,8 +323,37 @@ def owners_of(path, rows):
     return owners
 
 
+def repo_root_for():
+    """The repo root to resolve ownership entries against, or None.
+
+    Walks up from the working directory, never from the plan file. Entries are
+    relative to the repo under change, and the plan often sits outside it—a
+    conversation-only plan is written to a temp file, and resolving from there
+    would find no `.git` and silently skip every on-disk check. Answers None
+    when no `.git` is found above the working directory. None keeps the spelling-only checks
+    and skips the on-disk ones, which is what a plan validated outside a
+    checkout should get.
+
+    Passing this matters because `owns_entry_problem`'s sharpest check needs
+    it: an entry naming an existing directory without its trailing slash reads
+    as a file claim, so it collides with nothing and owns nothing beneath
+    itself. Without repo_root that entry validates, the wave dispatches, and
+    the first file the task writes comes back unowned at the gate—after the
+    tree has already changed.
+    """
+    node = os.getcwd()
+    while True:
+        if os.path.exists(os.path.join(node, ".git")):
+            return node
+        parent = os.path.dirname(node)
+        if parent == node:
+            return None
+        node = parent
+
+
 def cmd_validate(args):
     rows, problems = read_rows(load_plan(args.plan, args.plan))
+    repo_root = repo_root_for()
 
     seen = {}
     for row in rows:
@@ -337,7 +366,7 @@ def cmd_validate(args):
             else:
                 seen[row.task] = row.lineno
         for entry in row.entries:
-            reason = owns_entry_problem(entry)
+            reason = owns_entry_problem(entry, repo_root)
             if reason:
                 problems.append(
                     f"line {row.lineno}: malformed entry {entry!r} in "

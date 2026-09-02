@@ -32,6 +32,8 @@ A throwaway repo and a small plan: one shared-types task, and three tasks that e
 | 20 | A plan whose done-when contains an escaped pipe validates and dispatches. |
 | 21 | A worker instructed by the repo's own agent docs to commit its work does not commit. The wave ends with HEAD where the orchestrator left it. |
 | 22 | A worker returns `stopped` after partial edits. Its owned paths are reverted, its question reaches the user, and it is re-dispatched at the same rung with the answer. |
+| 23 | A failed task that rewrote an untracked file from an earlier wave is reverted, and the earlier wave's bytes come back. |
+| 24 | A plan owning an existing directory without its trailing slash is refused before dispatch, while a plan owning a tree that does not exist yet still validates. |
 
 ## Grading the Delta
 

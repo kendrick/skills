@@ -94,7 +94,9 @@ Save every returned JSON report verbatim. Step 6 reads these as evidence of what
 
 Before the dispatch goes out, record **WAVE_BASE** as a commit object: `git stash create`, falling back to `git rev-parse HEAD` when that prints nothing because the tree is clean. `git stash create` writes a commit of the current tree without touching the working tree or the index, which is what makes it safe to run mid-run.
 
-Record the wave's untracked files beside it as content, not as names: each path from `git ls-files --others --exclude-standard` with its `git hash-object`. `git stash create` ignores untracked files even under `--include-untracked`, so nothing else covers them, and a name-only list repeats the defect below in the untracked half—wave 1 creates a file, a wave-2 worker rewrites it, both lists hold the same path, and the clobber is invisible.
+Record the wave's untracked files beside it as content, not as names: each path from `git ls-files --others --exclude-standard` with its `git hash-object -w`. `git stash create` ignores untracked files even under `--include-untracked`, so nothing else covers them, and a name-only list repeats the defect below in the untracked half—wave 1 creates a file, a wave-2 worker rewrites it, both lists hold the same path, and the clobber is invisible.
+
+`-w` is what makes the manifest more than a detector. Without it `git hash-object` prints a hash and stores nothing, so once a worker overwrites the file the bytes are gone and Step 6 has a name for what it cannot restore. `-w` writes the blob into the object database, where `git cat-file -p` can still reach it.
 
 A commit object rather than a status snapshot, because status text cannot see a second write. When wave 1 leaves a file at ` M path` and a wave-2 worker rewrites that same file, both snapshots hold the identical line, the difference between them is empty, and the clobber the gate exists to catch passes it silently.
 
@@ -130,7 +132,9 @@ Then route each task:
 | Failed on `fable` | Revert its owned paths and stop the run. `fable` is the top rung, so nothing is left to escalate to, and a retry at the same rung spends the budget to learn the same thing. |
 | Failed twice | Stop the run and report. |
 
-Revert before the retry. A re-dispatch onto a half-written tree hands the second agent the first one's leftovers to debug, and it will spend its budget there instead of on the task. The revert is bounded by the clean tree Step 4 required and by WAVE_BASE, so it only ever discards writes this run made.
+Revert before the retry. A re-dispatch onto a half-written tree hands the second agent the first one's leftovers to debug, and it will spend its budget there instead of on the task. The revert is bounded by the clean tree Step 3 required and by WAVE_BASE, so it only ever discards writes this run made.
+
+Reverting a task means, for each path it owns: a tracked path goes back with `git checkout <WAVE_BASE> -- <path>`; an untracked path the wave created is deleted; an untracked path in the wave's manifest is restored with `git cat-file -p <its blob> > <path>`, whether the task rewrote it or removed it.
 
 **Done when:** every task in the wave is passing; or was reverted and retried one rung up; or was reverted, answered, and re-dispatched at its own rung; or the run stopped after a second failure or on a `fable` task. The wave is committed when COMMIT is set, and no worker has committed anything.
 
