@@ -1,11 +1,11 @@
 ---
-name: wave-plan
+name: divvy-up
 description: "Run an approved implementation plan as waves of parallel subagents, where the tasks in a wave own disjoint files and each one is routed to the cheapest model that can do it correctly."
 argument-hint: '[plan path] [--max N] [--commit]'
 disable-model-invocation: true
 ---
 
-# wave-plan
+# divvy-up
 
 An implementation plan is a dependency graph, not a list. Read as a list it executes in the order somebody typed the bullets, one task at a time, on whatever model the session happens to be running. Read as a graph it has width: most tasks wait on one or two others and on nothing else, so they can run at the same moment.
 
@@ -13,7 +13,7 @@ Width is only safe under one condition—no two concurrent tasks write the same 
 
 Cost falls for a second reason. Each task runs on the cheapest rung of the ladder that can do it correctly, and the savings hold only because **review stays on the session model**. Delegation that also delegates the judgment of whether the work came back right does not save money; it moves the mistake somewhere nobody is looking.
 
-Three skills cover three shapes of the same job. Reach for `agent-guild` when the work needs a written constitution and an independent checker per task. Reach for `wave-plan` when a plan is already approved and its tasks can be carved into disjoint file ownership. Reach for `subagent-driven-development` when they cannot be, and the tasks have to run one at a time.
+Three skills cover three shapes of the same job. Reach for `agent-guild` when the work needs a written constitution and an independent checker per task. Reach for `divvy-up` when a plan is already approved and its tasks can be carved into disjoint file ownership. Reach for `subagent-driven-development` when they cannot be, and the tasks have to run one at a time.
 
 This skill is user-invoked (`disable-model-invocation: true`) because a misfire during ordinary planning spends a whole fan-out, while a missed trigger costs the user one word.
 
@@ -57,7 +57,7 @@ A task goes in the lowest wave where it shares no owned path with a peer already
 Write the result into PLAN under a `## Waves` heading, as a pipe table with the header `Wave | Task | Files owned | Model | Done when` (print it instead when the plan lives only in the conversation). Then:
 
 ```
-wave-plan/scripts/check-waves.py validate <PLAN>
+divvy-up/scripts/check-waves.py validate <PLAN>
 ```
 
 A non-zero exit is a hard stop, not a warning. Overlapping owners inside one wave remove the single property the whole design rests on, and a fan-out on top of that overlap produces a diff nobody can attribute. Its `serialized:` lines are the healthy case: two tasks that touch one tree, held in different waves.
@@ -95,7 +95,7 @@ Three checks, then a route.
 1. **Ownership.** Work out what this wave wrote, then pipe those paths through the plan:
 
    ```
-   wave-plan/scripts/check-waves.py owners <PLAN> --wave N
+   divvy-up/scripts/check-waves.py owners <PLAN> --wave N
    ```
 
    Derive the paths against WAVE_BASE, not against the working tree as a whole. With COMMIT set, that is `git diff --name-only <WAVE_BASE>` together with `git ls-files --others --exclude-standard`, since a diff alone never mentions a file a subagent created. With COMMIT unset, earlier waves are still sitting uncommitted, so take the paths a fresh `git status --porcelain --untracked-files=all` reports that the snapshot did not—reading the whole dirty tree instead fails wave 2 for every path wave 1 legitimately owned.

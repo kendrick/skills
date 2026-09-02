@@ -2,9 +2,9 @@
 """Prove a plan's waves are safe to dispatch in parallel, then work out which
 task in a wave owns a path an agent wrote.
 
-    wave-plan/scripts/check-waves.py validate PLAN.md
+    divvy-up/scripts/check-waves.py validate PLAN.md
     git diff --name-only \\
-        | wave-plan/scripts/check-waves.py owners PLAN.md --wave 1
+        | divvy-up/scripts/check-waves.py owners PLAN.md --wave 1
 
 `validate` is the gate the skill passes before it dispatches anything. Two tasks
 in one wave run at the same moment against one working tree, so if the paths

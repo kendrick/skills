@@ -1,6 +1,6 @@
-# wave-plan—evals
+# divvy-up—evals
 
-The smoke test (`bash tests/wave-plan-smoke.sh`) pins the artifact: files present, load-bearing strings intact, `check-waves.py` behaving on fixed input. It says nothing about whether the waves actually work, because that needs live subagents. This file is the procedure for that.
+The smoke test (`bash tests/divvy-up-smoke.sh`) pins the artifact: files present, load-bearing strings intact, `check-waves.py` behaving on fixed input. It says nothing about whether the waves actually work, because that needs live subagents. This file is the procedure for that.
 
 ## The Fixture
 

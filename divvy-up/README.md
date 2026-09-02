@@ -1,4 +1,4 @@
-# wave-plan
+# divvy-up
 
 Runs an approved plan as waves of parallel subagents, where no two agents in a wave can write the same file.
 
@@ -34,14 +34,14 @@ That last read is why the routing saves anything. Deriving the tasks, gating a w
 ## Install
 
 ```bash
-npx skills add kendrick/skills --skill wave-plan
+npx skills add kendrick/skills --skill divvy-up
 ```
 
 Or by hand:
 
 ```bash
 git clone git@github.com:kendrick/skills.git
-cp -R skills/wave-plan ~/.claude/skills/wave-plan
+cp -R skills/divvy-up ~/.claude/skills/divvy-up
 ```
 
 Needs a git repo and Python 3 for the bundled script, which is stdlib-only.
@@ -51,10 +51,10 @@ Needs a git repo and Python 3 for the bundled script, which is stdlib-only.
 It only runs when you ask for it by name—see the Gotchas for why.
 
 ```
-> /wave-plan
-> /wave-plan docs/plan.md
-> /wave-plan docs/plan.md --max 3
-> /wave-plan docs/plan.md --commit
+> /divvy-up
+> /divvy-up docs/plan.md
+> /divvy-up docs/plan.md --max 3
+> /divvy-up docs/plan.md --commit
 ```
 
 Without a path it takes the plan file this session wrote, and failing that the approved plan sitting in the conversation. `--max N` caps how many tasks one wave may hold. `--commit` commits after each passing wave instead of asking you at the confirmation step.
@@ -62,7 +62,7 @@ Without a path it takes the plan file this session wrote, and failing that the a
 ## What's Here
 
 ```
-wave-plan/
+divvy-up/
 ├── SKILL.md                  # the skill — derive, route, wave, confirm, dispatch, gate, review
 ├── references/
 │   └── worker-prompt.md        # the dispatch template and the JSON contract every worker returns
@@ -82,7 +82,7 @@ wave-plan/
 
 ## Maintainers
 
-The decision ledger and eval suite live in [`_maintenance/wave-plan/`](../_maintenance/wave-plan/). Every contested choice has a row in [RATIONALE.md](../_maintenance/wave-plan/RATIONALE.md), including where each borrowed mechanism came from and the six things deliberately left out. [EVALS.md](../_maintenance/wave-plan/EVALS.md) carries the smoke test that pins the artifact and the live procedure for whether the waves actually work.
+The decision ledger and eval suite live in [`_maintenance/divvy-up/`](../_maintenance/divvy-up/). Every contested choice has a row in [RATIONALE.md](../_maintenance/divvy-up/RATIONALE.md), including where each borrowed mechanism came from and the six things deliberately left out. [EVALS.md](../_maintenance/divvy-up/EVALS.md) carries the smoke test that pins the artifact and the live procedure for whether the waves actually work.
 
 ## License
 

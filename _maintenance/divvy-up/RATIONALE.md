@@ -1,4 +1,4 @@
-# wave-plan—rationale
+# divvy-up—rationale
 
 Evidence tiers: **[E]** measured or observed in a real run, **[P]** practitioner reasoning from prior art, **[C]** convention inherited from this repo or its neighbors.
 
