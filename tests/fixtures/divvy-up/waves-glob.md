@@ -4,6 +4,6 @@ This plan demonstrates an invalid entry using a glob pattern instead of a litera
 
 ## Waves
 
-| Wave | Task | Files owned | Model | Done when |
-| --- | --- | --- | --- | --- |
-| 0 | Build components | src/**/*.ts | haiku | All components built |
+| Wave | Task | Files owned | Model | Done when | Constraints |
+| --- | --- | --- | --- | --- | --- |
+| 0 | Build components | src/**/*.ts | haiku | All components built | |

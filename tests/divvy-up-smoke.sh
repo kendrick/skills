@@ -106,16 +106,39 @@ require_text divvy-up/SKILL.md "fable"
 # plan.
 require_text divvy-up/SKILL.md "/agent-guild:job"
 
-# Reference contracts: the six placeholders every dispatch substitutes, and the
-# JSON-only rule that keeps the gate from having to arbitrate between a report
-# and a summary paragraph sitting next to it.
+# Reference contracts: the seven placeholders every dispatch substitutes, and
+# the JSON-only rule that keeps the gate from having to arbitrate between a
+# report and a summary paragraph sitting next to it.
 require_text divvy-up/references/worker-prompt.md "{{TASK}}"
 require_text divvy-up/references/worker-prompt.md "{{OWNS}}"
 require_text divvy-up/references/worker-prompt.md "{{CONTRACT}}"
 require_text divvy-up/references/worker-prompt.md "{{DONE_WHEN}}"
+require_text divvy-up/references/worker-prompt.md "{{CONSTRAINTS}}"
 require_text divvy-up/references/worker-prompt.md "{{VERIFY_CMD}}"
 require_text divvy-up/references/worker-prompt.md "{{PRIOR}}"
 require_text divvy-up/references/worker-prompt.md "Your final message is exactly one fenced json block and nothing else"
+
+# The constraint mechanism and the coupling question are each one deleted
+# paragraph from being gone, and this smoke test is the only thing that would
+# notice.
+
+# A constraint's whole definition lives in this sentence: the shortcut that
+# reaches done-when without doing the real work. Losing it leaves
+# {{CONSTRAINTS}} substituting into a paragraph that no longer tells the
+# worker what it's being warned off.
+require_text divvy-up/references/worker-prompt.md "doing the work. Taking it fails your task even when verification passes"
+
+# Step 6's third check now reads a report against its constraint as well as
+# its done-when. Drop "and its constraints" here and a worker that reached
+# done-when by the exact shortcut its constraint named passes the gate that
+# exists to catch it.
+require_text divvy-up/SKILL.md "and its constraints, not against whether it sounds finished"
+
+# The coupling question: disjoint files only prove two tasks can't clobber
+# each other's writes, not that they're unrelated. Losing this sentence
+# collapses Step 1 back to file-ownership alone, and a plan with real mutual
+# coupling ships two tasks that silently invalidate each other's work.
+require_text divvy-up/SKILL.md "Disjoint paths prove two tasks cannot lose each other's writes; they do not prove the two tasks are about different things."
 
 # Maintenance ledger. A rationale doc without its section headings is prose
 # nobody can navigate under time pressure.
@@ -148,6 +171,11 @@ refute_text divvy-up/SKILL.md "be careful"
 # Per-tier retry counters are guild machinery for a skill with no run state to
 # hold them; the retry rule here is fixed at one re-dispatch, one rung up.
 refute_text divvy-up/SKILL.md "retry counter"
+
+# A Dependencies column looks like documentation; it would just restate what
+# wave placement already proves. The ledger cuts it for exactly that reason,
+# and a dependency stays visible only as which wave a task landed in.
+refute_text divvy-up/SKILL.md "Dependencies |"
 
 # The three defects a Codex review found on the shipping PR. Each was reproduced
 # before it was fixed, and each fix is one sentence away from being edited back
@@ -281,9 +309,9 @@ set -e
 cat > "$tmp/pipe.md" <<'PLAN'
 ## Waves
 
-| Wave | Task | Files owned | Model | Done when |
-|---|---|---|---|---|
-| 0 | probe | src/a.py | sonnet | `printf x \| grep x` exits 0 |
+| Wave | Task | Files owned | Model | Done when | Constraints |
+|---|---|---|---|---|---|
+| 0 | probe | src/a.py | sonnet | `printf x \| grep x` exits 0 | |
 PLAN
 
 python3 "$waves" validate "$tmp/pipe.md" >/dev/null || {
@@ -303,9 +331,9 @@ python3 -W error::SyntaxWarning -c "import ast,sys; ast.parse(open('divvy-up/scr
 cat > "$tmp/noslash.md" <<'PLAN'
 ## Waves
 
-| Wave | Task | Files owned | Model | Done when |
-|---|---|---|---|---|
-| 0 | api | divvy-up | sonnet | it builds |
+| Wave | Task | Files owned | Model | Done when | Constraints |
+|---|---|---|---|---|---|
+| 0 | api | divvy-up | sonnet | it builds | |
 PLAN
 
 noslash_err="$(python3 "$waves" validate "$tmp/noslash.md" 2>&1 >/dev/null || true)"
@@ -319,13 +347,45 @@ grep -Fq "lacks the trailing" <<<"$noslash_err" || {
 cat > "$tmp/newtree.md" <<'PLAN'
 ## Waves
 
-| Wave | Task | Files owned | Model | Done when |
-|---|---|---|---|---|
-| 0 | api | brand-new/tree/ | sonnet | it builds |
+| Wave | Task | Files owned | Model | Done when | Constraints |
+|---|---|---|---|---|---|
+| 0 | api | brand-new/tree/ | sonnet | it builds | |
 PLAN
 
 python3 "$waves" validate "$tmp/newtree.md" >/dev/null || {
   echo "an owned path that does not exist yet must still validate" >&2
+  exit 1
+}
+
+# Constraints is legitimately empty for most tasks, and the validator never
+# reads its content, so a blank cell there must not block an otherwise sound
+# plan.
+cat > "$tmp/no-constraint.md" <<'PLAN'
+## Waves
+
+| Wave | Task | Files owned | Model | Done when | Constraints |
+|---|---|---|---|---|---|
+| 0 | api | brand-new/tree/ | sonnet | it builds | |
+PLAN
+
+python3 "$waves" validate "$tmp/no-constraint.md" >/dev/null || {
+  echo "an empty Constraints cell must still validate" >&2
+  exit 1
+}
+
+# The exemption is Constraints-only. Every other column, Done when included,
+# stays required, so a blank one must still fail with its own named complaint.
+cat > "$tmp/no-done-when.md" <<'PLAN'
+## Waves
+
+| Wave | Task | Files owned | Model | Done when | Constraints |
+|---|---|---|---|---|---|
+| 0 | api | brand-new/tree/ | sonnet | | do not raise timeouts |
+PLAN
+
+no_done_err="$(python3 "$waves" validate "$tmp/no-done-when.md" 2>&1 >/dev/null || true)"
+grep -Fq "empty Done when cell" <<<"$no_done_err" || {
+  echo "an empty Done when cell must still fail: $no_done_err" >&2
   exit 1
 }
 

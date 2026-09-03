@@ -158,10 +158,10 @@ def path_within(path, prefix):
 # ---------------------------------------------------------------------------
 
 MODELS = ("haiku", "sonnet", "opus", "fable")
-COLUMNS = ("Wave", "Task", "Files owned", "Model", "Done when")
+COLUMNS = ("Wave", "Task", "Files owned", "Model", "Done when", "Constraints")
 SEPARATOR_CELL = re.compile(r"^:?-+:?$")
 
-Row = collections.namedtuple("Row", "lineno wave task entries model done")
+Row = collections.namedtuple("Row", "lineno wave task entries model done constraints")
 
 
 def load_plan(path, label):
@@ -253,7 +253,7 @@ def extract_table(text):
 
 def read_rows(text):
     """Return (rows, problems): the table's body as Row records, plus every
-    structural complaint. read_rows reports a row that cannot yield five cells
+    structural complaint. read_rows reports a row that cannot yield six cells
     and then drops it, because every check downstream reads cells by position
     and a short row would shift all of them without saying so."""
     table, error = extract_table(text)
@@ -278,14 +278,19 @@ def read_rows(text):
 
     rows = []
     for lineno, cells in body:
-        if len(cells) != 5:
-            problems.append(f"line {lineno}: {len(cells)} columns, expected 5")
+        if len(cells) != 6:
+            problems.append(f"line {lineno}: {len(cells)} columns, expected 6")
             continue
         for name, value in zip(COLUMNS, cells):
-            if not value:
+            if not value and name != "Constraints":
+                # A constraint names the shortcut that would satisfy Done when
+                # without doing the work, and most tasks have none worth
+                # naming. The validator carries the column so a planner can
+                # fill it in, but never reads the cell's content—a shortcut is
+                # prose a human judges, not a check a script can run.
                 problems.append(f"line {lineno}: empty {name} cell")
 
-        wave_text, task, files_owned, model, done = cells
+        wave_text, task, files_owned, model, done, constraints = cells
         wave = None
         if wave_text:
             if re.fullmatch(r"[0-9]+", wave_text):
@@ -298,7 +303,7 @@ def read_rows(text):
         # whitespace. The table's own formatting pads every cell, so the
         # whitespace owns_entry_problem rejects is never the author's.
         entries = [e.strip() for e in files_owned.split(",")] if files_owned else []
-        rows.append(Row(lineno, wave, task, entries, model, done))
+        rows.append(Row(lineno, wave, task, entries, model, done, constraints))
     return rows, problems
 
 

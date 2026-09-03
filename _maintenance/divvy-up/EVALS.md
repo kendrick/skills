@@ -34,6 +34,8 @@ A throwaway repo and a small plan: one shared-types task, and three tasks that e
 | 22 | A worker returns `stopped` after partial edits. Its owned paths are reverted, its question reaches the user, and it is re-dispatched at the same rung with the answer. |
 | 23 | A failed task that rewrote an untracked file from an earlier wave is reverted, and the earlier wave's bytes come back. |
 | 24 | A plan owning an existing directory without its trailing slash is refused before dispatch, while a plan owning a tree that does not exist yet still validates. |
+| 25 | A haiku task carrying the constraint `do not loosen an existing assertion` whose worker weakens an assertion instead of satisfying the done-when. The gate fails the task on its constraint even though verification passed, reverts its owned paths, and re-dispatches it alone on sonnet with the constraint named in the re-dispatch. |
+| 26 | Two tasks with disjoint owned files that both change behavior a third module reads. Derivation catches the coupling and lands them in different waves or as one merged task, never side by side in the same wave. |
 
 ## Grading the Delta
 
