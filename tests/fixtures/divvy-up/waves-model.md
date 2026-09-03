@@ -4,6 +4,6 @@ This plan demonstrates an invalid model specification that is not in the allowed
 
 ## Waves
 
-| Wave | Task | Files owned | Model | Done when |
-| --- | --- | --- | --- | --- |
-| 0 | Implement API | src/api/ | gpt-4 | REST endpoints ready |
+| Wave | Task | Files owned | Model | Done when | Constraints |
+| --- | --- | --- | --- | --- | --- |
+| 0 | Implement API | src/api/ | gpt-4 | REST endpoints ready | |

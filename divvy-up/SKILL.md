@@ -33,9 +33,11 @@ Read PLAN end to end. One task per unit of work that names files. Shared contrac
 
 Batch small same-shape edits into ONE task. The same one-line fix or field addition repeated across eight files is one dispatch and one review surface, not eight of each; splitting it multiplies the gate work without buying any parallelism.
 
-Every task carries three things: an `owns` list of exact paths or directory prefixes ending in `/`, a model, and a done-when somebody could fail it against. Where PLAN leaves a task ambiguous, write it up with the open question attached and carry the question to Step 4 rather than guessing an answer that six parallel agents will then build on.
+Then take each pair of tasks whose files are disjoint and ask whether one's change would alter what the other builds against, even where PLAN names no dependency between them. Disjoint paths prove two tasks cannot lose each other's writes; they do not prove the two tasks are about different things. Three shapes turn up: both change behavior some third module reads, one fix may make the other unnecessary, or both touch a runtime agreement that is neither a type nor a schema and so never became a wave-0 task. A coupling found this way lands in a mechanism this skill already has. Directional—A's result shapes B's work—is a dependency, which Step 3's rule already resolves by putting B in a later wave. Mutual, or either may make the other moot, is a merge into one task, the same way the batching rule merges same-shape edits. Suspected but unclear is an ambiguity: write it up as a question for Step 4 rather than settling it here.
 
-**Done when:** every unit of work in PLAN is a task with owns, model, and a checkable done-when, and every ambiguity is written down as a question instead of a guess.
+Every task carries four things: an `owns` list of exact paths or directory prefixes ending in `/`, a model, a done-when somebody could fail it against, and a constraint naming the shortcut that would satisfy that done-when without doing the work. A done-when states what passing looks like, and a cheap rung told "these tests pass" can get there by weakening the test—the gate then sees green. So where the done-when has an obvious cheap wrong path—a test that could be loosened, a timeout that could be raised, production code a test-only task could edit—write that shortcut down. Most tasks have no such path, and their constraint cell stays empty rather than holding something invented to fill it. Where PLAN leaves a task ambiguous, write it up with the open question attached and carry the question to Step 4 rather than guessing an answer that six parallel agents will then build on.
+
+**Done when:** every unit of work in PLAN is a task with owns, model, a checkable done-when, and a constraint cell that is either filled or deliberately empty; every disjoint-file pair has been asked the coupling question, and each coupling found has landed as a dependency, a merge, or a recorded question; and every ambiguity is written down as a question instead of a guess.
 
 ## Step 2 — Route
 
@@ -56,7 +58,7 @@ Check `git status --porcelain` before writing anything. A dirty tree stops the r
 
 A task goes in the lowest wave where it shares no owned path with a peer already in that wave, and every task it depends on sits in an earlier wave. Apply MAX as a cap on wave size.
 
-Write the result into PLAN under a `## Waves` heading, as a pipe table with the header `Wave | Task | Files owned | Model | Done when`. Then:
+Write the result into PLAN under a `## Waves` heading, as a pipe table with the header `Wave | Task | Files owned | Model | Done when | Constraints`. Then:
 
 ```
 divvy-up/scripts/check-waves.py validate <PLAN>
@@ -120,7 +122,7 @@ Three checks, then a route.
 
 2. **Verification.** Find the repo's own command on disk rather than asking for it: manifest scripts first (`package.json`, `Makefile`, `pyproject.toml`, `Cargo.toml`), then runnable scripts under `tests/` or `scripts/`, then whatever `.github/workflows/` runs.
 
-3. **Reports.** Read each one against its task's done-when, not against whether it sounds finished.
+3. **Reports.** Read each one against its task's done-when and its constraints, not against whether it sounds finished.
 
 Then route each task:
 
@@ -128,7 +130,7 @@ Then route each task:
 |---|---|
 | Passing | Move to the next wave, committing first when COMMIT is set. |
 | `stopped` | Revert that task's owned paths, then hold its question. Put every held question to the user once the rest of the wave lands, then re-dispatch the task alone at the same rung with the answer attached. Same rung, because it stopped for want of an answer rather than for want of a better model. Reverting first matters as much as it does for a failure: partial work built toward a guess the worker declined to make is worse than an empty tree. |
-| `failed`, or failed the gate | Revert that task's owned paths, then re-dispatch it alone one rung up with the failure attached. |
+| `failed`, or failed the gate | Revert that task's owned paths, then re-dispatch it alone one rung up with the failure attached. Work that reached its done-when by the shortcut its constraint named has failed the gate: a worker that took that route lacked the judgment the task needed, and the rung above is what supplies it. |
 | Failed on `fable` | Revert its owned paths and stop the run. `fable` is the top rung, so nothing is left to escalate to, and a retry at the same rung spends the budget to learn the same thing. |
 | Failed twice | Stop the run and report. |
 
@@ -136,7 +138,7 @@ Revert before the retry. A re-dispatch onto a half-written tree hands the second
 
 Reverting a task means, for each path it owns: a tracked path goes back with `git checkout <WAVE_BASE> -- <path>`; an untracked path the wave created is deleted; an untracked path in the wave's manifest is restored with `git cat-file -p <its blob> > <path>`, whether the task rewrote it or removed it.
 
-**Done when:** every task in the wave is passing; or was reverted and retried one rung up; or was reverted, answered, and re-dispatched at its own rung; or the run stopped after a second failure or on a `fable` task. The wave is committed when COMMIT is set, and no worker has committed anything.
+**Done when:** every report has been read against its task's done-when and its constraints, and every task in the wave is passing; or was reverted and retried one rung up; or was reverted, answered, and re-dispatched at its own rung; or the run stopped after a second failure or on a `fable` task. The wave is committed when COMMIT is set, and no worker has committed anything.
 
 ## Step 7 — Review
 

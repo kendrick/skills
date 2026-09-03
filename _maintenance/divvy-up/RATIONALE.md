@@ -4,11 +4,12 @@ Evidence tiers: **[E]** measured or observed in a real run, **[P]** practitioner
 
 ## Where This Came From
 
-Three sources, one keeper mechanism each:
+Four sources:
 
 - **agent-guild** (a plugin at `~/.claude/plugins/cache/kendrick/agent-guild/`)—the `owns` field, the wave computation in `ready-set.py`, and the `paths_overlap` predicate. It stops short by requiring a per-project install, a constitution every task must cite a clause of, and an independent checker per task. Its only outside intake is a spec document, and it re-derives its own tasks from that, so a wave table handed to it becomes prose.
 - **The forked `subagent-driven-development` skill** (user-level, at `~/.agents/skills/`)—the model-routing rubric and the batching rule for small same-shape edits. It stops short at "Never dispatch multiple implementation subagents in parallel (conflicts)"—correct for a skill with no ownership mechanism, and exactly what declared ownership plus a validating script is there to lift.
 - **This repo's own `adversarial-review`**—disjoint territories with exactly one owner each, proved by a script, a hard stop on overlap, and the announce-before-you-spend line.
+- **obra's `superpowers` skill `dispatching-parallel-agents`** (https://github.com/obra/superpowers/blob/main/skills/dispatching-parallel-agents/SKILL.md)—the per-task negative constraint (its worked example ends "Do NOT just increase timeouts - find the real issue") and the "are they independent?" gate ahead of dispatch. It stops short by reconciling conflicts after the fan-out ("Check for conflicts - did agents edit same code?"), which is the check that runs too late. Declared ownership proved before dispatch is what replaces it.
 
 ## Decision Ledger
 
@@ -36,6 +37,8 @@ Three sources, one keeper mechanism each:
 | 20 | A `stopped` task is reverted, answered, and re-dispatched at the same rung | The worker contract permits `stopped` after partial edits, and the route only queued the question: no rollback, no resume, and a stopped task satisfied no branch of Step 6's completion rule. Partial work built toward a guess the worker declined to make is worse than an empty tree. The rung does not move, because the task stopped for want of an answer rather than for want of a better model. | [E] |
 | 21 | The untracked manifest hashes with `git hash-object -w` | Decision 15 recorded hashes to detect a clobber and stopped there. Without `-w`, `git hash-object` prints a hash and writes nothing, so once a worker overwrote an untracked file its bytes were gone and the mandatory revert had a name it could not restore. Verified: `cat-file` on a non-`-w` hash fails after the file is removed, and succeeds with `-w`. | [E] |
 | 22 | `cmd_validate` resolves a repo root and passes it to `owns_entry_problem` | The predicate's sharpest check needs it. An entry naming an existing directory without its trailing slash reads as a file claim, owns nothing beneath itself, and validated fine—so the task dispatched and its first write came back unowned at the gate, after the tree had changed. The root resolves from the working directory rather than the plan's location: a conversation-only plan lives in a temp file, and resolving from there finds no `.git` and silently skips every on-disk check. That second half was caught by the test written for the first. | [E] |
+| 23 | A sixth `Constraints` column on the `## Waves` table, last position, that the validator carries but never reads | Decision 9 makes the `## Waves` table the run's only artifact, so a constraint held only in the orchestrator's head does not survive a resumed run. Folding it into the Done when cell would make one cell carry both the acceptance bar and the prohibition, and the two get read differently under pressure. The validator stays out of the cell's content because a constraint is prose, and a script cannot tell "do not raise timeouts" from filler. | [P] |
+| 24 | A coupling question at Step 1: for each pair of tasks whose files are disjoint, ask whether one's change would alter what the other builds against | Path disjointness is provable and the script proves it; coupling is a reading of the plan, and this repo's rule is that where judgment is the job it stays in the prose. All three outcomes—record a dependency, merge into one task, or raise it as a question—route into mechanisms that already exist, so nothing new reaches Step 3 or the script. | [P] |
 
 ## Deliberately Not Built
 
@@ -47,6 +50,8 @@ Three sources, one keeper mechanism each:
 | Per-tier retry counters | The retry rule is fixed: one re-dispatch, one rung up, then stop. A counter per model tier is guild machinery for a skill with no run state to hold it. |
 | Automatic commits without the user's consent | A task's owned paths are the recovery mechanism for a failed retry. Committing on the skill's own authority would remove the user's chance to look before that revert happens. |
 | Sub-file ownership (two tasks each owning a different region of one file) | `paths_overlap` proves disjointness at the file level. Two tasks racing inside one file is a merge problem no path-level check can see coming. |
+| Validator checks on the Constraints cell | A script cannot tell a real prohibition from filler, and a check that passes on anything non-empty teaches planners to type a character. |
+| A Dependencies column on the table | That is the guild's shape. A dependency is visible as wave placement today and stays that way. |
 
 ## Known Limitations
 
@@ -55,4 +60,5 @@ Three sources, one keeper mechanism each:
 - Sub-file ownership is out of scope, so a plan needing it must split the file or serialize the tasks.
 - The gate trusts that the repo's verification command actually exercises the change.
 - **Writes are attributed by self-report, not by git.** Git records that a file changed and never which of two concurrent agents changed it. A worker that writes a peer's owned file and omits it from `files_changed` passes the gate. Per-wave commits keep it recoverable and the final review can still catch it. Closing it properly means one git worktree per worker, which changes the skill's shape enough to be a different design rather than a fix.
+- **Constraint enforcement is by report, not by proof.** The gate reads each worker's own account against its constraints, so a worker that takes the shortcut and does not describe it passes—the same shape as the self-report limitation above it.
 - No scenario in EVALS.md has been run live yet, so every row there is [P] until it is not.
