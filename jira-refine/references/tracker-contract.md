@@ -99,9 +99,15 @@ PROJ-412  description=applied  links=1/1  label=applied  goal=unmapped  writes=3
 |---|---|
 | 0 | Every field on every entry reported `applied` or `already-present`, or reported `unmapped` and took its fallback. An unmapped field that landed in the description block is a success: the shipped config leaves `fields.goal` unset, so treating that as a failure would exit 1 on every ordinary run |
 | 1 | Any `conflict`, `missing-issue`, unmapped-without-fallback, or failed write. The report is still complete: a failure is recorded and the entry continues |
-| 3 | Config missing or unparseable, unknown transport, missing credentials, missing `site`, absent `jira` binary, or a Python below the 3.11 `tomllib` floor. The message names the floor |
+| 3 | Config missing or unparseable, unknown transport, missing credentials, missing `site`, absent `jira` binary, a Python below the 3.11 `tomllib` floor, or the tracker itself unreachable or refusing to answer at preflight — see "Preflight versus the apply loop" below. The message names the floor |
 
 A dry run applies the same codes to the outcomes it planned.
+
+### Preflight versus the apply loop
+
+`get` and `fields` exist to be run before `update` or `create`, so a tracker that will not answer them has to fail loud rather than look like an ordinary result. A `TransportError` reaching either command — a dead `site`, a refused connection, an HTTP error with no 404 to read as an answer — exits 3, the same code as a bad config: neither command has a report to degrade into, so there is nothing safer to do than stop. That is distinct from the request actually landing and coming back negative: `get` on a key nobody created still exits 1, and `fields` finding no match for the given text still exits 1, because both are real answers from a tracker that responded.
+
+Inside `update` and `create`, the same kind of failure reports instead of stopping: reading an issue is per-entry, so one entry's transport error becomes that entry's `conflict` while the run continues on to the rest of stdin — a partial apply still owes the human a report of what it did. A write op that fails mid-loop is recorded the same way, against the field it was writing. Exit 3 belongs to preflight, where nothing has been attempted yet and stopping costs nothing; exit 1 belongs to the loop, where entries after the failure still deserve their own verdicts.
 
 ## Per-field fallback table
 

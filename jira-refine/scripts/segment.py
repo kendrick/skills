@@ -92,15 +92,30 @@ class Turn:
     """One collapsed speaker turn: `start` is 'HH:MM:SS' or None, `line` is
     the 1-based source line of the turn's first contributing line. `line` is
     kept even when `start` is set, because a no-clock transcript needs it for
-    the `L<n>` anchor form and a clock transcript costs nothing to carry it."""
+    the `L<n>` anchor form and a clock transcript costs nothing to carry it.
 
-    __slots__ = ("start", "line", "speaker", "text")
+    `cues` records every caption cue folded into this turn, as
+    `(word_start, start, line)` triples sorted by `word_start` (always
+    starting with `(0, start, line)` for the turn's own first cue) — the
+    word offset into `text` where each cue began, and that cue's own clock
+    and source line. It exists because a speakerless caption file merges
+    every cue into one long `unknown` turn (see `parse_captions`), and
+    without it a ticket key spoken at the start of the turn's third cue
+    read as buried mid-turn: boundary detection only ever looked at words
+    near the *turn's* start, and any segment built from that key would have
+    reported the first cue's clock and line instead of its own. Labelled
+    transcripts rarely fold multiple cues into one turn, so this is a no-op
+    for them; `cues` is just `[(0, start, line)]`, identical to the turn's
+    own fields."""
 
-    def __init__(self, start, line, speaker, text):
+    __slots__ = ("start", "line", "speaker", "text", "cues")
+
+    def __init__(self, start, line, speaker, text, cues=None):
         self.start = start
         self.line = line
         self.speaker = speaker
         self.text = text
+        self.cues = list(cues) if cues is not None else [(0, start, line)]
 
 
 # ---------------------------------------------------------------------------
@@ -192,20 +207,28 @@ def parse_captions(text, timing_re):
     turns = []
     speaker = None
     text_parts = []
+    cues = []
     start = None
     start_line = None
     pending_start = None
+    # Set the instant a timing line is consumed, and cleared by the very
+    # next contributing text line — the line that follows it directly. That
+    # line is where its cue's words begin; any further physical lines under
+    # the same cue (before the blank line that ends it) are the same
+    # utterance continuing, not a new one.
+    cue_pending = False
     # A block, once opened, swallows every line — including ones that would
     # otherwise look like a cue id or a timing line — until the blank line
     # that closes it, per the WebVTT grammar.
     in_block = False
 
     def flush():
-        nonlocal speaker, text_parts
+        nonlocal speaker, text_parts, cues
         if speaker is not None:
-            turns.append(Turn(start, start_line, speaker, " ".join(text_parts)))
+            turns.append(Turn(start, start_line, speaker, " ".join(text_parts), cues))
         speaker = None
         text_parts = []
+        cues = []
 
     for lineno, raw in enumerate(text.splitlines(), start=1):
         line = raw.rstrip("\r")
@@ -232,6 +255,7 @@ def parse_captions(text, timing_re):
         m = timing_re.match(line)
         if m:
             pending_start = normalize_clock(m.group(1))
+            cue_pending = True
             continue
 
         vm = VOICE_SPAN_RE.match(line)
@@ -241,8 +265,23 @@ def parse_captions(text, timing_re):
             sm = SPEAKER_LINE_RE.match(line)
             if sm:
                 who, said = sm.group(1), sm.group(2)
-            else:
+            elif speaker is not None:
                 who, said = speaker, line  # continuation of the open turn
+            else:
+                # No turn is open yet, so this line has nothing to continue.
+                # Treating it as a continuation of `speaker=None` (the old
+                # behavior) meant `flush()` saw `speaker is None` and never
+                # recorded the turn at all — a caption file with no speaker
+                # labels anywhere, the common shape for machine-generated
+                # transcripts, silently produced zero turns and the ticket
+                # keys spoken in it vanished with no boundary ever found.
+                # Open a turn instead, attributed the way inbox-to-memory
+                # attributes unlabelled speech to `@unknown`: an admitted
+                # gap beats a guessed name. `who != speaker` below then
+                # opens this turn same as any other speaker change, and a
+                # later unlabelled line finds `speaker == "unknown"` and
+                # continues it rather than opening a second one.
+                who, said = "unknown", line
         said = VOICE_END_RE.sub("", said)
 
         if who != speaker:
@@ -250,6 +289,17 @@ def parse_captions(text, timing_re):
             speaker = who
             start = pending_start
             start_line = lineno
+            cues.append((0, start, start_line))
+        elif cue_pending:
+            # Same turn, but a new cue started it — record where, and with
+            # which clock and line, so a key spoken in this cue's opening
+            # words can still qualify as a boundary even though it lands
+            # well past word 0 of the merged turn, and a segment built from
+            # it reports this cue's own timing rather than the turn's
+            # first. `word_index_at` reads word counts, so the offset is
+            # counted the same way: words already banked in `text_parts`.
+            cues.append((sum(len(p.split()) for p in text_parts), pending_start, lineno))
+        cue_pending = False
         text_parts.append(said)
     flush()
     return turns
@@ -474,6 +524,20 @@ def word_index_at(text, char_pos):
 # ---------------------------------------------------------------------------
 
 
+def _enclosing_cue_start(cues, idx):
+    """The word-offset of the last entry in `turn.cues` at or before `idx`
+    — which cue a word offset falls in, identified by that cue's own start
+    word (unique per turn, so it doubles as the cue's key). `cues` is
+    ascending by construction (cues are appended in the order they're
+    read), so the last entry not past `idx` is the one that opened it."""
+    region = cues[0][0]
+    for word_start, _start, _line in cues:
+        if word_start > idx:
+            break
+        region = word_start
+    return region
+
+
 def analyze_turns(turns, project_regexes, cue_re, boundary_window_words):
     """Walk every turn once, sorting each turn's key matches left to right.
     The plan's rule for two keys in one utterance — first is a boundary,
@@ -481,7 +545,25 @@ def analyze_turns(turns, project_regexes, cue_re, boundary_window_words):
     boundary — only makes sense evaluated in that left-to-right order, so a
     single per-turn pass does both boundary detection and mention
     collection together rather than in two passes that would have to agree
-    on ordering independently."""
+    on ordering independently.
+
+    'One utterance' is scoped to a cue, not the whole turn: a speakerless
+    caption file folds every cue into one `unknown` turn (see
+    `parse_captions`), and without that narrower scope the first key in the
+    turn would claim the turn's one boundary slot and every key spoken in a
+    later cue — a fresh thought to whoever said it — would read as merely
+    co-discussed with the first. `_enclosing_cue_start` is what tells two
+    matches apart as 'same cue' or 'different cues'; for an ordinary turn
+    (one cue, `cues == [(0, ...)]`) every match maps to the same region and
+    this reduces to the original one-boundary-per-turn behavior.
+
+    Every event this returns carries `cue_start` — the word offset (within
+    its turn) of the cue it landed in — alongside `turn_idx`, because a
+    turn split across several boundaries needs finer than turn granularity
+    downstream: `build_spans` and `attribute_mentions` place both boundaries
+    and mentions onto per-cue atoms, not whole turns, so that a key opened
+    by a later cue doesn't inherit an earlier cue's clock, line, or word
+    count."""
     boundaries = []
     co_discussed = []
     mention_events = []
@@ -500,64 +582,109 @@ def analyze_turns(turns, project_regexes, cue_re, boundary_window_words):
 
         cue_end_words = [word_index_at(text, m.end()) for m in cue_re.finditer(text)] if cue_re else []
 
-        turn_boundary_key = None
+        boundary_key_by_cue = {}
         for start_char, project, key in matches:
             idx = word_index_at(text, start_char)
-            qualifies = idx < boundary_window_words or any(
-                ce <= idx < ce + 4 for ce in cue_end_words
-            )
+            # `turn.cues` is `[(0, ...)]` for an ordinary turn, so this
+            # already covers the plain turn-start case; a merged speakerless
+            # turn carries one entry per folded-in cue, so a key opening any
+            # of them qualifies too — the cue, not the turn, is the unit of
+            # utterance once there is no speaker label to mark a fresh turn.
+            qualifies = any(
+                cs <= idx < cs + boundary_window_words for cs, _s, _l in turn.cues
+            ) or any(ce <= idx < ce + 4 for ce in cue_end_words)
             all_keys_seen.append(key)
-            if qualifies and turn_boundary_key is None:
-                boundaries.append({"turn_idx": turn_idx, "key": key, "project": project})
-                turn_boundary_key = key
+            cue_start = _enclosing_cue_start(turn.cues, idx)
+            if qualifies and cue_start not in boundary_key_by_cue:
+                boundaries.append({"turn_idx": turn_idx, "cue_start": cue_start, "key": key, "project": project})
+                boundary_key_by_cue[cue_start] = key
             elif qualifies:
-                co_discussed.append((turn_idx, turn_boundary_key, key))
+                co_discussed.append((turn_idx, boundary_key_by_cue[cue_start], key))
             else:
-                mention_events.append({"turn_idx": turn_idx, "key": key})
+                mention_events.append({"turn_idx": turn_idx, "cue_start": cue_start, "key": key})
 
     return boundaries, co_discussed, mention_events, all_keys_seen
 
 
-def build_spans(boundaries, turns):
-    """One span per boundary, running to the turn before the next boundary
-    (or to the transcript's last turn). A span's 'end' is its own last
-    turn's start time/line rather than the next span's first turn — the same
+def build_atoms(turns):
+    """Flatten every turn's `cues` into one atom per cue: `word_start` and
+    `word_end` slice that cue's own words out of the turn's merged `text`,
+    and `start`/`line` are that cue's own timing rather than the turn's.
+    `atom_index` maps `(turn_idx, cue_start)` — the same pair every boundary
+    and mention event in `analyze_turns` carries — to a position in the
+    flat, document-ordered `atoms` list, which is what lets `build_spans`
+    and `attribute_mentions` work in cue units without threading turn
+    internals through them. An ordinary turn (`cues == [(0, ...)]`) yields
+    exactly one atom spanning its whole text, so this is a straight
+    relabeling for every transcript this bug doesn't touch."""
+    atoms = []
+    atom_index = {}
+    for turn_idx, turn in enumerate(turns):
+        words = turn.text.split()
+        for i, (word_start, start, line) in enumerate(turn.cues):
+            word_end = turn.cues[i + 1][0] if i + 1 < len(turn.cues) else len(words)
+            atom_index[(turn_idx, word_start)] = len(atoms)
+            atoms.append({
+                "turn_idx": turn_idx,
+                "word_start": word_start,
+                "word_end": word_end,
+                "start": start,
+                "line": line,
+                "speaker": turn.speaker,
+                "text": " ".join(words[word_start:word_end]),
+            })
+    return atoms, atom_index
+
+
+def build_spans(boundaries, atoms, atom_index):
+    """One span per boundary, running to the atom before the next boundary
+    (or to the transcript's last atom). A span's 'end' is its own last
+    atom's start time/line rather than the next span's first atom — the same
     choice collapse-vtt.sh makes by discarding cue end times entirely, since
     nothing downstream of the collapse ever has a true end-of-speech moment
-    to read. Whole turns are assigned to one span or the other; a turn is not
-    split at the word where a boundary lands inside it, which keeps word
-    counts and mention attribution a per-turn lookup instead of a per-word
-    one, at the cost of crediting a boundary turn's opening words to the new
-    segment along with the rest of that turn."""
+    to read.
+
+    Spans are built over atoms — one atom per cue, see `build_atoms` — and
+    not whole turns, because `analyze_turns` now lets more than one boundary
+    open inside a single merged speakerless turn: whichever cue a key opens
+    in, only that cue's words and timing belong to its segment. An ordinary
+    turn has exactly one atom, so a labelled transcript (where two turns
+    almost never share a boundary) sees no change in behavior — this is
+    just the old whole-turn slicing at finer grain."""
     spans = []
     for i, b in enumerate(boundaries):
-        start_idx = b["turn_idx"]
-        end_idx = boundaries[i + 1]["turn_idx"] - 1 if i + 1 < len(boundaries) else len(turns) - 1
-        first_turn = turns[start_idx]
-        last_turn = turns[end_idx]
-        words = sum(len(turns[t].text.split()) for t in range(start_idx, end_idx + 1))
+        start_atom = atom_index[(b["turn_idx"], b["cue_start"])]
+        if i + 1 < len(boundaries):
+            nb = boundaries[i + 1]
+            end_atom = atom_index[(nb["turn_idx"], nb["cue_start"])] - 1
+        else:
+            end_atom = len(atoms) - 1
+        first_atom = atoms[start_atom]
+        last_atom = atoms[end_atom]
+        words = sum(a["word_end"] - a["word_start"] for a in atoms[start_atom:end_atom + 1])
         spans.append({
             "key": b["key"],
             "project": b["project"],
-            "turn_start": start_idx,
-            "turn_end": end_idx,
+            "atom_start": start_atom,
+            "atom_end": end_atom,
             "words": words,
-            "start": first_turn.start,
-            "end": last_turn.start,
-            "start_line": first_turn.line,
-            "end_line": last_turn.line,
+            "start": first_atom["start"],
+            "end": last_atom["start"],
+            "start_line": first_atom["line"],
+            "end_line": last_atom["line"],
             "mentions": set(),
         })
     return spans
 
 
-def attribute_mentions(spans, mention_events):
-    turn_to_span = {}
+def attribute_mentions(spans, mention_events, atom_index):
+    atom_to_span = {}
     for i, span in enumerate(spans):
-        for t in range(span["turn_start"], span["turn_end"] + 1):
-            turn_to_span[t] = i
+        for a in range(span["atom_start"], span["atom_end"] + 1):
+            atom_to_span[a] = i
     for ev in mention_events:
-        i = turn_to_span.get(ev["turn_idx"])
+        a = atom_index.get((ev["turn_idx"], ev["cue_start"]))
+        i = atom_to_span.get(a)
         if i is None:
             continue  # preamble mention: no open segment to credit it to
         span = spans[i]
@@ -587,8 +714,9 @@ def segment_transcript(turns, has_clock, cfg, min_words):
     if not boundaries:
         return None
 
-    spans = build_spans(boundaries, turns)
-    attribute_mentions(spans, mention_events)
+    atoms, atom_index = build_atoms(turns)
+    spans = build_spans(boundaries, atoms, atom_index)
+    attribute_mentions(spans, mention_events, atom_index)
 
     spans_by_key = {}
     ordered_keys = []
@@ -621,7 +749,7 @@ def segment_transcript(turns, has_clock, cfg, min_words):
             "end": key_spans[-1]["end"],
             "start_line": key_spans[0]["start_line"],
             "end_line": key_spans[-1]["end_line"],
-            "turns": [t for s in key_spans for t in range(s["turn_start"], s["turn_end"] + 1)],
+            "atoms": [a for s in key_spans for a in range(s["atom_start"], s["atom_end"] + 1)],
         })
 
     mention_only = set(all_keys_seen) - set(spans_by_key)
@@ -648,7 +776,11 @@ def segment_transcript(turns, has_clock, cfg, min_words):
         median_duration = None
 
     preamble_end = boundaries[0]["turn_idx"]
-    preamble_words = sum(len(t.text.split()) for t in turns[:preamble_end])
+    # Atoms, not turns: the first boundary can now open mid-turn — a later
+    # cue of the very turn it's in — so summing whole turns before it would
+    # miss that turn's own earlier cues, which are preamble too.
+    first_atom = atom_index[(boundaries[0]["turn_idx"], boundaries[0]["cue_start"])]
+    preamble_words = sum(a["word_end"] - a["word_start"] for a in atoms[:first_atom])
 
     return {
         "entries": entries,
@@ -664,11 +796,11 @@ def segment_transcript(turns, has_clock, cfg, min_words):
 # ---------------------------------------------------------------------------
 
 
-def render_turn_line(turn, has_clock):
-    label = f"[{turn.start}]" if has_clock and turn.start else f"[L{turn.line}]"
-    if turn.speaker:
-        return f"{label} {turn.speaker}: {turn.text}"
-    return f"{label} {turn.text}"
+def render_atom_line(atom, has_clock):
+    label = f"[{atom['start']}]" if has_clock and atom["start"] else f"[L{atom['line']}]"
+    if atom["speaker"]:
+        return f"{label} {atom['speaker']}: {atom['text']}"
+    return f"{label} {atom['text']}"
 
 
 def section_block(heading, body_lines):
@@ -715,7 +847,7 @@ def build_entry_lines(entry, source, session, has_clock):
         f"- segment: {segment_str}",
     ]
     lines += section_block("### Provenance", provenance)
-    excerpt = [render_turn_line(TURN_LOOKUP[i], has_clock) for i in entry["turns"]]
+    excerpt = [render_atom_line(ATOM_LOOKUP[i], has_clock) for i in entry["atoms"]]
     fenced = ["```text", *excerpt, "```"]
     lines += section_block("### Source excerpt", fenced)
     return lines
@@ -809,11 +941,13 @@ def build_json(result, frontmatter, min_words, long_factor):
 
 SESSION_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
-# build_entry_lines needs each turn by its transcript-wide index to render an
-# entry's excerpt; threading it through every call in the render chain would
-# turn a read-only lookup into a parameter on functions that otherwise only
-# care about one entry, so it is set once per run instead.
-TURN_LOOKUP = []
+# build_entry_lines needs each atom (one per caption cue — see build_atoms)
+# by its transcript-wide index to render an entry's excerpt; threading it
+# through every call in the render chain would turn a read-only lookup into
+# a parameter on functions that otherwise only care about one entry, so it
+# is set once per run instead. build_atoms is a pure function of `turns`, so
+# rebuilding it here reproduces exactly the indices segment_transcript used.
+ATOM_LOOKUP = []
 
 
 def parse_args(argv=None):
@@ -830,7 +964,7 @@ def parse_args(argv=None):
 
 
 def main(argv=None):
-    global TURN_LOOKUP
+    global ATOM_LOOKUP
     args = parse_args(argv)
 
     if sys.version_info < MIN_PYTHON:
@@ -848,7 +982,7 @@ def main(argv=None):
     text = read_text_file(args.transcript, args.transcript)
 
     turns, has_clock = parse_transcript(text)
-    TURN_LOOKUP = turns
+    ATOM_LOOKUP, _ = build_atoms(turns)
 
     min_words = args.min_words if args.min_words is not None else cfg["min_segment_words"]
     result = segment_transcript(turns, has_clock, cfg, min_words)

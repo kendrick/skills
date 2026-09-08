@@ -83,6 +83,44 @@ ANCHOR_MIN_WORDS = 4
 ANCHOR_MAX_WORDS = 10
 
 
+def group_clock_turns(content):
+    """Split a clock-mode Source excerpt into turns and return {coord:
+    [turn_text, ...]}, normalized the same way `excerpt_text` is.
+
+    A turn starts at a `[HH:MM:SS]` line and swallows every following line
+    up to the next one, because segment.py's render_turn_line only stamps a
+    timestamp on a turn's first line and wraps the rest of that turn's text
+    across further lines with no stamp of their own. Folding those wrapped
+    lines back together (rather than checking one raw line at a time) is
+    what lets a snippet split across a wrap still match; keying strictly on
+    "next timestamp line, not next line" is what stops a snippet from
+    running past its own turn into a different speaker's, which would mean
+    the anchor quoting two people as one. A stamp can recur (two turns
+    landing in the same second) so each coordinate maps to a list, and a
+    line before the first stamp has no turn to join and is dropped — an
+    excerpt is only in clock mode because some line matched the stamp
+    pattern, and text with no stamp ahead of it can't be labelled by any
+    coordinate regardless.
+    """
+    turns = {}
+    coord = None
+    buf = []
+
+    def flush():
+        if coord is not None:
+            turns.setdefault(coord, []).append(normalize_ws(" ".join(buf)))
+
+    for line in content:
+        if EXCERPT_TIMESTAMP_LINE_RE.match(line):
+            flush()
+            coord = line[1:9]
+            buf = [line]
+        elif coord is not None:
+            buf.append(line)
+    flush()
+    return turns
+
+
 def normalize_ws(text):
     """Collapse all whitespace runs to single spaces and trim. An anchor's
     snippet is checked against the excerpt after this normalization on both
@@ -353,6 +391,7 @@ def check_sections(key, sections, fm, projects):
         )
         excerpt_text = ""
         excerpt_mode = None
+        clock_turns = {}
     else:
         _start, _end, tag, content, closed = fences[0]
         if not closed:
@@ -374,6 +413,11 @@ def check_sections(key, sections, fm, projects):
             excerpt_mode = "line"
         else:
             excerpt_mode = None
+        # Only clock mode gets turn-level checking (see check_anchor below):
+        # an untimed excerpt carries no line labels of its own, so an L<n>
+        # anchor names a line in the source transcript, which this validator
+        # never reads.
+        clock_turns = group_clock_turns(content) if excerpt_mode == "clock" else {}
 
     def check_anchor(line, section_name):
         m = ANCHOR_RE.search(line)
@@ -417,6 +461,28 @@ def check_sections(key, sections, fm, projects):
                 f"entry {key}: {section_name} anchor coordinate {coord!r} is a clock time, "
                 "but this entry's Source excerpt carries no timestamps"
             )
+        elif excerpt_mode == "clock" and is_clock_coord:
+            # Shape alone (checked above) never confirms the coordinate
+            # points anywhere real — machine-contracts.md's rule that "a
+            # reference that silently points at the wrong line is worse
+            # than one that points nowhere" applies just as much to a
+            # timestamp as to the file:line anchors that rule was written
+            # for. So a clock coordinate has to name an actual turn in this
+            # entry's excerpt, and the snippet has to actually be in that
+            # turn — not just somewhere in the excerpt at large, which
+            # would let a snippet and a coordinate from two different turns
+            # pass by accident.
+            turns = clock_turns.get(coord)
+            if turns is None:
+                problems.append(
+                    f"entry {key}: {section_name} anchor coordinate {coord!r} does not "
+                    "label any line in this entry's Source excerpt"
+                )
+            elif not any(snippet in turn for turn in turns):
+                problems.append(
+                    f"entry {key}: {section_name} anchor snippet {m.group(1)!r} does not "
+                    f"appear on the {coord!r} line of this entry's Source excerpt"
+                )
 
     context_lines = [l for l in sections.get("Context", []) if l.strip()]
 

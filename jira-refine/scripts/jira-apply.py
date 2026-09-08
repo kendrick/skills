@@ -1124,15 +1124,20 @@ def cmd_create(args):
 
 def cmd_get(args):
     """Print one issue as the tracker returns it. The apply flow's preflight:
-    exit 3 here means the config or the credentials are wrong, which is worth
-    knowing before the first write."""
+    exit 3 here means the config, the credentials, or the tracker itself is
+    wrong or unreachable, which is worth knowing before the first write."""
     cfg = load_config(args.config, args.transport)
     transport = build_transport(cfg)
     try:
         issue = transport.get_issue(args.key)
     except TransportError as e:
-        sys.stderr.write(f"jira-apply: {args.key}: {e}\n")
-        return 1
+        # A dead site, a refused connection, and a real 404 must not collapse
+        # into the same code: get_issue already turns 404 into `None` below,
+        # so anything that lands here is the tracker itself unreachable or
+        # refusing the call, not an answer about this one key. That is a
+        # preflight stop (die -> 3), same as a bad config or missing
+        # credentials, and distinct from `not found`'s exit 1 a few lines down.
+        die(f"{args.key}: {e}")
     if issue is None:
         sys.stderr.write(f"jira-apply: {args.key} not found\n")
         return 1
@@ -1151,8 +1156,10 @@ def cmd_fields(args):
     try:
         found = transport.list_fields(args.name)
     except TransportError as e:
-        sys.stderr.write(f"jira-apply: {e}\n")
-        return 1
+        # Same split as cmd_get: a tracker that would not answer is a
+        # preflight stop, not the discovery answer "no field matched" that
+        # `not found` below reports for a reachable tracker.
+        die(str(e))
     if not found:
         sys.stderr.write(f"jira-apply: no field whose name contains {args.name!r}\n")
         return 1

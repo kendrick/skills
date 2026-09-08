@@ -155,6 +155,8 @@ Every non-empty line under Acceptance criteria, Dependencies, and Goal ends in a
 
 The captured snippet is four to ten verbatim words and is authoritative: `validate` fails the line unless the snippet appears, whitespace-normalized, inside that entry's Source excerpt. The floor exists because a snippet short enough to match anywhere in the excerpt cannot locate anything. `L<n>` names a line number and is legal only for a plain-text transcript that carries no timestamps.
 
+A clock coordinate is checked against the excerpt, not just for shape. `validate` groups the excerpt into turns — each one starting at a `[HH:MM:SS]` line and running to the next — and fails the anchor unless the coordinate names a turn that actually appears there and the snippet appears, whitespace-normalized, inside that turn's own text. A snippet that wraps across lines still matches, because a turn is joined before comparing; a snippet that would have to span two turns does not, since that would quote two speakers as one. This closes the gap a shape-only check leaves open: a coordinate with the right shape but the wrong value — a timestamp that never occurs, or one borrowed from a different line than the one holding the quote — used to pass. `L<n>` gets no such check: an untimed excerpt carries no line labels of its own, and `L<n>` names a line in the source transcript, which `validate` never reads.
+
 ## Not-discussed lines
 
 An empty content section carries a matching line under Open questions:

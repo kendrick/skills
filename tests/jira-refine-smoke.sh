@@ -805,4 +805,109 @@ anchor_case 11 "" fail
 anchor_case 5 L64 fail
 require_text jira-refine/scripts/check-staging.py "Source excerpt"
 
+# --- The three P0s the second Codex review round found -----------------------
+# Each sits in territory the first round's fixes touched, which is the argument
+# for re-reviewing after a fix rather than only before one.
+
+# A cue carrying plain caption text opened no turn, because an unlabelled line
+# continued a speaker that did not exist yet and flush() never recorded it. A
+# valid speakerless transcript produced nothing and blamed the user's config,
+# and most machine-generated captions carry no speaker labels at all.
+cat > "$tmp/speakerless.vtt" <<'VTT'
+WEBVTT
+
+00:00:01.000 --> 00:00:09.000
+Okay, PROJ dash four twelve. The export times out on large reports and marketing keeps asking about it every week.
+
+00:00:12.000 --> 00:00:20.000
+So we need the query layer to land first before any of that export work can start properly.
+
+00:01:30.000 --> 00:01:40.000
+Next up, PLAT 77. The audit log needs to record who exported what and retain it for ninety days.
+
+00:01:45.000 --> 00:01:55.000
+Agreed, and that one is independent of the export work so it can go in either order.
+VTT
+"$segment" "$tmp/speakerless.vtt" --config "$config" --session-date 2026-09-07 --min-words 0 --json > "$tmp/speakerless.json" || {
+  echo "a speakerless caption file must still segment" >&2
+  exit 1
+}
+python3 - "$tmp/speakerless.json" <<'PY' || exit 1
+import json, sys
+d = json.load(open(sys.argv[1], encoding="utf-8"))
+keys = [e["key"] for e in d["entries"]]
+# Both keys open their own cue. Merging every unlabelled cue into one turn
+# would leave only the first as a boundary and demote the rest to mentions,
+# which reads as "nobody discussed those" on a staging file.
+if keys != ["PROJ-412", "PLAT-77"]:
+    sys.exit(f"speakerless cues must each open a boundary; got {keys}")
+if d["passing"]:
+    sys.exit(f"nothing should be demoted here; got {[p['key'] for p in d['passing']]}")
+PY
+
+# The same rule must not fire on a key spoken mid-sentence: that is a mention,
+# and the distinction is the whole reason boundaries are positional.
+cat > "$tmp/midcue.vtt" <<'VTT'
+WEBVTT
+
+00:00:01.000 --> 00:00:09.000
+Okay, PROJ dash four twelve. The export times out on large reports and marketing keeps asking about it every week.
+
+00:00:12.000 --> 00:00:20.000
+We should be careful here because the work in PLAT 77 already covers part of that audit requirement.
+VTT
+"$segment" "$tmp/midcue.vtt" --config "$config" --session-date 2026-09-07 --min-words 0 --json > "$tmp/midcue.json"
+python3 - "$tmp/midcue.json" <<'PY' || exit 1
+import json, sys
+d = json.load(open(sys.argv[1], encoding="utf-8"))
+if [e["key"] for e in d["entries"]] != ["PROJ-412"]:
+    sys.exit("a key spoken mid-sentence must not open a boundary")
+if [p["key"] for p in d["passing"]] != ["PLAT-77"]:
+    sys.exit("a mid-sentence key must still be recorded as mentioned in passing")
+PY
+
+# The anchor coordinate was checked for shape and never against the excerpt, so
+# an invented timestamp passed. A reference that silently points at the wrong
+# moment is worse than one that points nowhere, which is why the snippet is
+# authoritative in the first place.
+anchor_coord() {  # <coordinate-substitution> <pass|fail>
+  python3 - "$fixtures/staging-good.md" "$tmp/coord.md" "$1" <<'PY'
+import re, sys
+src, dst, mode = sys.argv[1:4]
+text = open(src, encoding="utf-8").read()
+m = re.search(r'\(raw: "([^"]+)" (\d\d:\d\d:\d\d)\)', text)
+entry = text[text.rindex("## ", 0, m.start()):]
+stamps = re.findall(r"^\[(\d\d:\d\d:\d\d)\]", re.search(r"```text\n(.*?)```", entry, re.S).group(1), re.M)
+coord = "23:59:59" if mode == "absent" else next(s for s in stamps if s != m.group(2))
+open(dst, "w", encoding="utf-8").write(text.replace(m.group(0), f'(raw: "{m.group(1)}" {coord})', 1))
+PY
+  if "$staging" validate "$tmp/coord.md" >/dev/null 2>&1; then
+    [[ "$2" == pass ]] || { echo "anchor coordinate case '$1' should have failed" >&2; exit 1; }
+  else
+    [[ "$2" == fail ]] || { echo "anchor coordinate case '$1' should have validated" >&2; exit 1; }
+  fi
+}
+anchor_coord absent fail    # labels no line in the excerpt at all
+anchor_coord wrongturn fail # a real timestamp, but not the turn holding the snippet
+
+# A preflight against an unreachable tracker returned 1, the same code as an
+# issue that genuinely is not there, so apply mode read a Jira outage as a
+# missing ticket and walked on toward the writes.
+require_text jira-refine/references/tracker-contract.md "preflight"
+python3 - "$apply" <<'PY' || exit 1
+import ast, sys
+tree = ast.parse(open(sys.argv[1], encoding="utf-8").read())
+for fn in ast.walk(tree):
+    if not (isinstance(fn, ast.FunctionDef) and fn.name in ("cmd_get", "cmd_fields")):
+        continue
+    for handler in [n for n in ast.walk(fn) if isinstance(n, ast.ExceptHandler)]:
+        returns_one = any(
+            isinstance(n, ast.Return) and isinstance(n.value, ast.Constant) and n.value.value == 1
+            for n in ast.walk(handler)
+        )
+        names = {n.id for n in ast.walk(handler) if isinstance(n, ast.Name)}
+        if returns_one and "TransportError" in ast.dump(handler):
+            sys.exit(f"{fn.name}: a preflight TransportError must exit 3, not 1")
+PY
+
 echo "jira-refine smoke: OK"
