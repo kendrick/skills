@@ -17,6 +17,16 @@ this needs: `FAKE_JIRA_SEED` (read-only, shaped like `issues.json`) and
 invocation, created from the seed on first touch). `$FAKE_JIRA_LOG` gets one
 line per mutating invocation, same contract as the REST fake.
 
+Real jira-cli writes a custom field by the display name declared in its own
+config (`--custom Goal=...`), but the raw API it stands in front of returns
+that same field keyed by its id (`customfield_10057`). `jira-apply.py` reads
+with the id and writes with the name — tracker-contract.md's Auth section
+calls this out as deliberate, not a bug to paper over — so this fake needs
+the same declared mapping the real CLI config would carry, or a write and
+the read that checks it land on two different keys forever and idempotency
+rule 8 never holds. `FAKE_JIRA_CUSTOM_FIELDS` (a JSON object, e.g.
+`{"Goal": "customfield_10057"}`) supplies it.
+
 Only the argument shapes `JiraCliTransport` actually builds are handled:
 
     jira me
@@ -49,6 +59,26 @@ ISSUE_KEY = re.compile(r"\b[A-Z][A-Z0-9]+-[0-9]+\b")
 def die(message, code=1):
     sys.stderr.write(f"fake-jira: {message}\n")
     sys.exit(code)
+
+
+def custom_field_map():
+    """Name -> id map for `--custom NAME=VALUE`, from `FAKE_JIRA_CUSTOM_FIELDS`.
+
+    Mirrors the declaration the real jira-cli requires in its own config
+    before it will accept a custom field by name at all (tracker-contract.md's
+    Operations table). A name absent here falls back to storing under the
+    literal name, matching this fake's behavior before the map existed, so an
+    edit that isn't a declared custom field doesn't regress."""
+    raw = os.environ.get("FAKE_JIRA_CUSTOM_FIELDS")
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except (json.JSONDecodeError, ValueError):
+        return {}
+    if not isinstance(parsed, dict):
+        return {}
+    return parsed
 
 
 def state_paths():
@@ -165,9 +195,16 @@ def cmd_issue_edit(argv):
                 existing.append(label)
         mutated = True
 
-    for custom in customs:
-        name, _, value = custom.partition("=")
-        fields[name] = value
+    if customs:
+        custom_fields = custom_field_map()
+        for custom in customs:
+            name, _, value = custom.partition("=")
+            # The write-by-name / read-by-id split lives here: jira-apply.py
+            # reads this field back by id (`get_issue`'s raw JSON, keyed like
+            # the REST API), so storing it under the literal NAME the CLI
+            # write used would leave the id lookup empty forever and every
+            # run would look like the first one. See the module docstring.
+            fields[custom_fields.get(name, name)] = value
         mutated = True
 
     if not mutated:
@@ -256,9 +293,14 @@ def cmd_issue_create(argv):
     }
     if parent:
         fields["parent"] = {"key": parent}
-    for custom in customs:
-        name, _, value = custom.partition("=")
-        fields[name] = value
+    if customs:
+        custom_fields = custom_field_map()
+        for custom in customs:
+            name, _, value = custom.partition("=")
+            # Same write-by-name / read-by-id split as `cmd_issue_edit`: a
+            # later `get_issue` on this freshly created issue reads by id, so
+            # a mapped name has to land under that id here too.
+            fields[custom_fields.get(name, name)] = value
 
     issues[key] = {"key": key, "fields": fields}
     save_state(issues, state_path)

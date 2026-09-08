@@ -55,21 +55,33 @@ expect.
 ## Transport fakes: `fake-jira-rest.py`, `fake-jira`
 
 Two stand-ins for the two transports `jira-apply.py` supports, both seeded
-from `issues.json`. Three environment variables drive them:
+from `issues.json`. Four environment variables drive them:
 
 | Variable | Read by | Holds |
 |---|---|---|
 | `FAKE_JIRA_LOG` | both | Path to a log file. Each mutating write (`PUT`/`POST` under REST, an editing subprocess call under the CLI fake) appends one JSON line here; a `GET` (or `jira issue view`) never logs. Compare this file's line count before and after a second run over the same input to prove the idempotency rules hold: a clean second run appends nothing. |
 | `FAKE_JIRA_SEED` | `fake-jira` only | Path to the seed state, shaped like `issues.json`. |
 | `FAKE_JIRA_STATE` | `fake-jira` only | Path to the mutable state file the CLI fake reads and rewrites on every invocation — it has to persist across processes, since `JiraCliTransport` shells out fresh each time, unlike the REST fake's single long-lived server process. |
+| `FAKE_JIRA_CUSTOM_FIELDS` | `fake-jira` only | A JSON object mapping a custom field's display name to its field id, e.g. `{"Goal": "customfield_10057"}`. `fake-jira` uses it so a `--custom NAME=VALUE` write lands under the id and can be read back by id, the way real Jira behaves. A name absent from the map falls back to being stored under the literal name. |
 
 `fake-jira-rest.py` takes `--port N --seed PATH` on its command line rather
 than an env var for its seed, and serves the REST endpoints on that port for
 `site = "${JIRA_REFINE_TEST_SITE}"` to point at.
 
-`fake-jira` has no file extension and carries the executable bit, so putting
-this fixtures directory on `PATH` makes it resolve as `jira` — the same way
-`JiraCliTransport.__init__` looks the binary up with `shutil.which("jira")`.
+`fake-jira` has no file extension and carries the executable bit, but putting
+this fixtures directory on `PATH` does not make it resolve as `jira` —
+`shutil.which` (and `JiraCliTransport.__init__`, which looks the binary up
+the same way) matches on filename, and the file is named `fake-jira`. What
+the design enables instead is symlinking the fixture into a scratch directory
+under the name `jira`, then putting that directory on `PATH`, the way
+`tests/jira-refine-smoke.sh` does:
+
+```
+mkdir -p "$tmp/bin"
+ln -s "$fixtures/fake-jira" "$tmp/bin/jira"
+export PATH="$tmp/bin:$PATH"
+```
+
 It also runs directly as `python3 fake-jira KEY ...` for a test that would
 rather not touch `PATH`.
 
