@@ -1,0 +1,338 @@
+#!/usr/bin/env python3
+"""A fake `jira` binary (ankitpokhrel-shaped) for exercising `JiraCliTransport`
+in jira-apply.py.
+
+Has no extension on purpose: a test puts its directory on `PATH` so `jira`
+resolves to this file, the way `JiraCliTransport.__init__` looks it up with
+`shutil.which("jira")`. It also runs directly as `python3 fake-jira KEY ...`,
+because a file without the executable bit set can't be resolved off `PATH`
+either way.
+
+`JiraCliTransport` shells out once per mutation (`subprocess.run`, a fresh
+process every call), so state has to outlive the process — it round-trips
+through a JSON file rather than living in memory the way the REST fake's
+server process can afford to. Two environment variables name the two files
+this needs: `FAKE_JIRA_SEED` (read-only, shaped like `issues.json`) and
+`FAKE_JIRA_STATE` (the mutable copy this binary reads and rewrites on every
+invocation, created from the seed on first touch). `$FAKE_JIRA_LOG` gets one
+line per mutating invocation, same contract as the REST fake.
+
+Real jira-cli writes a custom field by the display name declared in its own
+config (`--custom Goal=...`), but the raw API it stands in front of returns
+that same field keyed by its id (`customfield_10057`). `jira-apply.py` reads
+with the id and writes with the name — tracker-contract.md's Auth section
+calls this out as deliberate, not a bug to paper over — so this fake needs
+the same declared mapping the real CLI config would carry, or a write and
+the read that checks it land on two different keys forever and idempotency
+rule 8 never holds. `FAKE_JIRA_CUSTOM_FIELDS` (a JSON object, e.g.
+`{"Goal": "customfield_10057"}`) supplies it.
+
+Only the argument shapes `JiraCliTransport` actually builds are handled:
+
+    jira me
+    jira issue view KEY --raw
+    jira issue edit KEY -b TEXT --no-input
+    jira issue edit KEY --label LABEL --no-input
+    jira issue edit KEY --custom NAME=VALUE --no-input
+    jira issue link DEPENDS_ON KEY LINK_TYPE
+    jira issue create -pPROJECT -tTYPE -s SUMMARY -b DESCRIPTION --no-input
+        [-l LABEL ...] [--parent PARENT] [--custom NAME=VALUE]
+
+The link shape stored on an issue mirrors the REST fake's choice for the same
+reason: `linked_dependencies` in jira-apply.py reads a dependency key off
+`inwardIssue.key` on the issue's own `issuelinks`, so that is the shape
+written here too, keyed by the issue passed as jira-cli's second positional
+(the "X" in `jira issue link D X TYPE`) — not the shape a stricter reading of
+Jira's own inward/outward convention would suggest for the request itself.
+
+Standard library only, so the fixture stays copy-in portable like the script
+it stands in for.
+"""
+import json
+import os
+import re
+import sys
+
+ISSUE_KEY = re.compile(r"\b[A-Z][A-Z0-9]+-[0-9]+\b")
+
+
+def die(message, code=1):
+    sys.stderr.write(f"fake-jira: {message}\n")
+    sys.exit(code)
+
+
+def custom_field_map():
+    """Name -> id map for `--custom NAME=VALUE`, from `FAKE_JIRA_CUSTOM_FIELDS`.
+
+    Mirrors the declaration the real jira-cli requires in its own config
+    before it will accept a custom field by name at all (tracker-contract.md's
+    Operations table). A name absent here falls back to storing under the
+    literal name, matching this fake's behavior before the map existed, so an
+    edit that isn't a declared custom field doesn't regress."""
+    raw = os.environ.get("FAKE_JIRA_CUSTOM_FIELDS")
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except (json.JSONDecodeError, ValueError):
+        return {}
+    if not isinstance(parsed, dict):
+        return {}
+    return parsed
+
+
+def state_paths():
+    seed = os.environ.get("FAKE_JIRA_SEED")
+    state = os.environ.get("FAKE_JIRA_STATE")
+    if not seed:
+        die("FAKE_JIRA_SEED is not set", code=1)
+    if not state:
+        die("FAKE_JIRA_STATE is not set", code=1)
+    return seed, state
+
+
+def load_state():
+    seed, state_path = state_paths()
+    if os.path.exists(state_path):
+        with open(state_path, "r", encoding="utf-8") as f:
+            return json.load(f), state_path
+    with open(seed, "r", encoding="utf-8") as f:
+        issues = json.load(f)
+    return issues, state_path
+
+
+def save_state(issues, state_path):
+    # Write-then-rename so a run killed mid-write never leaves a half-written
+    # state file for the next invocation to choke on — the same worry that
+    # justifies write-then-rename anywhere else state crosses process
+    # boundaries.
+    tmp = state_path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(issues, f)
+    os.replace(tmp, state_path)
+
+
+def log_write(record):
+    log_path = os.environ.get("FAKE_JIRA_LOG")
+    if not log_path:
+        return
+    with open(log_path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(record) + "\n")
+
+
+def cmd_me(argv):
+    print("fake-jira-user")
+    return 0
+
+
+def cmd_issue_view(argv):
+    # ["issue", "view", KEY, "--raw"]
+    if len(argv) < 1:
+        die("issue view: missing KEY", code=2)
+    key = argv[0]
+    issues, _ = load_state()
+    issue = issues.get(key)
+    if issue is None:
+        sys.stderr.write(f"fake-jira: issue does not exist: {key}\n")
+        return 1
+    print(json.dumps(issue))
+    return 0
+
+
+def _parse_edit_flags(argv):
+    """(-b value, [--label values], [--custom values], flags-seen) from argv.
+
+    `JiraCliTransport` sends exactly one valued flag per `edit` invocation
+    (one `-b`, or one `--label`, or one `--custom`) plus `--no-input`, but this
+    collects repeats rather than assuming exactly one — a caller that changes
+    to batch several flags per call shouldn't also need this fixture rewritten
+    to notice."""
+    text = None
+    labels = []
+    customs = []
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a == "-b":
+            i += 1
+            text = argv[i]
+        elif a == "--label":
+            i += 1
+            labels.append(argv[i])
+        elif a == "--custom":
+            i += 1
+            customs.append(argv[i])
+        elif a == "--no-input":
+            pass
+        i += 1
+    return text, labels, customs
+
+
+def cmd_issue_edit(argv):
+    # ["issue", "edit", KEY, ...flags..., "--no-input"]
+    if len(argv) < 1:
+        die("issue edit: missing KEY", code=2)
+    key = argv[0]
+    text, labels, customs = _parse_edit_flags(argv[1:])
+
+    issues, state_path = load_state()
+    issue = issues.get(key)
+    if issue is None:
+        sys.stderr.write(f"fake-jira: issue does not exist: {key}\n")
+        return 1
+
+    fields = issue.setdefault("fields", {})
+    mutated = False
+
+    if text is not None:
+        fields["description"] = text
+        mutated = True
+
+    if labels:
+        existing = fields.setdefault("labels", [])
+        for label in labels:
+            if label not in existing:
+                existing.append(label)
+        mutated = True
+
+    if customs:
+        custom_fields = custom_field_map()
+        for custom in customs:
+            name, _, value = custom.partition("=")
+            # The write-by-name / read-by-id split lives here: jira-apply.py
+            # reads this field back by id (`get_issue`'s raw JSON, keyed like
+            # the REST API), so storing it under the literal NAME the CLI
+            # write used would leave the id lookup empty forever and every
+            # run would look like the first one. See the module docstring.
+            fields[custom_fields.get(name, name)] = value
+        mutated = True
+
+    if not mutated:
+        # No recognized flag means this invocation shape isn't one
+        # JiraCliTransport builds; failing loudly beats silently no-opping.
+        die(f"issue edit {key}: no recognized mutation in {argv[1:]!r}", code=2)
+
+    save_state(issues, state_path)
+    log_write({"command": "issue edit", "key": key, "args": argv[1:]})
+    return 0
+
+
+def cmd_issue_link(argv):
+    # ["issue", "link", DEPENDS_ON, KEY, LINK_TYPE]
+    if len(argv) < 3:
+        die("issue link: expected DEPENDS_ON KEY LINK_TYPE", code=2)
+    depends_on, key, link_type = argv[0], argv[1], argv[2]
+
+    issues, state_path = load_state()
+    issue = issues.get(key)
+    if issue is None:
+        sys.stderr.write(f"fake-jira: issue does not exist: {key}\n")
+        return 1
+
+    fields = issue.setdefault("fields", {})
+    fields.setdefault("issuelinks", []).append(
+        {"type": {"name": link_type}, "inwardIssue": {"key": depends_on}}
+    )
+    save_state(issues, state_path)
+    log_write({"command": "issue link", "depends_on": depends_on, "key": key, "link_type": link_type})
+    return 0
+
+
+def _parse_create_flags(argv):
+    project = issue_type = summary = description = parent = None
+    labels = []
+    customs = []
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a.startswith("-p") and a != "-p":
+            project = a[2:]
+        elif a.startswith("-t") and a != "-t":
+            issue_type = a[2:]
+        elif a == "-s":
+            i += 1
+            summary = argv[i]
+        elif a == "-b":
+            i += 1
+            description = argv[i]
+        elif a == "-l":
+            i += 1
+            labels.append(argv[i])
+        elif a == "--parent":
+            i += 1
+            parent = argv[i]
+        elif a == "--custom":
+            i += 1
+            customs.append(argv[i])
+        elif a == "--no-input":
+            pass
+        i += 1
+    return project, issue_type, summary, description, parent, labels, customs
+
+
+def cmd_issue_create(argv):
+    project, issue_type, summary, description, parent, labels, customs = _parse_create_flags(argv)
+    if not project:
+        die(f"issue create: no -pPROJECT in {argv!r}", code=2)
+
+    issues, state_path = load_state()
+    existing_ids = [
+        int(m.group(0).rsplit("-", 1)[1])
+        for key in issues
+        for m in [ISSUE_KEY.fullmatch(key)]
+        if m and key.startswith(project + "-")
+    ]
+    next_id = max(existing_ids, default=1000) + 1
+    key = f"{project}-{next_id}"
+
+    fields = {
+        "summary": summary or "",
+        "description": description or "",
+        "labels": list(labels),
+        "issuelinks": [],
+    }
+    if parent:
+        fields["parent"] = {"key": parent}
+    if customs:
+        custom_fields = custom_field_map()
+        for custom in customs:
+            name, _, value = custom.partition("=")
+            # Same write-by-name / read-by-id split as `cmd_issue_edit`: a
+            # later `get_issue` on this freshly created issue reads by id, so
+            # a mapped name has to land under that id here too.
+            fields[custom_fields.get(name, name)] = value
+
+    issues[key] = {"key": key, "fields": fields}
+    save_state(issues, state_path)
+    log_write({"command": "issue create", "key": key, "args": argv})
+
+    # ISSUE_KEY takes the last regex match of stdout, same as a real `jira
+    # issue create`'s browse-URL-shaped output.
+    print(f"Issue created: https://example.atlassian.net/browse/{key}")
+    return 0
+
+
+def main(argv):
+    if not argv:
+        die("missing command", code=2)
+    if argv[0] == "me":
+        return cmd_me(argv[1:])
+    if argv[0] != "issue":
+        die(f"unknown command: {argv[0]!r}", code=2)
+    if len(argv) < 2:
+        die("issue: missing subcommand", code=2)
+    sub = argv[1]
+    rest = argv[2:]
+    if sub == "view":
+        return cmd_issue_view(rest)
+    if sub == "edit":
+        return cmd_issue_edit(rest)
+    if sub == "link":
+        return cmd_issue_link(rest)
+    if sub == "create":
+        return cmd_issue_create(rest)
+    die(f"issue: unknown subcommand: {sub!r}", code=2)
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

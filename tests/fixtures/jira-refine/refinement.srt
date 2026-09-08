@@ -1,0 +1,87 @@
+1
+00:00:00,000 --> 00:00:14,000
+Dan: Alright, thanks everyone for hopping on, let's get started with today's refinement session.
+
+2
+00:00:15,000 --> 00:00:59,000
+Priya: Sounds good, I have about six items lined up for us to get through today.
+
+3
+00:01:00,000 --> 00:01:19,000
+Dan: Okay, PROJ dash four twelve, so the export thing again. The nightly export times out for our largest customers whenever a report crosses fifty thousand rows, and support has escalated it three times this month, so we really need to fix this one properly this quarter.
+
+4
+00:01:20,000 --> 00:02:09,000
+Priya: Got it. I think the acceptance bar here is that the export has to complete for a fifty thousand row report without timing out, since that is the number support keeps citing back to us.
+
+5
+00:02:10,000 --> 00:02:39,000
+Dan: Also, this can't move forward until proj three ninety eight lands, since that data migration is a hard blocker on the export path.
+
+6
+00:02:40,000 --> 00:02:59,000
+Priya: Understood, I will go ping the migration team and see where that one actually stands this week.
+
+7
+00:03:00,000 --> 00:03:59,000
+Dan: One more thing, we also don't have a ticket yet for the retry-backoff work on the export job, so somebody should file one for that after this call.
+
+8
+00:04:00,000 --> 00:04:44,000
+Priya: Next, PROJ 413, this is the login flow ticket. The SSO redirect keeps dropping query params whenever a client uses their own identity provider, so folks land on the dashboard instead of wherever they were actually headed.
+
+9
+00:04:45,000 --> 00:05:19,000
+Dan: Right, and the acceptance criterion has to be that a redirect preserves the original query string byte for byte, since that is exactly what broke on us last time.
+
+10
+00:05:20,000 --> 00:05:59,000
+Priya: Also flagging that this one already has a description in Jira from Marcus, so whoever applies this later should be careful not to clobber his existing notes.
+
+11
+00:06:00,000 --> 00:06:39,000
+Dan: Okay, platform seventy seven, the auth-service migration. We need to cut the staging environment over before next month's audit, and QA wants a full regression pass on top of that.
+
+12
+00:06:40,000 --> 00:06:59,000
+Priya: Makes sense. I do not think we actually settled on a hard deadline for the cutover itself, so that one is still open.
+
+13
+00:07:00,000 --> 00:07:19,000
+Dan: Okay, back to platform seventy seven for one second, quick follow-up on the auth cutover timeline before we move on to the next item.
+
+14
+00:07:20,000 --> 00:07:59,000
+Priya: Right, and to close that out, the follow-up is just that security still needs to sign off before the cutover can be scheduled at all.
+
+15
+00:08:00,000 --> 00:09:59,000
+Dan: Moving on to PROJ four fifty five, the reporting pipeline overhaul. This is the big one, so let's take our time on it, since a lot of teams depend on this pipeline every single night.
+
+16
+00:10:00,000 --> 00:11:59,000
+Priya: Right, the core problem is that the aggregation step reprocesses the entire history on every run instead of just the new rows, which is why nightly runs keep creeping past their window.
+
+17
+00:12:30,000 --> 00:14:59,000
+Dan: So the acceptance criterion I would propose is that a nightly run only reprocesses rows added since the previous successful run, and finishes inside the existing two hour window.
+
+18
+00:15:00,000 --> 00:16:59,000
+Priya: Agreed, and out of scope for this one is backfilling historical data, that is a separate effort we already have a spike ticket open for.
+
+19
+00:17:45,000 --> 00:19:59,000
+Dan: One open question here is whether we snapshot the aggregation state hourly or daily, and nobody on this call actually has a strong opinion either way yet.
+
+20
+00:20:00,000 --> 00:21:59,000
+Priya: Fair, let's leave that one open for now and come back to it once we have looked at the storage cost either way.
+
+21
+00:22:15,000 --> 00:23:59,000
+Dan: One last thing on this ticket, the goal here is that large customers stop filing export tickets altogether once the pipeline is reliable.
+
+22
+00:24:00,000 --> 00:24:20,000
+Priya: Great, I think that covers everything for today, thanks all.

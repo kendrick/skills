@@ -1,0 +1,29 @@
+{
+  "PROJ-412": {
+    "key": "PROJ-412",
+    "fields": {
+      "summary": "Nightly export times out for large customers",
+      "description": null,
+      "labels": [],
+      "issuelinks": []
+    }
+  },
+  "PROJ-413": {
+    "key": "PROJ-413",
+    "fields": {
+      "summary": "SSO redirect drops query params",
+      "description": "A human wrote this by hand.",
+      "labels": [],
+      "issuelinks": []
+    }
+  },
+  "PROJ-398": {
+    "key": "PROJ-398",
+    "fields": {
+      "summary": "Identity data migration",
+      "description": null,
+      "labels": [],
+      "issuelinks": []
+    }
+  }
+}

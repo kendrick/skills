@@ -1,0 +1,49 @@
+# Test config for jira-refine's fixtures. Every value that matters for a
+# test run is set explicitly here rather than left to segment.py's or
+# jira-apply.py's defaults, so a reader never has to cross-check the shipped
+# example to know what a fixture run actually does.
+#
+# TOML puts every bare key under the table header above it, so every scalar
+# setting below has to come before the first [table] — [spoken_aliases],
+# [fields], and [auth] all follow them for that reason, not for tidiness.
+
+# --- Segmentation: read by segment.py -------------------------------------
+
+# Matches the two projects spoken across refinement.vtt / .srt / .txt.
+projects = ["PROJ", "PLAT"]
+
+# Left at segment.py's own default (40): every kept entry in the transcripts
+# was written to clear it comfortably, so the fixture never has to special-
+# case a --min-words override to stay stable.
+
+# --- Tracker: read by jira-apply.py ---------------------------------------
+
+transport = "rest"
+link_type = "Blocks"
+
+# Expands ${ENV} per tracker-contract.md's Auth section, so a test points
+# this same file at whichever fake it started without editing it. The REST
+# fake (fake-jira-rest.py) is what's listening on the other end; see the
+# README's "Transport fakes" section for the port and seed it needs.
+site = "${JIRA_REFINE_TEST_SITE}"
+
+[spoken_aliases]
+PROJ = ["project", "proj"]
+PLAT = ["platform", "plat"]
+
+# --- Custom fields ----------------------------------------------------------
+
+# A real-looking custom field id, so a run against this config exercises the
+# Goal-applied path rather than always taking the description-block fallback
+# the shipped example's empty `goal` would force.
+[fields]
+goal = "customfield_10057"
+goal_cli_name = "Goal"
+
+# --- Credentials ----------------------------------------------------------
+
+# Left at jira-apply.py's own defaults; the fixtures don't need a client that
+# renames these.
+[auth]
+email_env = "JIRA_EMAIL"
+token_env = "JIRA_API_TOKEN"
