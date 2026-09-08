@@ -96,7 +96,7 @@ PROJ-412  description=applied  links=1/1  label=applied  goal=unmapped  writes=3
 
 | Code | When |
 |---|---|
-| 0 | Every field on every entry reported `applied` or `already-present` |
+| 0 | Every field on every entry reported `applied` or `already-present`, or reported `unmapped` and took its fallback. An unmapped field that landed in the description block is a success: the shipped config leaves `fields.goal` unset, so treating that as a failure would exit 1 on every ordinary run |
 | 1 | Any `conflict`, `missing-issue`, unmapped-without-fallback, or failed write. The report is still complete: a failure is recorded and the entry continues |
 | 3 | Config missing or unparseable, unknown transport, missing credentials, missing `site`, absent `jira` binary, or a Python below the 3.11 `tomllib` floor. The message names the floor |
 
@@ -110,7 +110,7 @@ This table is the single authoritative statement of where each template field la
 |---|---|---|
 | Context, Out of scope, Open questions | sections inside the description block | description block (always) |
 | Acceptance criteria | `*` bullets in the block (wiki has no checkbox) | description block |
-| Dependencies | issue links, `link_type` (default `Blocks`), this issue inward | `Depends on: KEY, KEY` line inside the block; reported `unmapped` |
+| Dependencies | issue links, `link_type` (default `Blocks`), this issue inward | `Depends on: KEY, KEY` line inside the block; reported `unmapped`. An explicitly empty `link_type` is the only signal that selects this fallback. An absent key still means `Blocks`, because `plan_ops` is pure and nothing else about link support is knowable before the block is rendered |
 | Goal | custom field `fields.goal` | `Goal: …` line inside the block; reported `unmapped` |
 | Provenance | last section of the block + label `refined-<session>` | block only; label reported `unmapped` |
 
@@ -135,6 +135,12 @@ h6. jira-refine end
 ```
 
 `Depends on:` appears only when links are unmapped, and `Goal:` only when `fields.goal` is unset — each on its own line after Out of scope, in that order. Provenance is always the last section before the closing sentinel.
+
+### Two readings the implementation settled
+
+A section heading is emitted when the section has a body **or** carries a fallback line, and omitted only when it has neither. `Out of scope` with no content still appears when a `Depends on:` or `Goal:` fallback line lands under it, which is what the worked example above shows.
+
+Under the jira-cli transport a Goal is mapped only when both `fields.goal` and `fields.goal_cli_name` are set. The first reads the current value and the second writes by name; without the read, rule 8 cannot hold, since a field whose value cannot be fetched cannot be reported `already-present` on a second run.
 
 ## Idempotency rules
 
