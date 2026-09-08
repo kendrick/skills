@@ -686,6 +686,7 @@ fi
 # ships as something runnable rather than a description of what to do by hand.
 vtt=inbox-to-memory/scripts/collapse-vtt.sh
 require_file "$vtt"
+bash -n "$vtt"
 require_text inbox-to-memory/SKILL.md "one sanctioned exception to preserving raw content"
 collapsed="$(bash "$vtt" "$fixtures/steerco-excerpt.vtt")"
 [[ "$(printf '%s\n' "$collapsed" | wc -l | tr -d ' ')" == "5" ]] || {
@@ -704,6 +705,41 @@ require_line "$collapsed" "[00:00:06] Marcus Dell: Finance gave us a date. It is
 # The last turn exercises the other speaker form and a continuation line with no
 # speaker of its own, which is where a naive collapser drops half a sentence.
 require_line "$collapsed" "[00:00:11] Priya Raghavan: Third meeting, same question, still nobody's name on it." vtt
+
+# NOTE, STYLE, and REGION each run from their keyword to the next blank line,
+# and none of that body is speech. Skipping only the opening line left every
+# later line reading as a continuation of the open turn, so an editor's comment
+# came back out as words a named person said at a stated time, inside the zone
+# the skill calls the source of truth, after phase 4 deleted the original (#85).
+# The fixture puts a block in all three positions one can occupy: before the
+# first cue, between two cues, and after the last.
+blocks="$(bash "$vtt" "$fixtures/blocks.vtt")"
+[[ "$(printf '%s\n' "$blocks" | wc -l | tr -d ' ')" == "3" ]] || {
+  echo "two cues separated by comment blocks should collapse to two turns" >&2
+  printf '%s\n' "$blocks" >&2
+  exit 1
+}
+require_line "$blocks" "[00:00:01] Dan: Okay, the export times out on large reports and marketing keeps asking about it." blocks
+require_line "$blocks" "[00:00:20] Kendrick: Right, and that work depends on the query layer landing first." blocks
+
+# Every block body, by a distinctive string from each position, plus the two
+# keywords that were never skipped at all and the header line that matches the
+# `Name: ` speaker form.
+for swallowed in \
+  "reviewed by legal" \
+  "a block runs until the blank" \
+  "single-line comment" \
+  "Trailing commentary" \
+  "::cue" \
+  "STYLE" \
+  "REGION" \
+  "Kind"; do
+  refute_text <(printf '%s\n' "$blocks") "$swallowed"
+done
+
+# The rule that skipped a block by its first line only. Pinning its absence is
+# what stops the one-line form from looking like a tidy simplification later.
+refute_text "$vtt" "/^NOTE/ { next }"
 
 # ---------------------------------------------------------------------------
 # Raw-zone reflow (#48)
