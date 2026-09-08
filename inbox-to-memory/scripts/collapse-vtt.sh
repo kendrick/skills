@@ -8,9 +8,13 @@
 # and the timestamp of each turn's first cue is kept so a quote stays locatable.
 #
 # Handles both speaker forms VTT uses in the wild: `<v Name>text</v>` voice spans
-# and plain `Name: text` lines. The collapser drops the header and every NOTE,
-# STYLE, and REGION block whole, because none of that is speech and all of it
-# would otherwise land in whatever turn was open at the time.
+# and plain `Name: text` lines. Speech carrying neither form is attributed to
+# @unknown, never to a name inferred from a neighbouring turn.
+#
+# The collapser drops the header and every NOTE, STYLE, and REGION block whole,
+# because none of that is speech and all of it would otherwise land in whatever
+# turn was open at the time. Cue identifiers are found by position, one line
+# above the timing line, which is the only thing the spec guarantees about them.
 set -euo pipefail
 
 if [[ $# -ne 1 ]]; then
@@ -44,8 +48,14 @@ awk '
       who = substr(line, 1, RLENGTH - 2)
       said = substr(line, RLENGTH + 1)
     } else {
-      # A continuation line of the current turn, with no speaker of its own.
-      who = speaker
+      # A continuation of the open turn. With no turn open, this is speech that
+      # carries no label at all, which is what most machine-generated captions
+      # look like. Inheriting the empty speaker leaves flush() with nothing to
+      # print, so a speakerless file collapses to nothing while the run reports
+      # success and phase 4 deletes the original. @unknown is the token this
+      # skill already uses for a person nobody named, and it is never traded for
+      # a name inferred from a neighbouring turn: an admitted gap beats a guess.
+      who = (speaker == "" ? "@unknown" : speaker)
       said = line
     }
     sub(/<\/v>[[:space:]]*$/, "", said)
@@ -79,6 +89,12 @@ awk '
     # reached the raw zone of every turn in a 1,388-line transcript and the note
     # read as correct everywhere a reader is told to look.
     holding = 0
+    # An @unknown turn ends where its cue does. With no label anywhere in the
+    # file, the cue is the only unit of utterance on offer, and merging them
+    # would leave one timestamp standing for a whole meeting. A labelled turn
+    # still absorbs the unlabelled cues after it, since the captioner said whose
+    # words those are.
+    if (speaker == "@unknown") flush()
     split($1, t, "."); pending = t[1]; in_cue = 1; next
   }
   # Hold each content line for one iteration. The next line is what says whether

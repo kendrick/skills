@@ -770,6 +770,60 @@ refute_text "$vtt" "/^[0-9]+$/ { next }"
 # require_line calls plus the two counts above pin its output whole. No golden
 # file, because a fixture small enough to read is a better assertion than a diff.
 
+# A caption file carrying no speaker labels anywhere, which is what most
+# machine-generated transcripts look like, produced nothing at all and exited 0.
+# An unlabelled line inherited the empty speaker, flush() prints only when a
+# speaker is set, and phase 4 then deleted the source on the stated grounds that
+# the raw zone had preserved it. Empty note, deleted original, silent run (#84).
+# The non-empty check is the one that fails if that comes back.
+speakerless="$(bash "$vtt" "$fixtures/speakerless.vtt")"
+[[ -n "$speakerless" ]] || {
+  echo "a VTT with no speaker labels collapsed to nothing" >&2
+  exit 1
+}
+[[ "$(printf '%s\n' "$speakerless" | wc -l | tr -d ' ')" == "7" ]] || {
+  echo "four unlabelled cues should collapse to four turns, one per cue" >&2
+  printf '%s\n' "$speakerless" >&2
+  exit 1
+}
+
+# One turn per cue, each keeping its own timestamp. Merging them the way a
+# labelled turn merges its continuations would leave the first cue's clock
+# standing for a whole meeting, and every quote after it unlocatable.
+require_line "$speakerless" "[00:00:01] @unknown: Okay, so the export times out on large reports and marketing keeps asking about it." speakerless
+require_line "$speakerless" "[00:00:22] @unknown: 42" speakerless
+require_line "$speakerless" "[00:00:25] @unknown: That is the number of reports over the threshold, if anyone is counting." speakerless
+
+# Two physical lines under one cue are one utterance and still merge, which is
+# what repairs a sentence the captioner split. The cue is the boundary here, not
+# the line.
+require_line "$speakerless" "[00:00:12] @unknown: Right, and that work depends on the query layer landing first before anything else can start." speakerless
+
+# The label is the skill's own token for a person nobody named, so a reader
+# meets the same word here and in an open question's resolver field. A name
+# inferred from a neighbouring turn would be a fabrication that reads exactly
+# like a fact.
+require_text "$vtt" '@unknown'
+require_text inbox-to-memory/SKILL.md '@unknown'
+require_text inbox-to-memory/assets/note.template.md '@unknown is a true answer'
+
+# reflow-raw.sh recognizes a collapsed zone by its turn lines, so the @unknown
+# label has to satisfy that same shape or a speakerless note stops reflowing.
+printf '%s\n' "$speakerless" | grep -qE '^\[[0-9][0-9]?:[0-9][0-9](:[0-9][0-9])?\] [^:]+: ' || {
+  echo "an @unknown turn does not match the turn shape reflow-raw.sh looks for" >&2
+  exit 1
+}
+
+# The collapser carries a ledger; the skill as a whole still does not. Its rows
+# are what stop the three fixes above from reading as arbitrary to whoever
+# changes this script next, and every refute in this section corresponds to one
+# Deliberately Not Built row.
+rationale=_maintenance/inbox-to-memory/RATIONALE.md
+require_file "$rationale"
+require_text "$rationale" "## Decision Ledger"
+require_text "$rationale" "## Deliberately Not Built"
+require_text "$rationale" "## Known Limitations"
+
 # ---------------------------------------------------------------------------
 # Raw-zone reflow (#48)
 # ---------------------------------------------------------------------------
