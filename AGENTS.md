@@ -21,7 +21,7 @@ Four skills predate the bar. `databricks-api`, `eli5`, `inbox-to-memory`, and `t
 
 ## Invocation
 
-`disable-model-invocation: true` makes a skill user-invoked, which strips its description from the agent's reach and costs zero context. Choose by the asymmetry: when a misfire is expensive and a miss costs the user one word, take user-invoked. `adversarial-review`, `handoff`, `eli5`, and `divvy-up` are user-invoked for that reason, and each says so in its own body. Everything else carries a trigger-bearing description.
+`disable-model-invocation: true` makes a skill user-invoked, which strips its description from the agent's reach and costs zero context. Choose by the asymmetry: when a misfire is expensive and a miss costs the user one word, take user-invoked. `adversarial-review`, `handoff`, `eli5`, `divvy-up`, and `jira-refine` are user-invoked for that reason, and each says so in its own body. Everything else carries a trigger-bearing description.
 
 A description that summarizes the workflow becomes a shortcut the model takes instead of reading the body. Write triggers, and let the steps live in the file.
 

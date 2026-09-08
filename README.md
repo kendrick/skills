@@ -11,10 +11,10 @@
 
 Agent skills you can install individually or all at once.
 
-Eleven skills live here right now. One drives the Databricks APIs. Three keep your working life filed: meeting exhaust into durable notes, Johnny.Decimal filing, and the audit that keeps that system honest. Four cover the writing developers do around code: READMEs, GitHub issues, commit-and-PR prose, and a plain restatement when a message didn't land. The last three attach to a coding session: one reviews a diff adversarially, one runs an approved plan as waves of parallel subagents, and one carries unfinished work into a fresh session. Each sits in its own directory with a full guide, loads into your LLM harness the same way, and works independently of the rest.
+Twelve skills live here right now. One drives the Databricks APIs. Three keep your working life filed: meeting exhaust into durable notes, Johnny.Decimal filing, and the audit that keeps that system honest. Five cover the writing developers do around code: READMEs, GitHub issues, backlog-refinement transcripts turned into Jira tickets, commit-and-PR prose, and a plain restatement when a message didn't land. The last three attach to a coding session: one reviews a diff adversarially, one runs an approved plan as waves of parallel subagents, and one carries unfinished work into a fresh session. Each sits in its own directory with a full guide, loads into your LLM harness the same way, and works independently of the rest.
 
 - [Install](#install)
-- [The Skills](#the-skills): [databricks-api](#databricks-api) · [file-issue](#file-issue) · [inbox-to-memory](#inbox-to-memory) · [jd-file](#jd-file) · [jd-audit](#jd-audit) · [readme-coauthorship](#readme-coauthorship) · [adversarial-review](#adversarial-review) · [divvy-up](#divvy-up) · [handoff](#handoff) · [technical-writing](#technical-writing) · [eli5](#eli5)
+- [The Skills](#the-skills): [databricks-api](#databricks-api) · [file-issue](#file-issue) · [jira-refine](#jira-refine) · [inbox-to-memory](#inbox-to-memory) · [jd-file](#jd-file) · [jd-audit](#jd-audit) · [readme-coauthorship](#readme-coauthorship) · [adversarial-review](#adversarial-review) · [divvy-up](#divvy-up) · [handoff](#handoff) · [technical-writing](#technical-writing) · [eli5](#eli5)
 - [Repository Layout](#repository-layout)
 - [Contributing](#contributing)
 - [License](#license)
@@ -43,6 +43,14 @@ Writes one GitHub issue and files it with `gh`. Most issue tooling checks that y
 
 ```bash
 npx skills add kendrick/skills --skill file-issue
+```
+
+### [jira-refine](jira-refine/README.md)
+
+Turns the transcript of a recorded backlog-refinement session into enriched Jira issues. It segments the transcript by the project keys spoken aloud, fills a fixed seven-field template only from what was actually said, and anchors every acceptance criterion, dependency, and goal to a verbatim quote from its own excerpt—a slot the room never reached gets a `- not discussed` line instead of a guess. Every ticket lands first in a staging file beside its source excerpt, and nothing reaches Jira until a person marks it `approved`; apply mode then previews the writes in a dry run and asks for confirmation before pushing anything for real. It enriches issues that already exist, so a gap the room named but never ticketed gets drafted in `file-issue`'s task shape instead—`file-issue` only creates GitHub issues today, not Jira ones. Reach for it right after a refinement call, before what the room decided lives only in a recording—and type its name, since it won't fire on its own.
+
+```bash
+npx skills add kendrick/skills --skill jira-refine
 ```
 
 ### [inbox-to-memory](inbox-to-memory/)
@@ -119,7 +127,7 @@ npx skills add kendrick/skills --skill eli5
 
 ## Repository Layout
 
-- [databricks-api/](databricks-api/), [file-issue/](file-issue/), [inbox-to-memory/](inbox-to-memory/), [jd-file/](jd-file/), [jd-audit/](jd-audit/), [readme-coauthorship/](readme-coauthorship/), [handoff/](handoff/), [adversarial-review/](adversarial-review/), [divvy-up/](divvy-up/), [technical-writing/](technical-writing/), [eli5/](eli5/): the skills, one directory each
+- [databricks-api/](databricks-api/), [file-issue/](file-issue/), [jira-refine/](jira-refine/), [inbox-to-memory/](inbox-to-memory/), [jd-file/](jd-file/), [jd-audit/](jd-audit/), [readme-coauthorship/](readme-coauthorship/), [handoff/](handoff/), [adversarial-review/](adversarial-review/), [divvy-up/](divvy-up/), [technical-writing/](technical-writing/), [eli5/](eli5/): the skills, one directory each
 - [\_docs/](_docs/): research notes behind the skills, like the [readme-coauthorship writeup](_docs/readme-coauthorship-research.md) and the [issue-authorship survey](_docs/file-issue-research.md)
 - [\_maintenance/](_maintenance/): maintainer tooling, one subdirectory per skill that needs it: the refresh workflow that keeps `databricks-api` synced with upstream Databricks docs, the upstream sync behind `handoff`, the check that holds the `jd` pair's prose to the vault register, and the decision ledgers, evals, and provenance records behind the rest
 - [tests/](tests/): smoke scripts that pin the load-bearing decisions in each skill and in the repo's agent docs; each runs standalone from the repo root, like `bash tests/technical-writing-smoke.sh`
