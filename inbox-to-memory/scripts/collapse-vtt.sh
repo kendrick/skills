@@ -33,26 +33,10 @@ awk '
     if (speaker != "") print "[" start "] " speaker ": " text "\n"
     speaker = ""; text = ""
   }
-  # A blank line terminates whatever is open: the header, a cue, or a comment
-  # block. It is the only thing that closes any of them.
-  /^[[:space:]]*$/ { in_block = 0; in_cue = 0; next }
-  # A block runs from its keyword to that blank line, and none of it is speech.
-  # A line inside a block carries no `<v Name>` or `Name: ` prefix, so the
-  # speaker branch below reads it as a continuation of the open turn. Skip the
-  # keyword line alone and a comment an editor left about what legal pulled
-  # from the recording comes back out attributed to a person, by name and
-  # timestamp, in the zone the skill calls the source of truth.
-  in_block { next }
-  # A keyword opens a block only outside a cue. Inside one, a caption line
-  # beginning with the word NOTE is something a person said. WEBVTT joins the
-  # list because the header has the same grammar, and its `Kind: captions` line
-  # otherwise matches the `Name: ` speaker form exactly.
-  !in_cue && /^(WEBVTT|NOTE|STYLE|REGION)([ \t]|$)/ { in_block = 1; next }
-  # Cue identifiers are a bare number on their own line and carry nothing.
-  /^[0-9]+$/ { next }
-  / --> / { split($1, t, "."); pending = t[1]; in_cue = 1; next }
-  {
-    line = $0
+  # Attribute one line of cue text to a turn. Always runs one line behind the
+  # read, so a line reaches it only once the following line has proved it was
+  # speech rather than a cue identifier.
+  function emit(line,    who, said) {
     if (match(line, /^<v [^>]*>/)) {
       who = substr(line, 4, RLENGTH - 4)
       said = substr(line, RLENGTH + 1)
@@ -65,9 +49,40 @@ awk '
       said = line
     }
     sub(/<\/v>[[:space:]]*$/, "", said)
-
     if (who != speaker) { flush(); speaker = who; start = pending }
     text = (text == "" ? said : text " " said)
   }
-  END { flush() }
+  function emit_held() { if (holding) emit(held); holding = 0 }
+  # A blank line terminates whatever is open: the header, a cue, or a comment
+  # block. It is the only thing that closes any of them. Whatever line is held
+  # is speech by now, since an identifier would be followed by a timing line.
+  /^[[:space:]]*$/ { emit_held(); in_block = 0; in_cue = 0; next }
+  # A block runs from its keyword to that blank line, and none of it is speech.
+  # A line inside a block carries no `<v Name>` or `Name: ` prefix, so the
+  # speaker branch below reads it as a continuation of the open turn. Skip the
+  # keyword line alone and a comment an editor left about what legal pulled
+  # from the recording comes back out attributed to a person, by name and
+  # timestamp, in the zone the skill calls the source of truth.
+  in_block { next }
+  # A keyword opens a block only outside a cue. Inside one, a caption line
+  # beginning with the word NOTE is something a person said. WEBVTT joins the
+  # list because the header has the same grammar, and its `Kind: captions` line
+  # otherwise matches the `Name: ` speaker form exactly.
+  !in_cue && /^(WEBVTT|NOTE|STYLE|REGION)([ \t]|$)/ { in_block = 1; next }
+  / --> / {
+    # A cue identifier is whatever sits on the line directly before the timing
+    # line, and position is the only thing the spec guarantees about it. Matching
+    # a bare integer instead covered hand-numbered transcripts and nothing else,
+    # so a Teams or Zoom export keyed by <uuid>/<n>-<n> missed every branch and
+    # landed in the speaker turn as text. The run still exits 0 and the output
+    # still looks like turns, which is what made it expensive: the identifier
+    # reached the raw zone of every turn in a 1,388-line transcript and the note
+    # read as correct everywhere a reader is told to look.
+    holding = 0
+    split($1, t, "."); pending = t[1]; in_cue = 1; next
+  }
+  # Hold each content line for one iteration. The next line is what says whether
+  # this one was speech or the identifier of the cue about to open.
+  { emit_held(); held = $0; holding = 1 }
+  END { emit_held(); flush() }
 ' "$1"

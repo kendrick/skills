@@ -741,6 +741,35 @@ done
 # what stops the one-line form from looking like a tidy simplification later.
 refute_text "$vtt" "/^NOTE/ { next }"
 
+# A cue identifier is recognized by where it sits, one line above the timing
+# line, because position is all the spec guarantees. The old rule matched a bare
+# integer, which covered the hand-numbered fixture above and nothing else, so a
+# Teams or Zoom export keyed by <uuid>/<n>-<n> carried its identifier into the
+# turn text of every cue. Exit 0, turn-shaped output, and a note that read as
+# correct everywhere the retrieval funnel tells a reader to look (#78).
+teams="$(bash "$vtt" "$fixtures/teams-export.vtt")"
+[[ "$(printf '%s\n' "$teams" | wc -l | tr -d ' ')" == "3" ]] || {
+  echo "four uuid-keyed cues across two speakers should collapse to two turns" >&2
+  printf '%s\n' "$teams" >&2
+  exit 1
+}
+require_line "$teams" "[00:00:03] Kendrick M. Arnett: So with so much of the team out tomorrow, plan for the rest of the stand-ups today." teams-export
+refute_text <(printf '%s\n' "$teams") "f9a822e4"
+
+# The last cue is a line reading only `42`, which is what the deleted rule
+# matched. Nothing follows it, so it is speech and has to survive as speech,
+# the reason the fix reads position rather than widening the pattern.
+require_line "$teams" "[00:00:15] Priya Raghavan: Fine by me. How many people are we down? 42" teams-export
+
+# The pattern itself, gone rather than widened. Widening it is the obvious fix
+# and it only buys whichever identifier format someone thought of that day.
+refute_text "$vtt" "/^[0-9]+$/ { next }"
+
+# steerco-excerpt.vtt is the regression baseline for this change: its cues are
+# numbered 1 through 6, the shape the old rule handled, and the three
+# require_line calls plus the two counts above pin its output whole. No golden
+# file, because a fixture small enough to read is a better assertion than a diff.
+
 # ---------------------------------------------------------------------------
 # Raw-zone reflow (#48)
 # ---------------------------------------------------------------------------
