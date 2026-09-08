@@ -850,6 +850,55 @@ for f in blocks speakerless; do
   }
 done
 
+# A UTF-8 byte-order mark is a legal, optional start to a WebVTT file. It sits
+# in front of the signature, so the first record matches no rule and the
+# @unknown fallback signs a name to it: `[] @unknown: <BOM>WEBVTT` ahead of the
+# real transcript. Generated here for the same reason the CRLF copies are, and
+# because a checked-in file whose first three bytes carry the assertion is one
+# well-meaning editor save away from losing them.
+bom_dir="$(mktemp -d "${TMPDIR:-/tmp}/i2m-bom.XXXXXX")"
+trap 'rm -rf "$not_a_scope" "$inline_scope" "$dismissal_scope" "$crlf_dir" "$bom_dir"' EXIT
+for f in blocks speakerless steerco-excerpt; do
+  printf '\357\273\277' >"$bom_dir/$f.vtt"
+  /bin/cat "$fixtures/$f.vtt" >>"$bom_dir/$f.vtt"
+done
+for f in blocks speakerless steerco-excerpt; do
+  diff <(bash "$vtt" "$fixtures/$f.vtt") <(bash "$vtt" "$bom_dir/$f.vtt") >/dev/null || {
+    echo "$f.vtt collapses differently when it opens with a byte-order mark" >&2
+    diff <(bash "$vtt" "$fixtures/$f.vtt") <(bash "$vtt" "$bom_dir/$f.vtt") >&2
+    exit 1
+  }
+done
+
+# Both review findings were one shape: a preamble line the rules failed to
+# classify, handed a speaker by the @unknown fallback. WebVTT allows no speech
+# above the first timing line, so a turn opening with no cue behind it is always
+# a parse failure. The collapser refuses the file instead of signing a name to
+# the line, because phase 4 deletes the source once this output is written: a
+# loud stop is recoverable and a fabricated turn is not.
+preamble="$(mktemp -d "${TMPDIR:-/tmp}/i2m-preamble.XXXXXX")/bad.vtt"
+printf 'GARBAGE HEADER\n\n1\n00:00:01.000 --> 00:00:05.000\n<v Alice>Hello</v>\n' >"$preamble"
+if bash "$vtt" "$preamble" >/dev/null 2>&1; then
+  echo "the collapser accepted a line of speech above the first cue" >&2
+  exit 1
+fi
+guard_err="$(bash "$vtt" "$preamble" 2>&1 >/dev/null || true)"
+require_output "$guard_err" "no cue has started; refusing to attribute this line: GARBAGE HEADER"
+
+# The offending line, not the one that flushed it. emit() runs a record behind
+# the read, so reporting FNR here names the blank line below the problem and
+# sends a reader to the wrong place in a 1,388-line transcript.
+require_output "$guard_err" "bad.vtt:1:"
+
+# Every real fixture stays acceptable. A guard that fires on valid input would
+# refuse the transcripts this skill exists to process.
+for f in blocks teams-export speakerless steerco-excerpt; do
+  bash "$vtt" "$fixtures/$f.vtt" >/dev/null 2>&1 || {
+    echo "the preamble guard rejected $f.vtt, which is a valid transcript" >&2
+    exit 1
+  }
+done
+
 # The collapser carries a ledger; the skill as a whole still does not. Its rows
 # are what stop the three fixes above from reading as arbitrary to whoever
 # changes this script next, and every refute in this section corresponds to one
@@ -859,6 +908,25 @@ require_file "$rationale"
 require_text "$rationale" "## Decision Ledger"
 require_text "$rationale" "## Deliberately Not Built"
 require_text "$rationale" "## Known Limitations"
+
+# Every ledger row carries its tier in the Tier column. Numbering the rows once
+# dropped a separator from each, which markdown renders as the rationale under
+# Decision, the tier under Why, and an empty Tier column: the ledger still reads
+# as prose while the thing AGENTS.md asks it to record is gone from the table.
+awk -F'|' '
+  /^\| *# *\| *Decision/ { want = NF; next }
+  want && /^\|---/ { next }
+  want && /^\|/ {
+    if (NF != want) { print "ledger row " NR " has " NF-1 " columns, header has " want-1; bad = 1 }
+    next
+  }
+  want && !/^\|/ { want = 0 }
+  END { exit bad }
+' "$rationale" || {
+  echo "the RATIONALE decision ledger has a malformed row" >&2
+  exit 1
+}
+
 
 # ---------------------------------------------------------------------------
 # Raw-zone reflow (#48)

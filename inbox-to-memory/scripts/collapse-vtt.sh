@@ -59,7 +59,21 @@ awk '
       said = line
     }
     sub(/<\/v>[[:space:]]*$/, "", said)
-    if (who != speaker) { flush(); speaker = who; start = pending }
+    if (who != speaker) {
+      # No cue has opened yet, so this line sits above the first timing line,
+      # where WebVTT permits no speech. It is a preamble line the rules above
+      # failed to classify, and the @unknown fallback is about to sign a name to
+      # it. Two review rounds found one each, a CRLF header and a byte-order
+      # mark, and both reached this branch. Refuse the file rather than emit the
+      # turn: phase 4 deletes the source once this output is written, so a loud
+      # stop is recoverable and a fabricated turn is not.
+      if (pending == "") {
+        printf "%s:%d: no cue has started; refusing to attribute this line: %s\n", FILENAME, held_at, line > "/dev/stderr"
+        bad = 1
+        exit 1
+      }
+      flush(); speaker = who; start = pending
+    }
     text = (text == "" ? said : text " " said)
   }
   function emit_held() { if (holding) emit(held); holding = 0 }
@@ -71,6 +85,13 @@ awk '
   # This rule sets no `next`, so the line falls through to whichever rule owns
   # it. jira-refine/scripts/segment.py does the same at its own read.
   { sub(/\r$/, "") }
+  # A UTF-8 byte-order mark is a legal, optional start to a WebVTT file, and
+  # Windows tooling writes one. It sits in front of the signature, so the first
+  # record reads as neither the header nor anything else and lands in a turn.
+  # Located by the signature rather than by the bytes of the mark: matching those
+  # needs either a gawk-only escape or a locale-dependent sprintf, and a regex
+  # against them aborts BSD awk with a multibyte conversion error.
+  NR == 1 { i = index($0, "WEBVTT"); if (i > 1) $0 = substr($0, i) }
   # A blank line terminates whatever is open: the header, a cue, or a comment
   # block. It is the only thing that closes any of them. Whatever line is held
   # is speech by now, since an identifier would be followed by a timing line.
@@ -107,6 +128,6 @@ awk '
   }
   # Hold each content line for one iteration. The next line is what says whether
   # this one was speech or the identifier of the cue about to open.
-  { emit_held(); held = $0; holding = 1 }
-  END { emit_held(); flush() }
+  { emit_held(); held = $0; held_at = FNR; holding = 1 }
+  END { if (bad) exit 1; emit_held(); flush() }
 ' "$1"
