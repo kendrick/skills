@@ -153,7 +153,7 @@ Every non-empty line under Acceptance criteria, Dependencies, and Goal ends in a
 \(raw: "([^"]{1,120})" (\d\d:\d\d:\d\d|L\d+)\)
 ```
 
-The captured snippet is four to six verbatim words and is authoritative: `validate` fails the line unless the snippet appears, whitespace-normalized, inside that entry's Source excerpt. `L<n>` names a line number and is legal only for a plain-text transcript that carries no timestamps.
+The captured snippet is four to ten verbatim words and is authoritative: `validate` fails the line unless the snippet appears, whitespace-normalized, inside that entry's Source excerpt. The floor exists because a snippet short enough to match anywhere in the excerpt cannot locate anything. `L<n>` names a line number and is legal only for a plain-text transcript that carries no timestamps.
 
 ## Not-discussed lines
 

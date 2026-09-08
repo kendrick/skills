@@ -13,10 +13,13 @@ without also asserting "the second run makes no requests", which would be a
 much more fragile claim about a caller that legitimately re-reads an issue
 before deciding to skip it.
 
-`RestTransport._request` treats a 404 as "no issue" for every verb, not only
-GET, so a PUT or POST against an unknown key also returns 404 here rather than
-inventing a row — a fake that autovivified rows would make every run look
-idempotent, which is exactly what this fixture exists to catch elsewhere.
+An unknown key answers 404 on every verb here, rather than inventing a row: a
+fake that autovivified rows would make every run look idempotent, which is
+exactly what this fixture exists to catch elsewhere. What the caller does with
+that 404 depends on the verb. `RestTransport._request` takes `read=True` on its
+two GETs, where a 404 is the tracker's real answer that the issue is not there,
+and raises `TransportError` on a mutation, so a PUT against an issue that
+vanished mid-run is a reported failure instead of a counted write.
 
 The link shape stored on an issue is chosen to match the one consumer that
 reads it back, `linked_dependencies` in jira-apply.py: it scans an issue's own

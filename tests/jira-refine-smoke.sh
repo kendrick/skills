@@ -110,7 +110,7 @@ require_text jira-refine/references/ticket-template.md "**Describe outcomes, not
 # The anchor's snippet is authoritative, so a reader can tell a quoted criterion
 # from an invented one without trusting the fill.
 require_text jira-refine/SKILL.md "The snippet is authoritative and quoted exactly from the excerpt"
-require_text jira-refine/references/staging-format.md "The captured snippet is four to six verbatim words and is authoritative"
+require_text jira-refine/references/staging-format.md "The captured snippet is four to ten verbatim words and is authoritative"
 
 # Apply reads the staging file off disk, not from what this conversation
 # remembers writing. That is what makes a hand edit between the two modes count
@@ -679,5 +679,130 @@ with open(sys.argv[1], encoding="utf-8") as f:
     exit 1
   }
 done
+
+# --- The five P0 defects a Codex review found on PR #82 ---------------------
+# Each of these shipped once. Every pin below drives the real script, because a
+# string pin passes on code that has stopped behaving.
+
+# A WebVTT NOTE block ended at its first line, so the rest became continuation
+# speech: editor commentary reached a Source excerpt and a ticket key nobody
+# spoke appeared in the output. That is the never-invent rule failing at the
+# parser, before any judgment is involved.
+cat > "$tmp/note-block.vtt" <<'VTT'
+WEBVTT
+
+00:00:01.000 --> 00:00:09.000
+<v Dan>Okay, PROJ dash four twelve. The export times out on large reports and marketing keeps asking about it.
+
+NOTE
+PROJ dash nine hundred was archived by legal before this call and is not in scope.
+
+STYLE
+::cue { color: PLAT dash five five }
+
+00:00:20.000 --> 00:00:28.000
+<v Kendrick>Right, and that work depends on the query layer landing first.
+VTT
+note_out="$("$segment" "$tmp/note-block.vtt" --config "$config" --session-date 2026-09-07 --min-words 0)"
+for ghost in PROJ-900 PLAT-55 "archived by legal" "::cue"; do
+  case "$note_out" in
+    *"$ghost"*)
+      echo "a NOTE or STYLE block leaked '$ghost' into the staging output" >&2
+      exit 1
+      ;;
+  esac
+done
+case "$note_out" in
+  *PROJ-412*) : ;;
+  *) echo "skipping comment blocks must not drop the real speaker turns" >&2; exit 1 ;;
+esac
+
+# `_request` returned None on a 404 for every method, so a PUT the tracker
+# rejected was counted as a write and reconcile stamped the entry applied. A
+# read and a mutation have to diverge on 404, and only the reads opt in.
+require_text jira-refine/scripts/jira-apply.py "def _request(self, method, path, payload=None, read=False):"
+python3 - "$apply" <<'PY' || exit 1
+import ast, sys
+tree = ast.parse(open(sys.argv[1], encoding="utf-8").read())
+reads = 0
+for node in ast.walk(tree):
+    if not isinstance(node, ast.Call):
+        continue
+    fn = node.func
+    if not (isinstance(fn, ast.Attribute) and fn.attr == "_request"):
+        continue
+    verb = node.args[0].value if node.args and isinstance(node.args[0], ast.Constant) else None
+    opted = any(k.arg == "read" and getattr(k.value, "value", False) is True for k in node.keywords)
+    if verb != "GET" and opted:
+        sys.exit(f"a mutating _request call passes read=True: {verb}")
+    if verb == "GET" and opted:
+        reads += 1
+if reads < 2:
+    sys.exit("both GET call sites must pass read=True; a 404 is a real answer only on a read")
+PY
+
+# A failed set_field reported `unmapped` plus a description fallback that
+# nothing had written, so an approved Goal landed nowhere while the report said
+# it had. The failure path must claim no fallback; the plan-time unmapped path
+# still takes one, and conflating the two is how this comes back.
+python3 - "$apply" <<'PY' || exit 1
+import re, sys
+src = open(sys.argv[1], encoding="utf-8").read()
+block = re.search(r'elif name == "set_field":(.*?)elif name == "create_link":', src, re.S)
+if not block:
+    sys.exit("the set_field failure branch is gone from _record_failure")
+body = block.group(1)
+# Match the append itself, not the word: the branch's comment explains at
+# length why it must not claim a fallback, and a bare substring test fires on
+# the explanation.
+if 'unmapped"].append' in body or "unmapped'].append" in body:
+    sys.exit("a failed set_field must not append an unmapped fallback claim")
+if '"unmapped"' in body.replace("#", "\n#").split("\n#")[0]:
+    sys.exit("a failed set_field must not report unmapped")
+if 'outcomes["goal"] = "conflict"' not in body:
+    sys.exit("a failed set_field must report the goal as a conflict")
+PY
+require_text jira-refine/scripts/jira-apply.py 'FALLBACK_BLOCK'
+
+# The anchor word range was documented and unenforced, so a one-word snippet
+# passed. The floor is what carries the guarantee: a snippet short enough to
+# match anywhere cannot locate anything.
+anchor_case() {  # <word-count|literal> <coordinate|""> <pass|fail>
+  python3 - "$fixtures/staging-good.md" "$tmp/anchor.md" "$1" "$2" <<'PY'
+import re, sys
+src, dst, want, coord = sys.argv[1:5]
+text = open(src, encoding="utf-8").read()
+first = re.search(r'\(raw: "([^"]+)" ([^)]+)\)', text)
+# A snippet has to appear verbatim in the entry's own excerpt, so build it by
+# slicing the real excerpt rather than by repeating words: a fabricated snippet
+# would fail the snippet-in-excerpt rule and mask the word-count rule under test.
+entry = text[text.rindex("## ", 0, first.start()):]
+fence = re.search(r"```text\n(.*?)```", entry, re.S).group(1)
+speech = max((re.sub(r"^\[[^\]]*\]\s*\S+?:\s*", "", ln) for ln in fence.splitlines() if ln.strip()),
+             key=lambda s: len(s.split()))
+words = speech.split()
+new = " ".join(words[:int(want)]) if want.isdigit() else want
+if want.isdigit() and len(words) < int(want):
+    sys.exit(f"fixture excerpt has only {len(words)} words; cannot build a {want}-word snippet")
+text = text.replace(first.group(0), f'(raw: "{new}" {coord or first.group(2)})', 1)
+open(dst, "w", encoding="utf-8").write(text)
+PY
+  if "$staging" validate "$tmp/anchor.md" >/dev/null 2>&1; then
+    [[ "$3" == pass ]] || { echo "anchor case '$1' '$2' should have failed validation" >&2; exit 1; }
+  else
+    [[ "$3" == fail ]] || { echo "anchor case '$1' '$2' should have validated" >&2; exit 1; }
+  fi
+}
+anchor_case 1 "" fail
+anchor_case 3 "" fail
+anchor_case 4 "" pass
+anchor_case 10 "" pass
+anchor_case 11 "" fail
+
+# An L<n> coordinate was accepted on an entry whose excerpt carries clock
+# timestamps, which cannot be traced with the coordinates the excerpt holds.
+# The mode comes from the entry's own excerpt, so both directions have to fail.
+anchor_case 5 L64 fail
+require_text jira-refine/scripts/check-staging.py "Source excerpt"
 
 echo "jira-refine smoke: OK"

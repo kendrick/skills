@@ -668,7 +668,18 @@ class RestTransport(Transport):
         raw = f"{email}:{token}".encode("utf-8")
         self.authorization = "Basic " + base64.b64encode(raw).decode("ascii")
 
-    def _request(self, method, path, payload=None):
+    def _request(self, method, path, payload=None, read=False):
+        """One HTTP call. `read=True` is the caller saying a 404 is an answer.
+
+        Reads and mutations have to diverge on 404 and nothing else here does.
+        On a GET, 404 is the tracker's real answer — the issue is not there —
+        and callers act on the `None`. On a PUT or POST it means Jira refused
+        the write, so it raises like every other HTTP error: returning `None`
+        would let execute() count the write, the report say `applied`, and
+        reconcile stamp the staging entry `applied` for content that never
+        landed. A silent false success on a client's tracker is the worst
+        failure this script has, so the default is the safe one and a new
+        caller has to opt in to the lenient reading."""
         url = f"{self.site}/{API_PATH}/{path}"
         data = json.dumps(payload).encode("utf-8") if payload is not None else None
         request = urllib.request.Request(url, data=data, method=method)
@@ -680,7 +691,7 @@ class RestTransport(Transport):
             with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT) as response:
                 body = response.read()
         except urllib.error.HTTPError as e:
-            if e.code == 404:
+            if e.code == 404 and read:
                 return None
             detail = ""
             try:
@@ -704,7 +715,9 @@ class RestTransport(Transport):
         if self.goal_id:
             wanted.append(self.goal_id)
         query = urllib.parse.urlencode({"fields": ",".join(wanted)})
-        return self._request("GET", f"issue/{urllib.parse.quote(key)}?{query}")
+        return self._request(
+            "GET", f"issue/{urllib.parse.quote(key)}?{query}", read=True
+        )
 
     def update_description(self, key, text):
         self._request(
@@ -756,7 +769,7 @@ class RestTransport(Transport):
         return key, 1
 
     def list_fields(self, name):
-        found = self._request("GET", "field") or []
+        found = self._request("GET", "field", read=True) or []
         needle = name.lower()
         return [
             (
@@ -901,8 +914,11 @@ def _record_failure(outcomes, op, reason):
 
     The report's enums have no "failed" value, so each field takes the one value
     that does not falsely claim a verdict — `skipped` for a description that did
-    not land, `unmapped` for a label or goal that did not — and the entry-level
-    conflict carries what actually happened."""
+    not land, `unmapped` for a label, `conflict` for a goal — and the
+    entry-level conflict carries what actually happened. Label and goal differ
+    because their fallbacks do: Provenance is in the block on every run, so a
+    failed label really did degrade to the block, while the `Goal:` line is
+    rendered only for a goal that was already unmapped at plan time."""
     name = op["op"]
     if name in ("update_description", "create_issue"):
         outcomes["description"] = "skipped"
@@ -910,13 +926,18 @@ def _record_failure(outcomes, op, reason):
         outcomes["label"] = "unmapped"
         outcomes["unmapped"].append({"field": "label", "fallback": FALLBACK_BLOCK})
     elif name == "set_field":
-        # The contract's answer to a failed `--custom` edit is `unmapped` plus
-        # the description fallback. The fallback line is not re-rendered here:
-        # it is a plan-time decision, and re-deciding it mid-run would make the
-        # dry run — which cannot know a write will fail — describe a different
-        # description than the real run writes.
-        outcomes["goal"] = "unmapped"
-        outcomes["unmapped"].append({"field": "goal", "fallback": FALLBACK_BLOCK})
+        # A goal that failed to write took no fallback, so it must not claim
+        # one. The block was rendered at plan time, when the field still looked
+        # mapped, so it carries no `Goal:` line — reporting `unmapped` plus the
+        # description fallback would tell the human the goal landed somewhere
+        # when it landed nowhere. Re-rendering the block here is not the way
+        # out either: the dry run cannot know a write will fail, and a mid-run
+        # re-decision would make it describe a different description than the
+        # real run writes. So the goal reports `conflict` — it did not take the
+        # value, the entry-level reason says why — and the run exits 1. A rerun
+        # after the field config is fixed is safe: rule 8 makes every op
+        # idempotent, so nothing that already landed lands twice.
+        outcomes["goal"] = "conflict"
     elif name == "create_link":
         _mark_link(outcomes, op["depends_on"], "missing-issue")
     _note_conflict(outcomes, f"{name} failed: {reason}")

@@ -80,6 +80,7 @@ Field types and provenance:
 
 - `description: skipped` means no write was attempted, because reading the issue failed or the entry was abandoned before its description op ran.
 - `conflict` is null or a single-line reason, and it is the entry-level verdict; a per-field conflict also shows on that field.
+- `goal: conflict` means the value did not reach the field — Jira holds a different one, or the write failed — and the entry-level `conflict` says which. A failed goal write never appears in `unmapped`: the block was rendered before the failure, so it carries no `Goal:` line to claim.
 - `writes` counts mutations actually sent — HTTP writes under `rest`, subprocess invocations that mutate under `jira-cli`. A dry run always reports `0`.
 - On a `create` dry run, `key` is null.
 
@@ -111,7 +112,7 @@ This table is the single authoritative statement of where each template field la
 | Context, Out of scope, Open questions | sections inside the description block | description block (always) |
 | Acceptance criteria | `*` bullets in the block (wiki has no checkbox) | description block |
 | Dependencies | issue links, `link_type` (default `Blocks`), this issue inward | `Depends on: KEY, KEY` line inside the block; reported `unmapped`. An explicitly empty `link_type` is the only signal that selects this fallback. An absent key still means `Blocks`, because `plan_ops` is pure and nothing else about link support is knowable before the block is rendered |
-| Goal | custom field `fields.goal` | `Goal: …` line inside the block; reported `unmapped` |
+| Goal | custom field `fields.goal` | `Goal: …` line inside the block; reported `unmapped`. Plan time only: the line goes in while the block is still being rendered, so a write that fails afterwards reports `conflict` instead |
 | Provenance | last section of the block + label `refined-<session>` | block only; label reported `unmapped` |
 
 ## The description block
@@ -150,7 +151,7 @@ Under the jira-cli transport a Goal is mapped only when both `fields.goal` and `
 4. An empty description — null, whitespace, or holding only a stale same-source block — is written.
 5. Links read `fields.issuelinks`. Dependency D of X is present when X's list holds an entry with `type.name == link_type` and `inwardIssue.key == D` (D blocks X: D outward, X inward). Create the link only when it is absent. A D that is not on the tracker reports `missing-issue`, performs no write, and exits 1.
 6. Labels are added only when absent, by PUTting the union of the existing labels and the new one.
-7. Goal is written when the custom field is empty or already equal. A different non-empty value is a `conflict` on that field alone; the rest of the entry still applies.
+7. Goal is written when the custom field is empty or already equal. A different non-empty value is a `conflict` on that field alone; the rest of the entry still applies. A write that fails is the same verdict for the same reason — the value is not on the field — and rerunning once the config is fixed is safe, because rule 8 holds.
 8. A second run over the same input performs zero writes and reports `already-present` everywhere. The smoke test asserts this on both transports.
 
 ## Operations per transport
@@ -165,7 +166,7 @@ Under the jira-cli transport a Goal is mapped only when both `fields.goal` and `
 | create_issue | `POST issue` | `jira issue create -pPROJ -tTask -s"…" -b"…" -lL --no-input`, key parsed from the output |
 | list_fields | `GET field`, filtered by name substring, printing id / name / schema.type | exits 1 with `field discovery needs the rest transport` |
 
-`--custom` is documented on create, and jira-cli requires custom fields to be declared in its own config. When the edit fails, or when `fields.goal_cli_name` is unset, report `unmapped` and take the description fallback.
+`--custom` is documented on create, and jira-cli requires custom fields to be declared in its own config. The two ways a Goal misses the field split on timing. An unset `fields.goal` or `fields.goal_cli_name` is known while the block is still being rendered: report `unmapped` and put the `Goal:` line in the block. An edit that fails at write time is past that point — the block went out without the line, so there is no fallback to claim — and reports `conflict` on the goal, with the error in the entry-level `conflict`.
 
 ## Auth
 

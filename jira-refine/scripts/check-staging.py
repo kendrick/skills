@@ -71,6 +71,16 @@ DURATION_RE = re.compile(r"^\d+m\d+s$")
 INT_RE = re.compile(r"^\d+$")
 LIST_RE = re.compile(r"^\[(.*)\]$")
 KV_LINE_RE = re.compile(r"^(\w+):\s?(.*)$")
+CLOCK_COORD_RE = re.compile(r"^\d\d:\d\d:\d\d$")
+# segment.py's render_turn_line prefixes every excerpt line with `[HH:MM:SS]`
+# or `[L<n>]` depending on has_clock — never both in one transcript, so
+# whichever bracket shape shows up on the excerpt's own lines is the mode an
+# anchor's coordinate has to match. Matched against raw (non-normalized)
+# excerpt lines, since normalize_ws joins them into one string.
+EXCERPT_TIMESTAMP_LINE_RE = re.compile(r"^\[\d\d:\d\d:\d\d\]")
+EXCERPT_LINENO_LINE_RE = re.compile(r"^\[L\d+\]")
+ANCHOR_MIN_WORDS = 4
+ANCHOR_MAX_WORDS = 10
 
 
 def normalize_ws(text):
@@ -342,6 +352,7 @@ def check_sections(key, sections, fm, projects):
             f"entry {key}: Source excerpt has {len(fences)} fenced blocks, expected exactly 1"
         )
         excerpt_text = ""
+        excerpt_mode = None
     else:
         _start, _end, tag, content, closed = fences[0]
         if not closed:
@@ -351,6 +362,18 @@ def check_sections(key, sections, fm, projects):
         if not any(line.strip() for line in content):
             problems.append(f"entry {key}: Source excerpt fenced block is empty")
         excerpt_text = normalize_ws(" ".join(content))
+        # The excerpt is the one place a per-entry transcript's mode is
+        # actually recorded (no separate transcript file is read here), so
+        # the mode an anchor's coordinate must match is read off these lines
+        # rather than assumed from the file as a whole. `None` means neither
+        # bracket shape showed up — an already-malformed excerpt gets its own
+        # problem above, and guessing a mode for it would just add noise.
+        if any(EXCERPT_TIMESTAMP_LINE_RE.match(line) for line in content):
+            excerpt_mode = "clock"
+        elif any(EXCERPT_LINENO_LINE_RE.match(line) for line in content):
+            excerpt_mode = "line"
+        else:
+            excerpt_mode = None
 
     def check_anchor(line, section_name):
         m = ANCHOR_RE.search(line)
@@ -362,6 +385,37 @@ def check_sections(key, sections, fm, projects):
             problems.append(
                 f"entry {key}: {section_name} anchor snippet {m.group(1)!r} not found "
                 "in this entry's Source excerpt"
+            )
+        # staging-format.md L156: the snippet is "authoritative" only because
+        # it is distinctive enough to locate in the excerpt on its own. A
+        # one- or two-word snippet can match anywhere (or match by luck),
+        # which quietly turns the anchor from a provenance check into a
+        # rubber stamp — the floor is what carries that guarantee. The
+        # ceiling only exists to stop an anchor from swallowing a whole
+        # line; it is loose because a real quote runs longer than a tidy
+        # made-up one (staging-format.md's own worked example is 7 words).
+        word_count = len(snippet.split())
+        if not (ANCHOR_MIN_WORDS <= word_count <= ANCHOR_MAX_WORDS):
+            problems.append(
+                f"entry {key}: {section_name} anchor snippet is {word_count} words "
+                f"{m.group(1)!r}, expected {ANCHOR_MIN_WORDS} to {ANCHOR_MAX_WORDS}"
+            )
+        # staging-format.md L156: `L<n>` is legal only when the transcript
+        # (here, this entry's own excerpt) carries no clock. An `L<n>` on a
+        # timed excerpt — or a clock time on an untimed one — can't be traced
+        # back to anything the excerpt actually holds, which defeats the
+        # anchor's whole job of pointing at a real line.
+        coord = m.group(2)
+        is_clock_coord = bool(CLOCK_COORD_RE.match(coord))
+        if excerpt_mode == "clock" and not is_clock_coord:
+            problems.append(
+                f"entry {key}: {section_name} anchor coordinate {coord!r} is L<n>, but "
+                "this entry's Source excerpt carries clock timestamps"
+            )
+        elif excerpt_mode == "line" and is_clock_coord:
+            problems.append(
+                f"entry {key}: {section_name} anchor coordinate {coord!r} is a clock time, "
+                "but this entry's Source excerpt carries no timestamps"
             )
 
     context_lines = [l for l in sections.get("Context", []) if l.strip()]

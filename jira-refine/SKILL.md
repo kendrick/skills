@@ -42,7 +42,7 @@ Exit 1 means no project key was ever heard as a boundary. Show the user the conf
 
 Read [`references/ticket-template.md`](references/ticket-template.md) once, then work entry by entry. The rules that decide what gets written are these, and they apply on every run:
 
-Every non-empty line under Acceptance criteria, Dependencies, and Goal ends in `(raw: "four to six verbatim words" HH:MM:SS)`. The snippet is authoritative and quoted exactly from the excerpt — `check-staging.py` fails the line unless those words appear in that entry's Source excerpt, whitespace aside. Use `L<n>` in place of the timestamp only for a plain-text transcript that carries no clock.
+Every non-empty line under Acceptance criteria, Dependencies, and Goal ends in `(raw: "four to ten verbatim words" HH:MM:SS)`. The snippet is authoritative and quoted exactly from the excerpt — `check-staging.py` fails the line unless those words appear in that entry's Source excerpt, whitespace aside. Use `L<n>` in place of the timestamp only for a plain-text transcript that carries no clock.
 
 **NEVER invent acceptance criteria.** Write a criterion only where someone stated a condition, a number, a behavior, or a case, or where the excerpt admits no other reading. A criterion that follows logically from what was said is still not something anyone said. A section the room never reached stays empty and takes a `- not discussed: <section>` line under Open questions instead — one per empty content section, always, and never alongside content in the same section.
 

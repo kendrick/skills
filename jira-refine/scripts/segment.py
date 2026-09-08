@@ -81,6 +81,12 @@ CLOCK_SPEAKER_LINE_RE = re.compile(r"^\[(\d\d:\d\d:\d\d)\]\s*([A-Z][A-Za-z.' -]*
 VOICE_SPAN_RE = re.compile(r"^<v ([^>]*)>(.*)$")
 VOICE_END_RE = re.compile(r"</v>\s*$")
 
+# NOTE, STYLE, and REGION are WebVTT's block constructs: each opens on a line
+# starting with the keyword (NOTE may carry trailing text on that same line;
+# STYLE and REGION stand alone) and runs through every following line up to
+# the blank line that terminates it. None of that body is speech.
+VTT_BLOCK_START_RE = re.compile(r"^(?:NOTE|STYLE|REGION)(?:$|[ \t])")
+
 
 class Turn:
     """One collapsed speaker turn: `start` is 'HH:MM:SS' or None, `line` is
@@ -178,17 +184,21 @@ def normalize_clock(raw):
 
 def parse_captions(text, timing_re):
     """Shared VTT/SRT collapse. Reimplements collapse-vtt.sh's rules — skip
-    the header/NOTE/blank/bare-id lines, `<v Name>` or `Name: ` opens a turn,
-    a non-matching line continues the open turn, words are never altered —
-    parameterized on the timing line's regex so the same walk serves both
-    caption formats; SRT's only difference from VTT is a comma before the
-    millis instead of a dot."""
+    the header/blank/bare-id lines and whole NOTE/STYLE/REGION blocks,
+    `<v Name>` or `Name: ` opens a turn, a non-matching line continues the
+    open turn, words are never altered — parameterized on the timing line's
+    regex so the same walk serves both caption formats; SRT's only
+    difference from VTT is a comma before the millis instead of a dot."""
     turns = []
     speaker = None
     text_parts = []
     start = None
     start_line = None
     pending_start = None
+    # A block, once opened, swallows every line — including ones that would
+    # otherwise look like a cue id or a timing line — until the blank line
+    # that closes it, per the WebVTT grammar.
+    in_block = False
 
     def flush():
         nonlocal speaker, text_parts
@@ -200,10 +210,22 @@ def parse_captions(text, timing_re):
     for lineno, raw in enumerate(text.splitlines(), start=1):
         line = raw.rstrip("\r")
         if not line.strip():
+            in_block = False
+            continue
+        if in_block:
             continue
         if line.strip().upper().startswith("WEBVTT"):
             continue
-        if line.startswith("NOTE"):
+        if VTT_BLOCK_START_RE.match(line):
+            # Skipping only this opening line (the original bug) let every
+            # later line in the block fall through to the speaker branch
+            # below, where a line with no `<v Name>` or `Name:` prefix reads
+            # as a continuation of whatever turn is still open. That turned
+            # editor commentary — e.g. a NOTE explaining a ticket was pulled
+            # from scope — into words credited to a speaker, and once a key
+            # like PROJ-900 showed up in that swallowed prose it was staged
+            # as a ticket nobody actually spoke. Skip the whole block instead.
+            in_block = True
             continue
         if re.fullmatch(r"\d+", line.strip()):
             continue  # cue identifier / SRT index — carries nothing
