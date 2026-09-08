@@ -63,6 +63,14 @@ awk '
     text = (text == "" ? said : text " " said)
   }
   function emit_held() { if (holding) emit(held); holding = 0 }
+  # WebVTT permits a CRLF terminator and Windows tooling emits one, but awk
+  # splits on the newline alone and leaves the carriage return on the record.
+  # Every rule below then reads a line one invisible character longer than it
+  # looks: WEBVTT misses the block opener, the block skip stops working, and
+  # the header lands in a turn. Strip it once here rather than in each pattern.
+  # This rule sets no `next`, so the line falls through to whichever rule owns
+  # it. jira-refine/scripts/segment.py does the same at its own read.
+  { sub(/\r$/, "") }
   # A blank line terminates whatever is open: the header, a cue, or a comment
   # block. It is the only thing that closes any of them. Whatever line is held
   # is speech by now, since an identifier would be followed by a timing line.

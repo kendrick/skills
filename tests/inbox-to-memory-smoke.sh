@@ -814,6 +814,42 @@ printf '%s\n' "$speakerless" | grep -qE '^\[[0-9][0-9]?:[0-9][0-9](:[0-9][0-9])?
   exit 1
 }
 
+# WebVTT permits a CRLF terminator and Windows tooling emits one. awk splits on
+# the newline alone, so the carriage return rides along on every record and each
+# rule reads a line one invisible character longer than it looks. `WEBVTT\r`
+# missed the block opener, which put the header in a turn of its own and stopped
+# the block skip working, so a NOTE body reached a speaker turn on exactly the
+# input #85 was filed about while this suite stayed green on its LF fixtures.
+#
+# Generated here rather than checked in: a fixture whose whole point is its line
+# endings is one `git config` away from being normalized into an LF file that
+# asserts nothing.
+crlf_dir="$(mktemp -d "${TMPDIR:-/tmp}/i2m-crlf.XXXXXX")"
+trap 'rm -rf "$not_a_scope" "$inline_scope" "$dismissal_scope" "$crlf_dir"' EXIT
+for f in blocks teams-export speakerless steerco-excerpt; do
+  sed 's/$/\r/' "$fixtures/$f.vtt" >"$crlf_dir/$f.vtt"
+done
+
+# Same bytes out of a CRLF file as out of its LF twin. This is the assertion that
+# matters: it holds every fixture above to the CRLF path without restating one of
+# their expected turns, so a new fixture is covered by both the moment it lands.
+for f in blocks teams-export speakerless steerco-excerpt; do
+  diff <(bash "$vtt" "$fixtures/$f.vtt") <(bash "$vtt" "$crlf_dir/$f.vtt") >/dev/null || {
+    echo "$f.vtt collapses differently with CRLF line endings than with LF" >&2
+    diff <(bash "$vtt" "$fixtures/$f.vtt") <(bash "$vtt" "$crlf_dir/$f.vtt") >&2
+    exit 1
+  }
+done
+
+# No carriage return survives into the output. It rode into turn text long before
+# the block rules were touched, so this pins the older half of the same defect.
+for f in blocks speakerless; do
+  bash "$vtt" "$crlf_dir/$f.vtt" | grep -q $'\r' && {
+    echo "a carriage return survived into the collapsed output of $f.vtt" >&2
+    exit 1
+  }
+done
+
 # The collapser carries a ledger; the skill as a whole still does not. Its rows
 # are what stop the three fixes above from reading as arbitrary to whoever
 # changes this script next, and every refute in this section corresponds to one
