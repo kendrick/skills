@@ -1,0 +1,85 @@
+# jira-refine configuration. Every key below carries its default, so a copy of
+# this file with `projects` and `site` edited is a working config.
+#
+# Resolved once per invocation, first file that parses wins:
+#   $JIRA_REFINE_CONFIG, then ./jira-refine.toml, then
+#   ~/.config/jira-refine/config.toml
+#
+# TOML puts every bare key under the table header above it, so the top-level
+# settings all come before the first [table].
+
+# --- Segmentation: read by segment.py -------------------------------------
+
+# The Jira project keys spoken in this session. Required; segment.py exits 3
+# without it. The pattern that finds a key in the transcript is derived from
+# this list plus [spoken_aliases] at run time, which is why there is no
+# raw-regex setting: a session names its projects, not its regexes.
+projects = ["PROJ", "PLAT"]
+
+# A segment shorter than this is demoted to "mentioned in passing" rather than
+# becoming an entry. Override per run with --min-words.
+min_segment_words = 40
+
+# A key counts as a boundary — the start of a new segment — when it lands in
+# the first N words of a turn, or within 4 words after a boundary cue.
+# Elsewhere it is a mention, attributed to whichever segment is open.
+boundary_window_words = 6
+
+# The phrases that open a new topic. Matched case-insensitively.
+boundary_cues = ["okay", "ok", "next", "next up", "let's do", "moving on", "on to", "now"]
+
+# A segment is flagged `long` when its duration exceeds this multiple of the
+# session's median segment duration. Long segments surface as spike candidates.
+long_factor = 2
+
+# The batch label is this prefix followed by the session date, giving
+# `refined-2026-09-07`. Override per run with --label.
+label_prefix = "refined-"
+
+# --- Tracker: read by jira-apply.py ---------------------------------------
+
+# Jira Cloud base URL. Expands ${ENV}, so `site = "${JIRA_REFINE_SITE}"` lets a
+# test point this config at a local fake without editing it.
+site = "https://your-site.atlassian.net"
+
+# "rest" talks to /rest/api/2 over urllib. "jira-cli" shells out to
+# ankitpokhrel's `jira` binary, for a client environment that allows only that.
+transport = "rest"
+
+# The Jira link type used for Dependencies. The dependency issue is outward and
+# this issue is inward: D blocks X.
+link_type = "Blocks"
+
+# --- Spoken forms --------------------------------------------------------
+
+# What each project key sounds like out loud, beyond the key itself. Matching
+# is case-insensitive and treats whitespace inside an alias as flexible, so
+# "the plat board" and "platform dash ninety one" both resolve. Add whatever
+# your room actually says; a missing alias costs you a segment.
+[spoken_aliases]
+PROJ = ["project", "proj"]
+PLAT = ["platform", "plat"]
+
+# --- Custom fields --------------------------------------------------------
+
+# The custom field id that holds Goal, e.g. "customfield_10042". Empty means
+# unset, and Goal then falls back into the description block and reports
+# `unmapped`. Discover candidates with:
+#   jira-apply.py fields --name goal --config <this file>
+# then paste the id here — the discovery step never writes the config itself.
+[fields]
+goal = ""
+
+# The same field's name as declared in jira-cli's own config, used by
+# `jira issue edit --custom name=value`. Only the jira-cli transport reads it.
+# Empty means unset, and Goal takes the description fallback.
+goal_cli_name = ""
+
+# --- Credentials ----------------------------------------------------------
+
+# The names of the environment variables holding the REST credentials. Only the
+# names live here; the values stay in the environment and never land in a
+# config file or a report.
+[auth]
+email_env = "JIRA_EMAIL"
+token_env = "JIRA_API_TOKEN"
