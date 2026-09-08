@@ -17,7 +17,7 @@ Four artifacts. The first two are universal; the last two are the bar a new skil
 
 `_maintenance/<skill>/EVALS.md` joins them where a skill needs live subagents to prove it works, since a smoke test cannot. `PROVENANCE.md` joins them where a skill is derived from an upstream project, as `handoff` and `technical-writing` are.
 
-Four skills predate the bar. `databricks-api`, `eli5`, `inbox-to-memory`, and `technical-writing` carry no `RATIONALE.md`, and `databricks-api` and `eli5` have no smoke test. Hold new work to the full bar; leave those alone until someone is changing them anyway.
+Four skills predate the bar. `databricks-api`, `eli5`, and `technical-writing` carry no `RATIONALE.md`, and `databricks-api` and `eli5` have no smoke test. `inbox-to-memory` carries a partial one covering `scripts/collapse-vtt.sh` alone, added when a change reached that script; the rest of the skill is unledgered. Hold new work to the full bar, and leave the rest alone until someone is changing it anyway. A partial ledger grows one section at a time, in whichever part of a skill a change touches.
 
 ## Invocation
 

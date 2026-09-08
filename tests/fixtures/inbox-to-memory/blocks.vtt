@@ -1,0 +1,28 @@
+WEBVTT
+Kind: captions
+Language: en-US
+
+STYLE
+::cue { color: #ff0000 }
+
+REGION
+id:speaker-box
+width:40%
+
+NOTE A single-line comment, which is the form that ends on its own line.
+
+1
+00:00:01.000 --> 00:00:09.000
+<v Dan>Okay, the export times out on large reports and marketing keeps asking about it.
+
+NOTE
+This recording was reviewed by legal and one topic was pulled from scope.
+A second line of the same comment, because a block runs until the blank.
+
+2
+00:00:20.000 --> 00:00:28.000
+<v Kendrick>Right, and that work depends on the query layer landing first.
+
+NOTE
+Trailing commentary after the last cue, which has no turn left to attach to
+and must still not reopen one.

@@ -686,6 +686,7 @@ fi
 # ships as something runnable rather than a description of what to do by hand.
 vtt=inbox-to-memory/scripts/collapse-vtt.sh
 require_file "$vtt"
+bash -n "$vtt"
 require_text inbox-to-memory/SKILL.md "one sanctioned exception to preserving raw content"
 collapsed="$(bash "$vtt" "$fixtures/steerco-excerpt.vtt")"
 [[ "$(printf '%s\n' "$collapsed" | wc -l | tr -d ' ')" == "5" ]] || {
@@ -704,6 +705,228 @@ require_line "$collapsed" "[00:00:06] Marcus Dell: Finance gave us a date. It is
 # The last turn exercises the other speaker form and a continuation line with no
 # speaker of its own, which is where a naive collapser drops half a sentence.
 require_line "$collapsed" "[00:00:11] Priya Raghavan: Third meeting, same question, still nobody's name on it." vtt
+
+# NOTE, STYLE, and REGION each run from their keyword to the next blank line,
+# and none of that body is speech. Skipping only the opening line left every
+# later line reading as a continuation of the open turn, so an editor's comment
+# came back out as words a named person said at a stated time, inside the zone
+# the skill calls the source of truth, after phase 4 deleted the original (#85).
+# The fixture puts a block in all three positions one can occupy: before the
+# first cue, between two cues, and after the last.
+blocks="$(bash "$vtt" "$fixtures/blocks.vtt")"
+[[ "$(printf '%s\n' "$blocks" | wc -l | tr -d ' ')" == "3" ]] || {
+  echo "two cues separated by comment blocks should collapse to two turns" >&2
+  printf '%s\n' "$blocks" >&2
+  exit 1
+}
+require_line "$blocks" "[00:00:01] Dan: Okay, the export times out on large reports and marketing keeps asking about it." blocks
+require_line "$blocks" "[00:00:20] Kendrick: Right, and that work depends on the query layer landing first." blocks
+
+# Every block body, by a distinctive string from each position, plus the two
+# keywords that were never skipped at all and the header line that matches the
+# `Name: ` speaker form.
+for swallowed in \
+  "reviewed by legal" \
+  "a block runs until the blank" \
+  "single-line comment" \
+  "Trailing commentary" \
+  "::cue" \
+  "STYLE" \
+  "REGION" \
+  "Kind"; do
+  refute_text <(printf '%s\n' "$blocks") "$swallowed"
+done
+
+# The rule that skipped a block by its first line only. Pinning its absence is
+# what stops the one-line form from looking like a tidy simplification later.
+refute_text "$vtt" "/^NOTE/ { next }"
+
+# A cue identifier is recognized by where it sits, one line above the timing
+# line, because position is all the spec guarantees. The old rule matched a bare
+# integer, which covered the hand-numbered fixture above and nothing else, so a
+# Teams or Zoom export keyed by <uuid>/<n>-<n> carried its identifier into the
+# turn text of every cue. Exit 0, turn-shaped output, and a note that read as
+# correct everywhere the retrieval funnel tells a reader to look (#78).
+teams="$(bash "$vtt" "$fixtures/teams-export.vtt")"
+[[ "$(printf '%s\n' "$teams" | wc -l | tr -d ' ')" == "3" ]] || {
+  echo "four uuid-keyed cues across two speakers should collapse to two turns" >&2
+  printf '%s\n' "$teams" >&2
+  exit 1
+}
+require_line "$teams" "[00:00:03] Kendrick M. Arnett: So with so much of the team out tomorrow, plan for the rest of the stand-ups today." teams-export
+refute_text <(printf '%s\n' "$teams") "f9a822e4"
+
+# The last cue is a line reading only `42`, which is what the deleted rule
+# matched. Nothing follows it, so it is speech and has to survive as speech,
+# the reason the fix reads position rather than widening the pattern.
+require_line "$teams" "[00:00:15] Priya Raghavan: Fine by me. How many people are we down? 42" teams-export
+
+# The pattern itself, gone rather than widened. Widening it is the obvious fix
+# and it only buys whichever identifier format someone thought of that day.
+refute_text "$vtt" "/^[0-9]+$/ { next }"
+
+# steerco-excerpt.vtt is the regression baseline for this change: its cues are
+# numbered 1 through 6, the shape the old rule handled, and the three
+# require_line calls plus the two counts above pin its output whole. No golden
+# file, because a fixture small enough to read is a better assertion than a diff.
+
+# A caption file carrying no speaker labels anywhere, which is what most
+# machine-generated transcripts look like, produced nothing at all and exited 0.
+# An unlabelled line inherited the empty speaker, flush() prints only when a
+# speaker is set, and phase 4 then deleted the source on the stated grounds that
+# the raw zone had preserved it. Empty note, deleted original, silent run (#84).
+# The non-empty check is the one that fails if that comes back.
+speakerless="$(bash "$vtt" "$fixtures/speakerless.vtt")"
+[[ -n "$speakerless" ]] || {
+  echo "a VTT with no speaker labels collapsed to nothing" >&2
+  exit 1
+}
+[[ "$(printf '%s\n' "$speakerless" | wc -l | tr -d ' ')" == "7" ]] || {
+  echo "four unlabelled cues should collapse to four turns, one per cue" >&2
+  printf '%s\n' "$speakerless" >&2
+  exit 1
+}
+
+# One turn per cue, each keeping its own timestamp. Merging them the way a
+# labelled turn merges its continuations would leave the first cue's clock
+# standing for a whole meeting, and every quote after it unlocatable.
+require_line "$speakerless" "[00:00:01] @unknown: Okay, so the export times out on large reports and marketing keeps asking about it." speakerless
+require_line "$speakerless" "[00:00:22] @unknown: 42" speakerless
+require_line "$speakerless" "[00:00:25] @unknown: That is the number of reports over the threshold, if anyone is counting." speakerless
+
+# Two physical lines under one cue are one utterance and still merge, which is
+# what repairs a sentence the captioner split. The cue is the boundary here, not
+# the line.
+require_line "$speakerless" "[00:00:12] @unknown: Right, and that work depends on the query layer landing first before anything else can start." speakerless
+
+# The label is the skill's own token for a person nobody named, so a reader
+# meets the same word here and in an open question's resolver field. A name
+# inferred from a neighbouring turn would be a fabrication that reads exactly
+# like a fact.
+require_text "$vtt" '@unknown'
+require_text inbox-to-memory/SKILL.md '@unknown'
+require_text inbox-to-memory/assets/note.template.md '@unknown is a true answer'
+
+# reflow-raw.sh recognizes a collapsed zone by its turn lines, so the @unknown
+# label has to satisfy that same shape or a speakerless note stops reflowing.
+printf '%s\n' "$speakerless" | grep -qE '^\[[0-9][0-9]?:[0-9][0-9](:[0-9][0-9])?\] [^:]+: ' || {
+  echo "an @unknown turn does not match the turn shape reflow-raw.sh looks for" >&2
+  exit 1
+}
+
+# WebVTT permits a CRLF terminator and Windows tooling emits one. awk splits on
+# the newline alone, so the carriage return rides along on every record and each
+# rule reads a line one invisible character longer than it looks. `WEBVTT\r`
+# missed the block opener, which put the header in a turn of its own and stopped
+# the block skip working, so a NOTE body reached a speaker turn on exactly the
+# input #85 was filed about while this suite stayed green on its LF fixtures.
+#
+# Generated here rather than checked in: a fixture whose whole point is its line
+# endings is one `git config` away from being normalized into an LF file that
+# asserts nothing.
+crlf_dir="$(mktemp -d "${TMPDIR:-/tmp}/i2m-crlf.XXXXXX")"
+trap 'rm -rf "$not_a_scope" "$inline_scope" "$dismissal_scope" "$crlf_dir"' EXIT
+for f in blocks teams-export speakerless steerco-excerpt; do
+  sed 's/$/\r/' "$fixtures/$f.vtt" >"$crlf_dir/$f.vtt"
+done
+
+# Same bytes out of a CRLF file as out of its LF twin. This is the assertion that
+# matters: it holds every fixture above to the CRLF path without restating one of
+# their expected turns, so a new fixture is covered by both the moment it lands.
+for f in blocks teams-export speakerless steerco-excerpt; do
+  diff <(bash "$vtt" "$fixtures/$f.vtt") <(bash "$vtt" "$crlf_dir/$f.vtt") >/dev/null || {
+    echo "$f.vtt collapses differently with CRLF line endings than with LF" >&2
+    diff <(bash "$vtt" "$fixtures/$f.vtt") <(bash "$vtt" "$crlf_dir/$f.vtt") >&2
+    exit 1
+  }
+done
+
+# No carriage return survives into the output. It rode into turn text long before
+# the block rules were touched, so this pins the older half of the same defect.
+for f in blocks speakerless; do
+  bash "$vtt" "$crlf_dir/$f.vtt" | grep -q $'\r' && {
+    echo "a carriage return survived into the collapsed output of $f.vtt" >&2
+    exit 1
+  }
+done
+
+# A UTF-8 byte-order mark is a legal, optional start to a WebVTT file. It sits
+# in front of the signature, so the first record matches no rule and the
+# @unknown fallback signs a name to it: `[] @unknown: <BOM>WEBVTT` ahead of the
+# real transcript. Generated here for the same reason the CRLF copies are, and
+# because a checked-in file whose first three bytes carry the assertion is one
+# well-meaning editor save away from losing them.
+bom_dir="$(mktemp -d "${TMPDIR:-/tmp}/i2m-bom.XXXXXX")"
+trap 'rm -rf "$not_a_scope" "$inline_scope" "$dismissal_scope" "$crlf_dir" "$bom_dir"' EXIT
+for f in blocks speakerless steerco-excerpt; do
+  printf '\357\273\277' >"$bom_dir/$f.vtt"
+  /bin/cat "$fixtures/$f.vtt" >>"$bom_dir/$f.vtt"
+done
+for f in blocks speakerless steerco-excerpt; do
+  diff <(bash "$vtt" "$fixtures/$f.vtt") <(bash "$vtt" "$bom_dir/$f.vtt") >/dev/null || {
+    echo "$f.vtt collapses differently when it opens with a byte-order mark" >&2
+    diff <(bash "$vtt" "$fixtures/$f.vtt") <(bash "$vtt" "$bom_dir/$f.vtt") >&2
+    exit 1
+  }
+done
+
+# Both review findings were one shape: a preamble line the rules failed to
+# classify, handed a speaker by the @unknown fallback. WebVTT allows no speech
+# above the first timing line, so a turn opening with no cue behind it is always
+# a parse failure. The collapser refuses the file instead of signing a name to
+# the line, because phase 4 deletes the source once this output is written: a
+# loud stop is recoverable and a fabricated turn is not.
+preamble="$(mktemp -d "${TMPDIR:-/tmp}/i2m-preamble.XXXXXX")/bad.vtt"
+printf 'GARBAGE HEADER\n\n1\n00:00:01.000 --> 00:00:05.000\n<v Alice>Hello</v>\n' >"$preamble"
+if bash "$vtt" "$preamble" >/dev/null 2>&1; then
+  echo "the collapser accepted a line of speech above the first cue" >&2
+  exit 1
+fi
+guard_err="$(bash "$vtt" "$preamble" 2>&1 >/dev/null || true)"
+require_output "$guard_err" "no cue has started; refusing to attribute this line: GARBAGE HEADER"
+
+# The offending line, not the one that flushed it. emit() runs a record behind
+# the read, so reporting FNR here names the blank line below the problem and
+# sends a reader to the wrong place in a 1,388-line transcript.
+require_output "$guard_err" "bad.vtt:1:"
+
+# Every real fixture stays acceptable. A guard that fires on valid input would
+# refuse the transcripts this skill exists to process.
+for f in blocks teams-export speakerless steerco-excerpt; do
+  bash "$vtt" "$fixtures/$f.vtt" >/dev/null 2>&1 || {
+    echo "the preamble guard rejected $f.vtt, which is a valid transcript" >&2
+    exit 1
+  }
+done
+
+# The collapser carries a ledger; the skill as a whole still does not. Its rows
+# are what stop the three fixes above from reading as arbitrary to whoever
+# changes this script next, and every refute in this section corresponds to one
+# Deliberately Not Built row.
+rationale=_maintenance/inbox-to-memory/RATIONALE.md
+require_file "$rationale"
+require_text "$rationale" "## Decision Ledger"
+require_text "$rationale" "## Deliberately Not Built"
+require_text "$rationale" "## Known Limitations"
+
+# Every ledger row carries its tier in the Tier column. Numbering the rows once
+# dropped a separator from each, which markdown renders as the rationale under
+# Decision, the tier under Why, and an empty Tier column: the ledger still reads
+# as prose while the thing AGENTS.md asks it to record is gone from the table.
+awk -F'|' '
+  /^\| *# *\| *Decision/ { want = NF; next }
+  want && /^\|---/ { next }
+  want && /^\|/ {
+    if (NF != want) { print "ledger row " NR " has " NF-1 " columns, header has " want-1; bad = 1 }
+    next
+  }
+  want && !/^\|/ { want = 0 }
+  END { exit bad }
+' "$rationale" || {
+  echo "the RATIONALE decision ledger has a malformed row" >&2
+  exit 1
+}
+
 
 # ---------------------------------------------------------------------------
 # Raw-zone reflow (#48)
