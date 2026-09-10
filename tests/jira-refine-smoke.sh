@@ -797,6 +797,45 @@ if found != 2:
     sys.exit(f"append should leave exactly two begin lines, found {found}")
 ' "$tmp/append-once.json" "$tmp/append-twice-issue.json" || exit 1
 
+# A field body carrying a sentinel-shaped line makes the rendered block
+# ambiguous: `begin ... begin ... end` is the same bytes whether it is one block
+# quoting a sentinel or a stale block with an appended one, so no scanning rule
+# separates them. The entry is refused rather than escaped, because escaping
+# would rewrite what a person wrote. Pinned pure: the fake never sees it,
+# because nothing is ever sent.
+python3 - "$apply" <<'PY' || exit 1
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("jira_apply", sys.argv[1])
+ja = importlib.util.module_from_spec(spec); spec.loader.exec_module(ja)
+cfg = {"transport": "rest", "link_type": "Blocks", "fields": {}, "extra_fields": {}}
+
+for label, body in (
+    ("begin-shaped", "quoting\nh6. jira-refine begin | session q | source e.vtt"),
+    ("end-shaped", "quoting\nh6. jira-refine end"),
+):
+    entry = {"key": "P-1", "source": "o.vtt", "session": "2026-09-07", "label": "L",
+             "fields": {"context": body}}
+    block = ja.render_block(entry)
+    _, verdict, reason = ja.plan_description(entry, {"fields": {"description": block}}, block)
+    if verdict != "conflict":
+        sys.exit(f"{label} field body should refuse, got {verdict}")
+    if "shaped like a jira-refine sentinel" not in (reason or ""):
+        sys.exit(f"{label} refusal should name the sentinel-shaped line: {reason!r}")
+    ops, outcomes = ja.plan_ops(
+        dict(entry, project="PROJ", issue_type="Task", summary="s"), None, cfg
+    )
+    if ops or outcomes["description"] != "skipped":
+        sys.exit(f"{label} field body must create nothing, got {len(ops)} ops")
+
+# The guard must stay off ordinary content, or every entry refuses.
+plain = {"key": "P-1", "source": "o.vtt", "session": "2026-09-07", "label": "L",
+         "fields": {"context": "An ordinary context line.", "acceptance_criteria": ["a", "b"]}}
+block = ja.render_block(plain)
+_, verdict, _ = ja.plan_description(plain, {"fields": {"description": block}}, block)
+if verdict != "already-present":
+    sys.exit(f"an ordinary entry must still apply, got {verdict}")
+PY
+
 # Pure pins on find_blocks, no fake required: a terminated block reports a
 # real line number for its end, and an unterminated one reports None. Every
 # conflict check above depends on that shape holding, so a change here fails

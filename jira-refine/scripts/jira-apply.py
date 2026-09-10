@@ -408,6 +408,37 @@ def find_blocks(text):
     return blocks
 
 
+def self_shaped_reason(block):
+    """A reason this rendered block cannot be told apart from two blocks, or None.
+
+    A rendered block must read back as exactly one block covering all its lines.
+    When a field body carries a line shaped like a sentinel, it does not: the
+    scan sees `begin ... begin ... end` and cannot know whether that is one
+    block quoting a sentinel or a stale block followed by an appended one. Those
+    two are the same bytes, so no scanning rule separates them.
+
+    Refusing beats escaping. Escaping would rewrite what a person actually
+    wrote, and this skill's whole posture on an unknowable extent, established
+    for the missing-sentinel case, is to stop rather than guess. Refusing is
+    that same rule one step earlier, at render time instead of parse time."""
+    spans = find_blocks(block)
+    if not spans:
+        # The block's own begin line did not parse. A create entry carries no
+        # `source`, so its sentinel renders with an empty tail that `.strip()`
+        # takes below what BEGIN_RE matches. That is its own defect and it
+        # predates this guard, which is only here to judge body text that
+        # masquerades as a sentinel.
+        return None
+    last = len(block.splitlines()) - 1
+    if len(spans) == 1 and spans[0][0] == 0 and spans[0][1] == last:
+        return None
+    return (
+        "a field carries a line shaped like a jira-refine sentinel, so the "
+        "rendered block cannot be told apart from two blocks; reword that line "
+        "in the staging file"
+    )
+
+
 def _holds_block(existing, blocks, block):
     """True when a terminated block in `existing` already holds `block` verbatim.
 
@@ -464,6 +495,10 @@ def plan_description(entry, issue, block):
     block from a different source, or text with no block at all, is somebody
     else's writing — refuse it unless the human set `on_conflict`. Rule 4: an
     empty description is written."""
+    self_shaped = self_shaped_reason(block)
+    if self_shaped:
+        return None, "conflict", self_shaped
+
     existing = ((issue.get("fields") or {}).get("description") or "") if issue else ""
     if not isinstance(existing, str):
         # A v3 (ADF) description comes back as a dict. This skill writes v2 wiki
@@ -821,6 +856,15 @@ def plan_create_ops(entry, cfg):
         depends_on=deps if links_unmapped else None,
         goal_line=goal if (goal and goal_unmapped) else None,
     )
+
+    # Same refusal as the update path, and it matters more here: create has no
+    # idempotency rule, so a ticket made from an ambiguous block could never be
+    # repaired by rerunning.
+    self_shaped = self_shaped_reason(block)
+    if self_shaped:
+        outcomes["description"] = "skipped"
+        _note_conflict(outcomes, self_shaped)
+        return [], outcomes
 
     label = str(entry.get("label") or "").strip()
     if label:
