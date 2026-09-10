@@ -408,6 +408,23 @@ def find_blocks(text):
     return blocks
 
 
+def _holds_block(existing, blocks, block):
+    """True when a terminated block in `existing` already holds `block` verbatim.
+
+    Byte equality carries the source with it, because the begin sentinel names
+    the source on its own line, so no separate source comparison is needed. An
+    unterminated span is skipped: its extent is unknown, which is the whole
+    reason it is marked, and slicing to a guessed end would compare the wrong
+    lines."""
+    lines = existing.splitlines()
+    wanted = block.splitlines()
+    return any(
+        lines[start:end + 1] == wanted
+        for start, end, _ in blocks
+        if end is not None
+    )
+
+
 def splice_block(existing, spans, block):
     """Replace the first span with `block` and delete the rest.
 
@@ -475,6 +492,14 @@ def plan_description(entry, issue, block):
     elif not blocks and not existing.strip():
         text = block
     elif on_conflict == "append":
+        # Append has to converge by itself here. On an ordinary conflict the
+        # same-source branch above takes over from the second run on, which is
+        # what has always made `append` idempotent. An unterminated block never
+        # leaves the description, so that branch stays shut and every rerun
+        # would add one more copy of the same block. Rule 8 is the guarantee at
+        # stake: a second run over the same input writes nothing.
+        if _holds_block(existing, blocks, block):
+            return None, "already-present", None
         text = (existing.rstrip("\n") + "\n\n" + block) if existing.strip() else block
     elif on_conflict == "replace":
         # Destructive by request: "removes every jira-refine block and writes

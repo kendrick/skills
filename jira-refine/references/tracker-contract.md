@@ -190,7 +190,7 @@ Under the jira-cli transport a Goal is mapped only when both `fields.goal` and `
 5. Links read `fields.issuelinks`. Dependency D of X is present when X's list holds an entry with `type.name == link_type` and `inwardIssue.key == D` (D blocks X: D outward, X inward). Create the link only when it is absent. A D that is not on the tracker reports `missing-issue`, performs no write, and exits 1.
 6. Labels are added only when absent, by PUTting the union of the existing labels and the new one.
 7. Goal is written when the custom field is empty or already equal. A different non-empty value is a `conflict` on that field alone; the rest of the entry still applies. A write that fails is the same verdict for the same reason — the value is not on the field — and rerunning once the config is fixed is safe, because rule 8 holds.
-8. A second run over the same input performs zero writes and reports `already-present` everywhere. The smoke test asserts this on both transports.
+8. A second run over the same input performs zero writes and reports `already-present` everywhere. The smoke test asserts this on both transports. `append` holds this on its own rather than through rule 2: an entry that keeps `on_conflict: append` reports `already-present` once a terminated block already carries the same bytes, because an unterminated block stays in the description and never lets rule 2's in-place replacement take over.
 
 ## Operations per transport
 

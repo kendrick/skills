@@ -755,6 +755,48 @@ if "A reviewer edit that must not be discarded." not in after:
     sys.exit("re-applying after an append destroyed the reviewer text")
 ' "$tmp/proj-412-before-reapply.json" "$tmp/proj-412-after-reapply.json" || exit 1
 
+# An entry that keeps `on_conflict: append` must converge like any other. The
+# same-source branch is what has always made a second append a no-op, and an
+# unterminated block holds that branch shut forever, so without a check of its
+# own the append path would add one more copy of the same block on every run
+# and rule 8 would not hold. The earlier rerun above drops `on_conflict`, so it
+# exercises a different input and cannot see this.
+put_description PROJ-412 "$tmp/seed-unterminated.txt"
+python3 "$apply" update --config "$config" \
+  < "$tmp/unterminated-append.jsonl" > /dev/null 2>&1 || {
+  echo "the first append over an unterminated block should exit 0" >&2
+  exit 1
+}
+python3 "$apply" get PROJ-412 --config "$config" > "$tmp/append-once.json"
+append_writes_before="$(log_lines "$rest_log")"
+python3 "$apply" update --config "$config" \
+  < "$tmp/unterminated-append.jsonl" > "$tmp/append-twice.json" 2> "$tmp/append-twice.err" || {
+  echo "a second append over the same input should exit 0" >&2
+  exit 1
+}
+[[ "$(log_lines "$rest_log")" == "$append_writes_before" ]] || {
+  echo "a second append must write nothing; the description would grow a block per run" >&2
+  exit 1
+}
+grep -Fq '"description": "already-present"' "$tmp/append-twice.json" || {
+  echo "a second append should report the block already present:" >&2
+  cat "$tmp/append-twice.json" >&2
+  exit 1
+}
+python3 "$apply" get PROJ-412 --config "$config" > "$tmp/append-twice-issue.json"
+python3 -c '
+import json, sys
+def description(path):
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)["fields"]["description"]
+once, twice = description(sys.argv[1]), description(sys.argv[2])
+if once != twice:
+    sys.exit("a second append rewrote the description")
+found = twice.count("h6. jira-refine begin")
+if found != 2:
+    sys.exit(f"append should leave exactly two begin lines, found {found}")
+' "$tmp/append-once.json" "$tmp/append-twice-issue.json" || exit 1
+
 # Pure pins on find_blocks, no fake required: a terminated block reports a
 # real line number for its end, and an unterminated one reports None. Every
 # conflict check above depends on that shape holding, so a change here fails
