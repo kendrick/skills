@@ -411,32 +411,31 @@ def find_blocks(text):
 def self_shaped_reason(block):
     """A reason this rendered block cannot be told apart from two blocks, or None.
 
-    A rendered block must read back as exactly one block covering all its lines.
-    When a field body carries a line shaped like a sentinel, it does not: the
-    scan sees `begin ... begin ... end` and cannot know whether that is one
-    block quoting a sentinel or a stale block followed by an appended one. Those
-    two are the same bytes, so no scanning rule separates them.
+    Reads the body lines directly rather than asking `find_blocks` what it sees.
+    Going through the scan looked equivalent and was not: a create entry carries
+    no `source`, so its own begin line renders with an empty tail that `.strip()`
+    takes below what BEGIN_RE matches, the scan then finds nothing at all, and a
+    body line shaped like a sentinel sailed through on exactly the entries that
+    can least afford it.
+
+    The first and last lines are the block's own sentinels, because
+    `render_block` always writes them there. Any line between them that reads as
+    a sentinel came from a field.
 
     Refusing beats escaping. Escaping would rewrite what a person actually
-    wrote, and this skill's whole posture on an unknowable extent, established
-    for the missing-sentinel case, is to stop rather than guess. Refusing is
-    that same rule one step earlier, at render time instead of parse time."""
-    spans = find_blocks(block)
-    if not spans:
-        # The block's own begin line did not parse. A create entry carries no
-        # `source`, so its sentinel renders with an empty tail that `.strip()`
-        # takes below what BEGIN_RE matches. That is its own defect and it
-        # predates this guard, which is only here to judge body text that
-        # masquerades as a sentinel.
-        return None
-    last = len(block.splitlines()) - 1
-    if len(spans) == 1 and spans[0][0] == 0 and spans[0][1] == last:
-        return None
-    return (
-        "a field carries a line shaped like a jira-refine sentinel, so the "
-        "rendered block cannot be told apart from two blocks; reword that line "
-        "in the staging file"
-    )
+    wrote, and this skill's posture on an unknowable extent, established for the
+    missing-sentinel case, is to stop rather than guess. Refusing is that same
+    rule one step earlier, at render time instead of parse time."""
+    body = block.splitlines()[1:-1]
+    for line in body:
+        stripped = line.strip()
+        if BEGIN_RE.match(stripped) or stripped == END_LINE:
+            return (
+                "a field carries a line shaped like a jira-refine sentinel, so "
+                "the rendered block cannot be told apart from two blocks; reword "
+                "that line in the staging file"
+            )
+    return None
 
 
 def _holds_block(existing, blocks, block):

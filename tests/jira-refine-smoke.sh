@@ -821,11 +821,25 @@ for label, body in (
         sys.exit(f"{label} field body should refuse, got {verdict}")
     if "shaped like a jira-refine sentinel" not in (reason or ""):
         sys.exit(f"{label} refusal should name the sentinel-shaped line: {reason!r}")
-    ops, outcomes = ja.plan_ops(
-        dict(entry, project="PROJ", issue_type="Task", summary="s"), None, cfg
-    )
+    # A real create entry carries no `source` and no `session`, per the contract.
+    # Keeping them here made the outer sentinel parse and hid the case that
+    # matters: without them the begin line renders with an empty tail, `.strip()`
+    # takes it below BEGIN_RE, and a guard that asked `find_blocks` what it saw
+    # found nothing and let the block through.
+    create_entry = {"project": "PROJ", "issue_type": "Task", "summary": "s",
+                    "label": "L", "fields": {"context": body}}
+    if "source" in create_entry or "session" in create_entry:
+        sys.exit("the create entry must carry neither source nor session")
+    ops, outcomes = ja.plan_ops(create_entry, None, cfg)
     if ops or outcomes["description"] != "skipped":
         sys.exit(f"{label} field body must create nothing, got {len(ops)} ops")
+
+    # The same entry without the sentinel-shaped line still creates, or the
+    # guard is refusing every source-less create rather than the ambiguous ones.
+    plain_create = dict(create_entry, fields={"context": "An ordinary line."})
+    ops, outcomes = ja.plan_ops(plain_create, None, cfg)
+    if not ops or outcomes["description"] != "applied":
+        sys.exit("an ordinary source-less create must still plan its create_issue op")
 
 # The guard must stay off ordinary content, or every entry refuses.
 plain = {"key": "P-1", "source": "o.vtt", "session": "2026-09-07", "label": "L",

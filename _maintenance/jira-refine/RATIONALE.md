@@ -48,6 +48,8 @@ Five sources:
 
 | 30 | The smoke suite carries a cross-product invariant table over `plan_description` alongside its hand-written cases | Four defects on one branch each lived in a shape the hand cases did not sample, and each surfaced on the run after the one being asserted. Two invariants over every stored description crossed with every `on_conflict` catch all four, and catch the shapes nobody has thought of yet. Verified by reverting each guard in turn. | [E] |
 
+| 31 | An entry whose field text is shaped like a sentinel is refused, rather than escaped on the way out | Escaping rewrites what a person wrote, which this skill does not do to quoted material anywhere else. The two readings of `begin ... begin ... end` are byte-identical, so the ambiguity has to be removed before the block is written rather than resolved after. Refusing is row 29's rule moved one step earlier, from parse time to render time. | [P] |
+
 ## Deliberately Not Built
 
 | Cut | Why |
@@ -58,6 +60,7 @@ Five sources:
 | ADF / API v3 | v2 wiki markup is the one rendering path this skill's idempotency rules are proven against. A second format needs its own sentinel and its own byte-comparison rule, not a toggle on the existing one. |
 | Merging into a human-written description | Idempotency rule 3 treats non-block text with no block as a conflict unless `on_conflict` is set. Merging into someone else's prose automatically is exactly the guess that rule exists to avoid. |
 | Claiming to the end of the description when a block's end sentinel is missing | Rule 3 now treats a missing end sentinel the same as an unmatched source: a `conflict` unless `on_conflict` is set. Claiming an unknown extent as the block's body is exactly the guess that FRW-758 showed can overwrite a human's own edits below it. |
+| Escaping a sentinel-shaped line in a field body | The escape would have to survive a Jira round trip and come back to compare byte-for-byte under rule 2, and it would alter the words a human wrote to describe their own ticket. Row 31 takes the refusal instead. |
 | Cross-ticket duplicate detection | Each entry validates and applies against its own excerpt. The transcript already said which tickets it discussed; scanning the rest of the tracker for lookalikes answers a question nobody in the room asked. |
 | Hardcoded or regex key pattern | The pattern is derived from `projects` and `[spoken_aliases]` at run time. A fixed or user-authored regex would need hand-editing for every new project a session adds, and fail silently when nobody remembers to. |
 | Hydrating Jira state at stage time | `jira-apply.py` is the only file that knows Jira exists. Reading the tracker during staging would mean stage mode needs credentials before there's anything approved to push. |
