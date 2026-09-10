@@ -33,6 +33,11 @@ tomllib-floor problem, or input that is not one JSON object per line. Argparse
 supplies 2 for a mistyped flag. A dry run applies the same codes to the
 outcomes it planned.
 
+`create` also sends whatever `[extra_fields]` the config declares — the Team or
+board field a project's filter tests, which a ticket created without simply does
+not appear on. Those have no description-block fallback, so an entry whose extra
+field the config cannot map creates nothing at all and reports why.
+
 One file, importing nothing from a sibling script and nothing from a sibling
 skill: a skill lands alone, so a write path reached through a sibling breaks
 whenever that sibling is absent. The follow-up that gives `file-issue` a Jira
@@ -152,7 +157,51 @@ def load_config(path, transport_override=None):
         cfg["fields"] = {}
     if not isinstance(cfg.get("auth"), dict):
         cfg["auth"] = {}
+    cfg["extra_fields"] = _normalize_extra_fields(cfg.get("extra_fields"))
     return cfg
+
+
+def _normalize_extra_fields(raw):
+    """`[extra_fields.<name>]` as `{name: {"id", "cli_name", "value"}}`, or exit 3.
+
+    Loud rather than lenient, unlike the `fields`/`auth` tables above, which a
+    wrong shape merely empties. Those two carry a documented fallback — an
+    unmapped Goal lands in the description block — so a silently-dropped table
+    still gets the content to Jira. An extra field has no fallback: dropping a
+    misspelled `[extra_fields.team]` would create tickets missing the very
+    field the board filters on, which is the invisible-ticket failure this
+    table exists to close.
+
+    Values are strings only. jira-cli writes through `--custom name=value`,
+    which cannot carry a number, a list, or an object, so accepting one here
+    would mean a config that works on `rest` and silently stringifies on
+    `jira-cli`."""
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        die("config: [extra_fields] must be a table of tables, one per field")
+    normalized = {}
+    for name, declaration in raw.items():
+        if not isinstance(declaration, dict):
+            die(
+                f"config: [extra_fields.{name}] must be a table with id, "
+                "cli_name, and value"
+            )
+        for setting in ("id", "cli_name", "value"):
+            if setting in declaration and not isinstance(declaration[setting], str):
+                die(f"config: extra_fields.{name}.{setting} must be a string")
+        unknown = sorted(set(declaration) - {"id", "cli_name", "value"})
+        if unknown:
+            die(
+                f"config: [extra_fields.{name}] has no setting "
+                f"{unknown[0]!r}; expected id, cli_name, or value"
+            )
+        normalized[name] = {
+            "id": declaration.get("id", "").strip(),
+            "cli_name": declaration.get("cli_name", "").strip(),
+            "value": declaration.get("value", "").strip(),
+        }
+    return normalized
 
 
 # ---------------------------------------------------------------------------
@@ -373,6 +422,46 @@ def goal_mapping(cfg):
     return field_id, "", not field_id
 
 
+def extra_field_mappings(entry, cfg):
+    """(name, field_id, cli_name, value, reason) per extra field this create wants.
+
+    `reason` is None when the field resolved to a value and a key to write it
+    under; otherwise it is the line the report hands the human, and the caller
+    refuses the create. Every name the config declares is sent on every create, because the
+    field these exist for — the one a board filters on — is a property of the
+    run rather than of the ticket. An entry naming the same field overrides the
+    value; an entry naming a field the config never declared is a mistake with
+    no safe reading, since nothing here knows that field's id.
+
+    Sorted so the op, the report, and the stderr line agree on an order across
+    runs, which a dict of a TOML table would otherwise leave to file order."""
+    declared = cfg.get("extra_fields") or {}
+    overrides = entry.get("extra_fields") or {}
+    transport = cfg.get("transport")
+    resolved = []
+    for name in sorted(set(declared) | set(overrides)):
+        declaration = declared.get(name)
+        if declaration is None:
+            resolved.append(
+                (name, "", "", "", f"the entry names {name!r}, which no [extra_fields."
+                 f"{name}] in the config declares")
+            )
+            continue
+        field_id = declaration["id"]
+        cli_name = declaration["cli_name"]
+        value = str(overrides.get(name, declaration["value"])).strip()
+        if not value:
+            reason = f"extra field {name!r} has no value in the config or the entry"
+        elif transport == "jira-cli" and not cli_name:
+            reason = f"extra field {name!r} has no cli_name, which jira-cli writes by"
+        elif transport != "jira-cli" and not field_id:
+            reason = f"extra field {name!r} has no id, which the rest transport writes by"
+        else:
+            reason = None
+        resolved.append((name, field_id, cli_name, value, reason))
+    return resolved
+
+
 def linked_dependencies(issuelinks, link_type):
     """Keys D for which this issue already records "D blocks me".
 
@@ -397,6 +486,7 @@ def _outcomes():
         "links": [],
         "label": "unmapped",
         "goal": "already-present",
+        "extra_fields": {},
         "unmapped": [],
         "conflict": None,
     }
@@ -546,9 +636,41 @@ def plan_create_ops(entry, cfg):
     the block still carries the sentinel, so the first `update` against the
     ticket this makes replaces it in place instead of conflicting with it. The
     create entry shape carries no `session` or `source`, so those render empty
-    unless the caller supplies them."""
+    unless the caller supplies them.
+
+    An extra field the config cannot map is the one condition that plans no ops
+    at all; see the comment on that branch for why refusing beats creating."""
     fields = entry.get("fields") or {}
     outcomes = _outcomes()
+
+    extra = extra_field_mappings(entry, cfg)
+    unresolved = [(name, reason) for name, _, _, _, reason in extra if reason]
+    if unresolved:
+        # The one place this script refuses to write rather than degrading, and
+        # the asymmetry with Goal is deliberate. An unmapped Goal falls into the
+        # description block, so the content still reaches Jira and a rerun after
+        # the config is fixed replaces the same block. An extra field has
+        # nowhere to fall: the value is a field id or a select option, not prose,
+        # and the block cannot hold it. Creating the ticket anyway would put it
+        # exactly where this bug already put four of them — on the tracker,
+        # reported applied, missing the field its board filters on — and because
+        # create is the one op with no idempotency rule, the rerun that fixed
+        # the config would leave a duplicate behind rather than repairing the
+        # first. Refusing leaves nothing to clean up.
+        blocked = {name for name, _ in unresolved}
+        for name, _, _, _, _ in extra:
+            # A field that mapped cleanly still did not land, because the create
+            # it would have ridden on never went. `skipped` is the same word the
+            # description takes for a write nobody attempted; leaving these
+            # `applied` would name a field on an issue that does not exist.
+            outcomes["extra_fields"][name] = (
+                "unmapped" if name in blocked else "skipped"
+            )
+        for name, _ in unresolved:
+            outcomes["unmapped"].append({"field": name, "fallback": None})
+        _note_conflict(outcomes, "; ".join(reason for _, reason in unresolved))
+        outcomes["description"] = "skipped"
+        return [], outcomes
 
     link_type = str(cfg.get("link_type") or "").strip()
     deps = _bullets(entry.get("blocked_by"))
@@ -565,6 +687,9 @@ def plan_create_ops(entry, cfg):
         outcomes["unmapped"].append({"field": "goal", "fallback": FALLBACK_BLOCK})
     elif goal:
         outcomes["goal"] = "applied"
+
+    for name, _, _, _, _ in extra:
+        outcomes["extra_fields"][name] = "applied"
 
     block = render_block(
         entry,
@@ -592,6 +717,10 @@ def plan_create_ops(entry, cfg):
             "field_id": "" if goal_unmapped else goal_id,
             "cli_name": "" if goal_unmapped else goal_cli_name,
             "value": "" if goal_unmapped else goal,
+            "extra_fields": [
+                {"name": name, "field_id": field_id, "cli_name": cli_name, "value": value}
+                for name, field_id, cli_name, value, _ in extra
+            ],
         }
     ]
     for dep in deps if not links_unmapped else []:
@@ -762,6 +891,8 @@ class RestTransport(Transport):
             fields["parent"] = {"key": op["parent"]}
         if op.get("field_id") and op.get("value"):
             fields[op["field_id"]] = op["value"]
+        for extra in op.get("extra_fields") or []:
+            fields[extra["field_id"]] = extra["value"]
         created = self._request("POST", "issue", {"fields": fields})
         key = (created or {}).get("key")
         if not key:
@@ -880,6 +1011,10 @@ class JiraCliTransport(Transport):
             args.extend(["--parent", op["parent"]])
         if op.get("cli_name") and op.get("value"):
             args.extend(["--custom", f"{op['cli_name']}={op['value']}"])
+        # `--custom` is documented on create, unlike on edit, so this path does
+        # not carry the caveat set_field does.
+        for extra in op.get("extra_fields") or []:
+            args.extend(["--custom", f"{extra['cli_name']}={extra['value']}"])
         completed = self._mutate(args)
         found = ISSUE_KEY.findall(completed.stdout or "")
         if not found:
@@ -922,6 +1057,11 @@ def _record_failure(outcomes, op, reason):
     name = op["op"]
     if name in ("update_description", "create_issue"):
         outcomes["description"] = "skipped"
+        # One POST carries the whole issue, extra fields included, so a create
+        # that failed took every one of them down with it. Leaving them
+        # `applied` would name fields on a ticket that does not exist.
+        for field_name in outcomes["extra_fields"]:
+            outcomes["extra_fields"][field_name] = "conflict"
     elif name == "add_labels":
         outcomes["label"] = "unmapped"
         outcomes["unmapped"].append({"field": "label", "fallback": FALLBACK_BLOCK})
@@ -1002,6 +1142,8 @@ def entry_failed(report):
         return True
     if report["goal"] == "conflict":
         return True
+    if any(verdict == "conflict" for verdict in report["extra_fields"].values()):
+        return True
     if any(link["result"] == "missing-issue" for link in report["links"]):
         return True
     return any(not item.get("fallback") for item in report["unmapped"])
@@ -1010,10 +1152,15 @@ def entry_failed(report):
 def human_line(report):
     links = report["links"]
     landed = sum(1 for link in links if link["result"] != "missing-issue")
+    # Extra fields sit before `writes` so a create that refused to run reads
+    # left to right as the reason and then the zero it produced.
+    extra = "".join(
+        f"  {name}={verdict}" for name, verdict in report["extra_fields"].items()
+    )
     return (
         f"{report['key'] or '(new)'}  description={report['description']}  "
         f"links={landed}/{len(links)}  label={report['label']}  "
-        f"goal={report['goal']}  writes={report['writes']}"
+        f"goal={report['goal']}{extra}  writes={report['writes']}"
     )
 
 
@@ -1041,8 +1188,36 @@ def read_entries(required):
         missing = [name for name in required if not entry.get(name)]
         if missing:
             die(f"stdin line {lineno}: entry is missing {', '.join(missing)}")
+        _check_extra_fields(entry, lineno)
         entries.append(entry)
     return entries
+
+
+def _check_extra_fields(entry, lineno):
+    """Exit 3 on an `extra_fields` that update cannot honor or create cannot send.
+
+    Rejected outright on an update, rather than ignored. `update` edits an issue
+    that already carries its fields, so the key means the caller expected a
+    write this command has no path for — and a silently dropped one reads on the
+    report as a field that landed. Same reasoning `read_entries` applies to every
+    other malformed line: the producer is `check-staging.py entries`, which emits
+    this key on neither shape, so anything here came from a hand-built line."""
+    if "extra_fields" not in entry:
+        return
+    if "project" not in entry:
+        die(
+            f"stdin line {lineno}: extra_fields is create-only; update writes "
+            "only the fields the contract's per-field table names"
+        )
+    raw = entry["extra_fields"]
+    if not isinstance(raw, dict):
+        die(f"stdin line {lineno}: extra_fields must be an object of name to value")
+    for name, value in raw.items():
+        if not isinstance(value, str):
+            die(
+                f"stdin line {lineno}: extra_fields.{name} must be a string; "
+                "jira-cli writes custom fields as --custom name=value"
+            )
 
 
 def _apply(args, required, dry_run):
@@ -1083,6 +1258,7 @@ def _apply(args, required, dry_run):
                 "links": outcomes["links"],
                 "label": outcomes["label"],
                 "goal": outcomes["goal"],
+                "extra_fields": outcomes["extra_fields"],
                 "unmapped": outcomes["unmapped"],
                 "conflict": outcomes["conflict"],
                 "writes": writes,

@@ -550,6 +550,154 @@ if description.index("A human wrote this by hand.") > description.index("h6. jir
     sys.exit("on_conflict: append should keep the existing text first")
 ' "$tmp/proj-413.json" || exit 1
 
+# --- Extra fields on create (REST). -----------------------------------------
+# A board whose filter tests a field the create never sent hides the ticket it
+# just made: real, correct, reported applied, and absent from the backlog. Every
+# case below drives the real create path, because the whole failure was a report
+# that said `applied` while the field was null.
+
+create_entry() {  # <summary> [extra_fields JSON]
+  python3 -c '
+import json, sys
+entry = {"project": "PROJ", "issue_type": "Task", "summary": sys.argv[1],
+         "fields": {"context": "Seeded by the smoke test.", "acceptance_criteria": [],
+                    "out_of_scope": "", "dependencies": [], "goal": None,
+                    "open_questions": [], "provenance": "source: smoke"},
+         "parent": None, "blocked_by": [], "label": "refined-2026-09-07"}
+if len(sys.argv) > 2 and sys.argv[2]:
+    entry["extra_fields"] = json.loads(sys.argv[2])
+print(json.dumps(entry))
+' "$1" "${2:-}"
+}
+
+# What the POST actually carried, not what the report claimed about it: the bug
+# was a report saying `applied` over a null field.
+created_field() {  # <log> <field id>
+  python3 -c '
+import json, sys
+posts = [json.loads(line) for line in open(sys.argv[1], encoding="utf-8")]
+created = [p for p in posts if p.get("path") == "issue" and p.get("method") == "POST"]
+if not created:
+    sys.exit("no POST issue reached the fake")
+print(created[-1]["body"]["fields"].get(sys.argv[2], ""))
+' "$1" "$2"
+}
+
+# The declared value rides along with no entry saying so, because the field a
+# board filters on is a property of the run, not of one ticket.
+create_entry "Team from the config" > "$tmp/create-default.jsonl"
+python3 "$apply" create --config "$config" \
+  < "$tmp/create-default.jsonl" > "$tmp/create-default.json" 2>/dev/null || {
+  echo "a create declaring a mappable extra field should exit 0" >&2
+  exit 1
+}
+grep -Fq '"extra_fields": {"team": "applied"}' "$tmp/create-default.json" || {
+  echo "the create report should mark the declared extra field applied:" >&2
+  cat "$tmp/create-default.json" >&2
+  exit 1
+}
+sent="$(created_field "$rest_log" customfield_10001)" || exit 1
+[[ "$sent" == "team-a" ]] || {
+  echo "the created issue carried customfield_10001='$sent', expected 'team-a'" >&2
+  exit 1
+}
+
+# An entry naming the same field overrides the config's value for that ticket.
+create_entry "Team from the entry" '{"team": "team-b"}' > "$tmp/create-override.jsonl"
+python3 "$apply" create --config "$config" \
+  < "$tmp/create-override.jsonl" > /dev/null 2>&1 || {
+  echo "a create overriding an extra field should exit 0" >&2
+  exit 1
+}
+sent="$(created_field "$rest_log" customfield_10001)" || exit 1
+[[ "$sent" == "team-b" ]] || {
+  echo "an entry override should win: got '$sent', expected 'team-b'" >&2
+  exit 1
+}
+
+# The refusal, and the reason it is a refusal rather than a fallback. An extra
+# field has nowhere to fall, and create has no idempotency rule: creating the
+# ticket anyway would put an invisible one on the tracker AND leave the rerun
+# that fixes the config making a duplicate. Nothing may reach the tracker here.
+before_refusal="$(log_lines "$rest_log")"
+create_entry "Undeclared field" '{"sprint": "42"}' > "$tmp/create-undeclared.jsonl"
+set +e
+python3 "$apply" create --config "$config" \
+  < "$tmp/create-undeclared.jsonl" > "$tmp/create-undeclared.json" 2> "$tmp/create-undeclared.err"
+undeclared_status=$?
+set -e
+[[ "$undeclared_status" == 1 ]] || {
+  echo "an undeclared extra field should exit 1, got $undeclared_status" >&2
+  exit 1
+}
+[[ "$(log_lines "$rest_log")" == "$before_refusal" ]] || {
+  echo "a refused create must not reach the tracker at all" >&2
+  exit 1
+}
+grep -Fq '"description": "skipped"' "$tmp/create-undeclared.json" || {
+  echo "a refused create should report the description skipped, not applied" >&2
+  exit 1
+}
+# `"fallback": null` is the load-bearing half: `entry_failed` exits 1 on an
+# unmapped field that took no fallback, and a fallback string here would make
+# this case pass while the ticket went out without its field.
+grep -Fq '{"field": "sprint", "fallback": null}' "$tmp/create-undeclared.json" || {
+  echo "an unmapped extra field must claim no fallback:" >&2
+  cat "$tmp/create-undeclared.json" >&2
+  exit 1
+}
+grep -Fq "which no [extra_fields.sprint] in the config declares" "$tmp/create-undeclared.json" || {
+  echo "the conflict should name the undeclared field and where to declare it" >&2
+  exit 1
+}
+# The field that DID map still never landed, because the create it would have
+# ridden on never went. Reporting it `applied` would name a field on an issue
+# that does not exist.
+grep -Fq '"team": "skipped"' "$tmp/create-undeclared.json" || {
+  echo "a mappable extra field on a refused create should report skipped" >&2
+  exit 1
+}
+
+# A create dry run plans the extra field and sends nothing, same as every other
+# dry run: the plan the user approves has to be the plan that runs.
+before_dry="$(log_lines "$rest_log")"
+python3 "$apply" create --config "$config" --dry-run \
+  < "$tmp/create-default.jsonl" > "$tmp/create-dry.json" 2>/dev/null || {
+  echo "a create dry run should exit 0" >&2
+  exit 1
+}
+[[ "$(log_lines "$rest_log")" == "$before_dry" ]] || {
+  echo "a create --dry-run must write nothing" >&2
+  exit 1
+}
+grep -Fq '"key": null' "$tmp/create-dry.json" || {
+  echo "a create dry run reports a null key, per the contract" >&2
+  exit 1
+}
+grep -Fq '"extra_fields": {"team": "applied"}' "$tmp/create-dry.json" || {
+  echo "a create dry run should plan the extra field the real run would send" >&2
+  exit 1
+}
+
+# `update` edits issues that already carry their fields. Accepting the key and
+# dropping it would report a field as landed that no code path ever wrote.
+set +e
+python3 -c '
+import json
+print(json.dumps({"key": "PROJ-412", "fields": {}, "extra_fields": {"team": "x"}}))
+' | python3 "$apply" update --config "$config" > /dev/null 2> "$tmp/update-extra.err"
+update_extra_status=$?
+set -e
+[[ "$update_extra_status" == 3 ]] || {
+  echo "extra_fields on an update entry should exit 3, got $update_extra_status" >&2
+  exit 1
+}
+grep -Fq "extra_fields is create-only" "$tmp/update-extra.err" || {
+  echo "the rejection should say extra_fields is create-only:" >&2
+  cat "$tmp/update-extra.err" >&2
+  exit 1
+}
+
 kill "$rest_pid" 2>/dev/null || true
 wait "$rest_pid" 2>/dev/null || true
 rest_pid=""
@@ -568,19 +716,31 @@ export FAKE_JIRA_SEED="$fixtures/issues.json"
 export FAKE_JIRA_STATE="$tmp/cli-state.json"
 # jira-cli writes a custom field by its declared name and the raw API returns it
 # by id, so the fake needs the same name-to-id declaration the real CLI carries
-# in its own config. Both halves are already in the fixture config as
-# `goal_cli_name` and `goal`; deriving the map from there rather than restating
-# the pair keeps a config edit from silently splitting the write key from the
-# read key, which is the shape of the bug this leg exists to catch.
+# in its own config. Every half is already in the fixture config — `goal` and
+# `goal_cli_name` under [fields], and an `id`/`cli_name` pair per
+# [extra_fields.*] table; deriving the map from there rather than restating the
+# pairs keeps a config edit from silently splitting a write key from its read
+# key, which is the shape of the bug this leg exists to catch.
 export FAKE_JIRA_CUSTOM_FIELDS="$(python3 -c '
 import json, sys, tomllib
 with open(sys.argv[1], "rb") as f:
-    fields = tomllib.load(f).get("fields") or {}
+    cfg = tomllib.load(f)
+fields = cfg.get("fields") or {}
 name = (fields.get("goal_cli_name") or "").strip()
 field_id = (fields.get("goal") or "").strip()
 if not name or not field_id:
     sys.exit("the fixture config must set both fields.goal and fields.goal_cli_name")
-print(json.dumps({name: field_id}))
+declared = {name: field_id}
+extra = cfg.get("extra_fields") or {}
+if not extra:
+    sys.exit("the fixture config must declare at least one [extra_fields.*] table")
+for key, declaration in extra.items():
+    cli_name = (declaration.get("cli_name") or "").strip()
+    ident = (declaration.get("id") or "").strip()
+    if not cli_name or not ident:
+        sys.exit(f"extra_fields.{key} must set both id and cli_name")
+    declared[cli_name] = ident
+print(json.dumps(declared))
 ' "$config")" || exit 1
 # The CLI transport never opens a socket, and pointing `site` at a dead port
 # proves it: a leg that quietly fell back to REST would fail here instead of
@@ -638,6 +798,111 @@ grep -Fq '"description": "conflict"' "$tmp/cli-1.json" || {
   echo "PROJ-413 should conflict on the jira-cli transport too" >&2
   exit 1
 }
+
+# --- Extra fields on create (jira-cli). -------------------------------------
+# The CLI writes a custom field by its declared NAME and the raw API returns it
+# by id. That split is where the field silently lands on the wrong key, so this
+# leg checks both ends: the argument that went out, and the id it reads back on.
+
+create_entry "Team over the CLI" > "$tmp/cli-create.jsonl"
+python3 "$apply" create --config "$config" --transport jira-cli \
+  < "$tmp/cli-create.jsonl" > "$tmp/cli-create.json" 2>/dev/null || {
+  echo "a jira-cli create with a mappable extra field should exit 0" >&2
+  exit 1
+}
+python3 - "$cli_log" <<'PY' || exit 1
+import json, sys
+creates = [json.loads(line) for line in open(sys.argv[1], encoding="utf-8")]
+creates = [c for c in creates if c.get("command") == "issue create"]
+if not creates:
+    sys.exit("no `issue create` reached the CLI fake")
+args = creates[-1]["args"]
+if "--custom" not in args or "Team=team-a" not in args:
+    sys.exit(f"the create should have sent --custom Team=team-a; got {args!r}")
+PY
+cli_created_key="$(python3 -c '
+import json, sys
+print(json.load(open(sys.argv[1], encoding="utf-8"))["key"])
+' "$tmp/cli-create.json")"
+python3 "$apply" get "$cli_created_key" --config "$config" --transport jira-cli \
+  > "$tmp/cli-created.json" 2>/dev/null || {
+  echo "the issue the CLI create reported should be readable back" >&2
+  exit 1
+}
+python3 - "$tmp/cli-created.json" <<'PY' || exit 1
+import json, sys
+fields = json.load(open(sys.argv[1], encoding="utf-8"))["fields"]
+# Written by name, read by id. A fake or a transport that stored it under the
+# literal name would leave this empty while every report still said `applied`.
+if fields.get("customfield_10001") != "team-a":
+    sys.exit(f"the created issue reads back customfield_10001="
+             f"{fields.get('customfield_10001')!r}, expected 'team-a'")
+PY
+
+# `--custom` writes by name, so a jira-cli run with no `cli_name` has no way to
+# name the field. Refusing beats creating a ticket the board will not show.
+before_nocli="$(log_lines "$cli_log")"
+grep -v '^cli_name = "Team"$' "$config" > "$tmp/no-cli-name.toml"
+set +e
+python3 "$apply" create --config "$tmp/no-cli-name.toml" --transport jira-cli \
+  < "$tmp/cli-create.jsonl" > "$tmp/cli-nocli.json" 2>/dev/null
+nocli_status=$?
+set -e
+[[ "$nocli_status" == 1 ]] || {
+  echo "a jira-cli create with no cli_name should exit 1, got $nocli_status" >&2
+  exit 1
+}
+[[ "$(log_lines "$cli_log")" == "$before_nocli" ]] || {
+  echo "a create refused for a missing cli_name must not reach the tracker" >&2
+  exit 1
+}
+grep -Fq "no cli_name, which jira-cli writes by" "$tmp/cli-nocli.json" || {
+  echo "the refusal should name cli_name as the missing piece:" >&2
+  cat "$tmp/cli-nocli.json" >&2
+  exit 1
+}
+
+# --- The extra_fields config table. -----------------------------------------
+# Loud rather than lenient, unlike [fields] and [auth], which a wrong shape
+# merely empties. Those two have a documented description-block fallback, so a
+# dropped table still gets the content to Jira. A dropped [extra_fields.team]
+# creates tickets missing the field the board filters on — the original bug,
+# reintroduced by a typo nobody sees.
+bad_extra_config() {  # <toml body> <expected message fragment>
+  {
+    echo 'projects = ["PROJ"]'
+    echo 'site = "http://127.0.0.1:1"'
+    printf '%s\n' "$1"
+  } > "$tmp/bad-extra.toml"
+  set +e
+  python3 "$apply" get PROJ-412 --config "$tmp/bad-extra.toml" > /dev/null 2> "$tmp/bad-extra.err"
+  local status=$?
+  set -e
+  [[ "$status" == 3 ]] || {
+    echo "a malformed [extra_fields] should exit 3, got $status for: $1" >&2
+    exit 1
+  }
+  grep -Fq "$2" "$tmp/bad-extra.err" || {
+    echo "the message should name the problem '$2'; got: $(cat "$tmp/bad-extra.err")" >&2
+    exit 1
+  }
+}
+bad_extra_config 'extra_fields = "nope"' "must be a table of tables"
+bad_extra_config '[extra_fields]
+team = "flat"' "must be a table with id, cli_name, and value"
+bad_extra_config '[extra_fields.team]
+id = 10001' "must be a string"
+# A misspelled setting is the whole failure mode in miniature: `idd` would leave
+# `id` empty, and a lenient read would create invisible tickets forever.
+bad_extra_config '[extra_fields.team]
+idd = "customfield_10001"' "has no setting"
+
+# Nothing infers a team from the project. On a project shared by several teams
+# that would file one team's work onto another team's board — worse than
+# invisibility, and the reason the field is declared per run instead.
+refute_text jira-refine/scripts/jira-apply.py "customfield_10001"
+require_text jira-refine/references/tracker-contract.md "extra_fields"
+require_text jira-refine/assets/jira-refine.example.toml "[extra_fields.team]"
 
 # --- Portability. -----------------------------------------------------------
 

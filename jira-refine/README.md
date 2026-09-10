@@ -70,6 +70,7 @@ jira-refine/
 - **Number words only go up to 9999.** A key spoken as a larger number won't parse. Say the digits instead, or spell the key.
 - **The jira-cli transport is the thinner path.** It can't discover custom fields at all, its undocumented `--custom` flag on edit means Goal may still fall back to the description block even with `goal_cli_name` set, and its flags are pinned by the test fixture rather than by any particular `jira` release.
 - **Deleting the sentinel doesn't undo anything.** It marks the next apply a conflict rather than a clean rewrite, because that block is the only record a push already happened.
+- **A board filter can hide a ticket you just created.** If your board's filter tests a Team field, a ticket created without one is real, correct, reported `applied`, and nowhere in the backlog. Declare that field under `[extra_fields]` so every `create` carries it. Nothing guesses it for you: on a project shared by several teams, a guess files one team's work onto another team's board.
 - **An epic-link Goal needs its own config entry.** The skill assumes Goal is a custom field; nothing detects the epic-link case automatically.
 - **Jira's description cap is unhandled.** Past roughly 32,767 characters, you get whatever error the API returns, nothing friendlier.
 - **Refining the same ticket in two sessions conflicts by design.** The two sources don't match, and the skill won't guess which one wins.

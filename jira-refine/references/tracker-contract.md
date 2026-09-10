@@ -43,7 +43,8 @@ For `create`:
  "fields": {"...": "same seven keys"},
  "parent": null,
  "blocked_by": [],
- "label": "refined-2026-09-07"}
+ "label": "refined-2026-09-07",
+ "extra_fields": {"team": "1b4b76c3-..."}}
 ```
 
 Field types and provenance:
@@ -60,6 +61,7 @@ Field types and provenance:
 | `fields.goal` | string or null | Null when the section is empty |
 | `not_discussed` | array of string | Lowercased section names, carried for reporting; it does not affect the rendered block |
 | `parent`, `blocked_by` | string, array of string | `create` only |
+| `extra_fields` | object of string to string | `create` only, and optional. Overrides the value of a field the config declares; see "Extra fields on create". On an `update` entry it exits 3 |
 
 **Anchors are stripped at this boundary.** A staging line's trailing `(raw: "…" HH:MM:SS)` is bookkeeping for the human reviewing the file, and every string above is the line text with its list marker and its anchor removed and whitespace trimmed. Traceability into Jira runs through Provenance and the `refined-<session>` label instead.
 
@@ -73,6 +75,7 @@ Field types and provenance:
  "links": [{"key": "PROJ-398", "result": "applied|already-present|missing-issue"}],
  "label": "applied|already-present|unmapped",
  "goal": "applied|already-present|conflict|unmapped",
+ "extra_fields": {"team": "applied|skipped|unmapped|conflict"},
  "unmapped": [{"field": "goal", "fallback": "description block"}],
  "conflict": null,
  "writes": 0}
@@ -81,6 +84,7 @@ Field types and provenance:
 - `description: skipped` means no write was attempted, because reading the issue failed or the entry was abandoned before its description op ran.
 - `conflict` is null or a single-line reason, and it is the entry-level verdict; a per-field conflict also shows on that field.
 - `goal: conflict` means the value did not reach the field — Jira holds a different one, or the write failed — and the entry-level `conflict` says which. A failed goal write never appears in `unmapped`: the block was rendered before the failure, so it carries no `Goal:` line to claim.
+- `extra_fields` is empty on every `update`. On a `create` it carries one verdict per field the config declares or the entry names: `skipped` means the create was refused, so the field landed nowhere; `conflict` means the create itself failed.
 - `writes` counts mutations actually sent — HTTP writes under `rest`, subprocess invocations that mutate under `jira-cli`. A dry run always reports `0`.
 - On a `create` dry run, `key` is null.
 
@@ -98,7 +102,7 @@ PROJ-412  description=applied  links=1/1  label=applied  goal=unmapped  writes=3
 | Code | When |
 |---|---|
 | 0 | Every field on every entry reported `applied` or `already-present`, or reported `unmapped` and took its fallback. An unmapped field that landed in the description block is a success: the shipped config leaves `fields.goal` unset, so treating that as a failure would exit 1 on every ordinary run |
-| 1 | Any `conflict`, `missing-issue`, unmapped-without-fallback, or failed write. The report is still complete: a failure is recorded and the entry continues |
+| 1 | Any `conflict`, `missing-issue`, unmapped-without-fallback, or failed write. An extra field the config cannot map lands here, since it has no fallback to take. The report is still complete: a failure is recorded and the entry continues |
 | 3 | Config missing or unparseable, unknown transport, missing credentials, missing `site`, absent `jira` binary, a Python below the 3.11 `tomllib` floor, or the tracker itself unreachable or refusing to answer at preflight — see "Preflight versus the apply loop" below. The message names the floor |
 
 A dry run applies the same codes to the outcomes it planned.
@@ -120,6 +124,32 @@ This table is the single authoritative statement of where each template field la
 | Dependencies | issue links, `link_type` (default `Blocks`), this issue inward | `Depends on: KEY, KEY` line inside the block; reported `unmapped`. An explicitly empty `link_type` is the only signal that selects this fallback. An absent key still means `Blocks`, because `plan_ops` is pure and nothing else about link support is knowable before the block is rendered |
 | Goal | custom field `fields.goal` | `Goal: …` line inside the block; reported `unmapped`. Plan time only: the line goes in while the block is still being rendered, so a write that fails afterwards reports `conflict` instead |
 | Provenance | last section of the block + label `refined-<session>` | block only; label reported `unmapped` |
+| Extra fields (`create` only) | the field id each `[extra_fields.<name>]` declares | none. The create is refused; see below |
+
+## Extra fields on create
+
+A Jira project shared by several teams gives each team a board whose filter tests a field the ticket has to carry — `project in (10777) AND cf[10001] in (1b4b76c3-...)` for Advanced Roadmaps' Team field. A ticket created without that field is on the tracker, correct in every field this contract otherwise covers, and absent from the backlog its team reads.
+
+`[extra_fields.<name>]` in the config declares one such field, and every `create` sends all of them:
+
+```toml
+[extra_fields.team]
+id = "customfield_10001"
+cli_name = "Team"
+value = "1b4b76c3-..."
+```
+
+`id` is what `rest` writes by, `cli_name` what `jira issue create --custom name=value` writes by, and `value` what every create sends. A create entry's own `extra_fields` object overrides the value for that one ticket; the config's `value` covers every other. Values are strings on both sides, because `--custom name=value` carries nothing else.
+
+The config table is validated strictly, unlike `[fields]` and `[auth]`, which a wrong shape merely empties. Those two have a description-block fallback, so a dropped table still gets its content to Jira. This one has none, so a misspelled setting would silently create the invisible tickets it exists to prevent: a non-table value, an unknown setting, or a non-string `id`, `cli_name`, or `value` exits 3 naming the key.
+
+**An extra field the run cannot map refuses the create.** No value from either side, no `id` under `rest`, no `cli_name` under `jira-cli`, or a name the entry gives that no `[extra_fields.<name>]` declares: the entry plans no ops at all, reports `description: skipped`, an `unmapped` item carrying `"fallback": null`, and a `conflict` naming the field. Every field that did map reports `skipped`, because the create it would have ridden on never went.
+
+That is the opposite of Goal's behavior, and the asymmetry is the point. A Goal falls into the description block, so its content still reaches Jira and the next run replaces the same block. An extra field's value is a field id or a select option rather than prose, so the block cannot hold it — and `create` is the one operation with no idempotency rule, so a ticket made without the field would both hide on the board and turn the rerun that fixes the config into a duplicate. Refusing leaves nothing to clean up.
+
+Nothing infers a field from the project. On a shared project, guessing a team files one team's work onto another team's board, which is worse than filing it nowhere.
+
+`update` rejects the `extra_fields` key at exit 3. It edits issues that already carry their fields, so the key means the caller expected a write this command has no path for, and dropping it silently would read on the report as a field that landed.
 
 ## The description block
 
@@ -169,7 +199,7 @@ Under the jira-cli transport a Goal is mapped only when both `fields.goal` and `
 | add_labels | `PUT issue/{key}` `{"fields":{"labels":[union]}}` | `jira issue edit KEY --label L --no-input` |
 | set_field | `PUT issue/{key}` `{"fields":{id:value}}` | `jira issue edit KEY --custom name=value --no-input` |
 | create_link | `POST issueLink` `{type:{name},inwardIssue:{key:X},outwardIssue:{key:D}}` | `jira issue link D X "<link_type>"` |
-| create_issue | `POST issue` | `jira issue create -pPROJ -tTask -s"…" -b"…" -lL --no-input`, key parsed from the output |
+| create_issue | `POST issue`, extra fields as `fields[id]` | `jira issue create -pPROJ -tTask -s"…" -b"…" -lL --no-input`, one `--custom name=value` per extra field, key parsed from the output |
 | list_fields | `GET field`, filtered by name substring, printing id / name / schema.type | exits 1 with `field discovery needs the rest transport` |
 
 `--custom` is documented on create, and jira-cli requires custom fields to be declared in its own config. The two ways a Goal misses the field split on timing. An unset `fields.goal` or `fields.goal_cli_name` is known while the block is still being rendered: report `unmapped` and put the `Goal:` line in the block. An edit that fails at write time is past that point — the block went out without the line, so there is no fallback to claim — and reports `conflict` on the goal, with the error in the entry-level `conflict`.

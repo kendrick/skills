@@ -40,6 +40,9 @@ Five sources:
 | 22 | `jira-refine` never calls `file-issue` to apply an update, and never will | `file-issue` is creation-only by its own rule, and a skill lands alone: a write path reached through a sibling breaks the moment that sibling isn't installed, unlike a prose convention, which degrades safely. | [C] |
 | 23 | The jira-cli op table's `create_link` reads `link_type` from config instead of a hardcoded `"Blocks"` | Both transports plan against the same config key, so switching transports never changes which link type a dependency creates. | [P] |
 | 24 | Anchors are stripped when an entry crosses from the staging file into the tracker-contract JSON | The anchor is bookkeeping for the human reviewing the file; once an entry is approved, traceability into Jira runs through the Provenance block and the `refined-<session>` label instead of a raw transcript quote. | [P] |
+| 25 | A create sends the fields `[extra_fields]` declares, per run, with a per-entry override | A board filtering on a Team field hides every ticket created without one—observed live on FRW-765, four tickets reported `applied` and absent from the backlog. The field belongs to the run rather than the ticket, so the config carries the value and an entry overrides it only where one ticket differs. | [E] |
+| 26 | An extra field the run cannot map refuses the create outright, where an unmapped Goal falls into the description block | The block can hold prose, not a field id or a select option, so there is no fallback to take. `create` is also the one op with no idempotency rule: creating the ticket anyway would hide it on the board and turn the rerun that fixes the config into a duplicate. Refusing leaves nothing to clean up. | [P] |
+| 27 | `[extra_fields]` is validated strictly at load, unlike `[fields]` and `[auth]`, which a wrong shape empties | Those two have a documented description-block fallback, so a dropped table still gets its content to Jira. This one has none, so a misspelled setting would silently recreate the invisible-ticket bug the table exists to close. | [P] |
 
 ## Deliberately Not Built
 
@@ -54,14 +57,17 @@ Five sources:
 | Hardcoded or regex key pattern | The pattern is derived from `projects` and `[spoken_aliases]` at run time. A fixed or user-authored regex would need hand-editing for every new project a session adds, and fail silently when nobody remembers to. |
 | Hydrating Jira state at stage time | `jira-apply.py` is the only file that knows Jira exists. Reading the tracker during staging would mean stage mode needs credentials before there's anything approved to push. |
 | `jira-apply.py` writing the staging file | The staging file is the human's review artifact. A script that reads entries and writes reports has no business also rewriting the approvals it was handed. |
+| Inferring a team or board field from the project | A project shared by several teams has no single right answer, so a guess files one team's work onto another team's board. That is a worse failure than the invisibility it would be fixing, and it is invisible in the same way: the report says `applied` either way. |
+| Extra fields on `update` | `update` edits issues that already carry their fields, so the key would name a write with no path behind it. `read_entries` rejects it at exit 3 rather than dropping it, because a dropped key reads on the report as a field that landed. |
 | Transitions, assignees, sprints, estimates, comments | The seven-field template holds what a transcript states. None of these five is something a spoken session states; adding write paths for them multiplies the idempotency rules for fields the template doesn't hold. |
 | A `mark` verb for status flipping | Status flips happen by hand, in an editor, per the staging file's own lifecycle. A verb that flips it programmatically reopens the auto-approve risk cut above, through a side door. |
 | Broadening `file-issue` into a `manage-issue` that both creates and edits | `file-issue`'s entire body is a create-time interview with gates that grade a freshly drafted body; editing shares none of that sequence. Widening a model-invoked description to cover closing and relabelling would raise the cost of a misfire on a skill whose own ledger says it lacks the guards for it. The repo already split this way once, as `jd-file` and `jd-audit`. |
 
 ## Known Limitations
 
-- Nothing here is measured yet, so every row above is `[P]` or `[C]` until a live run, recorded in `EVALS.md`, bumps one to `[E]`.
+- Row 25 is the only `[E]` here, and it was measured by the bug rather than by a scenario: a live run created four tickets nobody could find. Every other row stays `[P]` or `[C]` until a run recorded in `EVALS.md` bumps it.
 - Number-word parsing covers English 0–9999 only.
+- An extra field's value is a string on both transports, because `jira issue create --custom name=value` carries nothing else. A field wanting a number, a list, or an option object has no path here.
 - The jira-cli transport can't discover fields at all, `--custom` on edit is undocumented so Goal may fall back to the description block even when `goal_cli_name` is set, and its flags are pinned by the fixture shim rather than by every jira-cli release.
 - A hand-deleted sentinel makes the next apply report a conflict. That's the correct outcome, not a bug: the block is the only record that a push already happened.
 - A Goal that's really an epic link, not a custom field, needs its own config entry; nothing detects that case automatically.
