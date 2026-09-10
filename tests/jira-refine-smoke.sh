@@ -834,6 +834,28 @@ for label, body in (
     if ops or outcomes["description"] != "skipped":
         sys.exit(f"{label} field body must create nothing, got {len(ops)} ops")
 
+    # A refused create must not name fields on a ticket nobody made. Everything
+    # planned before the refusal is computed and then thrown away, so a `goal`
+    # or an extra field still reading `applied` is a report claiming a write
+    # that never happened.
+    rich_cfg = {"transport": "rest", "link_type": "Blocks",
+                "fields": {"goal": "customfield_10057"},
+                "extra_fields": {"team": {"id": "customfield_10001",
+                                          "cli_name": "Team", "value": "team-a"}}}
+    rich = dict(create_entry, fields={"context": body, "goal": "A real goal."})
+    ops, outcomes = ja.plan_ops(rich, None, rich_cfg)
+    if ops:
+        sys.exit(f"{label} with a goal and an extra field must still create nothing")
+    for field, verdict in (("description", outcomes["description"]),
+                           ("goal", outcomes["goal"])):
+        if verdict != "skipped":
+            sys.exit(f"{label}: a refused create should report {field} skipped, got {verdict}")
+    if outcomes["extra_fields"] != {"team": "skipped"}:
+        sys.exit(f"{label}: a refused create should report its extra field skipped, "
+                 f"got {outcomes['extra_fields']}")
+    if any(item.get("fallback") for item in outcomes["unmapped"]):
+        sys.exit(f"{label}: a refused create must claim no description-block fallback")
+
     # The same entry without the sentinel-shaped line still creates, or the
     # guard is refusing every source-less create rather than the ambiguous ones.
     plain_create = dict(create_entry, fields={"context": "An ordinary line."})

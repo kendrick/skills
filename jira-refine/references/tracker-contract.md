@@ -74,7 +74,7 @@ Field types and provenance:
  "description": "applied|already-present|conflict|skipped",
  "links": [{"key": "PROJ-398", "result": "applied|already-present|missing-issue"}],
  "label": "applied|already-present|unmapped",
- "goal": "applied|already-present|conflict|unmapped",
+ "goal": "applied|already-present|conflict|skipped|unmapped",
  "extra_fields": {"team": "applied|skipped|unmapped|conflict"},
  "unmapped": [{"field": "goal", "fallback": "description block"}],
  "conflict": null,
@@ -84,6 +84,7 @@ Field types and provenance:
 - `description: skipped` means no write was attempted, because reading the issue failed or the entry was abandoned before its description op ran.
 - `conflict` is null or a single-line reason, and it is the entry-level verdict; a per-field conflict also shows on that field.
 - `goal: conflict` means the value did not reach the field — Jira holds a different one, or the write failed — and the entry-level `conflict` says which. A failed goal write never appears in `unmapped`: the block was rendered before the failure, so it carries no `Goal:` line to claim.
+- A refused `create` reports every field it would have written as `skipped`, the same word `description` takes, because the entry was abandoned before any write. A `goal` or an extra field left reading `applied` would name a field on a ticket nobody created, and no `unmapped` entry claims a description-block fallback, since no block was written.
 - `extra_fields` is empty on every `update`. On a `create` it carries one verdict per field the config declares or the entry names: `skipped` means the create was refused, so the field landed nowhere; `conflict` means the create itself failed.
 - `writes` counts mutations actually sent — HTTP writes under `rest`, subprocess invocations that mutate under `jira-cli`. A dry run always reports `0`.
 - On a `create` dry run, `key` is null.

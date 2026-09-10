@@ -801,6 +801,10 @@ def plan_create_ops(entry, cfg):
     at all; see the comment on that branch for why refusing beats creating."""
     fields = entry.get("fields") or {}
     outcomes = _outcomes()
+    # Read early, because both refusal paths below have to say whether a goal
+    # was carried. `_outcomes()` defaults it to `already-present`, which is true
+    # of an entry with no goal and false of one whose goal never got written.
+    goal = str(fields.get("goal") or "").strip()
 
     extra = extra_field_mappings(entry, cfg)
     unresolved = [(name, reason) for name, _, _, _, reason in extra if reason]
@@ -827,6 +831,8 @@ def plan_create_ops(entry, cfg):
             )
         for name, _ in unresolved:
             outcomes["unmapped"].append({"field": name, "fallback": None})
+        if goal:
+            outcomes["goal"] = "skipped"
         _note_conflict(outcomes, "; ".join(reason for _, reason in unresolved))
         outcomes["description"] = "skipped"
         return [], outcomes
@@ -839,7 +845,6 @@ def plan_create_ops(entry, cfg):
             {"field": "dependencies", "fallback": FALLBACK_BLOCK}
         )
 
-    goal = str(fields.get("goal") or "").strip()
     goal_id, goal_cli_name, goal_unmapped = goal_mapping(cfg)
     if goal and goal_unmapped:
         outcomes["goal"] = "unmapped"
@@ -861,9 +866,20 @@ def plan_create_ops(entry, cfg):
     # repaired by rerunning.
     self_shaped = self_shaped_reason(block)
     if self_shaped:
-        outcomes["description"] = "skipped"
-        _note_conflict(outcomes, self_shaped)
-        return [], outcomes
+        # Everything computed above describes a create that will not happen, so
+        # none of it may travel into the report. A `goal` or an extra field left
+        # reading `applied` names a field on a ticket nobody made, and the
+        # `unmapped` entries would claim a description-block fallback inside a
+        # block that was never written — the same false report `_record_failure`
+        # refuses to write for a set_field that failed.
+        refused = _outcomes()
+        refused["description"] = "skipped"
+        if goal:
+            refused["goal"] = "skipped"
+        for name, _, _, _, _ in extra:
+            refused["extra_fields"][name] = "skipped"
+        _note_conflict(refused, self_shaped)
+        return [], refused
 
     label = str(entry.get("label") or "").strip()
     if label:
