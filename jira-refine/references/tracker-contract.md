@@ -74,7 +74,7 @@ Field types and provenance:
  "description": "applied|already-present|conflict|skipped",
  "links": [{"key": "PROJ-398", "result": "applied|already-present|missing-issue"}],
  "label": "applied|already-present|unmapped",
- "goal": "applied|already-present|conflict|unmapped",
+ "goal": "applied|already-present|conflict|skipped|unmapped",
  "extra_fields": {"team": "applied|skipped|unmapped|conflict"},
  "unmapped": [{"field": "goal", "fallback": "description block"}],
  "conflict": null,
@@ -84,6 +84,7 @@ Field types and provenance:
 - `description: skipped` means no write was attempted, because reading the issue failed or the entry was abandoned before its description op ran.
 - `conflict` is null or a single-line reason, and it is the entry-level verdict; a per-field conflict also shows on that field.
 - `goal: conflict` means the value did not reach the field — Jira holds a different one, or the write failed — and the entry-level `conflict` says which. A failed goal write never appears in `unmapped`: the block was rendered before the failure, so it carries no `Goal:` line to claim.
+- A refused `create` reports every field it would have written as `skipped`, the same word `description` takes, because the entry was abandoned before any write. A `goal` or an extra field left reading `applied` would name a field on a ticket nobody created, and no `unmapped` entry claims a description-block fallback, since no block was written.
 - `extra_fields` is empty on every `update`. On a `create` it carries one verdict per field the config declares or the entry names: `skipped` means the create was refused, so the field landed nowhere; `conflict` means the create itself failed.
 - `writes` counts mutations actually sent — HTTP writes under `rest`, subprocess invocations that mutate under `jira-cli`. A dry run always reports `0`.
 - On a `create` dry run, `key` is null.
@@ -185,12 +186,12 @@ Under the jira-cli transport a Goal is mapped only when both `fields.goal` and `
 
 1. The block is bracketed by `h6. jira-refine begin | session <date> | source <name>` and `h6. jira-refine end`. `h6.` survives a v2 round-trip; `{{ }}` and `[ ]` are wiki macros and do not, which is why the sentinel is a heading and not a macro.
 2. An existing block with the same `source` is replaced in place: `applied` when the bytes differ, `already-present` when they are identical, and zero writes when they are identical.
-3. An existing block from a different `source`, or non-block text with no block at all, is a `conflict` unless `on_conflict` is set. `append` keeps the existing text and adds the block after it. `replace` removes every jira-refine block and writes only the new one.
+3. An existing block from a different `source`, or non-block text with no block at all, is a `conflict` unless `on_conflict` is set. `append` keeps the existing text and adds the block after it. `replace` removes every jira-refine block and writes only the new one. A block with no end sentinel gets the same verdict, whatever removed it—a hand-deleted sentinel, or Jira Cloud folding the heading into the block's last bullet on a round trip (issue #93). `find_blocks` marks it with `end: None` instead of a line number, and `plan_description` refuses it the same way it refuses an unmatched source: `(None, "conflict", reason)`, unless `on_conflict` is `append` or `replace`. Its extent is unknowable, so claiming the rest of the description as its body would silently overwrite whatever a human wrote below it. The reason names the missing sentinel through the `END_LINE` constant rather than hardcoded text, and tells the human to restore the line or set `on_conflict`. An entry whose field body carries a line shaped like either sentinel is refused before anything is sent, on both `update` and `create`, because the rendered block would read back as two blocks and no scanning rule separates that from a stale block with one appended after it. The refusal names the line and asks for it to be reworded; escaping it would rewrite what a person wrote. A begin sentinel is unterminated whenever the next sentinel below it is another begin, not only when no end line exists at all—`append` leaves precisely that shape, and pairing the stale begin with the appended block's end would splice over both and everything between them on the following apply.
 4. An empty description — null, whitespace, or holding only a stale same-source block — is written.
 5. Links read `fields.issuelinks`. Dependency D of X is present when X's list holds an entry with `type.name == link_type` and `inwardIssue.key == D` (D blocks X: D outward, X inward). Create the link only when it is absent. A D that is not on the tracker reports `missing-issue`, performs no write, and exits 1.
 6. Labels are added only when absent, by PUTting the union of the existing labels and the new one.
 7. Goal is written when the custom field is empty or already equal. A different non-empty value is a `conflict` on that field alone; the rest of the entry still applies. A write that fails is the same verdict for the same reason — the value is not on the field — and rerunning once the config is fixed is safe, because rule 8 holds.
-8. A second run over the same input performs zero writes and reports `already-present` everywhere. The smoke test asserts this on both transports.
+8. A second run over the same input performs zero writes and reports `already-present` everywhere. The smoke test asserts this on both transports. `append` holds this on its own rather than through rule 2: an entry that keeps `on_conflict: append` reports `already-present` once a terminated block already carries the same bytes, because an unterminated block stays in the description and never lets rule 2's in-place replacement take over.
 
 ## Operations per transport
 

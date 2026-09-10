@@ -364,7 +364,11 @@ def find_blocks(text):
 
     Line indices rather than character offsets because splicing is a line
     operation: the block is a run of whole lines and the human text around it
-    has to come back unchanged."""
+    has to come back unchanged.
+
+    The last line is None for a begin sentinel with no matching end, which is
+    how a caller learns the block's extent is unknown instead of receiving a
+    span it would happily overwrite."""
     lines = (text or "").splitlines()
     blocks = []
     i = 0
@@ -375,17 +379,80 @@ def find_blocks(text):
             continue
         end = None
         for j in range(i + 1, len(lines)):
-            if lines[j].strip() == END_LINE:
+            stripped = lines[j].strip()
+            # A second begin before any end closes nothing: this block never
+            # terminated. `on_conflict: append` builds exactly that shape — a
+            # stale unterminated block, the human text under it, then a whole
+            # new block — and pairing this begin with the LATER block's end
+            # would hand splice_block one span covering all three. The next
+            # apply would then replace the lot and report `applied`, which is
+            # the loss this whole guard exists to stop, arriving through the
+            # recovery documented for it.
+            if BEGIN_RE.match(stripped):
+                break
+            if stripped == END_LINE:
                 end = j
                 break
-        # A begin with no end is still our block: someone hand-deleted the
-        # closing sentinel. Claiming to the end of the description keeps the
-        # next run replacing it rather than nesting a second block inside it.
-        if end is None:
-            end = len(lines) - 1
+        # A begin with no end is still our block, but where it stops is
+        # unknowable: the block's own tail and whatever a human wrote below it
+        # read identically. The sentinel goes missing on its own, not only by
+        # hand — Jira Cloud folds the closing heading into the last bullet when
+        # the block ends in a list — so treating the rest of the description as
+        # ours would discard reviewer edits on every issue shaped that way.
+        # None hands that decision up to plan_description, which conflicts.
         blocks.append((i, end, match.group("source")))
+        if end is None:
+            i += 1
+            continue
         i = end + 1
     return blocks
+
+
+def self_shaped_reason(block):
+    """A reason this rendered block cannot be told apart from two blocks, or None.
+
+    Reads the body lines directly rather than asking `find_blocks` what it sees.
+    Going through the scan looked equivalent and was not: a create entry carries
+    no `source`, so its own begin line renders with an empty tail that `.strip()`
+    takes below what BEGIN_RE matches, the scan then finds nothing at all, and a
+    body line shaped like a sentinel sailed through on exactly the entries that
+    can least afford it.
+
+    The first and last lines are the block's own sentinels, because
+    `render_block` always writes them there. Any line between them that reads as
+    a sentinel came from a field.
+
+    Refusing beats escaping. Escaping would rewrite what a person actually
+    wrote, and this skill's posture on an unknowable extent, established for the
+    missing-sentinel case, is to stop rather than guess. Refusing is that same
+    rule one step earlier, at render time instead of parse time."""
+    body = block.splitlines()[1:-1]
+    for line in body:
+        stripped = line.strip()
+        if BEGIN_RE.match(stripped) or stripped == END_LINE:
+            return (
+                "a field carries a line shaped like a jira-refine sentinel, so "
+                "the rendered block cannot be told apart from two blocks; reword "
+                "that line in the staging file"
+            )
+    return None
+
+
+def _holds_block(existing, blocks, block):
+    """True when a terminated block in `existing` already holds `block` verbatim.
+
+    Byte equality carries the source with it, because the begin sentinel names
+    the source on its own line, so no separate source comparison is needed. An
+    unterminated span is skipped: its extent is unknown, which is the whole
+    reason it is marked, and slicing to a guessed end would compare the wrong
+    lines."""
+    lines = existing.splitlines()
+    wanted = block.splitlines()
+    return any(
+        lines[start:end + 1] == wanted
+        for start, end, _ in blocks
+        if end is not None
+    )
 
 
 def splice_block(existing, spans, block):
@@ -427,6 +494,10 @@ def plan_description(entry, issue, block):
     block from a different source, or text with no block at all, is somebody
     else's writing — refuse it unless the human set `on_conflict`. Rule 4: an
     empty description is written."""
+    self_shaped = self_shaped_reason(block)
+    if self_shaped:
+        return None, "conflict", self_shaped
+
     existing = ((issue.get("fields") or {}).get("description") or "") if issue else ""
     if not isinstance(existing, str):
         # A v3 (ADF) description comes back as a dict. This skill writes v2 wiki
@@ -440,11 +511,29 @@ def plan_description(entry, issue, block):
     other = [b for b in blocks if b[2] != source]
     on_conflict = entry.get("on_conflict")
 
-    if same and not other:
+    # An unterminated block outranks every branch below, including the
+    # same-source splice: the splice needs an extent, and this one has none.
+    unterminated = [b for b in blocks if b[1] is None]
+    if unterminated and on_conflict not in ("append", "replace"):
+        return None, "conflict", (
+            f"description holds a jira-refine block from source {unterminated[0][2]!r} with no "
+            f"end sentinel, so its extent is unknown; restore the `{END_LINE}` line below the "
+            "block, or set on_conflict to append or replace"
+        )
+
+    if same and not other and not unterminated:
         text = splice_block(existing, same, block)
     elif not blocks and not existing.strip():
         text = block
     elif on_conflict == "append":
+        # Append has to converge by itself here. On an ordinary conflict the
+        # same-source branch above takes over from the second run on, which is
+        # what has always made `append` idempotent. An unterminated block never
+        # leaves the description, so that branch stays shut and every rerun
+        # would add one more copy of the same block. Rule 8 is the guarantee at
+        # stake: a second run over the same input writes nothing.
+        if _holds_block(existing, blocks, block):
+            return None, "already-present", None
         text = (existing.rstrip("\n") + "\n\n" + block) if existing.strip() else block
     elif on_conflict == "replace":
         # Destructive by request: "removes every jira-refine block and writes
@@ -712,6 +801,10 @@ def plan_create_ops(entry, cfg):
     at all; see the comment on that branch for why refusing beats creating."""
     fields = entry.get("fields") or {}
     outcomes = _outcomes()
+    # Read early, because both refusal paths below have to say whether a goal
+    # was carried. `_outcomes()` defaults it to `already-present`, which is true
+    # of an entry with no goal and false of one whose goal never got written.
+    goal = str(fields.get("goal") or "").strip()
 
     extra = extra_field_mappings(entry, cfg)
     unresolved = [(name, reason) for name, _, _, _, reason in extra if reason]
@@ -738,6 +831,8 @@ def plan_create_ops(entry, cfg):
             )
         for name, _ in unresolved:
             outcomes["unmapped"].append({"field": name, "fallback": None})
+        if goal:
+            outcomes["goal"] = "skipped"
         _note_conflict(outcomes, "; ".join(reason for _, reason in unresolved))
         outcomes["description"] = "skipped"
         return [], outcomes
@@ -750,7 +845,6 @@ def plan_create_ops(entry, cfg):
             {"field": "dependencies", "fallback": FALLBACK_BLOCK}
         )
 
-    goal = str(fields.get("goal") or "").strip()
     goal_id, goal_cli_name, goal_unmapped = goal_mapping(cfg)
     if goal and goal_unmapped:
         outcomes["goal"] = "unmapped"
@@ -766,6 +860,26 @@ def plan_create_ops(entry, cfg):
         depends_on=deps if links_unmapped else None,
         goal_line=goal if (goal and goal_unmapped) else None,
     )
+
+    # Same refusal as the update path, and it matters more here: create has no
+    # idempotency rule, so a ticket made from an ambiguous block could never be
+    # repaired by rerunning.
+    self_shaped = self_shaped_reason(block)
+    if self_shaped:
+        # Everything computed above describes a create that will not happen, so
+        # none of it may travel into the report. A `goal` or an extra field left
+        # reading `applied` names a field on a ticket nobody made, and the
+        # `unmapped` entries would claim a description-block fallback inside a
+        # block that was never written — the same false report `_record_failure`
+        # refuses to write for a set_field that failed.
+        refused = _outcomes()
+        refused["description"] = "skipped"
+        if goal:
+            refused["goal"] = "skipped"
+        for name, _, _, _, _ in extra:
+            refused["extra_fields"][name] = "skipped"
+        _note_conflict(refused, self_shaped)
+        return [], refused
 
     label = str(entry.get("label") or "").strip()
     if label:
