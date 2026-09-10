@@ -83,7 +83,7 @@ Field types and provenance:
 
 - `description: skipped` means no write was attempted, because reading the issue failed or the entry was abandoned before its description op ran.
 - `conflict` is null or a single-line reason, and it is the entry-level verdict; a per-field conflict also shows on that field.
-- `goal: conflict` means the value did not reach the field — Jira holds a different one, or the write failed — and the entry-level `conflict` says which. A failed goal write never appears in `unmapped`: the block was rendered before the failure, so it carries no `Goal:` line to claim.
+- `goal: conflict` means the value did not reach the field — Jira holds a different one, or the write failed — and the entry-level `conflict` says which. A failed goal write never appears in `unmapped`: the block was rendered before the failure, so it carries no Goal section to claim.
 - A refused `create` reports every field it would have written as `skipped`, the same word `description` takes, because the entry was abandoned before any write. A `goal` or an extra field left reading `applied` would name a field on a ticket nobody created, and no `unmapped` entry claims a description-block fallback, since no block was written.
 - `extra_fields` is empty on every `update`. On a `create` it carries one verdict per field the config declares or the entry names: `skipped` means the create was refused, so the field landed nowhere; `conflict` means the create itself failed.
 - `writes` counts mutations actually sent — HTTP writes under `rest`, subprocess invocations that mutate under `jira-cli`. A dry run always reports `0`.
@@ -122,8 +122,8 @@ This table is the single authoritative statement of where each template field la
 |---|---|---|
 | Context, Out of scope, Open questions | sections inside the description block | description block (always) |
 | Acceptance criteria | `*` bullets in the block (wiki has no checkbox) | description block |
-| Dependencies | issue links, `link_type` (default `Blocks`), this issue inward | `Depends on: KEY, KEY` line inside the block; reported `unmapped`. An explicitly empty `link_type` is the only signal that selects this fallback. An absent key still means `Blocks`, because `plan_ops` is pure and nothing else about link support is knowable before the block is rendered |
-| Goal | custom field `fields.goal` | `Goal: …` line inside the block; reported `unmapped`. Plan time only: the line goes in while the block is still being rendered, so a write that fails afterwards reports `conflict` instead |
+| Dependencies | issue links, `link_type` (default `Blocks`), this issue inward | an `h5. Dependencies` section holding the comma-joined keys; reported `unmapped`. An explicitly empty `link_type` is the only signal that selects this fallback. An absent key still means `Blocks`, because `plan_ops` is pure and nothing else about link support is knowable before the block is rendered |
+| Goal | custom field `fields.goal` | an `h5. Goal` section, first in the block; reported `unmapped`. Plan time only: the section goes in while the block is still being rendered, so a write that fails afterwards reports `conflict` instead |
 | Provenance | last section of the block + label `refined-<session>` | block only; label reported `unmapped` |
 | Extra fields (`create` only) | the field id each `[extra_fields.<name>]` declares | none. The create is refused; see below |
 
@@ -158,35 +158,53 @@ Nothing infers a field from the project. On a shared project, guessing a team fi
 
 Rendering is a pure function of the entry, so identical entries produce identical bytes — which is what makes rule 2 below a byte comparison. Sections with no content are omitted.
 
+One blank line separates every element of the block: sentinel, heading, body, bullet run. Wiki markup ends a bullet list at a blank line, and Jira Cloud reads whatever directly follows a `*` run without one as part of the last list item—which turned `h5. Out of scope` into bold upcased text nested in the list and left the closing sentinel unmatchable (issue #93). The blank line is structural and deterministic, so rendering stays pure and rule 2's byte comparison still holds. A multi-line Context or Out of scope body stays consecutive lines, one wiki paragraph carrying line breaks: the blank line goes between elements, never inside a body.
+
+The worked example below is an entry whose Goal and dependencies are both unmapped.
+
 ```
-h6. jira-refine begin | session 2026-09-07 | source refinement-2026-09-07.vtt
+jira-refine begin | session 2026-09-07 | source refinement-2026-09-07.vtt
+
+h5. Goal
+
+Large customers stop filing export tickets.
+
 h5. Context
+
 The nightly export times out for the largest customers.
+
 h5. Acceptance criteria
+
 * Export completes for a 50k-row report without a timeout
-h5. Out of scope
-Depends on: PROJ-398, PLAT-77
-Goal: Large customers stop filing export tickets.
+
+h5. Dependencies
+
+PROJ-398, PLAT-77
+
 h5. Open questions
+
 * not discussed: out of scope
+
 h5. Provenance
+
 source: refinement-2026-09-07.vtt, session: 2026-09-07, segment: 00:12:04 - 00:19:40
-h6. jira-refine end
+
+jira-refine end
 ```
 
-`Depends on:` appears only when links are unmapped, and `Goal:` only when `fields.goal` is unset — each on its own line after Out of scope, in that order. Provenance is always the last section before the closing sentinel.
+Section order is fixed: Goal, Context, Acceptance criteria, Out of scope, Dependencies, Open questions, Provenance. `h5. Goal` appears only when `fields.goal` is unset, `h5. Dependencies` only when links are unmapped, and each holds the bare value with no `Goal:` or `Depends on:` label, because the heading above it already says what it is. Provenance is always the last section before the closing sentinel.
 
 ### Two readings the implementation settled
 
-A section heading is emitted when the section has a body **or** carries a fallback line, and omitted only when it has neither. `Out of scope` with no content still appears when a `Depends on:` or `Goal:` fallback line lands under it, which is what the worked example above shows.
+A section heading is emitted when, and only when, the section has content—one rule for every section, fallbacks included. `Out of scope` with no body is omitted rather than shipped as a heading holding somebody else's content: a Goal filed under it reads as scope that was ruled out, which inverts the one field a product owner cared enough to state out loud (issue #89). Goal leads the block for the same reason it is worth rescuing—on a project with no Goal custom field on its screens, the block is where the goal lives permanently.
 
 Under the jira-cli transport a Goal is mapped only when both `fields.goal` and `fields.goal_cli_name` are set. The first reads the current value and the second writes by name; without the read, rule 8 cannot hold, since a field whose value cannot be fetched cannot be reported `already-present` on a second run.
 
 ## Idempotency rules
 
-1. The block is bracketed by `h6. jira-refine begin | session <date> | source <name>` and `h6. jira-refine end`. `h6.` survives a v2 round-trip; `{{ }}` and `[ ]` are wiki macros and do not, which is why the sentinel is a heading and not a macro.
+1. The block is bracketed by `jira-refine begin | session <date> | source <name>` and `jira-refine end`, plain paragraph lines symmetric with each other. The sentinels exist to be found by `find_blocks` and are noise to a human reader, so a heading bought nothing once the real defect turned out to be list absorption; `{{ }}` and `[ ]` are wiki macros and do not survive a v2 round-trip, which is why the sentinel is neither. Symmetry is load-bearing: the old markup's begin line survived only because it was the first line of the field, and that asymmetry is what hid issue #93 for three tickets. A block written under the older `h6.` markup is not read as a jira-refine block. It lost its end sentinel to the round trip already, so it conflicts under rule 3 whether or not the begin line is recognized, and recognizing the old line would only change the conflict's wording. `on_conflict` is the way through.
 2. An existing block with the same `source` is replaced in place: `applied` when the bytes differ, `already-present` when they are identical, and zero writes when they are identical.
-3. An existing block from a different `source`, or non-block text with no block at all, is a `conflict` unless `on_conflict` is set. `append` keeps the existing text and adds the block after it. `replace` removes every jira-refine block and writes only the new one. A block with no end sentinel gets the same verdict, whatever removed it—a hand-deleted sentinel, or Jira Cloud folding the heading into the block's last bullet on a round trip (issue #93). `find_blocks` marks it with `end: None` instead of a line number, and `plan_description` refuses it the same way it refuses an unmatched source: `(None, "conflict", reason)`, unless `on_conflict` is `append` or `replace`. Its extent is unknowable, so claiming the rest of the description as its body would silently overwrite whatever a human wrote below it. The reason names the missing sentinel through the `END_LINE` constant rather than hardcoded text, and tells the human to restore the line or set `on_conflict`. An entry whose field body carries a line shaped like either sentinel is refused before anything is sent, on both `update` and `create`, because the rendered block would read back as two blocks and no scanning rule separates that from a stale block with one appended after it. The refusal names the line and asks for it to be reworded; escaping it would rewrite what a person wrote. A begin sentinel is unterminated whenever the next sentinel below it is another begin, not only when no end line exists at all—`append` leaves precisely that shape, and pairing the stale begin with the appended block's end would splice over both and everything between them on the following apply.
+3. An existing block from a different `source`, or non-block text with no block at all, is a `conflict` unless `on_conflict` is set. `append` keeps the existing text and adds the block after it. `replace` removes every jira-refine block and writes only the new one. A block with no end sentinel gets the same verdict, whatever removed it—a hand-deleted sentinel, or Jira Cloud folding a block written under the older markup into its own last bullet on a round trip (issue #93). `find_blocks` marks it with `end: None` instead of a line number, and `plan_description` refuses it the same way it refuses an unmatched source: `(None, "conflict", reason)`, unless `on_conflict` is `append` or `replace`. Its extent is unknowable, so claiming the rest of the description as its body would silently overwrite whatever a human wrote below it. The reason names the missing sentinel through the `END_LINE` constant rather than hardcoded text, and tells the human to restore the line or set `on_conflict`. An entry whose field body carries a line shaped like either sentinel is refused before anything is sent, on both `update` and `create`, because the rendered block would read back as two blocks and no scanning rule separates that from a stale block with one appended after it. The refusal names the line and asks for it to be reworded; escaping it would rewrite what a person wrote. A begin sentinel is unterminated whenever the next sentinel below it is another begin, not only when no end line exists at all—`append` leaves precisely that shape, and pairing the stale begin with the appended block's end would splice over both and everything between them on the following apply.
 4. An empty description — null, whitespace, or holding only a stale same-source block — is written.
 5. Links read `fields.issuelinks`. Dependency D of X is present when X's list holds an entry with `type.name == link_type` and `inwardIssue.key == D` (D blocks X: D outward, X inward). Create the link only when it is absent. A D that is not on the tracker reports `missing-issue`, performs no write, and exits 1.
 6. Labels are added only when absent, by PUTting the union of the existing labels and the new one.
@@ -205,7 +223,7 @@ Under the jira-cli transport a Goal is mapped only when both `fields.goal` and `
 | create_issue | `POST issue`, extra fields as `fields[id]` | `jira issue create -pPROJ -tTask -s"…" -b"…" -lL --no-input`, one `--custom name=value` per extra field, key parsed from the output |
 | list_fields | `GET field`, filtered by name substring, printing id / name / schema.type | exits 1 with `field discovery needs the rest transport` |
 
-`--custom` is documented on create, and jira-cli requires custom fields to be declared in its own config. The two ways a Goal misses the field split on timing. An unset `fields.goal` or `fields.goal_cli_name` is known while the block is still being rendered: report `unmapped` and put the `Goal:` line in the block. An edit that fails at write time is past that point — the block went out without the line, so there is no fallback to claim — and reports `conflict` on the goal, with the error in the entry-level `conflict`.
+`--custom` is documented on create, and jira-cli requires custom fields to be declared in its own config. The two ways a Goal misses the field split on timing. An unset `fields.goal` or `fields.goal_cli_name` is known while the block is still being rendered: report `unmapped` and put the `h5. Goal` section in the block. An edit that fails at write time is past that point — the block went out without that section, so there is no fallback to claim — and reports `conflict` on the goal, with the error in the entry-level `conflict`.
 
 ## Auth
 
