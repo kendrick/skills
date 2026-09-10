@@ -46,6 +46,8 @@ Five sources:
 | 28 | Two `[extra_fields]` declarations resolving to one Jira field exit 3, including a collision with a core create field or with `fields.goal` | Both write paths are last-one-wins and silent: a REST create builds one flat `fields` dict, so `id = "description"` replaces the rendered block while the report still says `description: applied`. Caught in review of the change that added the table. | [E] |
 | 29 | A block with no end sentinel—hand-deleted or stripped by Jira's own rendering—is a `conflict` unless `on_conflict` is set, never a claim to the end of the description | Observed on FRW-758: the block's last section was a bullet list, and Jira Cloud folded `h6. jira-refine end` into that last bullet on its own round trip. The old end-of-description fallback would have spliced over three reviewer edits, one the only recorded answer to the ticket's open question. | [E] |
 
+| 30 | The smoke suite carries a cross-product invariant table over `plan_description` alongside its hand-written cases | Four defects on one branch each lived in a shape the hand cases did not sample, and each surfaced on the run after the one being asserted. Two invariants over every stored description crossed with every `on_conflict` catch all four, and catch the shapes nobody has thought of yet. Verified by reverting each guard in turn. | [E] |
+
 ## Deliberately Not Built
 
 | Cut | Why |
@@ -68,7 +70,7 @@ Five sources:
 
 ## Known Limitations
 
-- Rows 25, 28, and 29 are the only `[E]` rows here, each measured by the bug rather than by a scenario: a live run created four tickets nobody could find, a review harness erased a rendered block through a colliding field id, and reviewing FRW-758 found a Jira Cloud round trip that would have spliced over three reviewer edits on its next apply. Every other row stays `[P]` or `[C]` until a run recorded in `EVALS.md` bumps it.
+- Rows 25, 28, 29, and 30 are the only `[E]` rows here, each measured by the bug rather than by a scenario: a live run created four tickets nobody could find, a review harness erased a rendered block through a colliding field id, and reviewing FRW-758 found a Jira Cloud round trip that would have spliced over three reviewer edits on its next apply. Every other row stays `[P]` or `[C]` until a run recorded in `EVALS.md` bumps it.
 - Number-word parsing covers English 0–9999 only.
 - An extra field's value is a string on both transports, because `jira issue create --custom name=value` carries nothing else. A field wanting a number, a list, or an option object has no path here.
 - The jira-cli transport can't discover fields at all, `--custom` on edit is undocumented so Goal may fall back to the description block even when `goal_cli_name` is set, and its flags are pinned by the fixture shim rather than by every jira-cli release.

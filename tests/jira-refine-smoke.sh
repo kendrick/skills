@@ -1343,6 +1343,108 @@ refute_text jira-refine/scripts/jira-apply.py "customfield_10001"
 require_text jira-refine/references/tracker-contract.md "extra_fields"
 require_text jira-refine/assets/jira-refine.example.toml "[extra_fields.team]"
 
+# --- The apply invariants, over every shape at once. -------------------------
+# Every hand-written case above samples one description at one point in a
+# sequence, and this file has now been wrong about that four separate times:
+# each fix taught `find_blocks` one shape and left it blind to a neighbouring
+# one, and the case that would have shown it was always the run after the one
+# being asserted. The contract is about what a SECOND run does to ANY stored
+# description, so this drives the whole cross-product instead of guessing which
+# corners matter. It is pure `plan_description`, so no fake is involved and
+# nothing is sent.
+#
+# Two invariants, and between them they catch all four defects this file pins
+# by hand. Each one fails here when its guard is removed.
+python3 - "$apply" <<'PY' || exit 1
+import importlib.util
+import sys
+
+spec = importlib.util.spec_from_file_location("jira_apply", sys.argv[1])
+ja = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(ja)
+
+ENTRY = {"key": "P-1", "source": "s.vtt", "session": "2026-09-07", "label": "L",
+         "fields": {"context": "The export times out.", "acceptance_criteria": ["a", "b"]}}
+BLOCK = ja.render_block(ENTRY)
+STALE = ja.render_block(dict(ENTRY, fields={"context": "An older context."}))
+OTHER = ja.render_block(dict(ENTRY, source="other.vtt"))
+KEEP, K2 = "REVIEWER-KEPT-1", "REVIEWER-KEPT-2"
+# The FRW-758 shape: Jira folded the closing sentinel into the last bullet.
+UNTERMINATED = "\n".join(l for l in STALE.splitlines() if l != ja.END_LINE)
+
+STARTS = {
+    "empty": "",
+    "null": None,
+    "whitespace": "   \n\n",
+    "human only": KEEP,
+    "identical block": BLOCK,
+    "stale same-source block": STALE,
+    "stale block + tail": f"{STALE}\n{KEEP}",
+    "identical block + tail": f"{BLOCK}\n{KEEP}",
+    "unterminated + tail": f"{UNTERMINATED}\n{KEEP}",
+    "appended pair + tail": f"{UNTERMINATED}\n{KEEP}\n\n{BLOCK}",
+    "other-source block": OTHER,
+    "other-source + tail": f"{OTHER}\n{KEEP}",
+    "humans either side": f"{KEEP}\n{STALE}\n{K2}",
+}
+
+# The entry varies too. A field body shaped like a sentinel is an entry-side
+# defect, so a table that varied only the stored description could not reach it.
+ENTRIES = {
+    "ordinary": ENTRY,
+    "sentinel-shaped body": dict(
+        ENTRY,
+        fields={"context": "The ticket says:\n"
+                           + ja.BEGIN_FMT.format(session="q", source="e.vtt")},
+    ),
+}
+
+
+def step(entry, start, on_conflict):
+    entry = dict(entry) if on_conflict is None else dict(entry, on_conflict=on_conflict)
+    block = ja.render_block(entry)
+    text, verdict, _ = ja.plan_description(
+        entry, {"fields": {"description": start}}, block
+    )
+    # A null description is what the tracker returns for an empty field; every
+    # comparison below is between strings.
+    return ((start or "") if text is None else text), verdict
+
+
+failures = []
+for entry_name, entry in ENTRIES.items():
+    for start_name, start in STARTS.items():
+        for on_conflict in (None, "append", "replace"):
+            first, verdict_one = step(entry, start, on_conflict)
+            second, verdict_two = step(entry, first, on_conflict)
+            case = f"{entry_name} / {start_name} / on_conflict={on_conflict}"
+
+            # Rule 8. A second run over the same input writes nothing, whatever
+            # the first run decided, including when it conflicted.
+            if second != first:
+                failures.append(
+                    f"{case}: second run rewrote the description ({verdict_one} -> {verdict_two})"
+                )
+
+            # Nothing a human wrote disappears. `replace` is excluded because it
+            # discards the description by explicit request, which the contract
+            # documents; every other path has to preserve the text around it.
+            if on_conflict != "replace":
+                for marker in (KEEP, K2):
+                    if marker in (start or "") and marker not in first:
+                        failures.append(f"{case}: lost {marker} on the first run ({verdict_one})")
+                    if marker in first and marker not in second:
+                        failures.append(f"{case}: lost {marker} on the second run ({verdict_two})")
+
+            # A refusal refuses. A conflict that still rewrote the field would
+            # be the loss it exists to prevent, wearing the right label.
+            if verdict_one == "conflict" and first != (start or ""):
+                failures.append(f"{case}: conflicted but changed the description anyway")
+
+if failures:
+    sys.exit("\n".join(failures[:12]))
+PY
+
 # --- Portability. -----------------------------------------------------------
 
 # Standard library only, so a skill stays copy-in portable. A third-party import
