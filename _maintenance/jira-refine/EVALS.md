@@ -113,7 +113,7 @@ Then run it for real, and run it a second time.
 
 ### 9. A Hand-Deleted Sentinel Reports a Conflict, Not a Silent Rewrite
 
-**Setup:** a sandbox issue already carrying a jira-refine block from a prior successful apply (Scenario 5 or 6's issue works). By hand, delete the `h6. jira-refine begin … h6. jira-refine end` block from the issue's description, leaving the rest of the description (if any) untouched.
+**Setup:** a sandbox issue already carrying a jira-refine block from a prior successful apply (Scenario 5 or 6's issue works). By hand, delete the `jira-refine begin … jira-refine end` block from the issue's description, leaving the rest of the description (if any) untouched.
 
 **Commands:** the same update pipeline as Scenario 6, against that entry.
 
@@ -126,6 +126,24 @@ Then run it for real, and run it a second time.
 **Commands:** the update pipeline, pointed at session B's staging entries.
 
 **Pass condition:** the run reports `conflict` on that entry, because the existing block's `source` doesn't match session B's. Per idempotency rule 3, this is deliberate, not a defect, and this scenario exists so nobody "fixes" it later. Fails if the run overwrites session A's block without `on_conflict` set.
+
+### 11. The Block Round-Trips Byte-Identical Through a Live Jira Cloud Description
+
+**Setup:** a sandbox Jira Cloud project, and a staging entry approved against a real (sandbox) issue key whose Acceptance criteria section holds at least one bullet and whose Out of scope section holds content directly after it—the shape that broke on FRW-758, FRW-759, and FRW-762 (issue #93), where a section heading right after a bullet list got folded into the list's last item. Leave `fields.goal` unset in config so the entry's Goal also renders as its own `h5. Goal` section, first in the block.
+
+**Commands:**
+
+```
+jira-refine/scripts/check-staging.py entries STAGING --status approved \
+  | jira-refine/scripts/jira-apply.py update --config jira-refine.toml
+jira-refine/scripts/jira-apply.py get PROJ-1 --config jira-refine.toml
+jira-refine/scripts/check-staging.py entries STAGING --status approved \
+  | jira-refine/scripts/jira-apply.py update --config jira-refine.toml
+```
+
+**Pass condition:** the first run reports `applied`. Reading the issue back with `get` between the two runs shows `h5. Goal` and `h5. Out of scope` both rendered as real headings beside the bullet list, neither one folded into its last item. The second run reports `already-present` on description with `writes: 0`, matching idempotency rule 8 against a real tracker rather than the fixture fakes.
+
+`applied` on the second run is the finding: it means Jira's converter altered the stored bytes on the way in, so the block the first run wrote no longer compares byte-identical to the block the second run would write, and idempotency rule 2's byte comparison fails against a live tracker. Diff the two rendered blocks: the line that changed names the specific markup that doesn't survive the round trip. Fails if the second run reports `applied`, or if the description read back between runs shows any section folded into the bullet list the way issue #93 described.
 
 ## What These Evals Do Not Cover
 
