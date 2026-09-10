@@ -142,10 +142,13 @@ require_text jira-refine/SKILL.md "Never the file's mtime"
 
 # --- The tracker contract. --------------------------------------------------
 
-# The sentinel is a heading because `h6.` survives a v2 round-trip where a wiki
-# macro does not, and the block is the only record that a push already happened.
-require_text jira-refine/references/tracker-contract.md "h6. jira-refine begin"
-require_text jira-refine/scripts/jira-apply.py "h6. jira-refine begin"
+# The sentinel is a plain paragraph line, symmetric with its closing pair, not a
+# heading: `h6.` was the one shape Jira Cloud rewrote when it followed a bullet
+# run with no blank line under it, which is what broke the round trip on
+# FRW-758, FRW-759 and FRW-762 (issue #93). The block is still the only record
+# that a push already happened.
+require_text jira-refine/references/tracker-contract.md "jira-refine begin | session"
+require_text jira-refine/scripts/jira-apply.py "jira-refine begin | session"
 
 # `already-present` is how rule 8 reports a clean second run; losing the state
 # collapses idempotency into "write every time".
@@ -544,9 +547,9 @@ with open(sys.argv[1], encoding="utf-8") as f:
     description = json.load(f)["fields"]["description"] or ""
 if "A human wrote this by hand." not in description:
     sys.exit("on_conflict: append destroyed the human-written text")
-if "h6. jira-refine begin" not in description:
+if "jira-refine begin | session" not in description:
     sys.exit("on_conflict: append never wrote the block")
-if description.index("A human wrote this by hand.") > description.index("h6. jira-refine begin"):
+if description.index("A human wrote this by hand.") > description.index("jira-refine begin | session"):
     sys.exit("on_conflict: append should keep the existing text first")
 ' "$tmp/proj-413.json" || exit 1
 
@@ -632,7 +635,7 @@ lines = description.splitlines()
 # an earlier case in this suite may have left reviewer text of its own below
 # the block, and this case wants the block on its own, unterminated.
 try:
-    end = next(i for i, line in enumerate(lines) if line.strip() == "h6. jira-refine end")
+    end = next(i for i, line in enumerate(lines) if line.strip() == "jira-refine end")
 except StopIteration:
     sys.exit("PROJ-412 should carry a terminated block to build the unterminated case from")
 unterminated = "\n".join(lines[:end]) + "\nA reviewer edit that must not be discarded.\n"
@@ -671,7 +674,7 @@ grep -Fq "restore" "$tmp/unterminated.json" || {
   echo "the conflict reason should tell the human to restore the end line" >&2
   exit 1
 }
-grep -Fq "h6. jira-refine end" "$tmp/unterminated.json" || {
+grep -Fq "jira-refine end" "$tmp/unterminated.json" || {
   echo "the conflict reason should interpolate the END_LINE constant" >&2
   exit 1
 }
@@ -716,7 +719,7 @@ with open(sys.argv[1], encoding="utf-8") as f:
     description = json.load(f)["fields"]["description"]
 if "A reviewer edit that must not be discarded." not in description:
     sys.exit("on_conflict: append destroyed the reviewer text below the stale block")
-if description.count("h6. jira-refine begin") != 2:
+if description.count("jira-refine begin | session") != 2:
     sys.exit("on_conflict: append should keep the stale begin line and add a new block")
 ' "$tmp/proj-412-after-append.json" || exit 1
 
@@ -792,7 +795,7 @@ def description(path):
 once, twice = description(sys.argv[1]), description(sys.argv[2])
 if once != twice:
     sys.exit("a second append rewrote the description")
-found = twice.count("h6. jira-refine begin")
+found = twice.count("jira-refine begin | session")
 if found != 2:
     sys.exit(f"append should leave exactly two begin lines, found {found}")
 ' "$tmp/append-once.json" "$tmp/append-twice-issue.json" || exit 1
@@ -810,8 +813,8 @@ ja = importlib.util.module_from_spec(spec); spec.loader.exec_module(ja)
 cfg = {"transport": "rest", "link_type": "Blocks", "fields": {}, "extra_fields": {}}
 
 for label, body in (
-    ("begin-shaped", "quoting\nh6. jira-refine begin | session q | source e.vtt"),
-    ("end-shaped", "quoting\nh6. jira-refine end"),
+    ("begin-shaped", "quoting\njira-refine begin | session q | source e.vtt"),
+    ("end-shaped", "quoting\njira-refine end"),
 ):
     entry = {"key": "P-1", "source": "o.vtt", "session": "2026-09-07", "label": "L",
              "fields": {"context": body}}
@@ -878,6 +881,7 @@ PY
 # loudly instead of drifting quietly into a wrong guess.
 python3 - "$apply" <<'PY' || exit 1
 import importlib.util
+import re
 import sys
 
 path = sys.argv[1]
@@ -886,16 +890,97 @@ jira_apply = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(jira_apply)
 
 terminated = jira_apply.find_blocks(
-    "h6. jira-refine begin | session 2026-08-30 | source x\ntext\nh6. jira-refine end\n"
+    "jira-refine begin | session 2026-08-30 | source x\ntext\njira-refine end\n"
 )
 if len(terminated) != 1 or not isinstance(terminated[0][1], int):
     sys.exit(f"a terminated block should report an integer end, got {terminated}")
 
 unterminated = jira_apply.find_blocks(
-    "h6. jira-refine begin | session 2026-08-30 | source x\ntext with no end line\n"
+    "jira-refine begin | session 2026-08-30 | source x\ntext with no end line\n"
 )
 if len(unterminated) != 1 or unterminated[0][1] is not None:
     sys.exit(f"an unterminated block should report end=None, got {unterminated}")
+
+# --- Pins for c2721fb: one blank line between block elements (issue #93), and
+# Goal/Dependencies rendering their own sections (issue #89). -----------------
+
+# The old markup is not merely superseded, it is unreadable. A block written
+# under the h6. heading already lost its end sentinel to the round trip
+# (issue #93), so find_blocks must see nothing rather than half a block; the
+# RATIONALE.md ledger records reading it back as deliberately not built.
+legacy = jira_apply.find_blocks(
+    "h6. jira-refine begin | session 2026-08-30 | source x\ntext\nh6. jira-refine end\n"
+)
+if legacy:
+    sys.exit(
+        f"find_blocks must not read a block under the old h6. markup; got {legacy}"
+    )
+
+# The actual defect: Jira Cloud absorbs whatever follows a `*` run with no
+# blank line under it into the last list item, which is how `h5. Out of scope`
+# and the closing sentinel went missing on FRW-758, FRW-759 and FRW-762.
+# Splitting on the element separator, rather than substring-searching, catches
+# a join that regresses to a single newline: a merged bullet-then-heading comes
+# back as one element instead of two, where a substring check would not notice.
+criteria_entry = {"key": "P-1", "source": "s.vtt", "session": "2026-09-07", "label": "L",
+                   "fields": {"acceptance_criteria": ["Export completes for a 50k-row report"],
+                              "out_of_scope": "Retrying a failed export is unchanged."}}
+criteria_block = jira_apply.render_block(criteria_entry)
+elements = criteria_block.split("\n\n")
+expected_elements = [
+    jira_apply.BEGIN_FMT.format(session="2026-09-07", source="s.vtt"),
+    "h5. Acceptance criteria",
+    "* Export completes for a 50k-row report",
+    "h5. Out of scope",
+    "Retrying a failed export is unchanged.",
+    jira_apply.END_LINE,
+]
+if elements != expected_elements:
+    sys.exit(
+        "a blank line must separate every block element; a bullet run merged "
+        f"into the section after it. got: {elements!r}"
+    )
+
+# Purity is what makes rule 2's byte comparison meaningful: two renders of one
+# entry have to be the same bytes, or "already-present" is a coin flip.
+if jira_apply.render_block(criteria_entry) != jira_apply.render_block(criteria_entry):
+    sys.exit("render_block must be pure: the same entry rendered twice produced different bytes")
+
+# Symmetry is the fix, not a heading choice: the old begin line survived the
+# round trip only because it led the field, and that asymmetry is what hid
+# issue #93 across three tickets. Neither sentinel may be a wiki heading again.
+begin_line = jira_apply.BEGIN_FMT.format(session="2026-09-07", source="s.vtt")
+end_line = jira_apply.END_LINE
+if not (begin_line.startswith("jira-refine ") and end_line.startswith("jira-refine ")):
+    sys.exit("begin and end sentinels must share one construct")
+if re.match(r"^h\d\.", begin_line) or re.match(r"^h\d\.", end_line):
+    sys.exit("a sentinel must not be a wiki heading; that is the shape Jira Cloud rewrote")
+
+# An unmapped Goal leads the block in its own section, holding the bare text
+# with no label, and Out of scope stays absent with no content of its own
+# (issue #89): a Goal filed under Out of scope reads as scope that was ruled
+# out, which inverts the one field a product owner cared enough to state.
+goal_entry = {"key": "P-1", "source": "s.vtt", "session": "2026-09-07", "label": "L", "fields": {}}
+goal_block = jira_apply.render_block(
+    goal_entry, goal_line="Large customers stop filing export tickets."
+)
+if "h5. Out of scope" in goal_block:
+    sys.exit("an empty Out of scope must render no heading at all")
+if "Goal:" in goal_block:
+    sys.exit("an unmapped Goal must render bare, with no Goal: label")
+headings = [line for line in goal_block.splitlines() if line.startswith("h5.")]
+if not headings or headings[0] != "h5. Goal":
+    sys.exit(f"an unmapped Goal must render h5. Goal first, got {headings}")
+
+# Unmapped dependencies get the same treatment: their own section, the bare
+# comma-joined keys, no label.
+dep_block = jira_apply.render_block(goal_entry, depends_on=["PROJ-398", "PLAT-77"])
+if "h5. Dependencies" not in dep_block:
+    sys.exit("unmapped dependencies must render their own h5. Dependencies section")
+if "PROJ-398, PLAT-77" not in dep_block:
+    sys.exit("unmapped dependencies must render as the comma-joined keys")
+if "Depends on:" in dep_block:
+    sys.exit("unmapped dependencies must render bare, with no Depends on: label")
 PY
 
 # The refutes pin the cut mechanism; the require pins the contract line it
