@@ -550,6 +550,209 @@ if description.index("A human wrote this by hand.") > description.index("h6. jir
     sys.exit("on_conflict: append should keep the existing text first")
 ' "$tmp/proj-413.json" || exit 1
 
+# --- The unterminated-block conflict. Issue #94. ----------------------------
+# A begin sentinel with no matching end used to claim the rest of the
+# description as its own body, so the second apply spliced over every
+# reviewer edit below it and still reported applied. Jira Cloud loses the end
+# sentinel on its own when a block's last section is a bullet list, so an
+# issue reaches this shape without anyone touching the file by hand.
+
+put_description() {  # <key> <file holding the description text to seed>
+  python3 -c '
+import json, os, sys, urllib.request
+key, path = sys.argv[1], sys.argv[2]
+with open(path, encoding="utf-8") as f:
+    text = f.read()
+site = os.environ["JIRA_REFINE_TEST_SITE"]
+payload = json.dumps({"fields": {"description": text}}).encode("utf-8")
+request = urllib.request.Request(
+    f"{site}/rest/api/2/issue/{key}", data=payload, method="PUT"
+)
+request.add_header("Content-Type", "application/json")
+urllib.request.urlopen(request).read()
+' "$1" "$2"
+}
+
+# A normal splice over an intact block must still leave text below it alone.
+# Reseed a well-formed block with a reviewer line under it, change the entry,
+# and reapply: the fix that stopped guessing at a missing sentinel must not
+# start treating every block as suspect.
+python3 "$apply" get PROJ-412 --config "$config" > "$tmp/proj-412-intact.json"
+python3 -c '
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as f:
+    description = json.load(f)["fields"]["description"]
+with open(sys.argv[2], "w", encoding="utf-8") as f:
+    f.write(description + "\nA reviewer added this note after the block.\n")
+' "$tmp/proj-412-intact.json" "$tmp/seed-intact.txt"
+put_description PROJ-412 "$tmp/seed-intact.txt"
+
+python3 -c '
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as out:
+    for line in src:
+        entry = json.loads(line)
+        if entry["key"] == "PROJ-412":
+            entry["fields"]["context"] = "A different context, so the block actually has to change."
+            out.write(json.dumps(entry) + "\n")
+' "$tmp/entries.jsonl" "$tmp/intact-changed.jsonl"
+
+python3 "$apply" update --config "$config" \
+  < "$tmp/intact-changed.jsonl" > "$tmp/intact.json" 2>/dev/null || {
+  echo "an intact block's splice should still exit 0" >&2
+  exit 1
+}
+grep -Fq '"description": "applied"' "$tmp/intact.json" || {
+  echo "a changed entry over an intact block should report the description applied" >&2
+  exit 1
+}
+python3 "$apply" get PROJ-412 --config "$config" > "$tmp/proj-412-after-intact.json"
+python3 -c '
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as f:
+    description = json.load(f)["fields"]["description"]
+if "A different context, so the block actually has to change." not in description:
+    sys.exit("the splice never landed the new block content")
+if "A reviewer added this note after the block." not in description:
+    sys.exit("text below an intact block must survive a normal splice")
+' "$tmp/proj-412-after-intact.json" || exit 1
+
+# A missing end sentinel refuses instead of guessing. Strip the sentinel, add
+# a reviewer line, and reapply the same entry unchanged: the run must
+# conflict, name the sentinel and `restore` as the way out, and leave the
+# description exactly as seeded. Byte-identity is the assertion FRW-758
+# needed and never had.
+python3 "$apply" get PROJ-412 --config "$config" > "$tmp/proj-412-for-unterminated.json"
+python3 -c '
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as f:
+    description = json.load(f)["fields"]["description"]
+lines = description.splitlines()
+# Truncate at the first end sentinel rather than assume it is the last line:
+# an earlier case in this suite may have left reviewer text of its own below
+# the block, and this case wants the block on its own, unterminated.
+try:
+    end = next(i for i, line in enumerate(lines) if line.strip() == "h6. jira-refine end")
+except StopIteration:
+    sys.exit("PROJ-412 should carry a terminated block to build the unterminated case from")
+unterminated = "\n".join(lines[:end]) + "\nA reviewer edit that must not be discarded.\n"
+with open(sys.argv[2], "w", encoding="utf-8") as f:
+    f.write(unterminated)
+' "$tmp/proj-412-for-unterminated.json" "$tmp/seed-unterminated.txt" || exit 1
+put_description PROJ-412 "$tmp/seed-unterminated.txt"
+
+python3 -c '
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as out:
+    for line in src:
+        entry = json.loads(line)
+        if entry["key"] == "PROJ-412":
+            out.write(json.dumps(entry) + "\n")
+' "$tmp/entries.jsonl" "$tmp/unterminated-entry.jsonl"
+
+set +e
+python3 "$apply" update --config "$config" \
+  < "$tmp/unterminated-entry.jsonl" > "$tmp/unterminated.json" 2> "$tmp/unterminated.err"
+unterminated_status=$?
+set -e
+[[ "$unterminated_status" == 1 ]] || {
+  echo "an unterminated block should exit 1, got $unterminated_status" >&2
+  exit 1
+}
+grep -Fq '"description": "conflict"' "$tmp/unterminated.json" || {
+  echo "an unterminated block should report the description a conflict" >&2
+  exit 1
+}
+grep -Fq "no end sentinel" "$tmp/unterminated.json" || {
+  echo "the conflict reason should name the missing end sentinel" >&2
+  exit 1
+}
+grep -Fq "restore" "$tmp/unterminated.json" || {
+  echo "the conflict reason should tell the human to restore the end line" >&2
+  exit 1
+}
+grep -Fq "h6. jira-refine end" "$tmp/unterminated.json" || {
+  echo "the conflict reason should interpolate the END_LINE constant" >&2
+  exit 1
+}
+python3 "$apply" get PROJ-412 --config "$config" > "$tmp/proj-412-after-unterminated.json"
+python3 -c '
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as f:
+    seeded = f.read()
+with open(sys.argv[2], encoding="utf-8") as f:
+    after = json.load(f)["fields"]["description"]
+if after != seeded:
+    sys.exit(
+        "an unterminated block must come back byte-identical to what was seeded:\n"
+        f"seeded: {seeded!r}\nafter:  {after!r}"
+    )
+' "$tmp/seed-unterminated.txt" "$tmp/proj-412-after-unterminated.json" || exit 1
+
+# `on_conflict: append` is still the way out of an unterminated block. The
+# stale block and the reviewer text below it both have to survive; only a
+# new block gets added after them.
+put_description PROJ-412 "$tmp/seed-unterminated.txt"
+
+python3 -c '
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as src, open(sys.argv[2], "w", encoding="utf-8") as out:
+    for line in src:
+        entry = json.loads(line)
+        if entry["key"] == "PROJ-412":
+            entry["on_conflict"] = "append"
+            out.write(json.dumps(entry) + "\n")
+' "$tmp/entries.jsonl" "$tmp/unterminated-append.jsonl"
+
+python3 "$apply" update --config "$config" \
+  < "$tmp/unterminated-append.jsonl" > "$tmp/unterminated-append.json" 2>/dev/null || {
+  echo "on_conflict: append should resolve an unterminated block and exit 0" >&2
+  exit 1
+}
+python3 "$apply" get PROJ-412 --config "$config" > "$tmp/proj-412-after-append.json"
+python3 -c '
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as f:
+    description = json.load(f)["fields"]["description"]
+if "A reviewer edit that must not be discarded." not in description:
+    sys.exit("on_conflict: append destroyed the reviewer text below the stale block")
+if description.count("h6. jira-refine begin") != 2:
+    sys.exit("on_conflict: append should keep the stale begin line and add a new block")
+' "$tmp/proj-412-after-append.json" || exit 1
+
+# Pure pins on find_blocks, no fake required: a terminated block reports a
+# real line number for its end, and an unterminated one reports None. Every
+# conflict check above depends on that shape holding, so a change here fails
+# loudly instead of drifting quietly into a wrong guess.
+python3 - "$apply" <<'PY' || exit 1
+import importlib.util
+import sys
+
+path = sys.argv[1]
+spec = importlib.util.spec_from_file_location("jira_apply", path)
+jira_apply = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(jira_apply)
+
+terminated = jira_apply.find_blocks(
+    "h6. jira-refine begin | session 2026-08-30 | source x\ntext\nh6. jira-refine end\n"
+)
+if len(terminated) != 1 or not isinstance(terminated[0][1], int):
+    sys.exit(f"a terminated block should report an integer end, got {terminated}")
+
+unterminated = jira_apply.find_blocks(
+    "h6. jira-refine begin | session 2026-08-30 | source x\ntext with no end line\n"
+)
+if len(unterminated) != 1 or unterminated[0][1] is not None:
+    sys.exit(f"an unterminated block should report end=None, got {unterminated}")
+PY
+
+# The refutes pin the cut mechanism; the require pins the contract line it
+# would have violated. RATIONALE.md's Deliberately Not Built table records
+# the cut.
+refute_text jira-refine/scripts/jira-apply.py "Claiming to the end of the description"
+refute_text jira-refine/scripts/jira-apply.py "end = len(lines) - 1"
+require_text jira-refine/references/tracker-contract.md "no end sentinel"
+
 # --- Extra fields on create (REST). -----------------------------------------
 # A board whose filter tests a field the create never sent hides the ticket it
 # just made: real, correct, reported applied, and absent from the backlog. Every
