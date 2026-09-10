@@ -106,6 +106,12 @@ token_env = "JIRA_API_TOKEN"
 # Discover an id the same way as Goal, which never writes the config itself:
 #   jira-apply.py fields --name team --config <this file>
 #
+# Two fields here may not resolve to one Jira field. An `id` naming something a
+# create already writes (`project`, `issuetype`, `summary`, `description`,
+# `labels`, `parent`), or repeating `fields.goal` or another field's `id`, stops
+# the run: a create sends one flat payload, so the second value would silently
+# replace the first. The same holds for a repeated `cli_name`.
+#
 # There is no fallback. A field declared here that cannot be mapped — no value,
 # or no id under `rest` — refuses the create rather than making a ticket that
 # would be invisible anyway. Nothing infers a team from the project: on a

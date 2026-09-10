@@ -897,6 +897,126 @@ id = 10001' "must be a string"
 bad_extra_config '[extra_fields.team]
 idd = "customfield_10001"' "has no setting"
 
+# Two declarations that resolve to one field. Both write paths are last-one-wins
+# and neither says so: a REST create builds one flat `fields` dict, and a
+# jira-cli create repeats `--custom name=value`. The worst case is `id =
+# "description"`, which sends the extra field's value in place of the rendered
+# block while the report still reads `description=applied` — the same silent
+# shape the extra-field table exists to close, arriving through the config.
+bad_extra_config '[fields]
+goal = "customfield_10057"
+
+[extra_fields.team]
+id = "description"
+value = "ERASED"' "which is a field every create already writes"
+bad_extra_config '[extra_fields.team]
+id = "summary"
+value = "x"' "which is a field every create already writes"
+bad_extra_config '[fields]
+goal = "customfield_10057"
+
+[extra_fields.team]
+id = "customfield_10057"
+value = "x"' "the same field as fields.goal"
+bad_extra_config '[extra_fields.a]
+id = "customfield_10099"
+value = "1"
+
+[extra_fields.b]
+id = "customfield_10099"
+value = "2"' "already declared by extra_fields.a"
+# The jira-cli namespace is checked on a rest run and vice versa, because
+# `--transport` overrides the config at the command line: a config validated
+# only for the active transport would pass here and silently drop a field the
+# moment somebody switched.
+bad_extra_config '[fields]
+goal_cli_name = "Goal"
+
+[extra_fields.team]
+cli_name = "Goal"
+value = "x"' "the same field as fields.goal_cli_name"
+bad_extra_config '[extra_fields.a]
+cli_name = "Dup"
+value = "1"
+
+[extra_fields.b]
+cli_name = "Dup"
+value = "2"' "already declared by extra_fields.a"
+
+# A field declared for one transport only leaves the other half empty, and two
+# empty halves collide with nothing. Rejecting this would make a rest-only
+# config impossible to write.
+{
+  echo 'projects = ["PROJ"]'
+  echo 'site = "http://127.0.0.1:1"'
+  printf '%s\n' '[extra_fields.a]
+id = "customfield_10001"
+value = "1"
+
+[extra_fields.b]
+cli_name = "OnlyCli"
+value = "2"'
+} > "$tmp/half-declared.toml"
+set +e
+python3 "$apply" get PROJ-412 --config "$tmp/half-declared.toml" > /dev/null 2> "$tmp/half-declared.err"
+set -e
+# The exit code cannot tell the two apart: `get` against this deliberately dead
+# site exits 3 whether the config was rejected or merely unreachable. The
+# message is what separates them, so getting past config parsing means no
+# extra_fields complaint on stderr.
+grep -Fq "config: extra_fields" "$tmp/half-declared.err" && {
+  echo "a field declared for one transport only should load, but was rejected:" >&2
+  cat "$tmp/half-declared.err" >&2
+  exit 1
+}
+
+# The reserved set and the payload must not drift. A field added to
+# `create_issue`'s dict without a matching entry in CREATE_PAYLOAD_FIELDS
+# becomes overwritable again, silently, and no other assertion here would say so.
+python3 - "$apply" <<'PY' || exit 1
+import ast, sys
+tree = ast.parse(open(sys.argv[1], encoding="utf-8").read())
+reserved = None
+for node in ast.walk(tree):
+    if isinstance(node, ast.Assign) and any(
+        isinstance(t, ast.Name) and t.id == "CREATE_PAYLOAD_FIELDS" for t in node.targets
+    ):
+        reserved = {e.value for e in ast.walk(node.value) if isinstance(e, ast.Constant)}
+if reserved is None:
+    sys.exit("CREATE_PAYLOAD_FIELDS is gone; nothing pins the reserved create fields")
+rest = next(
+    n for n in ast.walk(tree)
+    if isinstance(n, ast.ClassDef) and n.name == "RestTransport"
+)
+create = next(
+    n for n in ast.walk(rest)
+    if isinstance(n, ast.FunctionDef) and n.name == "create_issue"
+)
+written = set()
+for node in ast.walk(create):
+    if not isinstance(node, ast.Assign):
+        continue
+    for target in node.targets:
+        # `fields = {...}`: only this dict's own keys, never a nested one like
+        # the `{"key": ...}` a project or parent is wrapped in.
+        if (isinstance(target, ast.Name) and target.id == "fields"
+                and isinstance(node.value, ast.Dict)):
+            written |= {
+                k.value for k in node.value.keys if isinstance(k, ast.Constant)
+            }
+        # `fields["x"] = ...`; a computed subscript is an extra field or the
+        # goal, both of which the collision check already governs.
+        if (isinstance(target, ast.Subscript)
+                and isinstance(target.value, ast.Name)
+                and target.value.id == "fields"
+                and isinstance(target.slice, ast.Constant)):
+            written.add(target.slice.value)
+missing = sorted(w for w in written if w not in reserved)
+if missing:
+    sys.exit(f"create_issue writes {missing} which CREATE_PAYLOAD_FIELDS does not reserve; "
+             "an extra field could overwrite them")
+PY
+
 # Nothing infers a team from the project. On a project shared by several teams
 # that would file one team's work onto another team's board — worse than
 # invisibility, and the reason the field is declared per run instead.

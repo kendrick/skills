@@ -80,6 +80,15 @@ ISSUE_KEY = re.compile(r"\b[A-Z][A-Z0-9]+-[0-9]+\b")
 
 FALLBACK_BLOCK = "description block"
 
+# The `fields` keys `RestTransport.create_issue` writes itself. An extra field
+# declaring one of these as its `id` would land in the same flat payload dict
+# and silently replace the value the create path just built — the rendered block
+# most damagingly. Kept as a constant so the validator and the payload cannot
+# drift apart; the smoke suite pins that every key `create_issue` sets is here.
+CREATE_PAYLOAD_FIELDS = frozenset(
+    {"project", "issuetype", "summary", "description", "labels", "parent"}
+)
+
 
 class TransportError(Exception):
     """A tracker call failed. Carries a single line fit for a report's reason."""
@@ -157,11 +166,13 @@ def load_config(path, transport_override=None):
         cfg["fields"] = {}
     if not isinstance(cfg.get("auth"), dict):
         cfg["auth"] = {}
-    cfg["extra_fields"] = _normalize_extra_fields(cfg.get("extra_fields"))
+    cfg["extra_fields"] = _normalize_extra_fields(
+        cfg.get("extra_fields"), cfg["fields"]
+    )
     return cfg
 
 
-def _normalize_extra_fields(raw):
+def _normalize_extra_fields(raw, goal_fields):
     """`[extra_fields.<name>]` as `{name: {"id", "cli_name", "value"}}`, or exit 3.
 
     Loud rather than lenient, unlike the `fields`/`auth` tables above, which a
@@ -201,7 +212,66 @@ def _normalize_extra_fields(raw):
             "cli_name": declaration.get("cli_name", "").strip(),
             "value": declaration.get("value", "").strip(),
         }
+    _reject_field_collisions(normalized, goal_fields)
     return normalized
+
+
+def _reject_field_collisions(normalized, goal_fields):
+    """Exit 3 where two declarations would write the same field.
+
+    Both write paths are last-one-wins and neither says so. A REST create builds
+    one flat `fields` dict, so an `id` naming a core create field replaces the
+    value the create path just built — `id = "description"` sends the extra
+    field's value in place of the rendered block, and the report still says
+    `description: applied`. A jira-cli create repeats `--custom name=value`, so
+    two declarations sharing a `cli_name` leave whichever Jira reads last.
+    Shadowing the configured Goal is the same failure against `[fields]`.
+
+    Checked for both transports whatever this run uses, because `--transport`
+    overrides the config at the command line: validating only the active
+    namespace would let a config pass on `rest` and silently drop a field the
+    moment somebody switched."""
+    seen_ids = {}
+    seen_names = {}
+    goal_id = str(goal_fields.get("goal") or "").strip()
+    goal_cli_name = str(goal_fields.get("goal_cli_name") or "").strip()
+    for name in sorted(normalized):
+        declaration = normalized[name]
+        field_id = declaration["id"]
+        cli_name = declaration["cli_name"]
+        # An empty half is a field declared for the other transport only, and
+        # two of those collide with nothing.
+        if field_id:
+            if field_id in CREATE_PAYLOAD_FIELDS:
+                die(
+                    f"config: extra_fields.{name}.id is {field_id!r}, which is a "
+                    "field every create already writes; an extra field cannot "
+                    "replace it"
+                )
+            if field_id == goal_id:
+                die(
+                    f"config: extra_fields.{name}.id is {field_id!r}, the same "
+                    "field as fields.goal; one of the two values would be lost"
+                )
+            if field_id in seen_ids:
+                die(
+                    f"config: extra_fields.{name}.id is {field_id!r}, already "
+                    f"declared by extra_fields.{seen_ids[field_id]}"
+                )
+            seen_ids[field_id] = name
+        if cli_name:
+            if cli_name == goal_cli_name:
+                die(
+                    f"config: extra_fields.{name}.cli_name is {cli_name!r}, the "
+                    "same field as fields.goal_cli_name; one of the two values "
+                    "would be lost"
+                )
+            if cli_name in seen_names:
+                die(
+                    f"config: extra_fields.{name}.cli_name is {cli_name!r}, "
+                    f"already declared by extra_fields.{seen_names[cli_name]}"
+                )
+            seen_names[cli_name] = name
 
 
 # ---------------------------------------------------------------------------

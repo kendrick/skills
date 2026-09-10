@@ -43,6 +43,7 @@ Five sources:
 | 25 | A create sends the fields `[extra_fields]` declares, per run, with a per-entry override | A board filtering on a Team field hides every ticket created without one—observed live on FRW-765, four tickets reported `applied` and absent from the backlog. The field belongs to the run rather than the ticket, so the config carries the value and an entry overrides it only where one ticket differs. | [E] |
 | 26 | An extra field the run cannot map refuses the create outright, where an unmapped Goal falls into the description block | The block can hold prose, not a field id or a select option, so there is no fallback to take. `create` is also the one op with no idempotency rule: creating the ticket anyway would hide it on the board and turn the rerun that fixes the config into a duplicate. Refusing leaves nothing to clean up. | [P] |
 | 27 | `[extra_fields]` is validated strictly at load, unlike `[fields]` and `[auth]`, which a wrong shape empties | Those two have a documented description-block fallback, so a dropped table still gets its content to Jira. This one has none, so a misspelled setting would silently recreate the invisible-ticket bug the table exists to close. | [P] |
+| 28 | Two `[extra_fields]` declarations resolving to one Jira field exit 3, including a collision with a core create field or with `fields.goal` | Both write paths are last-one-wins and silent: a REST create builds one flat `fields` dict, so `id = "description"` replaces the rendered block while the report still says `description: applied`. Caught in review of the change that added the table. | [E] |
 
 ## Deliberately Not Built
 
@@ -65,7 +66,7 @@ Five sources:
 
 ## Known Limitations
 
-- Row 25 is the only `[E]` here, and it was measured by the bug rather than by a scenario: a live run created four tickets nobody could find. Every other row stays `[P]` or `[C]` until a run recorded in `EVALS.md` bumps it.
+- Rows 25 and 28 are the only `[E]` rows here, and it was measured by the bug rather than by a scenario: a live run created four tickets nobody could find, and a review harness erased a rendered block through a colliding field id. Every other row stays `[P]` or `[C]` until a run recorded in `EVALS.md` bumps it.
 - Number-word parsing covers English 0–9999 only.
 - An extra field's value is a string on both transports, because `jira issue create --custom name=value` carries nothing else. A field wanting a number, a list, or an option object has no path here.
 - The jira-cli transport can't discover fields at all, `--custom` on edit is undocumented so Goal may fall back to the description block even when `goal_cli_name` is set, and its flags are pinned by the fixture shim rather than by every jira-cli release.
