@@ -720,6 +720,41 @@ if description.count("h6. jira-refine begin") != 2:
     sys.exit("on_conflict: append should keep the stale begin line and add a new block")
 ' "$tmp/proj-412-after-append.json" || exit 1
 
+# Applying again over what `append` just built must not undo it. The append
+# leaves a stale unterminated block, the reviewer text, and a whole new block;
+# scanning for an end from the first begin reaches the SECOND block's end, and
+# pairing them hands splice_block one span covering all three. That reported
+# `applied` and destroyed the reviewer text — the exact loss this guard exists
+# to stop, arriving through the recovery documented for it. Applying once
+# never sees it, which is why this case reruns.
+python3 "$apply" get PROJ-412 --config "$config" > "$tmp/proj-412-before-reapply.json"
+set +e
+python3 "$apply" update --config "$config" \
+  < "$tmp/unterminated-entry.jsonl" > "$tmp/reapply.json" 2> "$tmp/reapply.err"
+reapply_status=$?
+set -e
+[[ "$reapply_status" == 1 ]] || {
+  echo "re-applying after an append should conflict, got exit $reapply_status" >&2
+  exit 1
+}
+grep -Fq '"description": "conflict"' "$tmp/reapply.json" || {
+  echo "the stale begin left by an append must still read as unterminated" >&2
+  exit 1
+}
+python3 "$apply" get PROJ-412 --config "$config" > "$tmp/proj-412-after-reapply.json"
+python3 -c '
+import json, sys
+def description(path):
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)["fields"]["description"]
+before, after = description(sys.argv[1]), description(sys.argv[2])
+if after != before:
+    sys.exit("re-applying after an append rewrote the description:\n"
+             f"before: {before!r}\nafter:  {after!r}")
+if "A reviewer edit that must not be discarded." not in after:
+    sys.exit("re-applying after an append destroyed the reviewer text")
+' "$tmp/proj-412-before-reapply.json" "$tmp/proj-412-after-reapply.json" || exit 1
+
 # Pure pins on find_blocks, no fake required: a terminated block reports a
 # real line number for its end, and an unterminated one reports None. Every
 # conflict check above depends on that shape holding, so a change here fails

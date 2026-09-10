@@ -379,7 +379,18 @@ def find_blocks(text):
             continue
         end = None
         for j in range(i + 1, len(lines)):
-            if lines[j].strip() == END_LINE:
+            stripped = lines[j].strip()
+            # A second begin before any end closes nothing: this block never
+            # terminated. `on_conflict: append` builds exactly that shape — a
+            # stale unterminated block, the human text under it, then a whole
+            # new block — and pairing this begin with the LATER block's end
+            # would hand splice_block one span covering all three. The next
+            # apply would then replace the lot and report `applied`, which is
+            # the loss this whole guard exists to stop, arriving through the
+            # recovery documented for it.
+            if BEGIN_RE.match(stripped):
+                break
+            if stripped == END_LINE:
                 end = j
                 break
         # A begin with no end is still our block, but where it stops is
