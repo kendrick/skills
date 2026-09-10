@@ -47,3 +47,16 @@ goal_cli_name = "Goal"
 [auth]
 email_env = "JIRA_EMAIL"
 token_env = "JIRA_API_TOKEN"
+
+# --- Extra fields on create -------------------------------------------------
+
+# A stand-in for the Team field a board filter tests, declared so a create run
+# against this config exercises the extra-field path on both transports rather
+# than only the empty-table case the shipped example would give. `id` is the
+# real Jira Cloud Advanced Roadmaps id, and `cli_name` is what jira-cli's own
+# config would declare the same field under — the two halves the fixture's
+# FAKE_JIRA_CUSTOM_FIELDS map is derived from.
+[extra_fields.team]
+id = "customfield_10001"
+cli_name = "Team"
+value = "team-a"

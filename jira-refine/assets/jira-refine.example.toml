@@ -83,3 +83,43 @@ goal_cli_name = ""
 [auth]
 email_env = "JIRA_EMAIL"
 token_env = "JIRA_API_TOKEN"
+
+# --- Extra fields on create -----------------------------------------------
+
+# Fields every `jira-apply.py create` sends beyond the seven-field template,
+# one table per field. Nothing here affects `update`, which edits issues that
+# already carry their fields.
+#
+# This exists because of how Jira boards filter. A project shared by several
+# teams gives each team a board whose filter tests a field the ticket has to
+# carry — `cf[10001] in (...)` for Advanced Roadmaps' Team field — and a ticket
+# created without it is on the tracker, correct in every other respect, and
+# absent from the backlog the team actually reads. Declaring the field here is
+# what puts a created ticket where somebody will see it.
+#
+# `id` is what the rest transport writes by; `cli_name` is the same field's
+# name as declared in jira-cli's own config, which `--custom name=value` writes
+# by. Set whichever your transport needs, or both to stay portable. `value` is
+# sent on every create; a create entry carrying its own `extra_fields` object
+# overrides it per ticket.
+#
+# Discover an id the same way as Goal, which never writes the config itself:
+#   jira-apply.py fields --name team --config <this file>
+#
+# Two fields here may not resolve to one Jira field. An `id` naming something a
+# create already writes (`project`, `issuetype`, `summary`, `description`,
+# `labels`, `parent`), or repeating `fields.goal` or another field's `id`, stops
+# the run: a create sends one flat payload, so the second value would silently
+# replace the first. The same holds for a repeated `cli_name`.
+#
+# There is no fallback. A field declared here that cannot be mapped — no value,
+# or no id under `rest` — refuses the create rather than making a ticket that
+# would be invisible anyway. Nothing infers a team from the project: on a
+# shared project that would file one team's work onto another team's board,
+# which is worse than not filing it.
+#
+# Commented out because the shipped default declares none:
+# [extra_fields.team]
+# id = "customfield_10001"
+# cli_name = "Team"
+# value = "1b4b76c3-0000-0000-0000-000000000000"

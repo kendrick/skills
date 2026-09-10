@@ -52,6 +52,13 @@ rule, so a test points it at a fake without editing the file — see "Transport
 fakes" below for what that variable, and the fakes on the other end of it,
 expect.
 
+It also declares one `[extra_fields.team]` table — `customfield_10001` (Jira
+Cloud's Advanced Roadmaps Team field) under the jira-cli name `Team`, with the
+value `team-a`. That makes a create run against this config exercise the
+extra-field path on both transports instead of the empty-table case the shipped
+example gives, which is the difference between testing the fix for the
+invisible-ticket bug and testing the code around it.
+
 ## Transport fakes: `fake-jira-rest.py`, `fake-jira`
 
 Two stand-ins for the two transports `jira-apply.py` supports, both seeded
@@ -62,7 +69,7 @@ from `issues.json`. Four environment variables drive them:
 | `FAKE_JIRA_LOG` | both | Path to a log file. Each mutating write (`PUT`/`POST` under REST, an editing subprocess call under the CLI fake) appends one JSON line here; a `GET` (or `jira issue view`) never logs. Compare this file's line count before and after a second run over the same input to prove the idempotency rules hold: a clean second run appends nothing. |
 | `FAKE_JIRA_SEED` | `fake-jira` only | Path to the seed state, shaped like `issues.json`. |
 | `FAKE_JIRA_STATE` | `fake-jira` only | Path to the mutable state file the CLI fake reads and rewrites on every invocation — it has to persist across processes, since `JiraCliTransport` shells out fresh each time, unlike the REST fake's single long-lived server process. |
-| `FAKE_JIRA_CUSTOM_FIELDS` | `fake-jira` only | A JSON object mapping a custom field's display name to its field id, e.g. `{"Goal": "customfield_10057"}`. `fake-jira` uses it so a `--custom NAME=VALUE` write lands under the id and can be read back by id, the way real Jira behaves. A name absent from the map falls back to being stored under the literal name. |
+| `FAKE_JIRA_CUSTOM_FIELDS` | `fake-jira` only | A JSON object mapping a custom field's display name to its field id, e.g. `{"Goal": "customfield_10057", "Team": "customfield_10001"}`. `fake-jira` uses it so a `--custom NAME=VALUE` write lands under the id and can be read back by id, the way real Jira behaves. A name absent from the map falls back to being stored under the literal name. The smoke test builds it from the config's `[fields]` pair **and** every `[extra_fields.*]` table, so adding a field to the config never leaves its write key and its read key on two different names. |
 
 `fake-jira-rest.py` takes `--port N --seed PATH` on its command line rather
 than an env var for its seed, and serves the REST endpoints on that port for
