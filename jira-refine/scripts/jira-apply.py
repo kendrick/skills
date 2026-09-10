@@ -364,7 +364,11 @@ def find_blocks(text):
 
     Line indices rather than character offsets because splicing is a line
     operation: the block is a run of whole lines and the human text around it
-    has to come back unchanged."""
+    has to come back unchanged.
+
+    The last line is None for a begin sentinel with no matching end, which is
+    how a caller learns the block's extent is unknown instead of receiving a
+    span it would happily overwrite."""
     lines = (text or "").splitlines()
     blocks = []
     i = 0
@@ -378,12 +382,17 @@ def find_blocks(text):
             if lines[j].strip() == END_LINE:
                 end = j
                 break
-        # A begin with no end is still our block: someone hand-deleted the
-        # closing sentinel. Claiming to the end of the description keeps the
-        # next run replacing it rather than nesting a second block inside it.
-        if end is None:
-            end = len(lines) - 1
+        # A begin with no end is still our block, but where it stops is
+        # unknowable: the block's own tail and whatever a human wrote below it
+        # read identically. The sentinel goes missing on its own, not only by
+        # hand — Jira Cloud folds the closing heading into the last bullet when
+        # the block ends in a list — so treating the rest of the description as
+        # ours would discard reviewer edits on every issue shaped that way.
+        # None hands that decision up to plan_description, which conflicts.
         blocks.append((i, end, match.group("source")))
+        if end is None:
+            i += 1
+            continue
         i = end + 1
     return blocks
 
@@ -440,7 +449,17 @@ def plan_description(entry, issue, block):
     other = [b for b in blocks if b[2] != source]
     on_conflict = entry.get("on_conflict")
 
-    if same and not other:
+    # An unterminated block outranks every branch below, including the
+    # same-source splice: the splice needs an extent, and this one has none.
+    unterminated = [b for b in blocks if b[1] is None]
+    if unterminated and on_conflict not in ("append", "replace"):
+        return None, "conflict", (
+            f"description holds a jira-refine block from source {unterminated[0][2]!r} with no "
+            f"end sentinel, so its extent is unknown; restore the `{END_LINE}` line below the "
+            "block, or set on_conflict to append or replace"
+        )
+
+    if same and not other and not unterminated:
         text = splice_block(existing, same, block)
     elif not blocks and not existing.strip():
         text = block

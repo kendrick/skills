@@ -44,6 +44,7 @@ Five sources:
 | 26 | An extra field the run cannot map refuses the create outright, where an unmapped Goal falls into the description block | The block can hold prose, not a field id or a select option, so there is no fallback to take. `create` is also the one op with no idempotency rule: creating the ticket anyway would hide it on the board and turn the rerun that fixes the config into a duplicate. Refusing leaves nothing to clean up. | [P] |
 | 27 | `[extra_fields]` is validated strictly at load, unlike `[fields]` and `[auth]`, which a wrong shape empties | Those two have a documented description-block fallback, so a dropped table still gets its content to Jira. This one has none, so a misspelled setting would silently recreate the invisible-ticket bug the table exists to close. | [P] |
 | 28 | Two `[extra_fields]` declarations resolving to one Jira field exit 3, including a collision with a core create field or with `fields.goal` | Both write paths are last-one-wins and silent: a REST create builds one flat `fields` dict, so `id = "description"` replaces the rendered block while the report still says `description: applied`. Caught in review of the change that added the table. | [E] |
+| 29 | A block with no end sentinel—hand-deleted or stripped by Jira's own rendering—is a `conflict` unless `on_conflict` is set, never a claim to the end of the description | Observed on FRW-758: the block's last section was a bullet list, and Jira Cloud folded `h6. jira-refine end` into that last bullet on its own round trip. The old end-of-description fallback would have spliced over three reviewer edits, one the only recorded answer to the ticket's open question. | [E] |
 
 ## Deliberately Not Built
 
@@ -54,6 +55,7 @@ Five sources:
 | Auto-creating gap tickets | A gap ticket is drafted from a passing mention that was never interviewed. `file-issue` exists to run that interview; creating the ticket straight from the transcript would skip it. |
 | ADF / API v3 | v2 wiki markup is the one rendering path this skill's idempotency rules are proven against. A second format needs its own sentinel and its own byte-comparison rule, not a toggle on the existing one. |
 | Merging into a human-written description | Idempotency rule 3 treats non-block text with no block as a conflict unless `on_conflict` is set. Merging into someone else's prose automatically is exactly the guess that rule exists to avoid. |
+| Claiming to the end of the description when a block's end sentinel is missing | Rule 3 now treats a missing end sentinel the same as an unmatched source: a `conflict` unless `on_conflict` is set. Claiming an unknown extent as the block's body is exactly the guess that FRW-758 showed can overwrite a human's own edits below it. |
 | Cross-ticket duplicate detection | Each entry validates and applies against its own excerpt. The transcript already said which tickets it discussed; scanning the rest of the tracker for lookalikes answers a question nobody in the room asked. |
 | Hardcoded or regex key pattern | The pattern is derived from `projects` and `[spoken_aliases]` at run time. A fixed or user-authored regex would need hand-editing for every new project a session adds, and fail silently when nobody remembers to. |
 | Hydrating Jira state at stage time | `jira-apply.py` is the only file that knows Jira exists. Reading the tracker during staging would mean stage mode needs credentials before there's anything approved to push. |
@@ -66,11 +68,11 @@ Five sources:
 
 ## Known Limitations
 
-- Rows 25 and 28 are the only `[E]` rows here, and it was measured by the bug rather than by a scenario: a live run created four tickets nobody could find, and a review harness erased a rendered block through a colliding field id. Every other row stays `[P]` or `[C]` until a run recorded in `EVALS.md` bumps it.
+- Rows 25, 28, and 29 are the only `[E]` rows here, each measured by the bug rather than by a scenario: a live run created four tickets nobody could find, a review harness erased a rendered block through a colliding field id, and reviewing FRW-758 found a Jira Cloud round trip that would have spliced over three reviewer edits on its next apply. Every other row stays `[P]` or `[C]` until a run recorded in `EVALS.md` bumps it.
 - Number-word parsing covers English 0–9999 only.
 - An extra field's value is a string on both transports, because `jira issue create --custom name=value` carries nothing else. A field wanting a number, a list, or an option object has no path here.
 - The jira-cli transport can't discover fields at all, `--custom` on edit is undocumented so Goal may fall back to the description block even when `goal_cli_name` is set, and its flags are pinned by the fixture shim rather than by every jira-cli release.
-- A hand-deleted sentinel makes the next apply report a conflict. That's the correct outcome, not a bug: the block is the only record that a push already happened.
+- Until issue #93 lands, a block whose last section is a bullet list loses its end sentinel on a Jira Cloud round trip, so the second apply of such an entry conflicts. Restoring the line or setting `on_conflict` is the way through.
 - A Goal that's really an epic link, not a custom field, needs its own config entry; nothing detects that case automatically.
 - Jira's roughly 32,767-character description cap is unhandled beyond surfacing whatever error the API returns.
 - A ticket refined in two separate sessions conflicts by design, because the two sources don't match.
