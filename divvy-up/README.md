@@ -78,7 +78,7 @@ divvy-up/
 - **A plan still being shaped stops it.** Waves computed over a moving plan expire the moment it moves, so it prints the table and waits for you to settle the plan first.
 - **It defers to `agent-guild`.** In a repo that already has `.agent-guild/`, it emits its table, names `/agent-guild:job`, and dispatches nothing. The guild re-derives its own tasks from a spec, so the ownership and model columns become prose for the guild to read rather than instructions anything will execute.
 - **Ownership is per file, never per region.** Two tasks that need different parts of one file have to split the file or land in different waves. `paths_overlap` proves disjointness at the file level, and two agents racing inside one file is a merge problem no path-level check can see coming.
-- **Owned paths are literal, never globs.** The predicate is vendored from `agent-guild`, where a glob entry is rejected outright because it can claim territory no file yet occupies, which is exactly the overlap the check exists to catch.
+- **Owned paths are literal, never globs, and never decorated.** The predicate is vendored from `agent-guild`, where a glob entry is rejected outright because it can claim territory no file yet occupies, which is exactly the overlap the check exists to catch. The same gate refuses a backtick or a markdown link around a path for the same reason: a decorated entry matches no file on disk, and it compares as a different string from the bare path a peer task owns, so two spellings of one file read as no overlap and two tasks land on it in the same wave.
 - **There's no run directory and no ledger.** The `## Waves` table in your plan file is the only artifact. Ownership is already the recovery story: a failed task rolls back by reverting the paths it owns, and a second record would restate the table until the two drifted apart.
 - **Writers are attributed by their own report.** Git records that a file changed, never which of two concurrent agents changed it. The gate cross-checks each worker's reported `files_changed` against its `owns`, so an honest stray is caught, but a worker that clobbers a peer and omits it from its report is not. Per-wave commits keep it recoverable. Closing the gap properly would mean one worktree per worker, which is a different skill.
 - **A constraint is read from the same report as everything else.** The gate checks the constraints cell against a worker's own report, the channel that also attributes writes. A shortcut a worker takes and doesn't mention gets through exactly like an unreported stray write.
@@ -87,7 +87,7 @@ divvy-up/
 
 ## Maintainers
 
-The decision ledger and eval suite live in [`_maintenance/divvy-up/`](../_maintenance/divvy-up/). Every contested choice has a row in [RATIONALE.md](../_maintenance/divvy-up/RATIONALE.md), including where each borrowed mechanism came from and the six things deliberately left out. [EVALS.md](../_maintenance/divvy-up/EVALS.md) carries the smoke test that pins the artifact and the live procedure for whether the waves actually work.
+The decision ledger and eval suite live in [`_maintenance/divvy-up/`](../_maintenance/divvy-up/). Every contested choice has a row in [RATIONALE.md](../_maintenance/divvy-up/RATIONALE.md), including where each borrowed mechanism came from and everything deliberately left out. [EVALS.md](../_maintenance/divvy-up/EVALS.md) carries the smoke test that pins the artifact and the live procedure for whether the waves actually work.
 
 ## License
 
