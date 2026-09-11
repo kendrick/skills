@@ -21,9 +21,11 @@ that nobody exercises.
 Reading the issue before writing it is the whole point. Writing
 unconditionally passes a first run and duplicates the block on the second, so
 every rule under "Idempotency rules" in the contract is a rule about what the
-issue already holds. The block is bracketed by an `h6.` sentinel because `h6.`
-survives a Jira v2 round-trip and the `{{ }}` and `[ ]` macros do not, which is
-what lets rule 2 be a byte comparison.
+issue already holds. The block separates every element it holds by a blank
+line, because wiki markup ends a bullet list at a blank line and Jira Cloud
+absorbs the line that follows a bullet run without one into the last list item.
+That is how the closing sentinel went missing on three tickets and left rule 2's
+byte comparison nothing to compare (issue #93).
 
 Exit codes: 0 every field on every entry applied or was already present; 1 a
 conflict, a missing-issue dependency, an unmapped field with no fallback, or a
@@ -67,13 +69,16 @@ API_PATH = "rest/api/2"
 TRANSPORTS = ("rest", "jira-cli")
 HTTP_TIMEOUT = 30
 
-# The sentinel is a heading rather than a macro because `h6.` survives a v2
-# round-trip; see the module docstring.
+# Plain paragraph lines rather than headings or `{{ }}` macros. The sentinels
+# exist for find_blocks and are noise to a reader, and a heading is the one shape
+# Jira Cloud rewrites when it follows a bullet run. Begin and end are symmetric
+# because the old asymmetry hid issue #93: the begin line survived the round trip
+# by leading the field, so only the end line went missing.
 BEGIN_RE = re.compile(
-    r"^h6\. jira-refine begin \| session (?P<session>.*?) \| source (?P<source>.*)$"
+    r"^jira-refine begin \| session (?P<session>.*?) \| source (?P<source>.*)$"
 )
-END_LINE = "h6. jira-refine end"
-BEGIN_FMT = "h6. jira-refine begin | session {session} | source {source}"
+END_LINE = "jira-refine end"
+BEGIN_FMT = "jira-refine begin | session {session} | source {source}"
 
 ENV_REF = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 ISSUE_KEY = re.compile(r"\b[A-Z][A-Z0-9]+-[0-9]+\b")
@@ -284,8 +289,11 @@ def _body_lines(value):
 
     A body arrives as one string with its list markers and anchors already
     stripped at the entry boundary, so there is no marker translation to do
-    here — only the blank lines to drop, because a blank line inside the block
-    would shift the byte comparison rule 2 depends on."""
+    here, only the blank lines to drop. A body stays consecutive lines, one wiki
+    paragraph carrying line breaks. The blank lines `render_block` writes are a
+    different thing: they sit between block elements, never inside a body, and
+    they are structural and deterministic, so rule 2's byte comparison holds
+    either way."""
     if not value:
         return []
     return [line.rstrip() for line in str(value).splitlines() if line.strip()]
@@ -307,11 +315,16 @@ def render_block(entry, depends_on=None, goal_line=None):
     heading whose body is empty this run and filled the next would move every
     line below it and mask the real change.
 
+    Every element stands alone between blank lines: sentinel, heading, body,
+    bullet run. Jira Cloud reads a line that directly follows a `*` run as part
+    of the last list item, so the blank line is what keeps the next heading a
+    heading and the closing sentinel findable (issue #93).
+
     `depends_on` and `goal_line` are the two fallbacks from the contract's
-    per-field table, and both are decided at plan time. They render inside the
-    Out of scope section, in that order, which is where the contract's worked
-    example puts them — so the section's heading appears whenever it has a body
-    OR a fallback line, and is omitted only when it has neither."""
+    per-field table, and both are decided at plan time. Each renders as its own
+    section, because a Goal shown under `h5. Out of scope` tells the reader the
+    ticket's goal was ruled out (issue #89). One rule covers every section here:
+    a heading if and only if it has content."""
     fields = entry.get("fields") or {}
     out = [
         BEGIN_FMT.format(
@@ -319,44 +332,36 @@ def render_block(entry, depends_on=None, goal_line=None):
         )
     ]
 
-    context = _body_lines(fields.get("context"))
-    if context:
-        out.append("h5. Context")
-        out.extend(context)
+    def section(heading, lines):
+        if lines:
+            out.append(heading)
+            out.append("\n".join(lines))
 
-    criteria = _bullets(fields.get("acceptance_criteria"))
-    if criteria:
-        out.append("h5. Acceptance criteria")
-        # `*` rather than a checkbox: wiki markup has no checkbox, so the
-        # staging file's `- [ ]` would render as literal brackets in Jira.
-        out.extend(f"* {item}" for item in criteria)
-
-    scope = _body_lines(fields.get("out_of_scope"))
-    tail = []
-    if depends_on:
-        tail.append("Depends on: " + ", ".join(depends_on))
-    if goal_line:
-        tail.append(f"Goal: {goal_line}")
-    if scope or tail:
-        out.append("h5. Out of scope")
-        out.extend(scope)
-        out.extend(tail)
-
-    questions = _bullets(fields.get("open_questions"))
-    if questions:
-        out.append("h5. Open questions")
-        out.extend(f"* {item}" for item in questions)
-
+    # Goal leads the block. It is the field a product owner cared enough to state
+    # out loud, and on a project with no Goal custom field on its screens the
+    # block is where it lives permanently.
+    section("h5. Goal", _body_lines(goal_line))
+    section("h5. Context", _body_lines(fields.get("context")))
+    # `*` rather than a checkbox: wiki markup has no checkbox, so the staging
+    # file's `- [ ]` would render as literal brackets in Jira.
+    section(
+        "h5. Acceptance criteria",
+        [f"* {item}" for item in _bullets(fields.get("acceptance_criteria"))],
+    )
+    section("h5. Out of scope", _body_lines(fields.get("out_of_scope")))
+    section("h5. Dependencies", [", ".join(depends_on)] if depends_on else [])
+    section(
+        "h5. Open questions",
+        [f"* {item}" for item in _bullets(fields.get("open_questions"))],
+    )
+    # Three staging bullets collapse to the contract's one comma-joined line, so
+    # the same entry renders identically whether the producer hands over three
+    # lines or one already-joined string.
     provenance = _body_lines(fields.get("provenance"))
-    if provenance:
-        out.append("h5. Provenance")
-        # Three staging bullets collapse to the contract's one comma-joined
-        # line, so the same entry renders identically whether the producer hands
-        # over three lines or one already-joined string.
-        out.append(", ".join(provenance))
+    section("h5. Provenance", [", ".join(provenance)] if provenance else [])
 
     out.append(END_LINE)
-    return "\n".join(out)
+    return "\n\n".join(out)
 
 
 def find_blocks(text):
@@ -396,10 +401,12 @@ def find_blocks(text):
         # A begin with no end is still our block, but where it stops is
         # unknowable: the block's own tail and whatever a human wrote below it
         # read identically. The sentinel goes missing on its own, not only by
-        # hand — Jira Cloud folds the closing heading into the last bullet when
-        # the block ends in a list — so treating the rest of the description as
-        # ours would discard reviewer edits on every issue shaped that way.
-        # None hands that decision up to plan_description, which conflicts.
+        # hand. A block written under the older markup ran its sections together
+        # with no blank line, and Jira Cloud folds whatever follows a bullet run
+        # into the last list item, so every tracker still holding one of those
+        # blocks has already lost its end sentinel. Treating the rest of the
+        # description as ours would discard reviewer edits on each of them. None
+        # hands that decision up to plan_description, which conflicts.
         blocks.append((i, end, match.group("source")))
         if end is None:
             i += 1
