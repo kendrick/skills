@@ -50,6 +50,7 @@ require_file _maintenance/adversarial-review/EVALS.md
 require_file tests/fixtures/adversarial-review/scope-good.json
 require_file tests/fixtures/adversarial-review/scope-overlap.json
 require_file tests/fixtures/adversarial-review/scope-glob.json
+require_file tests/fixtures/adversarial-review/scope-backtick.json
 
 [[ "$(find adversarial-review -maxdepth 1 -type f | wc -l | tr -d ' ')" == "2" ]] || {
   echo "adversarial-review/ must ship only SKILL.md and README.md at top level" >&2
@@ -175,6 +176,15 @@ grep -Fq "overlap:" <<<"$overlap_err" || {
 glob_err="$(python3 "$territories" validate "$fixtures/scope-glob.json" 2>&1 >/dev/null || true)"
 grep -Fq "glob character" <<<"$glob_err" || {
   echo "a glob entry must be rejected: $glob_err" >&2
+  exit 1
+}
+
+# A decorated entry (backtick or markdown link) is refused outright, never
+# stripped: the bare spelling has to be what a peer task can also write, or
+# R13's overlap check silently answers "no overlap" for the same file (#232).
+backtick_err="$(python3 "$territories" validate "$fixtures/scope-backtick.json" 2>&1 >/dev/null || true)"
+grep -Fq "backtick; write the path bare, without markdown decoration" <<<"$backtick_err" || {
+  echo "a backticked entry must be rejected: $backtick_err" >&2
   exit 1
 }
 

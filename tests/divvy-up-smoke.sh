@@ -248,6 +248,19 @@ refute_text divvy-up/SKILL.md "with its \`git hash-object\`."
 require_text divvy-up/scripts/check-waves.py "def repo_root_for"
 require_text divvy-up/scripts/check-waves.py "owns_entry_problem(entry, repo_root)"
 
+# kendrick/skills#97: a plan copied from the skill's own example table backticks
+# every cell, so the example row itself has to demonstrate a bare path or an
+# agent following it verbatim reproduces the bug this wave fixed.
+require_text divvy-up/SKILL.md "| 0 | add-user-schema | src/db/schema.ts | opus | schema exported, migration applies cleanly | |"
+
+# Deliberately Not Built: stripping or rewriting backtick/link decoration
+# instead of refusing it. Silent normalization here is how the original bug
+# came back — the entry `paths_overlap` compares is the one the author typed,
+# and quietly rewriting it would let a backticked and a bare spelling of one
+# path validate as disjoint again.
+refute_text divvy-up/scripts/check-waves.py '.replace("`"'
+refute_text divvy-up/scripts/check-waves.py '.strip("`")'
+
 # --- Functional checks. Cheap, deterministic, no subagents. ---
 
 fixtures=tests/fixtures/divvy-up
@@ -386,6 +399,81 @@ PLAN
 no_done_err="$(python3 "$waves" validate "$tmp/no-done-when.md" 2>&1 >/dev/null || true)"
 grep -Fq "empty Done when cell" <<<"$no_done_err" || {
   echo "an empty Done when cell must still fail: $no_done_err" >&2
+  exit 1
+}
+
+# #232: a backticked path reads as an ordinary path to the author who wrote
+# it, and it is worse than an unowned one — it differs from the bare spelling
+# a peer task wrote for the same file. Refused, not stripped, so the reason
+# can quote text the author can find in their own file.
+cat > "$tmp/backtick.md" <<'PLAN'
+## Waves
+
+| Wave | Task | Files owned | Model | Done when | Constraints |
+|---|---|---|---|---|---|
+| 0 | schema-task | `src/db/schema.ts` | opus | it builds | |
+PLAN
+
+set +e
+backtick_out="$(python3 "$waves" validate "$tmp/backtick.md" 2>&1)"
+backtick_status=$?
+set -e
+[[ "$backtick_status" != "0" ]] || {
+  echo "a backticked Files-owned entry must exit non-zero: $backtick_out" >&2
+  exit 1
+}
+grep -Fq "malformed entry '\`src/db/schema.ts\`' in schema-task: backtick; write the path bare, without markdown decoration" <<<"$backtick_out" || {
+  echo "a backticked entry must be reported by name, task, and reason: $backtick_out" >&2
+  exit 1
+}
+
+# The link test is `](`, not a bracket, so a real path shape like
+# app/[slug]/page.tsx stays legal while a Markdown link around a path is
+# refused the same way a backtick is.
+cat > "$tmp/link.md" <<'PLAN'
+## Waves
+
+| Wave | Task | Files owned | Model | Done when | Constraints |
+|---|---|---|---|---|---|
+| 0 | link-task | [a](src/a.py) | opus | it builds | |
+PLAN
+
+set +e
+link_out="$(python3 "$waves" validate "$tmp/link.md" 2>&1)"
+link_status=$?
+set -e
+[[ "$link_status" != "0" ]] || {
+  echo "a markdown-link Files-owned entry must exit non-zero: $link_out" >&2
+  exit 1
+}
+grep -Fq "malformed entry '[a](src/a.py)' in link-task: markdown link; write the path bare, without markdown decoration" <<<"$link_out" || {
+  echo "a markdown-link entry must be reported by name, task, and reason: $link_out" >&2
+  exit 1
+}
+
+# kendrick/skills#97, the defect itself: before this wave, a bare and a
+# backticked spelling of one path compared as different strings, so two tasks
+# in one wave rode straight past the overlap check onto the same file. This
+# used to print "OK: 2 tasks in 1 wave, disjoint" and exit 0.
+cat > "$tmp/mixed-decoration.md" <<'PLAN'
+## Waves
+
+| Wave | Task | Files owned | Model | Done when | Constraints |
+|---|---|---|---|---|---|
+| 0 | quote-bare | src/shared/util.ts | haiku | bare owner ready | |
+| 0 | quote-decorated | `src/shared/util.ts` | sonnet | decorated owner ready | |
+PLAN
+
+set +e
+mixed_out="$(python3 "$waves" validate "$tmp/mixed-decoration.md" 2>&1)"
+mixed_status=$?
+set -e
+[[ "$mixed_status" != "0" ]] || {
+  echo "kendrick/skills#97: a bare and backticked spelling of one path in one wave must not validate: $mixed_out" >&2
+  exit 1
+}
+grep -Fq "malformed entry '\`src/shared/util.ts\`' in quote-decorated: backtick; write the path bare, without markdown decoration" <<<"$mixed_out" || {
+  echo "kendrick/skills#97: the decorated entry and its owning task must be named: $mixed_out" >&2
   exit 1
 }
 
