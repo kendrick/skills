@@ -58,7 +58,15 @@ Check `git status --porcelain` before writing anything. A dirty tree stops the r
 
 A task goes in the lowest wave where it shares no owned path with a peer already in that wave, and every task it depends on sits in an earlier wave. Apply MAX as a cap on wave size.
 
-Write the result into PLAN under a `## Waves` heading, as a pipe table with the header `Wave | Task | Files owned | Model | Done when | Constraints`. Then:
+Write the result into PLAN under a `## Waves` heading, as a pipe table with the header `Wave | Task | Files owned | Model | Done when | Constraints`, one row per task:
+
+```
+| 0 | add-user-schema | src/db/schema.ts | opus | schema exported, migration applies cleanly | |
+```
+
+Files owned takes bare repo-relative paths, comma-separated for a task that owns more than one. `validate` refuses a backticked path and a markdown link alike, quoting back whatever the author typed.
+
+Then:
 
 ```
 divvy-up/scripts/check-waves.py validate <PLAN>
