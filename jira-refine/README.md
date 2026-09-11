@@ -69,7 +69,8 @@ jira-refine/
 - **It won't fire on its own.** A misfire here writes into a client's tracker, which costs somebody's team a real conversation; a missed trigger costs you one typed word. Type its name.
 - **Number words only go up to 9999.** A key spoken as a larger number won't parse. Say the digits instead, or spell the key.
 - **The jira-cli transport is the thinner path.** It can't discover custom fields at all, its undocumented `--custom` flag on edit means Goal may still fall back to the description block even with `goal_cli_name` set, and its flags are pinned by the test fixture rather than by any particular `jira` release.
-- **Deleting the sentinel doesn't undo anything.** It marks the next apply a conflict rather than a clean rewrite, because that block is the only record a push already happened. Jira's own rendering can remove it too—round-tripping a block whose last section is a bullet list folds the closing line into that last bullet—and the conflict on the next apply is how you find out.
+- **Deleting the sentinel doesn't undo anything.** It marks the next apply a conflict rather than a clean rewrite, because that block is the only record a push already happened. Set `on_conflict` on that entry once you've read what's actually on the ticket.
+- **A block pushed before the markup changed isn't recognized.** The block used to run its sections together with no blank line, which let Jira fold the closing sentinel into the last bullet of a list. An apply over one of those conflicts the same way a deleted sentinel does, and `on_conflict` is the same way through. Whether the current markup survives a Jira round trip unchanged is unverified. `EVALS.md` carries the scenario that would settle it.
 - **A board filter can hide a ticket you just created.** If your board's filter tests a Team field, a ticket created without one is real, correct, reported `applied`, and nowhere in the backlog. Declare that field under `[extra_fields]` so every `create` carries it. Nothing guesses it for you: on a project shared by several teams, a guess files one team's work onto another team's board.
 - **An epic-link Goal needs its own config entry.** The skill assumes Goal is a custom field; nothing detects the epic-link case automatically.
 - **Jira's description cap is unhandled.** Past roughly 32,767 characters, you get whatever error the API returns, nothing friendlier.
@@ -79,7 +80,7 @@ jira-refine/
 
 ## Maintainers
 
-The decision ledger lives in [`_maintenance/jira-refine/`](../_maintenance/jira-refine/). Every contested choice has a row in [RATIONALE.md](../_maintenance/jira-refine/RATIONALE.md), including the twelve things deliberately left out. [EVALS.md](../_maintenance/jira-refine/EVALS.md) carries the live procedure for whether a run actually holds up end to end.
+The decision ledger lives in [`_maintenance/jira-refine/`](../_maintenance/jira-refine/). Every contested choice has a row in [RATIONALE.md](../_maintenance/jira-refine/RATIONALE.md), including everything deliberately left out. [EVALS.md](../_maintenance/jira-refine/EVALS.md) carries the live procedure for whether a run actually holds up end to end.
 
 ## License
 
