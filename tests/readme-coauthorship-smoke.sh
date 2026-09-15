@@ -105,6 +105,9 @@ require_text readme-coauthorship/SKILL.md "Setup is the last question autopilot 
 
 # --- Root README pin ----------------------------------------------------
 
-require_text README.md "npx skills add kendrick/skills --skill readme-coauthorship"
+# The root README carries this skill's own install flag, in the map
+# table's third column. The command form around it is pinned once, in
+# repo-docs-smoke.sh, so this does not re-pin it twelve times.
+require_text README.md "--skill readme-coauthorship"
 
 echo "all pins passed"

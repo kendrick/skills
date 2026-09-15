@@ -26,6 +26,13 @@ require_text() {
 
 require_file AGENTS.md
 require_file CLAUDE.md
+require_file README.md
+
+# Every per-skill suite pins its own "--skill <name>" against the root README's
+# map table. None of them pins the command that flag belongs to, so deleting the
+# whole Install section would leave twelve table rows, twelve green suites, and
+# a reader with no way to install anything. This is that command, pinned once.
+require_text README.md "npx skills add kendrick/skills"
 
 # The import is the whole reason two files can coexist without drifting. Lose
 # it and Claude Code reads a stub, follows no repo rules, and every suite here

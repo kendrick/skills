@@ -145,7 +145,10 @@ require_text divvy-up/SKILL.md "Disjoint paths prove two tasks cannot lose each 
 require_text _maintenance/divvy-up/RATIONALE.md "## Decision Ledger"
 require_text _maintenance/divvy-up/RATIONALE.md "## Deliberately Not Built"
 require_text _maintenance/divvy-up/RATIONALE.md "## Known Limitations"
-require_text README.md "npx skills add kendrick/skills --skill divvy-up"
+# The root README carries this skill's own install flag, in the map
+# table's third column. The command form around it is pinned once, in
+# repo-docs-smoke.sh, so this does not re-pin it twelve times.
+require_text README.md "--skill divvy-up"
 
 # Provenance on the vendored predicate. Losing this line is how a local edit
 # silently forks from the upstream that owns the semantics.

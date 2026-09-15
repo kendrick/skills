@@ -39,7 +39,9 @@ Either way the CLI writes the skill directories where your harness looks for the
 > use technical-writing on this commit message
 ```
 
-If you're picking a first one, start with `technical-writing`, `file-issue`, or `readme-coauthorship`. None of them need a vault or an approved plan, they take no setup past the install above, and all three land on work you already do. Each skill's own README covers which harnesses it's been used in and how to invoke it there.
+If you're picking a first one, start with `technical-writing`, `file-issue`, or `readme-coauthorship`. None of them need a vault or an approved plan, and all three land on work you already do. One thing to know about the middle one: `file-issue` posts through the [GitHub CLI](https://cli.github.com), so authenticate `gh` before you expect it to file anything. Without that it still drafts, and says plainly that it can't post.
+
+Each skill's own README covers which harnesses it's been used in and how to invoke it there, along with any CLI it expects.
 
 ## The Skills
 
