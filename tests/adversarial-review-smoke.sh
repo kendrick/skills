@@ -154,7 +154,10 @@ refute_text adversarial-review/references/finder-prompt.md "verdict"
 require_text _maintenance/adversarial-review/RATIONALE.md "## Decision Ledger"
 require_text _maintenance/adversarial-review/RATIONALE.md "## Deliberately Not Built"
 require_text _maintenance/adversarial-review/RATIONALE.md "## Known Limitations"
-require_text README.md "npx skills add kendrick/skills --skill adversarial-review"
+# The root README carries this skill's own install flag, in the map
+# table's third column. The command form around it is pinned once, in
+# repo-docs-smoke.sh, so this does not re-pin it twelve times.
+require_text README.md "--skill adversarial-review"
 
 # --- Functional checks. Cheap, deterministic, no subagents. ---
 

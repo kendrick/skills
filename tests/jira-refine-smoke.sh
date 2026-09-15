@@ -252,7 +252,10 @@ require_text _maintenance/jira-refine/RATIONALE.md "## Where This Came From"
 require_text _maintenance/jira-refine/RATIONALE.md "## Decision Ledger"
 require_text _maintenance/jira-refine/RATIONALE.md "## Deliberately Not Built"
 require_text _maintenance/jira-refine/RATIONALE.md "## Known Limitations"
-require_text README.md "npx skills add kendrick/skills --skill jira-refine"
+# The root README carries this skill's own install flag, in the map
+# table's third column. The command form around it is pinned once, in
+# repo-docs-smoke.sh, so this does not re-pin it twelve times.
+require_text README.md "--skill jira-refine"
 
 # --- Functional checks. Real scripts, real fixtures, no network. ------------
 

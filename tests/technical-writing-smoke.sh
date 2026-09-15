@@ -252,7 +252,10 @@ require_text _maintenance/technical-writing/PROVENANCE.md "MIT, Copyright (c) 20
 
 # --- Root README pin --------------------------------------------------
 
-require_text README.md "npx skills add kendrick/skills --skill technical-writing"
+# The root README carries this skill's own install flag, in the map
+# table's third column. The command form around it is pinned once, in
+# repo-docs-smoke.sh, so this does not re-pin it twelve times.
+require_text README.md "--skill technical-writing"
 
 # --- Size ceiling -----------------------------------------------------
 # The self-imposed byte ceiling was raised from 6.5 KB to 7 KB when the new

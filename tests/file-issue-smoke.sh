@@ -184,4 +184,7 @@ require_text file-issue/references/evidence-map.md "Do not cite it."
 
 require_text _maintenance/file-issue/RATIONALE.md "## Decision Ledger"
 require_text _maintenance/file-issue/RATIONALE.md "## Known Limitations"
-require_text README.md "npx skills add kendrick/skills --skill file-issue"
+# The root README carries this skill's own install flag, in the map
+# table's third column. The command form around it is pinned once, in
+# repo-docs-smoke.sh, so this does not re-pin it twelve times.
+require_text README.md "--skill file-issue"

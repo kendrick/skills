@@ -26,6 +26,43 @@ require_text() {
 
 require_file AGENTS.md
 require_file CLAUDE.md
+require_file README.md
+
+# Six per-skill suites pin their own "--skill <name>" against the root README's
+# map table, and none pins the command that flag belongs to, so deleting the
+# whole Install section would leave twelve table rows, six green suites, and a
+# reader with no way to install anything. This is that command, pinned once.
+require_text README.md "npx skills add kendrick/skills"
+
+# --- The map table is the README's index of the collection, and a skill absent
+# from it is a skill nobody installs. Scattering that across the per-skill
+# suites cannot work: eli5 and databricks-api ship no suite to pin from, and a
+# suite pinning a bare flag can be satisfied by the Install section's example
+# instead of the row. So the table's inventory is checked here, against the
+# directories on disk. ---
+
+table_skills=""
+while IFS= read -r row; do
+  name="$(sed -E 's/^\| \[([a-z0-9-]+)\].*/\1/' <<<"$row")"
+  flag="$(grep -oE -- '--skill [a-z0-9-]+' <<<"$row" | head -1)"
+  [[ "$flag" == "--skill $name" ]] || {
+    echo "README map row for '$name' carries install flag '$flag'" >&2
+    exit 1
+  }
+  [[ -f "$name/SKILL.md" ]] || {
+    echo "README map lists '$name', which is not a skill in this repo" >&2
+    exit 1
+  }
+  table_skills+="$name"$'\n'
+done < <(grep -E '^\| \[[a-z0-9-]+\]\(' README.md)
+
+for skill_md in */SKILL.md; do
+  skill="$(dirname "$skill_md")"
+  grep -qx "$skill" <<<"$table_skills" || {
+    echo "$skill ships a SKILL.md but has no row in the README map table" >&2
+    exit 1
+  }
+done
 
 # The import is the whole reason two files can coexist without drifting. Lose
 # it and Claude Code reads a stub, follows no repo rules, and every suite here
