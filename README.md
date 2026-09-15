@@ -41,7 +41,7 @@ Either way the CLI writes the skill directories where your harness looks for the
 
 If you're picking a first one, start with `technical-writing`, `file-issue`, or `readme-coauthorship`. None of them need a vault or an approved plan, and all three land on work you already do. One thing to know about the middle one: `file-issue` posts through the [GitHub CLI](https://cli.github.com), so authenticate `gh` before you expect it to file anything. Without that it still drafts, and says plainly that it can't post.
 
-Each skill's own README covers which harnesses it's been used in and how to invoke it there, along with any CLI it expects.
+Each skill's own README covers any CLI it expects.
 
 ## The Skills
 
@@ -108,7 +108,7 @@ Runs an implementation plan you've already approved as waves of parallel subagen
 
 #### [handoff](handoff/README.md)
 
-Writes a handoff before you end a coding-agent session, either to a file on your machine or to a document panel when you're working on the web. A fresh session picks it up and keeps going, where raw conversation history would lose the detail needed to finish the work. The [handoff guide](handoff/README.md) covers Claude Code, Codex, and GitHub Copilot CLI invocation.
+Writes a handoff before you end a coding-agent session, either to a file on your machine or to a document panel when you're working on the web. Invoke it again in a fresh session and it restores the task list, then stops for your go-ahead. Raw conversation history would lose the detail needed to finish the work. The [handoff guide](handoff/README.md) covers Claude Code, Codex, and GitHub Copilot CLI invocation.
 
 ### Platform APIs
 
