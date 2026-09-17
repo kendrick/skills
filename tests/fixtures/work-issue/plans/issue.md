@@ -9,3 +9,7 @@ rather than discovering a missing owner or an unresolved decision mid-run.
 
 - [ ] Adds a `work-issue/scripts/check-plan.py` gate script a caller can run before dispatch.
 - [ ] The gate refuses a plan that never names the issue it claims to close.
+
+### Fixtures
+
+- [ ] Ships the plans both gates read under `tests/fixtures/work-issue/plans/`.

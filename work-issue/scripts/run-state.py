@@ -93,7 +93,7 @@ PROBE_FIELDS = (
     ("redteam_rounds", "int", ()),
     ("redteam_last_failed", "bool", ()),
     ("trigger_fired", "bool", ()),
-    ("ar_run_dir", "bool", ()),
+    ("ar_complete", "bool", ()),
     ("conflict", "bool", ()),
     ("rebase_in_progress", "bool", ()),
     ("ahead_of_origin", "bool", ()),
@@ -730,12 +730,23 @@ def phase_of(probe):
         and repair_reports == 0
     ):
         return "4", "row 10: the newest red-team round has NOT_REPRODUCED and no repair followed it"
-    if redteam_clean and flag(probe, "trigger_fired") and not flag(probe, "ar_run_dir"):
-        return "4", "row 11: trigger.txt says fired and adversarial-review has no run dir"
+    # `ar_complete` reads Step 4's record of adversarial-review's final ledger
+    # state, not its run directory: the directory exists from that skill's
+    # preflight onward, and a review interrupted after preflight left one
+    # behind that this row once took for a finished review.
+    if redteam_clean and flag(probe, "trigger_fired") and not flag(probe, "ar_complete"):
+        return "4", "row 11: trigger.txt says fired and adversarial-review has not finished"
     if flag(probe, "conflict") or flag(probe, "rebase_in_progress"):
         return "5", "row 12: a rebase conflict is in progress; resume at Step 5 item 1"
-    if redteam_clean and (pr_state is None or flag(probe, "ahead_of_origin")):
-        return "5", "row 13: red-team is clean and the branch is unpublished or ahead of origin"
+    # A review repair committed at Step 7 is also "ahead of origin" with a clean
+    # build red-team behind it, and that belongs to row 17 (red-team the repair,
+    # then push and reply), never to a fresh publish.
+    if (
+        redteam_clean
+        and triage_rounds == 0
+        and (pr_state is None or flag(probe, "ahead_of_origin"))
+    ):
+        return "5", "row 13: red-team is clean, no triage round yet, and the branch is unpublished or ahead of origin"
     # Step 8 pushes before it replies, so a stop between those two leaves rows
     # that still owe a reply under a review that now reads `pending`. Without
     # this guard the poll preempts row 17 and the old findings are never

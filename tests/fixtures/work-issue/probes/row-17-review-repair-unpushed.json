@@ -4,7 +4,7 @@
   "branch_remote": true,
   "run_dir": true,
   "pr_state": "OPEN",
-  "review_state": "cleared",
+  "review_state": "findings",
   "has_waves": true,
   "wave_tasks": 6,
   "wave_reports": 6,
@@ -16,11 +16,11 @@
   "ar_complete": false,
   "conflict": false,
   "rebase_in_progress": false,
-  "ahead_of_origin": false,
+  "ahead_of_origin": true,
   "triage_rounds": 1,
   "triage_newer_than_since": true,
   "triage_inscope_rows": 2,
   "repair_reports": 1,
-  "triage_rows_unanswered": 0,
+  "triage_rows_unanswered": 3,
   "newest_repair_report": true
 }

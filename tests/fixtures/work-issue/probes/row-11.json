@@ -13,7 +13,7 @@
   "redteam_rounds": 1,
   "redteam_last_failed": false,
   "trigger_fired": true,
-  "ar_run_dir": false,
+  "ar_complete": false,
   "conflict": false,
   "rebase_in_progress": false,
   "ahead_of_origin": false,

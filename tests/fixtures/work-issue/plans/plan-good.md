@@ -21,6 +21,10 @@ Build the fixtures both scripts read in their tests.
 
 Files: tests/fixtures/work-issue/plans/
 
+## OpenAPI changes
+
+- [ ] Regenerate the client once the endpoint lands.
+
 ## Waves
 
 | Wave | Task | Files owned | Model | Done when | Constraints |

@@ -217,7 +217,8 @@ def check_d4(lines):
         if not CHECKBOX_RE.match(line):
             continue
         for _, text in reversed(ancestors):
-            if re.search(r"decision|question|open", text, re.IGNORECASE):
+            # Whole words: `OpenAPI changes` is not an open question.
+            if re.search(r"\b(?:decision|question|open)s?\b", text, re.IGNORECASE):
                 problems.append(
                     f"check-plan: line {lineno}: D4 unchecked box under heading {text!r}"
                 )
@@ -231,13 +232,20 @@ def extract_criteria(criteria_text):
     it writes RUN_DIR/issue.md from the issue body."""
     lines = criteria_text.splitlines()
     criteria = []
-    under_acceptance = False
+    # Every heading still open above the line, so a `### Storage` inside
+    # `## Acceptance Criteria` keeps its boxes inside the criteria. The
+    # nearest-heading version dropped them, and a plan covering nothing
+    # passed with `0/0 criteria covered`.
+    ancestors = []
     for lineno, line in enumerate(lines, start=1):
         level = heading_level(line)
         if level is not None:
-            under_acceptance = "acceptance" in line.lower()
+            while ancestors and ancestors[-1][0] >= level:
+                ancestors.pop()
+            ancestors.append((level, line.lower()))
             continue
-        if under_acceptance and re.match(r"^-\s*\[[ xX]\]", line):
+        under_acceptance = any("acceptance" in text for _, text in ancestors)
+        if under_acceptance and re.match(r"^\s*[-*+]\s*\[[ xX]\]", line):
             criteria.append((lineno, line.strip()))
     return criteria
 

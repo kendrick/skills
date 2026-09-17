@@ -90,6 +90,9 @@ require_file tests/fixtures/work-issue/probes/row-17-redteam-repair.json
 # to Step 7; and a probe with one null, which a bool coercion read as "no".
 require_file tests/fixtures/work-issue/probes/row-16-earlier-queued.json
 require_file tests/fixtures/work-issue/probes/unknown-branch-remote.json
+# A review repair committed but unpushed: ahead of origin with a clean build
+# red-team, which row 13 once took for a fresh publish.
+require_file tests/fixtures/work-issue/probes/row-17-review-repair-unpushed.json
 require_file tests/fixtures/work-issue/review/changes-requested.json
 require_file tests/fixtures/work-issue/review/pr-comment-finding.json
 
@@ -274,7 +277,11 @@ set -e
   echo "plan-good.md should exit 0, got: $good_status: $good_out" >&2
   exit 1
 }
-grep -Fq "OK: plan cites #101, 3 tasks with files, 0 open markers, 2/2 criteria covered" <<<"$good_out" || {
+# 3/3: the third criterion sits under `### Fixtures`, a subheading inside
+# Acceptance Criteria, which the nearest-heading scan dropped. And plan-good
+# carries a box under `## OpenAPI changes`, which a substring match on `open`
+# once refused as a decision section.
+grep -Fq "OK: plan cites #101, 3 tasks with files, 0 open markers, 3/3 criteria covered" <<<"$good_out" || {
   echo "plan-good.md should print its full OK line, got: $good_out" >&2
   exit 1
 }
@@ -533,7 +540,7 @@ declare -a probe_cases=(
   "row-01:done" "row-02:wait" "row-03:stop" "row-04:0" "row-05:0" "row-06:0"
   "row-07:2" "row-08:3" "row-09:3" "row-10:4" "row-11:4" "row-12:5" "row-13:5"
   "row-14:6" "row-15:6" "row-16:7" "row-17:8" "row-17-queued:8" "row-17-postpush:8"
-  "row-17-redteam-repair:8" "row-16-earlier-queued:8" "row-18:done"
+  "row-17-redteam-repair:8" "row-16-earlier-queued:8" "row-17-review-repair-unpushed:8" "row-18:done"
 )
 for case in "${probe_cases[@]}"; do
   fixture="${case%%:*}"
@@ -611,6 +618,22 @@ require_text work-issue/references/worker-prompt.md '"path": "the repo-relative 
 require_text work-issue/references/redteam.md "\`claim\`, \`path\`, \`command\`, \`output\`"
 # Step 0 probes before it writes, or every fresh issue reads as row 5's dead run.
 require_text work-issue/SKILL.md "before anything is written under RUN_DIR"
+# Row 13 stays out of the way of a review repair, in both copies of the table.
+require_text work-issue/SKILL.md "| 13 | red-team clean; no triage round yet; no PR, or local HEAD ahead of \`origin/issue-N\` | Step 5 |"
+require_text work-issue/references/resume.md "| 13 | red-team clean; no triage round yet; no PR, or local HEAD ahead of \`origin/issue-N\` | Step 5 |"
+# The trigger record has an exact first line; a substring grep read `not
+# fired` as fired and sent a docs diff to adversarial-review.
+require_text work-issue/references/redteam.md "exactly \`fired: yes\` or \`fired: no\`"
+require_text work-issue/references/resume.md "= 'fired: yes'"
+# Completion of adversarial-review is read from Step 4's record of its ledger
+# state, never from its run directory, which exists from preflight onward.
+require_text work-issue/references/resume.md "redteam/ar-state.txt"
+require_text work-issue/SKILL.md "no \`redteam/ar-state.txt\` with \`UNVERIFIED: 0\`"
+refute_text work-issue/references/resume.md "ar_run_dir"
+# Step 5 item 2 clears the conflict marker, or row 12 re-runs item 1 forever.
+require_text work-issue/SKILL.md "remove \`RUN_DIR/conflict.txt\`"
+# The wave_tasks count reads compact rows, since the vendored parser does.
+require_text work-issue/references/resume.md "grep -cE '^\\|\\s*[0-9]+\\s*\\|'"
 
 # `--save` writes gather()'s output, before classify() ever runs on it. Ledger
 # row 34 called it the "classified" bundle until a code-review pass on this
