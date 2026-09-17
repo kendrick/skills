@@ -76,7 +76,7 @@ The user owns two phases of this loop, and both are outside it. Planning comes b
    `4 waves, 6 tasks; wave 0 is 1 contract task on opus.` Isolation: worktree at `../cambium-issue-42/` (another run is in flight: issue-38). Red-team: reproduce claims. On yes: execute, commit each passing wave, push `issue-42` to origin, open a PR against `main`, and push repair commits, without asking again. Never `main`. Go?
    ```
 
-   Where isolation resolved to *ask*, that choice is the one variable in this question. `divvy-up`'s own Step 4 question is folded in here through its `{{CALLER_NOTES}}` seam, answered on the user's behalf by this confirmation, and not asked again. `--dry-run` renders this message and stops.
+   Where isolation resolved to *ask*, that choice is the one variable in this question. `divvy-up`'s own Step 4 question is folded in here: this confirmation answers it on the user's behalf, the shape line says so, and `divvy-up` does not ask it again. `--dry-run` renders this message and stops.
 
 **Done when:** `check-plan.py` exited 0 and no derivation question was recorded; `check-inflight.py` exited 0; the shape line, the isolation choice, the red-team mode, and the push grant were put to the user in one message and answered yes — or the run stopped at a refusal, a stop, a dry-run, or a no, with nothing dispatched and nothing pushed.
 

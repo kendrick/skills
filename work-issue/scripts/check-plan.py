@@ -46,7 +46,18 @@ import argparse
 import re
 import sys
 
-OPEN_MARKERS = ("TBD", "TODO", "FIXME", r"\?\?\?", "decide later", "to be decided", "open question")
+# Each marker carries its own boundary. `\b` only fires at a word/non-word edge,
+# so wrapping `???` in `\b…\b` can never match: both sides of a run of question
+# marks are non-word characters, and the gate passed a live `???` clean.
+OPEN_MARKERS = (
+    ("TBD", r"\bTBD\b"),
+    ("TODO", r"\bTODO\b"),
+    ("FIXME", r"\bFIXME\b"),
+    ("???", r"(?<!\?)\?{3}(?!\?)"),
+    ("decide later", r"\bdecide later\b"),
+    ("to be decided", r"\bto be decided\b"),
+    ("open question", r"\bopen question\b"),
+)
 
 TASK_HEADING_RES = (
     re.compile(r"^##\s+Task\b"),
@@ -179,9 +190,8 @@ def check_d3(lines):
     problems = []
     for lineno, line in enumerate(lines, start=1):
         scannable = BACKTICK_SPAN_RE.sub("", line)
-        for marker in OPEN_MARKERS:
-            if re.search(rf"\b{marker}\b", scannable, re.IGNORECASE):
-                shown = marker.replace(r"\?", "?")
+        for shown, pattern in OPEN_MARKERS:
+            if re.search(pattern, scannable, re.IGNORECASE):
                 problems.append(f"check-plan: line {lineno}: D3 open marker {shown!r}")
     return problems
 

@@ -279,6 +279,13 @@ grep -Fq "D3 open marker 'TODO'" <<<"$thin_out" || {
   echo "plan-thin.md should fail D3 on its bare TODO, got: $thin_out" >&2
   exit 1
 }
+# `???` is the one marker with no word characters, so a boundary written for
+# words never matches it. The first version of the scan let a live `???` through
+# with `0 open markers` on its OK line.
+grep -Fq "D3 open marker '???'" <<<"$thin_out" || {
+  echo "plan-thin.md should fail D3 on its bare ???, got: $thin_out" >&2
+  exit 1
+}
 grep -Fq "D4 unchecked box under heading 'Open Questions'" <<<"$thin_out" || {
   echo "plan-thin.md should fail D4 on its Open Questions box, got: $thin_out" >&2
   exit 1
@@ -340,6 +347,14 @@ set -e
 }
 grep -Fq "overlap: work-issue/scripts/run-state.py — issue-101 task check-inflight-script, issue-38 task run-state-task" <<<"$inflight_out" || {
   echo "the overlap must name the path and both owning tasks, got: $inflight_out" >&2
+  exit 1
+}
+# closed/issue-7 owns the same path and must not be reported. A substring grep
+# on the issue-38 line and an exit code of 1 both stay true when the closed/
+# skip is lost: dropping the guard adds a "skipped: closed" line, and a rewrite
+# that recurses adds an issue-7 overlap. Only the whole output pins the skip.
+[[ "$inflight_out" == "check-inflight: overlap: work-issue/scripts/run-state.py — issue-101 task check-inflight-script, issue-38 task run-state-task" ]] || {
+  echo "check-inflight.py should report the issue-38 overlap and nothing else (closed/ is skipped), got: $inflight_out" >&2
   exit 1
 }
 
