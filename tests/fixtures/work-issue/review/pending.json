@@ -1,0 +1,33 @@
+{
+  "author": "kendrick",
+  "reactions": [
+    {
+      "content": "+1",
+      "user": "chatgpt-codex-connector[bot]",
+      "created_at": "2026-09-16T09:00:00Z"
+    }
+  ],
+  "reviews": [
+    {
+      "state": "APPROVED",
+      "author": "someone-else",
+      "submitted_at": "2026-09-16T09:05:00Z"
+    }
+  ],
+  "threads": [
+    {
+      "id": "PRRT_kwDOB1",
+      "is_resolved": false,
+      "root_created_at": "2026-09-16T09:10:00Z",
+      "root_author": "chatgpt-codex-connector",
+      "root_body": "**P1** Answered on the push before last; the cutoff is what keeps it out of this round."
+    }
+  ],
+  "comments": [
+    {
+      "author": "someone-else",
+      "created_at": "2026-09-16T09:15:00Z",
+      "body": "One more thing about the vendored block."
+    }
+  ]
+}

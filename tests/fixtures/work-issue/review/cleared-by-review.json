@@ -1,0 +1,27 @@
+{
+  "author": "kendrick",
+  "reactions": [],
+  "reviews": [
+    {
+      "state": "APPROVED",
+      "author": "someone-else",
+      "submitted_at": "2026-09-17T16:30:00Z"
+    }
+  ],
+  "threads": [
+    {
+      "id": "PRRT_kwDOC1",
+      "is_resolved": true,
+      "root_created_at": "2026-09-17T16:20:00Z",
+      "root_author": "someone-else",
+      "root_body": "**P1** Fixed in the last push; resolved by the reviewer."
+    }
+  ],
+  "comments": [
+    {
+      "author": "someone-else",
+      "created_at": "2026-09-17T16:31:00Z",
+      "body": "LGTM!"
+    }
+  ]
+}
