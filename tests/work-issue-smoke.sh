@@ -612,6 +612,26 @@ require_text work-issue/references/redteam.md "\`claim\`, \`path\`, \`command\`,
 # Step 0 probes before it writes, or every fresh issue reads as row 5's dead run.
 require_text work-issue/SKILL.md "before anything is written under RUN_DIR"
 
+# `--save` writes gather()'s output, before classify() ever runs on it. Ledger
+# row 34 called it the "classified" bundle until a code-review pass on this
+# diff caught the drift between the doc and the code it describes.
+require_text _maintenance/work-issue/RATIONALE.md "gathered bundle to disk"
+refute_text _maintenance/work-issue/RATIONALE.md "classified bundle to disk"
+
+# Row 36's reproduction cites the fixture that actually carries the values it
+# quotes. `row-16.json` has `triage_inscope_rows: 2`, not 0 — a code-review
+# pass caught the row pointing at the wrong file.
+require_text _maintenance/work-issue/RATIONALE.md "Reproduced against \`row-17-queued.json\`"
+
+# EVALS.md's own count of review bundles, so it can't drift from
+# tests/fixtures/work-issue/review/ the way it did when this diff added two
+# fixtures without touching the summary line.
+require_text _maintenance/work-issue/EVALS.md "against eight review bundles"
+[[ "$(find tests/fixtures/work-issue/review -maxdepth 1 -type f | wc -l | tr -d ' ')" == "8" ]] || {
+  echo "tests/fixtures/work-issue/review holds a different count than EVALS.md's 'eight review bundles'" >&2
+  exit 1
+}
+
 # The root README carries this skill's own install flag, in the map
 # table's third column. The command form around it is pinned once, in
 # repo-docs-smoke.sh, so this does not re-pin it twelve times.
