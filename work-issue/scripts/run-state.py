@@ -109,6 +109,7 @@ PROBE_FIELDS = (
     ("repair_reports", "int", ()),
     ("newest_repair_report", "bool", ()),
     ("triage_rows_unanswered", "int", ()),
+    ("deferred_comment_needed", "bool", ()),
 )
 
 BUNDLE_KEYS = (
@@ -817,6 +818,7 @@ def phase_of(probe):
         pr_state == "OPEN"
         and review_state == "pending"
         and count(probe, "triage_rows_unanswered") == 0
+        and not flag(probe, "deferred_comment_needed")
     ):
         return "6", "row 14: the PR is open and no review has landed since the last push; keep polling"
     if (
@@ -842,12 +844,19 @@ def phase_of(probe):
     if (
         pr_state == "OPEN"
         and (repair_reports > 0 or (triage_rounds > 0 and count(probe, "triage_inscope_rows") == 0))
-        and (flag(probe, "ahead_of_origin") or count(probe, "triage_rows_unanswered") > 0)
+        and (
+            flag(probe, "ahead_of_origin")
+            or count(probe, "triage_rows_unanswered") > 0
+            # Step 8 item 4 posts the queue after item 3's replies, so a stop
+            # between them leaves every row answered and the comment still
+            # owed, which no other field can see.
+            or flag(probe, "deferred_comment_needed")
+        )
     ):
         return (
             "8",
             "row 17: a repair report, or a triage round with no in-scope rows, "
-            "with work unpushed or a triage row still unanswered",
+            "with work unpushed, a triage row still unanswered, or the deferred-findings comment still owed",
         )
     if pr_state == "OPEN" and review_state == "cleared":
         return "done", "row 18: the PR is open and the review is cleared; print the final report"

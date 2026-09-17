@@ -16,7 +16,7 @@ Checks, one stderr line each naming its rule and a location:
   D1  the plan never cites the issue (`#N`, `issues/N`, or `issue N`,
       whole-word)
   D2  a task heading (`## Task`, `### Task`, `### T<n>`, or a `- [ ] Task`
-      line) whose section has no `Files:`, `**Files:**`, `owns:`, or
+      line with any list marker at any indent) whose section has no `Files:`, `**Files:**`, `owns:`, or
       `Files owned` line — checked only when the plan has no `## Waves`
       table, since a Waves table carries ownership itself
   D3  an open marker: `TBD`, `TODO`, `FIXME`, `???`, `decide later`,
@@ -64,7 +64,9 @@ TASK_HEADING_RES = (
     re.compile(r"^###\s+Task\b"),
     re.compile(r"^###\s+T\d+\b"),
 )
-CHECKBOX_TASK_RE = re.compile(r"^-\s*\[[ xX]\]\s*Task\b")
+# Any list marker, at any indent, the same widening D4 and D6 carry: a task
+# written as an indented checkbox was a task D2 never checked for files.
+CHECKBOX_TASK_RE = re.compile(r"^\s*[-*+]\s*\[[ xX]\]\s*Task\b")
 # Any list marker, at any indent. A box nested under a bullet or written with
 # `*` is an ordinary Markdown checkbox, and column-1 `-` alone let it past D4.
 CHECKBOX_RE = re.compile(r"^\s*[-*+]\s*\[\s\]")

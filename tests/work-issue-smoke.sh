@@ -93,6 +93,8 @@ require_file tests/fixtures/work-issue/probes/row-13-prepr-repair-clean.json
 # since the round, a repair since the round, and two failed rounds in a row.
 require_file tests/fixtures/work-issue/probes/row-10-repair-needed.json
 require_file tests/fixtures/work-issue/probes/row-10-failed-twice.json
+# Every row answered, the queue not yet posted: Step 8 item 4 still owed.
+require_file tests/fixtures/work-issue/probes/row-17-deferred-owed.json
 # A reviewer's reply inside an old thread after a repair push, and the same
 # thread where the only reply is the author's own.
 require_file tests/fixtures/work-issue/review/thread-followup.json
@@ -353,6 +355,13 @@ grep -Fq "D2 task" <<<"$nofiles_out" || {
   echo "plan-nofiles.md should fail D2 naming the task, got: $nofiles_out" >&2
   exit 1
 }
+# The first task is an indented `* [ ] Task` checkbox, which D2's column-1
+# dash pattern never saw, so a plan of nothing but such tasks passed with
+# `0 tasks with files`. Both tasks have to fire.
+[[ "$(grep -c "D2 task" <<<"$nofiles_out")" == "2" ]] || {
+  echo "plan-nofiles.md should fail D2 on both tasks, the indented checkbox included, got: $nofiles_out" >&2
+  exit 1
+}
 
 # A plan that never names the issue is a plan nobody can tie to the ticket the
 # whole run closes.
@@ -573,7 +582,7 @@ declare -a probe_cases=(
   "row-01:done" "row-02:wait" "row-03:stop" "row-04:0" "row-05:0" "row-06:0"
   "row-07:2" "row-07-isolation-incomplete:1" "row-08:3" "row-09:3" "row-10:4" "row-11:4" "row-11-trigger-unrecorded:4" "row-12:5" "row-13:5"
   "row-14:6" "row-15:6" "row-16:7" "row-17:8" "row-17-queued:8" "row-17-postpush:8"
-  "row-10-repair-unverified:4" "row-10-repair-needed:4" "row-10-failed-twice:stop" "row-13-prepr-repair-clean:5" "row-16-earlier-queued:8" "row-17-review-repair-unpushed:8" "row-18:done"
+  "row-10-repair-unverified:4" "row-10-repair-needed:4" "row-10-failed-twice:stop" "row-13-prepr-repair-clean:5" "row-16-earlier-queued:8" "row-17-review-repair-unpushed:8" "row-17-deferred-owed:8" "row-18:done"
 )
 for case in "${probe_cases[@]}"; do
   fixture="${case%%:*}"
@@ -651,8 +660,8 @@ require_text work-issue/SKILL.md "repair report, or a triage round with no in-sc
 require_text work-issue/references/resume.md "repair report, or a triage round with no in-scope rows"
 # Row 14's guard is what keeps a stop between the repair push and the replies
 # out of the poll. Both copies carry it.
-require_text work-issue/SKILL.md "| 14 | PR open; review \`pending\`; no triage row without a reply URL | Step 6 poll |"
-require_text work-issue/references/resume.md "| 14 | PR open; review \`pending\`; no triage row without a reply URL | Step 6 poll |"
+require_text work-issue/SKILL.md "| 14 | PR open; review \`pending\`; no triage row without a reply URL; no queue awaiting its comment | Step 6 poll |"
+require_text work-issue/references/resume.md "| 14 | PR open; review \`pending\`; no triage row without a reply URL; no queue awaiting its comment | Step 6 poll |"
 # The preamble is the only part of worker-prompt.md a worker sees, so the
 # nine-field contract has to be inside it, not only documented after it.
 require_text work-issue/references/worker-prompt.md "This shape replaces the six-field"
@@ -714,6 +723,10 @@ require_text work-issue/references/triage.md "quote \`last_comment_body\` from t
 # still open the pull request.
 require_text work-issue/SKILL.md "| 17 | PR open; repair report"
 require_text work-issue/references/resume.md "| 17 | PR open; repair report"
+# The queue's comment is probed, and rows 14 and 17 both read it.
+require_text work-issue/SKILL.md "or a non-empty queue with no \`Deferred findings\` comment | Step 8 |"
+require_text work-issue/references/resume.md "or a non-empty queue with no \`Deferred findings\` comment | Step 8 |"
+require_text work-issue/references/resume.md "grep -q '^## Deferred findings'"
 require_text work-issue/SKILL.md "two failed rounds in a row stop with the evidence"
 require_text work-issue/references/resume.md "two failed rounds in a row stop with the evidence"
 # pushed_at goes down before the push, so a same-second review still counts.
