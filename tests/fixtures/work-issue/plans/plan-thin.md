@@ -16,4 +16,4 @@ Shape of the queue row: ???
 
 ### Storage
 
-- [ ] IndexedDB or localStorage?
+  - [ ] IndexedDB or localStorage?

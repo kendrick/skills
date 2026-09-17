@@ -1,10 +1,10 @@
 # Resume
 
-Read this at Step 0, item 2, before anything else in the run spends a token.
+Read this at Step 0, item 1, before anything else in the run spends a token or writes under RUN_DIR. Row 5 reads a run dir with no branch as a dead run, so a probe taken after `issue.md` is written would archive the issue it just read.
 
 **The world outranks RUN_DIR, and RUN_DIR outranks memory.** git, gh, and herdr are asked first. RUN_DIR answers only what they cannot see — which reports came back, what the reproducer decided, which triage rows were written. Memory answers nothing: the conversation's account of where the run got to is the one source that was not there when the run actually stopped, and a crashed session's last confident sentence is exactly the sentence to distrust.
 
-Every field below is present in the probe JSON, `null` where the probe could not answer. A missing field exits 3 rather than defaulting, because a field silently defaulting to `false` reads as "no branch yet" and sends a run that is three steps in back to Step 0.
+Every field below is present in the probe JSON, `null` where the probe could not answer. A missing field exits 3 rather than defaulting, because a field silently defaulting to `false` reads as "no branch yet" and sends a run that is three steps in back to Step 0. A `null` is treated the same way for every field but `pr_state` and `review_state`, where null means no pull request yet: the script answers `stop` naming the field, because a null read as "no" is the same wrong answer arriving through the front door. Row 1 is checked first, since a merged or closed pull request ends the run whatever else the probe could not see.
 
 ## Probes
 
@@ -32,6 +32,7 @@ Every field below is present in the probe JSON, `null` where the probe could not
 | `triage_newer_than_since` | the newest `triage/round-*.md` is newer than SINCE: compare its mtime against `<RUN_DIR>/pushed_at`. Older means the rows describe review on a push that has since been replaced. |
 | `triage_inscope_rows` | rows marked in scope in the newest `triage/round-*.md` |
 | `repair_reports` | `find <RUN_DIR>/reports -name 'repair-*.json' \| wc -l` |
+| `newest_repair_report` | `test -f <RUN_DIR>/reports/repair-<k>.json` for the newest `triage/round-<k>.md`. Row 16 reads this rather than comparing counts, because an all-queued round writes no repair report and the counts drift apart |
 | `triage_rows_unanswered` | triage rows carrying no reply URL, across every round. Not cut off at SINCE: Step 8 pushes before it replies, so the rows it owes are always older than the push that answered them |
 
 Write them to a JSON file and map them:
@@ -63,7 +64,7 @@ The same eighteen rows the script implements, written out so a reader can fail o
 | 13 | red-team clean; no PR, or local HEAD ahead of `origin/issue-N` | Step 5 |
 | 14 | PR open; review `pending`; no triage row without a reply URL | Step 6 poll |
 | 15 | PR open; `findings`; no `triage/round-<k>.md` newer than SINCE | Step 6 triage |
-| 16 | triage round with in-scope rows; no matching `reports/repair-<k>.json` | Step 7 |
+| 16 | newest triage round has in-scope rows; no `reports/repair-<k>.json` for that round | Step 7 |
 | 17 | repair report, or a triage round with no in-scope rows; local ahead of origin, or a triage row without a reply URL | Step 8 |
 | 18 | PR open; `cleared` | done: final report |
 

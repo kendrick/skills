@@ -21,5 +21,6 @@
   "triage_newer_than_since": false,
   "triage_inscope_rows": 0,
   "repair_reports": 0,
-  "triage_rows_unanswered": 0
+  "triage_rows_unanswered": 0,
+  "newest_repair_report": false
 }

@@ -86,6 +86,10 @@ require_file tests/fixtures/work-issue/probes/row-17-queued.json
 # once sent somewhere else (row 14's poll and row 18's done).
 require_file tests/fixtures/work-issue/probes/row-17-postpush.json
 require_file tests/fixtures/work-issue/probes/row-17-redteam-repair.json
+# A queued round followed by a repaired one, which a count comparison sent back
+# to Step 7; and a probe with one null, which a bool coercion read as "no".
+require_file tests/fixtures/work-issue/probes/row-16-earlier-queued.json
+require_file tests/fixtures/work-issue/probes/unknown-branch-remote.json
 require_file tests/fixtures/work-issue/review/changes-requested.json
 require_file tests/fixtures/work-issue/review/pr-comment-finding.json
 
@@ -301,8 +305,9 @@ grep -Fq "D4 unchecked box under heading 'Open Questions'" <<<"$thin_out" || {
   echo "plan-thin.md should fail D4 on its Open Questions box, got: $thin_out" >&2
   exit 1
 }
-# The second box sits under `### Storage`, a subheading inside Open Questions.
-# Tracking only the nearest heading let that one through, so D4 has to fire
+# The second box sits under `### Storage`, a subheading inside Open Questions,
+# and it is indented. Tracking only the nearest heading let it through once,
+# and a column-1 checkbox pattern let it through again, so D4 has to fire
 # twice here, both times naming the ancestor that makes the box a decision.
 [[ "$(grep -c "D4 unchecked box under heading 'Open Questions'" <<<"$thin_out")" == "2" ]] || {
   echo "plan-thin.md should fail D4 on both boxes, the nested one included, got: $thin_out" >&2
@@ -528,7 +533,7 @@ declare -a probe_cases=(
   "row-01:done" "row-02:wait" "row-03:stop" "row-04:0" "row-05:0" "row-06:0"
   "row-07:2" "row-08:3" "row-09:3" "row-10:4" "row-11:4" "row-12:5" "row-13:5"
   "row-14:6" "row-15:6" "row-16:7" "row-17:8" "row-17-queued:8" "row-17-postpush:8"
-  "row-17-redteam-repair:8" "row-18:done"
+  "row-17-redteam-repair:8" "row-16-earlier-queued:8" "row-18:done"
 )
 for case in "${probe_cases[@]}"; do
   fixture="${case%%:*}"
@@ -546,6 +551,22 @@ for case in "${probe_cases[@]}"; do
     exit 1
   }
 done
+
+# A null is a probe that could not answer, and every row below row 1 reads a
+# null as "no". Rather than restart a run three steps in as fresh, the script
+# stops and names the field.
+set +e
+null_out="$(python3 "$run_state" phase --probe "$probes_dir/unknown-branch-remote.json" 2>&1)"
+null_status=$?
+set -e
+[[ "$null_status" == "0" ]] || {
+  echo "run-state.py phase on a null field should exit 0 with a stop, got: $null_status: $null_out" >&2
+  exit 1
+}
+grep -Fq "phase: stop reason: unknown probe fields: branch_remote" <<<"$null_out" || {
+  echo "a null branch_remote should stop the run naming the field, got: $null_out" >&2
+  exit 1
+}
 
 # A field the probe could not answer is written as null. A field that is absent
 # entirely must stop the run instead of defaulting, because a silent `false`
@@ -584,6 +605,12 @@ require_text work-issue/references/resume.md "| 14 | PR open; review \`pending\`
 # The preamble is the only part of worker-prompt.md a worker sees, so the
 # nine-field contract has to be inside it, not only documented after it.
 require_text work-issue/references/worker-prompt.md "This shape replaces the six-field"
+# The reproducer greps each claim's path at HEAD before it runs the command,
+# and never sees files_changed, so a claim without a path cannot be checked.
+require_text work-issue/references/worker-prompt.md '"path": "the repo-relative file the claim rests on"'
+require_text work-issue/references/redteam.md "\`claim\`, \`path\`, \`command\`, \`output\`"
+# Step 0 probes before it writes, or every fresh issue reads as row 5's dead run.
+require_text work-issue/SKILL.md "before anything is written under RUN_DIR"
 
 # The root README carries this skill's own install flag, in the map
 # table's third column. The command form around it is pinned once, in

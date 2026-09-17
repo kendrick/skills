@@ -49,8 +49,8 @@ The user owns two phases of this loop, and both are outside it. Planning comes b
 
 ## Step 0 — Gate and confirm
 
-1. Read the issue into `RUN_DIR/issue.md` and extract CRITERIA.
-2. Run the resume probe (see [Resume](#resume)). Any phase past 0 jumps there; the rest of this step is for a fresh issue.
+1. Run the resume probe (see [Resume](#resume)) before anything is written under RUN_DIR. A run dir with no branch is row 5's mark of a dead run, so an `issue.md` written first would make every fresh issue look dead and send it to `closed/`. Any phase past 0 jumps there; the rest of this step is for a fresh issue.
+2. Read the issue into `RUN_DIR/issue.md` and extract CRITERIA.
 3. The plan gate, mechanical half:
 
    ```
@@ -130,7 +130,7 @@ The worker's final report is `RUN_DIR/reports/build-final.json`, and its `claims
 Input is `claims`, `left`, and `plan_concerns` from the final report. The rule, quoted from `adversarial-review`: a finding is a hypothesis until something that did not author it reproduces it. A claim is the same object pointed the other way, and it gets the same treatment.
 
 1. Preflight: the work tree is clean. Commit first — a verifier running against uncommitted changes tests something the review never looked at.
-2. Read [references/redteam.md](references/redteam.md) and dispatch one **reproducer**: a fresh general-purpose subagent, `sonnet` by default and `opus` when any claim's path matches a trigger row. It receives the claims, BASE_SHA, HEAD, the tree path, and `baseline.txt`, and nothing else — not the worker's reasoning, not its summary, not its proposed fixes. Its stance is refutation. Per claim it returns the `command`, the real `output`, and a verdict of `REPRODUCED`, `NOT_REPRODUCED`, or `UNVERIFIABLE`; per `left` entry, whether the stated reason holds against the code. Before running a claim's command it proves the change that claim rests on exists at HEAD (`git diff BASE_SHA..HEAD -- <path> | grep -n <symbol>`), and a claim whose change it cannot find is `NOT_REPRODUCED` with that grep as the evidence. Any fixture it edits to provoke a failure is proved the same way.
+2. Read [references/redteam.md](references/redteam.md) and dispatch one **reproducer**: a fresh general-purpose subagent, `sonnet` by default and `opus` when any claim's path matches a trigger row. It receives the claims, BASE_SHA, HEAD, the tree path, and `baseline.txt`, and nothing else — not the worker's reasoning, not its summary, not its proposed fixes. Its stance is refutation. Per claim it returns the `command`, the real `output`, and a verdict of `REPRODUCED`, `NOT_REPRODUCED`, or `UNVERIFIABLE`; per `left` entry, whether the stated reason holds against the code. Before running a claim's command it proves the change that claim rests on exists at HEAD (`git diff BASE_SHA..HEAD -- <path> | grep -n <symbol>`, with `<path>` the claim's own `path` field), and a claim whose change it cannot find, or that names no path, is `NOT_REPRODUCED` with that grep as the evidence. Any fixture it edits to provoke a failure is proved the same way.
 3. Save the verdicts verbatim to `RUN_DIR/redteam/round-<k>.json`.
 4. `NOT_REPRODUCED` sends a repair dispatch with the reproducer's command and output attached, then round k+1 over the failed claims only. Two rounds, then stop with the evidence, the way `divvy-up` stops on a task that failed twice.
 5. `UNVERIFIABLE` becomes a "Not independently verified" section in the pull-request body.
@@ -201,7 +201,7 @@ Gate it the way Step 3 gates: VERIFY_CMD, then `code-review` against BASE_SHA, w
 
 The world outranks RUN_DIR, and RUN_DIR outranks memory. git, gh, and herdr are asked first, because a run's own notes are exactly what the crash that stranded it leaves stale.
 
-Gather the probe fields per [references/resume.md](references/resume.md) — one command per field, every field present and `null` where unknown — write them to a JSON file, and map them:
+Gather the probe fields per [references/resume.md](references/resume.md) — one command per field, every field present and `null` where unknown — write them to a JSON file, and map them. A `null` in any field but `pr_state` and `review_state` answers `stop` naming the field, so gather it again rather than guessing:
 
 ```
 work-issue/scripts/run-state.py phase --probe PROBE.json
@@ -226,7 +226,7 @@ It prints `phase: <0-8|done|wait|stop> reason: <one line>` and exits 0, or exits
 | 13 | red-team clean; no PR, or local HEAD ahead of `origin/issue-N` | Step 5 |
 | 14 | PR open; review `pending`; no triage row without a reply URL | Step 6 poll |
 | 15 | PR open; `findings`; no `triage/round-<k>.md` newer than SINCE | Step 6 triage |
-| 16 | triage round with in-scope rows; no matching `reports/repair-<k>.json` | Step 7 |
+| 16 | newest triage round has in-scope rows; no `reports/repair-<k>.json` for that round | Step 7 |
 | 17 | repair report, or a triage round with no in-scope rows; local ahead of origin, or a triage row without a reply URL | Step 8 |
 | 18 | PR open; `cleared` | done: final report |
 

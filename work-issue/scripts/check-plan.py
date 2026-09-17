@@ -65,7 +65,9 @@ TASK_HEADING_RES = (
     re.compile(r"^###\s+T\d+\b"),
 )
 CHECKBOX_TASK_RE = re.compile(r"^-\s*\[[ xX]\]\s*Task\b")
-CHECKBOX_RE = re.compile(r"^-\s*\[\s\]")
+# Any list marker, at any indent. A box nested under a bullet or written with
+# `*` is an ordinary Markdown checkbox, and column-1 `-` alone let it past D4.
+CHECKBOX_RE = re.compile(r"^\s*[-*+]\s*\[\s\]")
 HEADING_RE = re.compile(r"^(#{1,6})\s+(.*)$")
 FILES_LINE_RE = re.compile(r"Files:|\*\*Files:\*\*|owns:|Files owned")
 WAVES_HEADING_RE = re.compile(r"^##\s+Waves\s*$")

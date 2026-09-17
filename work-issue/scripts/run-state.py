@@ -101,6 +101,7 @@ PROBE_FIELDS = (
     ("triage_newer_than_since", "bool", ()),
     ("triage_inscope_rows", "int", ()),
     ("repair_reports", "int", ()),
+    ("newest_repair_report", "bool", ()),
     ("triage_rows_unanswered", "int", ()),
 )
 
@@ -677,6 +678,24 @@ def phase_of(probe):
     branch here to fail against."""
     pr_state = probe["pr_state"]
     review_state = probe["review_state"]
+    if pr_state in ("MERGED", "CLOSED"):
+        return "done", "row 1: the PR is " + pr_state + ", so offer cleanup and stop"
+    # A null anywhere else is a probe that could not answer, and every row
+    # below reads a null as "no": no branch, no run dir, no report. A transient
+    # failed `git ls-remote` would then restart a run three steps in as fresh.
+    # `pr_state` and `review_state` are the two fields where null is an answer
+    # (no pull request yet), so they are exempt.
+    unknown = [
+        name
+        for name, _, _ in PROBE_FIELDS
+        if name not in ("pr_state", "review_state") and probe[name] is None
+    ]
+    if unknown:
+        return (
+            "stop",
+            "unknown probe fields: " + ", ".join(unknown)
+            + "; a null here would read as no, so gather them again per references/resume.md",
+        )
     herdr = probe["herdr_agent_state"]
     branch_anywhere = flag(probe, "branch_local") or flag(probe, "branch_remote")
     wave_tasks = count(probe, "wave_tasks")
@@ -687,8 +706,6 @@ def phase_of(probe):
     triage_rounds = count(probe, "triage_rounds")
     repair_reports = count(probe, "repair_reports")
 
-    if pr_state in ("MERGED", "CLOSED"):
-        return "done", f"row 1: the PR is {pr_state}, so offer cleanup and stop"
     if herdr == "working":
         return "wait", "row 2: the herdr agent is working; wait and re-probe"
     if herdr == "blocked":
@@ -735,12 +752,16 @@ def phase_of(probe):
         and not flag(probe, "triage_newer_than_since")
     ):
         return "6", "row 15: the PR has findings and no triage round newer than SINCE"
+    # Counted totals cannot say whether the newest round was repaired: an
+    # all-queued round writes no repair report on purpose, so one queued round
+    # followed by a repaired one has two rounds and one report, and a count
+    # comparison re-dispatches a repair that already landed.
     if (
         triage_rounds > 0
         and count(probe, "triage_inscope_rows") > 0
-        and repair_reports < triage_rounds
+        and not flag(probe, "newest_repair_report")
     ):
-        return "7", "row 16: a triage round has in-scope rows and no matching repair report"
+        return "7", "row 16: the newest triage round has in-scope rows and no repair report of its own"
     # The repair-report leg stands alone: a red-team repair (row 10) writes a
     # repair report with no triage round behind it, and gating it on a triage
     # round sent that run to row 18's `done` with its commits still unpushed.

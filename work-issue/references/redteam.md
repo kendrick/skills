@@ -10,7 +10,7 @@ One fresh general-purpose subagent per round: `sonnet` by default, `opus` where 
 
 ### What it receives
 
-- the `claims` array out of the final report: `claim`, `command`, `output`
+- the `claims` array out of the final report: `claim`, `path`, `command`, `output`. The reproducer never sees `files_changed`, so `path` is the only file name it has for the change-exists grep, and the only one the `opus` routing reads against the trigger rows
 - the `left` array: `what` and `why`
 - BASE_SHA and HEAD
 - the absolute path of the tree
