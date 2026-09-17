@@ -95,6 +95,9 @@ require_file tests/fixtures/work-issue/probes/row-10-repair-needed.json
 require_file tests/fixtures/work-issue/probes/row-10-failed-twice.json
 # Every row answered, the queue not yet posted: Step 8 item 4 still owed.
 require_file tests/fixtures/work-issue/probes/row-17-deferred-owed.json
+# A worker's plan_concerns row queued at Step 4, before any triage round: the
+# owed comment alone has to reach Step 8.
+require_file tests/fixtures/work-issue/probes/row-17-worker-queue.json
 # A reviewer's reply inside an old thread after a repair push, and the same
 # thread where the only reply is the author's own.
 require_file tests/fixtures/work-issue/review/thread-followup.json
@@ -582,7 +585,7 @@ declare -a probe_cases=(
   "row-01:done" "row-02:wait" "row-03:stop" "row-04:0" "row-05:0" "row-06:0"
   "row-07:2" "row-07-isolation-incomplete:1" "row-08:3" "row-09:3" "row-10:4" "row-11:4" "row-11-trigger-unrecorded:4" "row-12:5" "row-13:5"
   "row-14:6" "row-15:6" "row-16:7" "row-17:8" "row-17-queued:8" "row-17-postpush:8"
-  "row-10-repair-unverified:4" "row-10-repair-needed:4" "row-10-failed-twice:stop" "row-13-prepr-repair-clean:5" "row-16-earlier-queued:8" "row-17-review-repair-unpushed:8" "row-17-deferred-owed:8" "row-18:done"
+  "row-10-repair-unverified:4" "row-10-repair-needed:4" "row-10-failed-twice:stop" "row-13-prepr-repair-clean:5" "row-16-earlier-queued:8" "row-17-review-repair-unpushed:8" "row-17-deferred-owed:8" "row-17-worker-queue:8" "row-18:done"
 )
 for case in "${probe_cases[@]}"; do
   fixture="${case%%:*}"
@@ -654,10 +657,10 @@ grep -Fq "pr_state" <<<"$short_probe_out" || {
 # ran, so the old test (`repair_reports > 0`) never matched, and nothing else
 # in the table did either. The Resume table's own copy has to say what the
 # script now checks.
-require_text work-issue/SKILL.md "repair report, or a triage round with no in-scope rows"
+require_text work-issue/SKILL.md "or a repair report or an all-queued triage round with local ahead of origin"
 # The resume path reads references/resume.md, so its copy of the table is the
 # one that matters at run time, and it has to say the same thing.
-require_text work-issue/references/resume.md "repair report, or a triage round with no in-scope rows"
+require_text work-issue/references/resume.md "or a repair report or an all-queued triage round with local ahead of origin"
 # Row 14's guard is what keeps a stop between the repair push and the replies
 # out of the poll. Both copies carry it.
 require_text work-issue/SKILL.md "| 14 | PR open; review \`pending\`; no triage row without a reply URL; no queue row missing from its comment | Step 6 poll |"
@@ -721,15 +724,18 @@ grep -Fq "reply 2026-09-17T16:20:00Z https://github.com/kendrick/skills/pull/1#d
 require_text work-issue/references/triage.md "quote \`last_comment_body\` from the saved file"
 # Row 17 is post-PR; a pre-PR repair goes to row 10 or row 13, both of which
 # still open the pull request.
-require_text work-issue/SKILL.md "| 17 | PR open; repair report"
-require_text work-issue/references/resume.md "| 17 | PR open; repair report"
+require_text work-issue/SKILL.md "| 17 | PR open; a queue row missing from the \`Deferred findings\` comment, or a repair report"
+require_text work-issue/references/resume.md "| 17 | PR open; a queue row missing from the \`Deferred findings\` comment, or a repair report"
 # The queue's comment is probed, and rows 14 and 17 both read it.
-require_text work-issue/SKILL.md "or a queue row missing from the \`Deferred findings\` comment | Step 8 |"
-require_text work-issue/references/resume.md "or a queue row missing from the \`Deferred findings\` comment | Step 8 |"
+require_text work-issue/SKILL.md "or a triage row without a reply URL | Step 8 |"
+require_text work-issue/references/resume.md "or a triage row without a reply URL | Step 8 |"
 # The probe compares the queue's rows to the comment, never just the heading:
 # a comment from an earlier round satisfied the heading test while a later
 # round's rows had never reached it.
-require_text work-issue/references/resume.md "check every queue row's Source cell against it"
+require_text work-issue/references/resume.md "check every queue row, whole, against it"
+# Whole rows, not Source cells: a Status moved to filed #M is a change the
+# comment has to carry, and a Source-only compare read it as published.
+refute_text work-issue/references/resume.md 'grep -qF -- "| $src |"'
 refute_text work-issue/references/resume.md "grep -q '^## Deferred findings'"
 # The probe's exact-text comparison means a Source cell reformatted as a link
 # or wrapped in backticks compares as disjoint from the queue's bare cell —

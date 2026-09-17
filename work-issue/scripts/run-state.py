@@ -841,16 +841,15 @@ def phase_of(probe):
     # so a repair with no PR behind it belongs to row 10 (unverified) or row
     # 13 (clean), never here. The repair-report leg still stands alone: a
     # post-PR repair round may have no triage round of its own.
-    if (
-        pr_state == "OPEN"
-        and (repair_reports > 0 or (triage_rounds > 0 and count(probe, "triage_inscope_rows") == 0))
-        and (
-            flag(probe, "ahead_of_origin")
-            or count(probe, "triage_rows_unanswered") > 0
-            # Step 8 item 4 posts the queue after item 3's replies, so a stop
-            # between them leaves every row answered and the comment still
-            # owed, which no other field can see.
-            or flag(probe, "deferred_comment_needed")
+    # An owed deferred-findings comment reaches Step 8 on its own. A worker's
+    # plan_concerns row lands in the queue at Step 4, before any triage round
+    # or repair report exists, and a resume that required one of those first
+    # matched no row at all and stranded the run.
+    if pr_state == "OPEN" and (
+        flag(probe, "deferred_comment_needed")
+        or (
+            (repair_reports > 0 or (triage_rounds > 0 and count(probe, "triage_inscope_rows") == 0))
+            and (flag(probe, "ahead_of_origin") or count(probe, "triage_rows_unanswered") > 0)
         )
     ):
         return (
