@@ -854,8 +854,8 @@ def phase_of(probe):
     ):
         return (
             "8",
-            "row 17: a repair report, or a triage round with no in-scope rows, "
-            "with work unpushed, a triage row still unanswered, or the deferred-findings comment still owed",
+            "row 17: the deferred-findings comment is owed, or a repair report or an "
+            "all-queued triage round leaves work unpushed or a triage row unanswered",
         )
     if pr_state == "OPEN" and review_state == "cleared":
         return "done", "row 18: the PR is open and the review is cleared; print the final report"

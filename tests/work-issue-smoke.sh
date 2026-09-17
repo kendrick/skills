@@ -735,8 +735,20 @@ require_text work-issue/references/resume.md "or a triage row without a reply UR
 require_text work-issue/references/resume.md "check every queue row, whole, against it"
 # Whole rows, not Source cells: a Status moved to filed #M is a change the
 # comment has to carry, and a Source-only compare read it as published.
-refute_text work-issue/references/resume.md 'grep -qF -- "| $src |"'
+refute_text work-issue/references/resume.md 'grep -qF -- "\| $src \|"'
 refute_text work-issue/references/resume.md "grep -q '^## Deferred findings'"
+# Step 8 item 4 and triage.md both described the Source-only compare the
+# whole-row recipe replaced; a reader told only Sources are checked can skip
+# a row whose Status changed without its Source changing.
+require_text work-issue/SKILL.md "The resume probe compares every queue row, whole, against that comment"
+require_text work-issue/references/triage.md "checks every queue row, whole, against it"
+# The row-17 reason string named a repair report or triage round as if the
+# deferred-findings comment were conjoined with them, which stopped being
+# true once the comment could reach row 17 on its own.
+require_text work-issue/scripts/run-state.py "row 17: the deferred-findings comment is owed, or a repair report"
+# The refute above needs its own Deliberately Not Built row, or the repo's
+# own rule that every refute pins a cut goes unmet.
+require_text _maintenance/work-issue/RATIONALE.md "Comparing only a queue row's Source cell against the deferred-findings comment"
 # The probe's exact-text comparison means a Source cell reformatted as a link
 # or wrapped in backticks compares as disjoint from the queue's bare cell —
 # the same failure divvy-up's owns entries hit before #97. Both places that

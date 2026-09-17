@@ -91,4 +91,4 @@ One pull-request comment, headed `Deferred findings`, carrying the queue table c
 | 1 | <url> | <quoted> | not in the diff under review | `file-issue` — <one line> | queued |
 ```
 
-Edited in place on later rounds rather than posted again. A second comment leaves two tables on the pull request and no rule for which is current, and the reviewer reading the older one is looking at a row somebody has already dealt with. The resume probe reads this comment back and checks every queue row's Source against it, which is why the Source column is quoted exactly as it appears on disk: a row the comment lacks is a Step 8 still owed.
+Edited in place on later rounds rather than posted again. A second comment leaves two tables on the pull request and no rule for which is current, and the reviewer reading the older one is looking at a row somebody has already dealt with. The resume probe reads this comment back and checks every queue row, whole, against it, which is why the table is quoted exactly as it appears on disk: a row the comment lacks, or carries with a changed cell, is a Step 8 still owed.
