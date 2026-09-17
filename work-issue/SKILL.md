@@ -192,7 +192,7 @@ Gate it the way Step 3 gates: VERIFY_CMD, then `code-review` against BASE_SHA, w
 1. Red-team the repair: Step 4 over `repair-<k>.json`'s claims, with the trigger re-evaluated on the full diff.
 2. Rebase, verify, write `pushed_at`, push — Step 5 items 1 through 4.
 3. Reply to every finding thread with what changed and the commit SHA: `gh api repos/{owner}/{repo}/pulls/<pr>/comments/<id>/replies -f body=…`, where `<id>` is the `reply-to` id on the thread's deciding line, and a pull-request comment for review-level and issue-level findings. The push in item 2 moves SINCE past the rows being answered, and that is why `triage_rows_unanswered` counts every round: a stop between the push and these replies resumes here, at row 17, rather than at row 14's poll. A queued row gets "deferred: <Outside because>; tracked in the deferred-findings comment". Replies go through `technical-writing`. **Answer, never resolve**: marking a thread resolved is the reviewer's act, and taking it from them destroys the only signal they have that anyone read the finding.
-4. One pull-request comment headed `Deferred findings` carries the queue table, edited in place on later rounds rather than posted again.
+4. One pull-request comment headed `Deferred findings` carries the queue table, edited in place on later rounds rather than posted again. The resume probe compares every queue row's Source against that comment, so a round that added rows and stopped before this edit resumes here rather than at the poll.
 5. The final report: pull-request URL, review state, rounds run, per-model task counts, escalations, the queue, and "a human merges." Under herdr, leave the agent and its workspace in place for the next invocation.
 
 **Done when:** every triage row has a reply URL; `origin/issue-N` equals HEAD; the deferred-findings comment exists wherever the queue is non-empty; and the final report was printed.
@@ -224,10 +224,10 @@ It prints `phase: <0-8|done|wait|stop> reason: <one line>` and exits 0, or exits
 | 11 | red-team clean; `trigger.txt` absent, or its first line `fired: yes` with no `redteam/ar-state.txt` showing `UNVERIFIED: 0` | Step 4 at the trigger, or at the adversarial-review invocation |
 | 12 | `conflict.txt` exists, or a rebase in progress | Step 5 item 1 |
 | 13 | red-team clean; trigger recorded; no triage round yet; no PR, or local HEAD ahead of `origin/issue-N` | Step 5 |
-| 14 | PR open; review `pending`; no triage row without a reply URL; no queue awaiting its comment | Step 6 poll |
+| 14 | PR open; review `pending`; no triage row without a reply URL; no queue row missing from its comment | Step 6 poll |
 | 15 | PR open; `findings`; no `triage/round-<k>.md` newer than SINCE | Step 6 triage |
 | 16 | newest triage round has in-scope rows; no `reports/repair-<k>.json` for that round | Step 7 |
-| 17 | PR open; repair report, or a triage round with no in-scope rows; local ahead of origin, a triage row without a reply URL, or a non-empty queue with no `Deferred findings` comment | Step 8 |
+| 17 | PR open; repair report, or a triage round with no in-scope rows; local ahead of origin, a triage row without a reply URL, or a queue row missing from the `Deferred findings` comment | Step 8 |
 | 18 | PR open; `cleared` | done: final report |
 
 ## Further Reading

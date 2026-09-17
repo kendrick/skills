@@ -660,8 +660,8 @@ require_text work-issue/SKILL.md "repair report, or a triage round with no in-sc
 require_text work-issue/references/resume.md "repair report, or a triage round with no in-scope rows"
 # Row 14's guard is what keeps a stop between the repair push and the replies
 # out of the poll. Both copies carry it.
-require_text work-issue/SKILL.md "| 14 | PR open; review \`pending\`; no triage row without a reply URL; no queue awaiting its comment | Step 6 poll |"
-require_text work-issue/references/resume.md "| 14 | PR open; review \`pending\`; no triage row without a reply URL; no queue awaiting its comment | Step 6 poll |"
+require_text work-issue/SKILL.md "| 14 | PR open; review \`pending\`; no triage row without a reply URL; no queue row missing from its comment | Step 6 poll |"
+require_text work-issue/references/resume.md "| 14 | PR open; review \`pending\`; no triage row without a reply URL; no queue row missing from its comment | Step 6 poll |"
 # The preamble is the only part of worker-prompt.md a worker sees, so the
 # nine-field contract has to be inside it, not only documented after it.
 require_text work-issue/references/worker-prompt.md "This shape replaces the six-field"
@@ -724,9 +724,13 @@ require_text work-issue/references/triage.md "quote \`last_comment_body\` from t
 require_text work-issue/SKILL.md "| 17 | PR open; repair report"
 require_text work-issue/references/resume.md "| 17 | PR open; repair report"
 # The queue's comment is probed, and rows 14 and 17 both read it.
-require_text work-issue/SKILL.md "or a non-empty queue with no \`Deferred findings\` comment | Step 8 |"
-require_text work-issue/references/resume.md "or a non-empty queue with no \`Deferred findings\` comment | Step 8 |"
-require_text work-issue/references/resume.md "grep -q '^## Deferred findings'"
+require_text work-issue/SKILL.md "or a queue row missing from the \`Deferred findings\` comment | Step 8 |"
+require_text work-issue/references/resume.md "or a queue row missing from the \`Deferred findings\` comment | Step 8 |"
+# The probe compares the queue's rows to the comment, never just the heading:
+# a comment from an earlier round satisfied the heading test while a later
+# round's rows had never reached it.
+require_text work-issue/references/resume.md "check every queue row's Source cell against it"
+refute_text work-issue/references/resume.md "grep -q '^## Deferred findings'"
 require_text work-issue/SKILL.md "two failed rounds in a row stop with the evidence"
 require_text work-issue/references/resume.md "two failed rounds in a row stop with the evidence"
 # pushed_at goes down before the push, so a same-second review still counts.

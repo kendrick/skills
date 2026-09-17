@@ -38,7 +38,7 @@ Every field below is present in the probe JSON, `null` where the probe could not
 | `repair_reports` | `find <RUN_DIR>/reports -name 'repair-*.json' \| wc -l` |
 | `newest_repair_report` | `test -f <RUN_DIR>/reports/repair-<k>.json` for the newest `triage/round-<k>.md`. Row 16 reads this rather than comparing counts, because an all-queued round writes no repair report and the counts drift apart |
 | `triage_rows_unanswered` | triage rows carrying no reply URL, across every round. Not cut off at SINCE: Step 8 pushes before it replies, so the rows it owes are always older than the push that answered them |
-| `deferred_comment_needed` | `queue.md` has rows and the pull request carries no comment by the author headed `## Deferred findings`: `test -s <RUN_DIR>/queue.md && ! gh api --paginate repos/{owner}/{repo}/issues/<pr>/comments --jq '.[] \| select(.user.login == "<login>") \| .body' \| grep -q '^## Deferred findings'`. False where there is no pull request. Step 8 posts the comment after its replies, so a stop between the two leaves every row answered and the queue unpublished, which no other field can see |
+| `deferred_comment_needed` | some row of `queue.md` is missing from the author's `## Deferred findings` comment on the pull request. Read the comment, then check every queue row's Source cell against it: `body="$(gh api --paginate repos/{owner}/{repo}/issues/<pr>/comments --jq '.[] \| select(.user.login == "<login>") \| .body' \| awk '/^## Deferred findings/{f=1} f')"; missing=0; while IFS='\|' read -r _ _ src _; do src="${src# }"; src="${src% }"; grep -qF -- "\| $src \|" <<<"$body" \|\| missing=1; done < <(grep -E '^\| [0-9]+ \|' <RUN_DIR>/queue.md); [ "$missing" = 1 ]`. True with no comment at all, false with no queue rows, and false where there is no pull request. A test for the heading alone missed a comment posted in an earlier round that a later round's rows never reached; comparing Sources is what says the queue on the pull request is the queue on disk |
 
 Write them to a JSON file and map them:
 
@@ -67,10 +67,10 @@ The same eighteen rows the script implements, written out so a reader can fail o
 | 11 | red-team clean; `trigger.txt` absent, or its first line `fired: yes` with no `redteam/ar-state.txt` showing `UNVERIFIED: 0` | Step 4 at the trigger, or at the adversarial-review invocation |
 | 12 | `conflict.txt` exists, or a rebase in progress | Step 5 item 1 |
 | 13 | red-team clean; trigger recorded; no triage round yet; no PR, or local HEAD ahead of `origin/issue-N` | Step 5 |
-| 14 | PR open; review `pending`; no triage row without a reply URL; no queue awaiting its comment | Step 6 poll |
+| 14 | PR open; review `pending`; no triage row without a reply URL; no queue row missing from its comment | Step 6 poll |
 | 15 | PR open; `findings`; no `triage/round-<k>.md` newer than SINCE | Step 6 triage |
 | 16 | newest triage round has in-scope rows; no `reports/repair-<k>.json` for that round | Step 7 |
-| 17 | PR open; repair report, or a triage round with no in-scope rows; local ahead of origin, a triage row without a reply URL, or a non-empty queue with no `Deferred findings` comment | Step 8 |
+| 17 | PR open; repair report, or a triage round with no in-scope rows; local ahead of origin, a triage row without a reply URL, or a queue row missing from the `Deferred findings` comment | Step 8 |
 | 18 | PR open; `cleared` | done: final report |
 
 Row order is the mechanism, not a convenience. Rows 1 through 3 read the world and outrank every RUN_DIR row below them: a pull request somebody closed while the session was away ends the run no matter how much unfinished state is on disk, and an agent still `working` is waited on rather than duplicated by a second dispatch into the same tree.
