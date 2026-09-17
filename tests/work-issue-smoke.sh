@@ -698,6 +698,17 @@ python3 -c "import json,sys; t=json.load(open(sys.argv[1]))['threads'][0]; sys.e
   echo "the saved bundle should carry the reply's body and URL" >&2
   exit 1
 }
+# The deciding line itself has to carry the reply's URL, not just the saved
+# bundle: Step 6's triage row cites the deciding line, and a fix that only
+# reached --save would leave the printed line still naming the stale root.
+set +e
+followup_line="$(python3 "$run_state" review 1 --since 2026-09-17T16:00:00Z --author kendrick \
+  --input "$review_dir/thread-followup.json" 2>&1)"
+set -e
+grep -Fq "reply 2026-09-17T16:20:00Z https://github.com/kendrick/skills/pull/1#discussion_r2199481010" <<<"$followup_line" || {
+  echo "the deciding line for thread-followup.json should carry the reply's timestamp and URL, got: $followup_line" >&2
+  exit 1
+}
 require_text work-issue/references/triage.md "quote \`last_comment_body\` from the saved file"
 # Row 17 is post-PR; a pre-PR repair goes to row 10 or row 13, both of which
 # still open the pull request.
@@ -728,6 +739,13 @@ refute_text _maintenance/work-issue/RATIONALE.md "classified bundle to disk"
 # pass caught the row pointing at the wrong file.
 require_text _maintenance/work-issue/RATIONALE.md "Reproduced against \`row-17-queued.json\`"
 
+# Rows 63 and 64 named fixtures that don't carry the values they describe:
+# `row-17.json` has one round, never two, and `row-10-repair-unverified.json`
+# has one round too. The fixtures that actually have two rounds, the newest
+# failed, are `row-10-repair-needed.json` and `row-10-failed-twice.json`.
+require_text _maintenance/work-issue/RATIONALE.md "Reproduced: \`row-10-repair-needed.json\`, with two rounds"
+require_text _maintenance/work-issue/RATIONALE.md "Reproduced: \`row-10-failed-twice.json\`, with two rounds"
+
 # EVALS.md's own count of review bundles, so it can't drift from
 # tests/fixtures/work-issue/review/ the way it did when this diff added two
 # fixtures without touching the summary line.
@@ -742,6 +760,12 @@ require_text _maintenance/work-issue/EVALS.md "against ten review bundles"
 # them that way after the split, describing four items under a header that
 # said "three more row-17 shapes" while two of the four no longer are.
 require_text _maintenance/work-issue/EVALS.md "two shapes a red-team repair no longer lands on row 17 for"
+
+# An in-session edit spliced the row-10 sentence into the middle of the
+# `baseline.txt` token, leaving the coverage claim unreadable. Pin the
+# repaired boundary on both sides of the splice.
+require_text _maintenance/work-issue/EVALS.md "no \`base_sha\` or \`baseline.txt\`, which resumes Step 1 rather than dispatching"
+require_text _maintenance/work-issue/EVALS.md "a failed round whose only repair report predates it, which resumes at the repair dispatch, and two failed rounds in a row, which stop"
 
 # EVALS.md's own count of D6 criteria, so it can't drift from plan-good.md's
 # actual OK line the way it did when this diff's own D6 fix moved the count
