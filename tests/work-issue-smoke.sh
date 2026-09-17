@@ -277,11 +277,13 @@ set -e
   echo "plan-good.md should exit 0, got: $good_status: $good_out" >&2
   exit 1
 }
-# 3/3: the third criterion sits under `### Fixtures`, a subheading inside
-# Acceptance Criteria, which the nearest-heading scan dropped. And plan-good
+# 4/4: the third criterion sits under `### Fixtures`, a subheading inside
+# Acceptance Criteria, which the nearest-heading scan dropped. The fourth is
+# indented and marked with `*` rather than a column-1 `-`, which D6's pattern
+# ignored until it was widened to match D4's CHECKBOX_RE. And plan-good
 # carries a box under `## OpenAPI changes`, which a substring match on `open`
 # once refused as a decision section.
-grep -Fq "OK: plan cites #101, 3 tasks with files, 0 open markers, 3/3 criteria covered" <<<"$good_out" || {
+grep -Fq "OK: plan cites #101, 3 tasks with files, 0 open markers, 4/4 criteria covered" <<<"$good_out" || {
   echo "plan-good.md should print its full OK line, got: $good_out" >&2
   exit 1
 }
@@ -652,6 +654,15 @@ require_text _maintenance/work-issue/RATIONALE.md "Reproduced against \`row-17-q
 require_text _maintenance/work-issue/EVALS.md "against eight review bundles"
 [[ "$(find tests/fixtures/work-issue/review -maxdepth 1 -type f | wc -l | tr -d ' ')" == "8" ]] || {
   echo "tests/fixtures/work-issue/review holds a different count than EVALS.md's 'eight review bundles'" >&2
+  exit 1
+}
+
+# EVALS.md's own count of D6 criteria, so it can't drift from plan-good.md's
+# actual OK line the way it did when this diff's own D6 fix moved the count
+# from 2/2 to 3/3 and left EVALS.md quoting 2/2.
+require_text _maintenance/work-issue/EVALS.md "4/4 criteria covered"
+grep -Fq "OK: plan cites #101, 3 tasks with files, 0 open markers, 4/4 criteria covered" <<<"$good_out" || {
+  echo "plan-good.md's OK line no longer matches EVALS.md's '4/4 criteria covered'" >&2
   exit 1
 }
 

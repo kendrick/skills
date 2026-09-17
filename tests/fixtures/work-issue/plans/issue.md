@@ -13,3 +13,4 @@ rather than discovering a missing owner or an unresolved decision mid-run.
 ### Fixtures
 
 - [ ] Ships the plans both gates read under `tests/fixtures/work-issue/plans/`.
+  * [ ] Covers that same path at an indented, alternate-marker line: `tests/fixtures/work-issue/plans/`.
