@@ -706,6 +706,12 @@ require_text _maintenance/work-issue/EVALS.md "against ten review bundles"
   exit 1
 }
 
+# The row-10/row-13 split (ledger row 58) pulled two of the "row-17 shapes"
+# off row 17 entirely. A code-review pass caught EVALS.md still labeling
+# them that way after the split, describing four items under a header that
+# said "three more row-17 shapes" while two of the four no longer are.
+require_text _maintenance/work-issue/EVALS.md "two shapes a red-team repair no longer lands on row 17 for"
+
 # EVALS.md's own count of D6 criteria, so it can't drift from plan-good.md's
 # actual OK line the way it did when this diff's own D6 fix moved the count
 # from 2/2 to 3/3 and left EVALS.md quoting 2/2.
