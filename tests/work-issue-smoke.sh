@@ -731,6 +731,12 @@ require_text work-issue/references/resume.md "or a queue row missing from the \`
 # round's rows had never reached it.
 require_text work-issue/references/resume.md "check every queue row's Source cell against it"
 refute_text work-issue/references/resume.md "grep -q '^## Deferred findings'"
+# The probe's exact-text comparison means a Source cell reformatted as a link
+# or wrapped in backticks compares as disjoint from the queue's bare cell —
+# the same failure divvy-up's owns entries hit before #97. Both places that
+# describe the comment say it is copied byte-for-byte, not paraphrased.
+require_text work-issue/SKILL.md "carries the queue table copied byte-for-byte"
+require_text work-issue/references/triage.md "carrying the queue table copied byte-for-byte"
 require_text work-issue/SKILL.md "two failed rounds in a row stop with the evidence"
 require_text work-issue/references/resume.md "two failed rounds in a row stop with the evidence"
 # pushed_at goes down before the push, so a same-second review still counts.

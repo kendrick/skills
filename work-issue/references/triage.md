@@ -81,7 +81,7 @@ Replies go through `technical-writing`, and they carry no attribution trailer or
 
 ## The deferred-findings comment
 
-One pull-request comment, headed `Deferred findings`, carrying the queue table:
+One pull-request comment, headed `Deferred findings`, carrying the queue table copied byte-for-byte — a Source cell rewritten as a markdown link or wrapped in backticks compares as disjoint from the queue's bare cell, the way `divvy-up`'s owns entries once did (#97):
 
 ```
 ## Deferred findings
