@@ -8,7 +8,7 @@ Run them on a sandbox repo or on `kendrick/cambium`, never on a client repo. Eve
 
 ## What the Fixtures Already Cover
 
-The plan fixtures cover D1 through D4 of `check-plan.py`—an uncited plan, a task with no files, an open marker, a decision box—and the `check-inflight.py` overlap, including the `closed/` run that must be skipped. D6, a criterion whose backticked identifier appears nowhere in the plan, is exercised only in the positive direction by `plan-good.md`'s `2/2 criteria covered`. The review bundles cover all three states plus the three ways a `+1` fails to clear a run—stale, from the author, or sitting beside unresolved threads. The probe fixtures cover all eighteen Resume rows.
+The plan fixtures cover D1 through D4 of `check-plan.py`—an uncited plan, a task with no files, an open marker, a decision box—and the `check-inflight.py` overlap, including the `closed/` run that must be skipped. D6, a criterion whose backticked identifier appears nowhere in the plan, is exercised only in the positive direction by `plan-good.md`'s `2/2 criteria covered`. The review bundles cover all three states plus the three ways a `+1` fails to clear a run—stale, from the author, or sitting beside unresolved threads. The probe fixtures cover all eighteen Resume rows, plus a second row-17 fixture for its other shape: a triage round with no in-scope rows instead of a repair report.
 
 None of that substitutes for the scenarios below. A bundle proves `run-state.py` reads the shape correctly; it does not prove `gh` produces that shape, and the bundles were written from one observation of one repo's pull request. Every scenario that needs a real GitHub pull request says so.
 

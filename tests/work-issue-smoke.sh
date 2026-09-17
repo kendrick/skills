@@ -77,6 +77,10 @@ require_file tests/fixtures/work-issue/review/stale-reaction.json
 for i in $(seq -w 1 18); do
   require_file "tests/fixtures/work-issue/probes/row-$i.json"
 done
+# Row 17 gained a second shape — a repair report, or a triage round with no
+# in-scope rows — and the fixture proving the first shape does not also cover
+# the second, so it gets its own file rather than replacing row-17.json.
+require_file tests/fixtures/work-issue/probes/row-17-queued.json
 
 [[ "$(find work-issue -maxdepth 1 -type f | wc -l | tr -d ' ')" == "2" ]] || {
   echo "work-issue/ must ship only SKILL.md and README.md at top level" >&2
@@ -419,6 +423,46 @@ for case in "${review_cases[@]}"; do
   }
 done
 
+# A thread's deciding line has to carry the id Step 8 replies to, not just the
+# thread's own GraphQL node id — `comments/<id>/replies` takes the root
+# comment's REST id, which findings-with-reaction.json's first thread pins
+# at 2199481001.
+set +e
+reply_out="$(python3 "$run_state" review 1 --since 2026-09-17T16:00:00Z --author kendrick \
+  --input "$review_dir/findings-with-reaction.json" 2>&1)"
+reply_status=$?
+set -e
+[[ "$reply_status" == "0" ]] || {
+  echo "run-state.py review on findings-with-reaction.json should exit 0, got: $reply_status: $reply_out" >&2
+  exit 1
+}
+grep -Fq "reply-to 2199481001" <<<"$reply_out" || {
+  echo "run-state.py review should print a reply-to target for an unresolved thread, got: $reply_out" >&2
+  exit 1
+}
+
+# --save has to work alongside --input (Step 6 always has a bundle in hand
+# by the time it polls) and the file it writes has to be the bundle, not the
+# printed lines, so a later step can read a finding's body out of it.
+set +e
+python3 "$run_state" review 1 --since 2026-09-17T16:00:00Z --author kendrick \
+  --input "$review_dir/cleared-by-review.json" --save "$tmp/saved-bundle.json" >/dev/null
+save_status=$?
+set -e
+[[ "$save_status" == "0" ]] || {
+  echo "run-state.py review --save should exit 0, got: $save_status" >&2
+  exit 1
+}
+set +e
+python3 -c "import json,sys; sys.exit(0 if 'author' in json.load(open(sys.argv[1])) else 1)" \
+  "$tmp/saved-bundle.json"
+saved_bundle_status=$?
+set -e
+[[ "$saved_bundle_status" == "0" ]] || {
+  echo "--save should write parseable JSON carrying the author key" >&2
+  exit 1
+}
+
 # A bundle this script cannot read must not score as `pending`, which is the
 # state that tells the caller to keep waiting for a review that already landed.
 echo '{"bad": 1}' > "$tmp/bad-bundle.json"
@@ -440,7 +484,7 @@ probes_dir=tests/fixtures/work-issue/probes
 declare -a probe_cases=(
   "row-01:done" "row-02:wait" "row-03:stop" "row-04:0" "row-05:0" "row-06:0"
   "row-07:2" "row-08:3" "row-09:3" "row-10:4" "row-11:4" "row-12:5" "row-13:5"
-  "row-14:6" "row-15:6" "row-16:7" "row-17:8" "row-18:done"
+  "row-14:6" "row-15:6" "row-16:7" "row-17:8" "row-17-queued:8" "row-18:done"
 )
 for case in "${probe_cases[@]}"; do
   fixture="${case%%:*}"
@@ -480,6 +524,12 @@ grep -Fq "pr_state" <<<"$short_probe_out" || {
   echo "a probe missing pr_state should name the field, got: $short_probe_out" >&2
   exit 1
 }
+
+# Row 17 used to strand an all-queued triage round: a repair dispatch never
+# ran, so the old test (`repair_reports > 0`) never matched, and nothing else
+# in the table did either. The Resume table's own copy has to say what the
+# script now checks.
+require_text work-issue/SKILL.md "repair report, or a triage round with no in-scope rows"
 
 # The root README carries this skill's own install flag, in the map
 # table's third column. The command form around it is pinned once, in

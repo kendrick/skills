@@ -154,7 +154,7 @@ Input is `claims`, `left`, and `plan_concerns` from the final report. The rule, 
 Poll every 60 seconds, for at most 10 minutes in one invocation:
 
 ```
-work-issue/scripts/run-state.py review <PR> --since <SINCE> --author <login>
+work-issue/scripts/run-state.py review <PR> --since <SINCE> --author <login> --save RUN_DIR/review/poll-<k>.json
 ```
 
 Three states, each scored relative to SINCE:
@@ -227,7 +227,7 @@ It prints `phase: <0-8|done|wait|stop> reason: <one line>` and exits 0, or exits
 | 14 | PR open; review `pending` | Step 6 poll |
 | 15 | PR open; `findings`; no `triage/round-<k>.md` newer than SINCE | Step 6 triage |
 | 16 | triage round with in-scope rows; no matching `reports/repair-<k>.json` | Step 7 |
-| 17 | repair report; local ahead of origin, or a triage row without a reply URL | Step 8 |
+| 17 | repair report, or a triage round with no in-scope rows; local ahead of origin, or a triage row without a reply URL | Step 8 |
 | 18 | PR open; `cleared` | done: final report |
 
 ## Further Reading
@@ -238,4 +238,4 @@ It prints `phase: <0-8|done|wait|stop> reason: <one line>` and exits 0, or exits
 - [references/triage.md](references/triage.md) — read at Steps 6 and 8 to score review signal, queue what is out of scope, and answer every thread
 - [scripts/check-plan.py](scripts/check-plan.py) — run at Step 0 as the mechanical half of the plan gate: `work-issue/scripts/check-plan.py PLAN.md --issue N [--criteria ISSUE.md]`
 - [scripts/check-inflight.py](scripts/check-inflight.py) — run at Step 0 to prove no in-flight run owns a path this plan owns: `work-issue/scripts/check-inflight.py PLAN.md --runs DIR [--self issue-N]`
-- [scripts/run-state.py](scripts/run-state.py) — run at Step 0 to place the run, and at Steps 6 and 8 to score the review: `work-issue/scripts/run-state.py phase --probe PROBE.json` and `work-issue/scripts/run-state.py review <PR> [--since ISO8601] [--author LOGIN] [--input BUNDLE.json]`
+- [scripts/run-state.py](scripts/run-state.py) — run at Step 0 to place the run, and at Steps 6 and 8 to score the review: `work-issue/scripts/run-state.py phase --probe PROBE.json` and `work-issue/scripts/run-state.py review <PR> [--since ISO8601] [--author LOGIN] [--input BUNDLE.json] [--save PATH]`

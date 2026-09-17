@@ -5,7 +5,10 @@
     {
       "state": "APPROVED",
       "author": "someone-else",
-      "submitted_at": "2026-09-17T16:30:00Z"
+      "submitted_at": "2026-09-17T16:30:00Z",
+      "id": 2245566,
+      "body": "Looks solid, nice work overall.",
+      "url": "https://github.com/kendrick/skills/pull/99#pullrequestreview-2245566"
     }
   ],
   "threads": [
@@ -14,7 +17,9 @@
       "is_resolved": true,
       "root_created_at": "2026-09-17T16:20:00Z",
       "root_author": "someone-else",
-      "root_body": "**P1** Fixed in the last push; resolved by the reviewer."
+      "root_body": "**P1** Fixed in the last push; resolved by the reviewer.",
+      "root_comment_id": 2199481010,
+      "root_url": "https://github.com/kendrick/skills/pull/99#discussion_r2199481010"
     }
   ],
   "comments": [

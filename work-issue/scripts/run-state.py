@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Read a pull request's review state, and map a resume probe to a phase.
 
-    work-issue/scripts/run-state.py review PR [--since ISO8601] [--author LOGIN]
-    work-issue/scripts/run-state.py review PR --input BUNDLE.json
+    work-issue/scripts/run-state.py review PR [--since ISO8601] [--author LOGIN] [--save PATH]
+    work-issue/scripts/run-state.py review PR --input BUNDLE.json [--save PATH]
     work-issue/scripts/run-state.py phase --probe PROBE.json
 
 Neither subcommand is a gate. `review` answers `findings`, `cleared`, or
@@ -21,9 +21,16 @@ every item at or before it is ignored.
 tests/fixtures/work-issue/review/ exercise the state rules with no network.
 Nothing shells out while `--input` is given.
 
-Exit codes: 0 with an answer on stdout; 3 usage, a `gh` failure, or input this
-script cannot read (an unparseable bundle, a bundle missing a top-level key, a
-probe missing a field). Argparse supplies 2 for a mistyped flag.
+`--save PATH` writes the classified bundle to PATH as JSON, whether or not
+`--input` was given. A thread's or a review's deciding line carries an id, a
+URL, and (for a review) a state and timestamp — never the body a reply has to
+quote. The skill reads the saved file for that body instead of asking `gh`
+again.
+
+Exit codes: 0 with an answer on stdout; 3 usage, a `gh` failure, an unwritable
+`--save` path, or input this script cannot read (an unparseable bundle, a
+bundle missing a top-level key, a probe missing a field). Argparse supplies 2
+for a mistyped flag.
 
 Stdlib only, so the skill stays copy-in portable.
 """
@@ -35,6 +42,12 @@ import sys
 from datetime import datetime, timezone
 
 GH_TIMEOUT = 60
+
+# One page size for both paginated connections below, kept as a module
+# constant rather than a literal in each query. A scratch run can lower it to
+# prove the paging loop against a PR with only a handful of reviews or
+# threads.
+PAGE_SIZE = 100
 
 # Only these two review states bear on the answer. A COMMENTED review is
 # carried by its threads, and PENDING is a draft only its author can see.
@@ -185,22 +198,37 @@ def flatten_pages(docs, label):
     return rows
 
 
-GRAPHQL_QUERY = """
-query($owner: String!, $name: String!, $pr: Int!) {
+# Reviews and review threads are separate connections, each with its own
+# cursor. One query per connection is the simplest shape that pages either
+# one to exhaustion without tangling its cursor with the other's. The author
+# only needs to ride on one query, and reviews is the one that runs first.
+REVIEWS_QUERY = """
+query($owner: String!, $name: String!, $pr: Int!, $pageSize: Int!, $after: String) {
   repository(owner: $owner, name: $name) {
     pullRequest(number: $pr) {
       author { login }
-      reviews(first: 100) {
-        nodes { state author { login } submittedAt }
+      reviews(first: $pageSize, after: $after) {
+        nodes { state author { login } submittedAt databaseId body url }
+        pageInfo { hasNextPage endCursor }
       }
-      reviewThreads(first: 100) {
+    }
+  }
+}
+"""
+
+THREADS_QUERY = """
+query($owner: String!, $name: String!, $pr: Int!, $pageSize: Int!, $after: String) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $pr) {
+      reviewThreads(first: $pageSize, after: $after) {
         nodes {
           id
           isResolved
           comments(first: 1) {
-            nodes { author { login } createdAt body }
+            nodes { author { login } createdAt body databaseId url }
           }
         }
+        pageInfo { hasNextPage endCursor }
       }
     }
   }
@@ -212,14 +240,58 @@ def _login(node):
     return (node or {}).get("login")
 
 
+def _paginate_pr_connection(owner, name, pr, query, field, label):
+    """Every node of one pull-request connection (`reviews` or
+    `reviewThreads`), followed to its last page.
+
+    A fixed `first: 100` with no `pageInfo` silently drops everything past the
+    hundredth review or thread. A pull request that had accumulated that many
+    over several review rounds could then report `cleared` over a finding
+    nobody read. Returns the nodes and the last page's `pullRequest` object,
+    so a caller can also read `author` or confirm the pull request exists off
+    whichever connection it paged."""
+    nodes = []
+    pull = {}
+    after = None
+    while True:
+        args = [
+            "api",
+            "graphql",
+            "-F",
+            f"owner={owner}",
+            "-F",
+            f"name={name}",
+            "-F",
+            f"pr={pr}",
+            "-F",
+            f"pageSize={PAGE_SIZE}",
+            "-f",
+            f"query={query}",
+        ]
+        if after is not None:
+            args += ["-f", f"after={after}"]
+        docs = gh(args, label)
+        payload = docs[0] if docs else {}
+        repository = ((payload.get("data") or {}).get("repository")) or {}
+        pull = repository.get("pullRequest") or {}
+        connection = pull.get(field) or {}
+        nodes.extend(connection.get("nodes") or [])
+        page_info = connection.get("pageInfo") or {}
+        after = page_info.get("endCursor")
+        if not page_info.get("hasNextPage") or after is None:
+            break
+    return nodes, pull
+
+
 def gather(pr):
     """The bundle shape, read from `gh`.
 
-    Three calls, because no one of them has all of it. REST carries the
-    reactions and the issue comments. GraphQL carries the author, the reviews,
-    and the review threads with their resolved flag. Only a hand run exercises
-    this path. Every fixture goes through `--input`, so the smoke suite does
-    not cover a change here."""
+    Four calls, because no one of them has all of it. REST carries the
+    reactions and the issue comments. GraphQL carries the author, the
+    reviews, and the review threads with their resolved flag. Reviews and
+    threads are two calls, not one, because each paginates on its own
+    cursor. Only a hand run exercises this path. Every fixture goes through
+    `--input`, so the smoke suite does not cover a change here."""
     repo_docs = gh(["repo", "view", "--json", "nameWithOwner"], "gh repo view")
     name_with_owner = (repo_docs[0] if repo_docs else {}).get("nameWithOwner", "")
     if "/" not in name_with_owner:
@@ -240,29 +312,18 @@ def gather(pr):
         ),
         "comments",
     )
-    graph = gh(
-        [
-            "api",
-            "graphql",
-            "-F",
-            f"owner={owner}",
-            "-F",
-            f"name={name}",
-            "-F",
-            f"pr={pr}",
-            "-f",
-            f"query={GRAPHQL_QUERY}",
-        ],
-        "gh api graphql",
+
+    review_nodes, reviews_pull = _paginate_pr_connection(
+        owner, name, pr, REVIEWS_QUERY, "reviews", "gh api graphql (reviews)"
     )
-    payload = graph[0] if graph else {}
-    repository = ((payload.get("data") or {}).get("repository")) or {}
-    pull = repository.get("pullRequest") or {}
-    if not pull:
+    if not reviews_pull:
         raise GhError(f"gh api graphql: no pull request {pr} in {name_with_owner}")
+    thread_nodes, _ = _paginate_pr_connection(
+        owner, name, pr, THREADS_QUERY, "reviewThreads", "gh api graphql (reviewThreads)"
+    )
 
     threads = []
-    for node in ((pull.get("reviewThreads") or {}).get("nodes")) or []:
+    for node in thread_nodes:
         roots = ((node.get("comments") or {}).get("nodes")) or []
         root = roots[0] if roots else {}
         threads.append(
@@ -272,11 +333,13 @@ def gather(pr):
                 "root_created_at": root.get("createdAt"),
                 "root_author": _login(root.get("author")),
                 "root_body": root.get("body"),
+                "root_comment_id": root.get("databaseId"),
+                "root_url": root.get("url"),
             }
         )
 
     return {
-        "author": _login(pull.get("author")),
+        "author": _login(reviews_pull.get("author")),
         "reactions": [
             {
                 "content": r.get("content"),
@@ -290,8 +353,11 @@ def gather(pr):
                 "state": n.get("state"),
                 "author": _login(n.get("author")),
                 "submitted_at": n.get("submittedAt"),
+                "id": n.get("databaseId"),
+                "body": n.get("body"),
+                "url": n.get("url"),
             }
-            for n in ((pull.get("reviews") or {}).get("nodes")) or []
+            for n in review_nodes
         ],
         "threads": threads,
         "comments": [
@@ -331,6 +397,16 @@ def parse_ts(value, label, problems):
 
 def show_ts(moment):
     return moment.strftime("%Y-%m-%dT%H:%M:%SZ") if moment else "unknown"
+
+
+def show_or_unknown(value):
+    """`value`, or `unknown` where an older bundle has no value for it.
+
+    An `--input` fixture written before this field existed has no
+    `root_comment_id` or review `url` at all, and `check_bundle` reads the
+    gap as null rather than refusing the bundle. The reply target is optional
+    information about a deciding item, not a condition of reading one."""
+    return "unknown" if value is None else value
 
 
 def normalize_login(login):
@@ -451,7 +527,9 @@ def classify(bundle, since, author):
         findings = True
         lines.append(
             f"thread {thread['id']} unresolved, created {show_ts(created)}, "
-            f"{severity(thread['root_body'])}"
+            f"{severity(thread['root_body'])}, reply-to "
+            f"{show_or_unknown(thread.get('root_comment_id'))} "
+            f"{show_or_unknown(thread.get('root_url'))}"
         )
 
     for index, reaction in enumerate(bundle["reactions"]):
@@ -478,7 +556,10 @@ def classify(bundle, since, author):
             findings = True
         else:
             approving = True
-        lines.append(f"review {state} by {review['author']} {show_ts(submitted)}")
+        lines.append(
+            f"review {state} by {review['author']} {show_ts(submitted)} "
+            f"{show_or_unknown(review.get('url'))}"
+        )
 
     for index, comment in enumerate(bundle["comments"]):
         created = parse_ts(
@@ -526,6 +607,13 @@ def cmd_review(args):
             check_bundle(bundle)
         author = args.author or bundle.get("author")
         state, lines = classify(bundle, since, author)
+        if args.save:
+            try:
+                with open(args.save, "w", encoding="utf-8") as handle:
+                    json.dump(bundle, handle, indent=2)
+                    handle.write("\n")
+            except OSError as e:
+                raise InputError([f"--save {args.save}: {e.strerror or e}"])
     except (InputError, GhError) as e:
         for problem in getattr(e, "problems", [str(e)]):
             sys.stderr.write(f"run-state: {problem}\n")
@@ -639,10 +727,16 @@ def phase_of(probe):
         and repair_reports < triage_rounds
     ):
         return "7", "row 16: a triage round has in-scope rows and no matching repair report"
-    if repair_reports > 0 and (
-        flag(probe, "ahead_of_origin") or count(probe, "triage_rows_unanswered") > 0
+    if (
+        triage_rounds > 0
+        and (repair_reports > 0 or count(probe, "triage_inscope_rows") == 0)
+        and (flag(probe, "ahead_of_origin") or count(probe, "triage_rows_unanswered") > 0)
     ):
-        return "8", "row 17: a repair report with work unpushed or a triage row still unanswered"
+        return (
+            "8",
+            "row 17: a repair report, or a triage round with no in-scope rows, "
+            "with work unpushed or a triage row still unanswered",
+        )
     if pr_state == "OPEN" and review_state == "cleared":
         return "done", "row 18: the PR is open and the review is cleared; print the final report"
     return (
@@ -678,6 +772,11 @@ def parse_args(argv=None):
         "--input",
         metavar="BUNDLE_JSON",
         help="read a gathered bundle instead of calling gh; '-' for stdin",
+    )
+    r.add_argument(
+        "--save",
+        metavar="PATH",
+        help="write the classified bundle as JSON to PATH; allowed with --input",
     )
     r.set_defaults(func=cmd_review)
 
