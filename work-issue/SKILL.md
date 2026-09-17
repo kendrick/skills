@@ -40,7 +40,7 @@ Resolve once per invocation:
 - **PR** — `gh pr list --head <BRANCH> --state all --json number,state,url --jq '.[0]'`
 - **VERIFY_CMD**, **INSTALL_CMD** — harvested off disk the way `file-issue` harvests, and quoted: manifest scripts first (`package.json`, `Makefile`, `pyproject.toml`, `Cargo.toml`); with no manifest, runnable scripts under `tests/` or `scripts/`, then what `.github/workflows/` runs, then `absent`. INSTALL_CMD is the manifest's install (`pnpm install --frozen-lockfile`, `npm ci`, `uv sync`, …), else `absent`.
 - **HERDR** — `test "${HERDR_ENV:-}" = 1 && command -v herdr`
-- **SINCE** — the contents of `RUN_DIR/pushed_at` (UTC ISO 8601, written right after every push), else the head commit's committer date
+- **SINCE** — the contents of `RUN_DIR/pushed_at` (UTC ISO 8601, written immediately before every push, so an event stamped the same second still counts), else the head commit's committer date
 - **FLAGS** — `--isolate` / `--no-isolate` pin the Step 1 row; `--deep` forces `adversarial-review` at Step 4; `--dry-run` runs every gate and every derivation, renders the confirmation, and dispatches nothing and pushes nothing.
 
 `gh auth status` is a Step 0 preflight, the way `file-issue` runs one. Unauthenticated at Step 0 stops the run, because the issue cannot be read and CRITERIA would be invented. Unauthenticated at Step 5 or later renders the pull-request body to `RUN_DIR/pr-body.md`, pushes nothing, and stops with "resume after `gh auth login`". A rendered body says on its face that it is rendered: a draft that reads like an opened pull request is a draft somebody goes looking for on GitHub.
@@ -144,7 +144,7 @@ Input is `claims`, `left`, and `plan_concerns` from the final report. The rule, 
 1. `git fetch origin DEFAULT`, then `git rebase origin/DEFAULT`. A conflict writes `RUN_DIR/conflict.txt` with the conflicted paths, leaves the rebase in progress, and stops: "resolve, then `work-issue N`". Resolving somebody else's concurrent change is a judgment call, and an unattended run guessing at it writes a merge nobody reviewed.
 2. Prove the rebase: `git diff origin/DEFAULT..HEAD --stat` is non-empty, and `git status` shows no rebase in progress. Then remove `RUN_DIR/conflict.txt` where it exists: the marker is item 1's stop signal, and left behind it sends every later invocation back to item 1 through row 12. Then run VERIFY_CMD. Red here after a green Step 4 means the rebase brought the break: repair dispatch, red-team the fix with Step 4 scoped to the fix diff, then continue.
 3. `gh auth status`. Unauthenticated renders the body and stops.
-4. Push `git push -u origin issue-N:refs/heads/issue-N`, or `git push --force-with-lease=issue-N origin issue-N:refs/heads/issue-N` where the remote branch already exists and was just rebased. Write `date -u +%FT%TZ` to `RUN_DIR/pushed_at`.
+4. Write `date -u +%FT%TZ` to `RUN_DIR/pushed_at`, then push: `git push -u origin issue-N:refs/heads/issue-N`, or `git push --force-with-lease=issue-N origin issue-N:refs/heads/issue-N` where the remote branch already exists and was just rebased. The marker goes first because GitHub stamps events to the second, and a review that lands in the push's own second has to count.
 5. The body goes through `technical-writing` on its pull-request-description profile, using `.github/PULL_REQUEST_TEMPLATE.md` where the repo has one. Without a template: summary, `Closes #N`, verification (the reproducer's commands and output tails, not the worker's), "Not independently verified", "Plan concerns", and "Left out". Then, where PR resolved to nothing, `gh pr create --base DEFAULT --head issue-N --title … --body-file RUN_DIR/pr-body.md`; an existing pull request keeps its number and simply receives the push.
 
 **Done when:** `origin/issue-N` equals local HEAD, rebased on `origin/DEFAULT`; VERIFY_CMD green at that SHA; `pushed_at` written; exactly one open pull request for the branch, whose body carries `Closes #N` and no attribution trailer or footer — or the run stopped on a conflict or on unauthenticated `gh`, with nothing pushed.
@@ -190,7 +190,7 @@ Gate it the way Step 3 gates: VERIFY_CMD, then `code-review` against BASE_SHA, w
 ## Step 8 — Close
 
 1. Red-team the repair: Step 4 over `repair-<k>.json`'s claims, with the trigger re-evaluated on the full diff.
-2. Rebase, verify, push, write `pushed_at` — Step 5 items 1 through 4.
+2. Rebase, verify, write `pushed_at`, push — Step 5 items 1 through 4.
 3. Reply to every finding thread with what changed and the commit SHA: `gh api repos/{owner}/{repo}/pulls/<pr>/comments/<id>/replies -f body=…`, where `<id>` is the `reply-to` id on the thread's deciding line, and a pull-request comment for review-level and issue-level findings. The push in item 2 moves SINCE past the rows being answered, and that is why `triage_rows_unanswered` counts every round: a stop between the push and these replies resumes here, at row 17, rather than at row 14's poll. A queued row gets "deferred: <Outside because>; tracked in the deferred-findings comment". Replies go through `technical-writing`. **Answer, never resolve**: marking a thread resolved is the reviewer's act, and taking it from them destroys the only signal they have that anyone read the finding.
 4. One pull-request comment headed `Deferred findings` carries the queue table, edited in place on later rounds rather than posted again.
 5. The final report: pull-request URL, review state, rounds run, per-model task counts, escalations, the queue, and "a human merges." Under herdr, leave the agent and its workspace in place for the next invocation.
@@ -217,13 +217,13 @@ It prints `phase: <0-8|done|wait|stop> reason: <one line>` and exits 0, or exits
 | 4 | no `issue-N` branch locally or on origin, no RUN_DIR | Step 0 |
 | 5 | RUN_DIR exists, no branch anywhere | RUN_DIR → `closed/`, Step 0 |
 | 6 | branch exists; `plan.md` has no `## Waves` | Step 0 at the plan gate |
-| 7 | `## Waves` present; `reports/` lacks a report for some task | Step 2 at that wave (re-record WAVE_BASE; revert a half-written wave with no report) |
+| 7 | `## Waves` present; no `base_sha` or no `baseline.txt`, or `reports/` lacks a report for some task | Step 1 at the missing artifact; else Step 2 at that wave (re-record WAVE_BASE; revert a half-written wave with no report) |
 | 8 | all wave reports; no `review/self-*.md` | Step 3 at the `code-review` invocation |
 | 9 | `review/self-*` present; no `reports/build-final.json` | Step 3 at the fix dispatch |
 | 10 | `build-final.json`; no `redteam/round-*.json`, or newest round has NOT_REPRODUCED and no later repair report | Step 4 |
-| 11 | red-team clean; `trigger.txt` says `fired: yes`; no `redteam/ar-state.txt` with `UNVERIFIED: 0` | Step 4 at the adversarial-review invocation |
+| 11 | red-team clean; `trigger.txt` absent, or its first line `fired: yes` with no `redteam/ar-state.txt` showing `UNVERIFIED: 0` | Step 4 at the trigger, or at the adversarial-review invocation |
 | 12 | `conflict.txt` exists, or a rebase in progress | Step 5 item 1 |
-| 13 | red-team clean; no triage round yet; no PR, or local HEAD ahead of `origin/issue-N` | Step 5 |
+| 13 | red-team clean; trigger recorded; no triage round yet; no PR, or local HEAD ahead of `origin/issue-N` | Step 5 |
 | 14 | PR open; review `pending`; no triage row without a reply URL | Step 6 poll |
 | 15 | PR open; `findings`; no `triage/round-<k>.md` newer than SINCE | Step 6 triage |
 | 16 | newest triage round has in-scope rows; no `reports/repair-<k>.json` for that round | Step 7 |

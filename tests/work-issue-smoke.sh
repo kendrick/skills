@@ -93,6 +93,11 @@ require_file tests/fixtures/work-issue/probes/unknown-branch-remote.json
 # A review repair committed but unpushed: ahead of origin with a clean build
 # red-team, which row 13 once took for a fresh publish.
 require_file tests/fixtures/work-issue/probes/row-17-review-repair-unpushed.json
+# Two stops the table once misread: inside Step 1 with no base_sha or baseline
+# (read as "dispatch wave 0"), and after a clean round with no trigger verdict
+# (read as "not fired", then published).
+require_file tests/fixtures/work-issue/probes/row-07-isolation-incomplete.json
+require_file tests/fixtures/work-issue/probes/row-11-trigger-unrecorded.json
 require_file tests/fixtures/work-issue/review/changes-requested.json
 require_file tests/fixtures/work-issue/review/pr-comment-finding.json
 
@@ -503,6 +508,19 @@ set -e
   exit 1
 }
 
+# An event stamped the same second as the cutoff reviewed the push that wrote
+# the cutoff, so it counts. The fixture's review is at 16:30:00Z exactly, and a
+# strict comparison scored this bundle pending.
+set +e
+same_second_out="$(python3 "$run_state" review 1 --since 2026-09-17T16:30:00Z --author kendrick \
+  --input "$review_dir/changes-requested.json" 2>&1)"
+same_second_status=$?
+set -e
+[[ "$same_second_status" == "0" && "$(head -1 <<<"$same_second_out")" == "findings" ]] || {
+  echo "a review stamped the same second as --since should count, got: $same_second_status: $same_second_out" >&2
+  exit 1
+}
+
 # A finding that arrives as a pull-request-level comment has no thread to
 # reply into, and its triage row still needs a Source URL. The comment line
 # carries it.
@@ -540,7 +558,7 @@ set -e
 probes_dir=tests/fixtures/work-issue/probes
 declare -a probe_cases=(
   "row-01:done" "row-02:wait" "row-03:stop" "row-04:0" "row-05:0" "row-06:0"
-  "row-07:2" "row-08:3" "row-09:3" "row-10:4" "row-11:4" "row-12:5" "row-13:5"
+  "row-07:2" "row-07-isolation-incomplete:1" "row-08:3" "row-09:3" "row-10:4" "row-11:4" "row-11-trigger-unrecorded:4" "row-12:5" "row-13:5"
   "row-14:6" "row-15:6" "row-16:7" "row-17:8" "row-17-queued:8" "row-17-postpush:8"
   "row-17-redteam-repair:8" "row-16-earlier-queued:8" "row-17-review-repair-unpushed:8" "row-18:done"
 )
@@ -621,16 +639,30 @@ require_text work-issue/references/redteam.md "\`claim\`, \`path\`, \`command\`,
 # Step 0 probes before it writes, or every fresh issue reads as row 5's dead run.
 require_text work-issue/SKILL.md "before anything is written under RUN_DIR"
 # Row 13 stays out of the way of a review repair, in both copies of the table.
-require_text work-issue/SKILL.md "| 13 | red-team clean; no triage round yet; no PR, or local HEAD ahead of \`origin/issue-N\` | Step 5 |"
-require_text work-issue/references/resume.md "| 13 | red-team clean; no triage round yet; no PR, or local HEAD ahead of \`origin/issue-N\` | Step 5 |"
+require_text work-issue/SKILL.md "| 13 | red-team clean; trigger recorded; no triage round yet; no PR, or local HEAD ahead of \`origin/issue-N\` | Step 5 |"
+require_text work-issue/references/resume.md "| 13 | red-team clean; trigger recorded; no triage round yet; no PR, or local HEAD ahead of \`origin/issue-N\` | Step 5 |"
 # The trigger record has an exact first line; a substring grep read `not
 # fired` as fired and sent a docs diff to adversarial-review.
 require_text work-issue/references/redteam.md "exactly \`fired: yes\` or \`fired: no\`"
-require_text work-issue/references/resume.md "= 'fired: yes'"
+require_text work-issue/references/resume.md "'fired: yes') echo yes"
+# A missing trigger.txt is `absent`, never `no`; both copies of row 11 and
+# row 13 say so.
+require_text work-issue/SKILL.md "| 11 | red-team clean; \`trigger.txt\` absent, or its first line"
+require_text work-issue/references/resume.md "| 11 | red-team clean; \`trigger.txt\` absent, or its first line"
+require_text work-issue/SKILL.md "| 13 | red-team clean; trigger recorded;"
+require_text work-issue/references/resume.md "| 13 | red-team clean; trigger recorded;"
+# Step 1's two closing writes are probed, and row 7 sends a run missing either
+# back to Step 1 in both copies of the table.
+require_text work-issue/SKILL.md "no \`base_sha\` or no \`baseline.txt\`, or \`reports/\` lacks a report"
+require_text work-issue/references/resume.md "no \`base_sha\` or no \`baseline.txt\`, or \`reports/\` lacks a report"
+# The wave count reads the Waves section and nothing after it.
+require_text work-issue/references/resume.md "awk '/^## Waves/{f=1;next} f&&/^## /{f=0} f'"
+# pushed_at goes down before the push, so a same-second review still counts.
+require_text work-issue/SKILL.md "Write \`date -u +%FT%TZ\` to \`RUN_DIR/pushed_at\`, then push"
 # Completion of adversarial-review is read from Step 4's record of its ledger
 # state, never from its run directory, which exists from preflight onward.
 require_text work-issue/references/resume.md "redteam/ar-state.txt"
-require_text work-issue/SKILL.md "no \`redteam/ar-state.txt\` with \`UNVERIFIED: 0\`"
+require_text work-issue/SKILL.md "no \`redteam/ar-state.txt\` showing \`UNVERIFIED: 0\`"
 refute_text work-issue/references/resume.md "ar_run_dir"
 # Step 5 item 2 clears the conflict marker, or row 12 re-runs item 1 forever.
 require_text work-issue/SKILL.md "remove \`RUN_DIR/conflict.txt\`"

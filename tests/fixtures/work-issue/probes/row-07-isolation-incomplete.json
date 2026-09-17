@@ -1,5 +1,5 @@
 {
-  "herdr_agent_state": "blocked",
+  "herdr_agent_state": "absent",
   "branch_local": true,
   "branch_remote": false,
   "run_dir": true,
@@ -9,7 +9,7 @@
   "review_state": null,
   "has_waves": true,
   "wave_tasks": 6,
-  "wave_reports": 2,
+  "wave_reports": 0,
   "self_reviews": 0,
   "build_final": false,
   "redteam_rounds": 0,

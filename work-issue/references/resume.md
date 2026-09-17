@@ -14,16 +14,18 @@ Every field below is present in the probe JSON, `null` where the probe could not
 | `branch_local` | `git show-ref --verify --quiet refs/heads/issue-<N>` |
 | `branch_remote` | `git ls-remote --exit-code --heads origin issue-<N>` |
 | `run_dir` | `test -d <COMMON>/work-issue/issue-<N>` |
+| `base_sha` | `test -f <RUN_DIR>/base_sha`. Step 1's last writes, with `baseline`; row 7 sends a run missing either back to Step 1 rather than dispatching workers against no fixed point |
+| `baseline` | `test -f <RUN_DIR>/baseline.txt` |
 | `pr_state` | `gh pr list --head issue-<N> --state all --json state --jq '.[0].state'`; no pull request is `null` |
 | `review_state` | `work-issue/scripts/run-state.py review <PR> --since <SINCE> --author <login>`, first stdout line; no pull request is `null` |
 | `has_waves` | `grep -q '^## Waves' <RUN_DIR>/plan.md` |
-| `wave_tasks` | rows in that table: `grep -cE '^\|\s*[0-9]+\s*\|' <RUN_DIR>/plan.md`. Whitespace-tolerant because the vendored table parser accepts a compact row such as `|0|one|a.py|sonnet|done||`, and a count that misses it leaves `has_waves` true with `wave_tasks` 0, which no row matches |
+| `wave_tasks` | rows in that table and no other: `awk '/^## Waves/{f=1;next} f&&/^## /{f=0} f' <RUN_DIR>/plan.md \| grep -cE '^\|\s*[0-9]+\s*\|'`. Scoped to the section, because a plan's later tables carry numbered rows too and a whole-file count made row 7 wait for reports that no task would ever write. Whitespace-tolerant because the vendored table parser accepts a compact row such as `|0|one|a.py|sonnet|done||` |
 | `wave_reports` | `find <RUN_DIR>/reports -name '[0-9]*-*.json' \| wc -l` — the `<wave>-<task>.json` files only, which is why `build-final.json` and `repair-<k>.json` do not match the glob |
 | `self_reviews` | `find <RUN_DIR>/review -name 'self-*.md' \| wc -l` |
 | `build_final` | `test -f <RUN_DIR>/reports/build-final.json` |
 | `redteam_rounds` | `find <RUN_DIR>/redteam -name 'round-*.json' \| wc -l` |
 | `redteam_last_failed` | `grep -q NOT_REPRODUCED "$(ls -t <RUN_DIR>/redteam/round-*.json \| head -1)"` — the newest round only; an earlier round's failures were the reason a later round exists |
-| `trigger_fired` | `test "$(head -1 <RUN_DIR>/redteam/trigger.txt)" = 'fired: yes'`. The first line is exactly `fired: yes` or `fired: no`; a substring grep for `fired` read `not fired` as fired |
+| `trigger_fired` | `yes`, `no`, or `absent`: `case "$(head -1 <RUN_DIR>/redteam/trigger.txt 2>/dev/null)" in 'fired: yes') echo yes;; 'fired: no') echo no;; *) echo absent;; esac`. Three values, because a missing file is not a `no`: a run that stopped between its clean round file and the trigger has not evaluated the trigger at all, and row 13 must not publish it |
 | `ar_complete` | `grep -q 'UNVERIFIED: 0' <RUN_DIR>/redteam/ar-state.txt`. Step 4 writes that file from `ledger.py state` after it has read the report, so it exists only for a review that finished. The run directory under `<TREE>/.adversarial-review/runs/` is not the signal: it exists from adversarial-review's preflight onward, and a review interrupted after preflight leaves one behind with nothing in it |
 | `conflict` | `test -f <RUN_DIR>/conflict.txt`. Step 5 item 2 removes the file once the rebase is proven, so a marker with no rebase in progress is a run that stopped between items 1 and 2, and row 12 sends it back to item 1, where the rebase is a no-op and item 2 clears it |
 | `rebase_in_progress` | `test -d "$(git -C <TREE> rev-parse --git-path rebase-merge)" \|\| test -d "$(git -C <TREE> rev-parse --git-path rebase-apply)"` — resolved through `--git-path` because in a linked worktree the hardcoded spelling under `.git/` does not exist |
@@ -55,13 +57,13 @@ The same eighteen rows the script implements, written out so a reader can fail o
 | 4 | no `issue-N` branch locally or on origin, no RUN_DIR | Step 0 |
 | 5 | RUN_DIR exists, no branch anywhere | RUN_DIR → `closed/`, Step 0 |
 | 6 | branch exists; `plan.md` has no `## Waves` | Step 0 at the plan gate |
-| 7 | `## Waves` present; `reports/` lacks a report for some task | Step 2 at that wave (re-record WAVE_BASE; revert a half-written wave with no report) |
+| 7 | `## Waves` present; no `base_sha` or no `baseline.txt`, or `reports/` lacks a report for some task | Step 1 at the missing artifact; else Step 2 at that wave (re-record WAVE_BASE; revert a half-written wave with no report) |
 | 8 | all wave reports; no `review/self-*.md` | Step 3 at the `code-review` invocation |
 | 9 | `review/self-*` present; no `reports/build-final.json` | Step 3 at the fix dispatch |
 | 10 | `build-final.json`; no `redteam/round-*.json`, or newest round has NOT_REPRODUCED and no later repair report | Step 4 |
-| 11 | red-team clean; `trigger.txt` says `fired: yes`; no `redteam/ar-state.txt` with `UNVERIFIED: 0` | Step 4 at the adversarial-review invocation |
+| 11 | red-team clean; `trigger.txt` absent, or its first line `fired: yes` with no `redteam/ar-state.txt` showing `UNVERIFIED: 0` | Step 4 at the trigger, or at the adversarial-review invocation |
 | 12 | `conflict.txt` exists, or a rebase in progress | Step 5 item 1 |
-| 13 | red-team clean; no triage round yet; no PR, or local HEAD ahead of `origin/issue-N` | Step 5 |
+| 13 | red-team clean; trigger recorded; no triage round yet; no PR, or local HEAD ahead of `origin/issue-N` | Step 5 |
 | 14 | PR open; review `pending`; no triage row without a reply URL | Step 6 poll |
 | 15 | PR open; `findings`; no `triage/round-<k>.md` newer than SINCE | Step 6 triage |
 | 16 | newest triage round has in-scope rows; no `reports/repair-<k>.json` for that round | Step 7 |

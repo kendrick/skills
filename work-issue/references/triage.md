@@ -10,7 +10,7 @@ Read this at Step 6 to score what came back from review, and again at Step 8 to 
 | cleared | no findings, and either an `APPROVED` review newer than SINCE, or a `+1` reaction on the pull request newer than SINCE from a login other than the author |
 | pending | neither |
 
-SINCE is the last push, read from `RUN_DIR/pushed_at`. Everything above is scored against it, and that cutoff is what makes the whole scheme usable.
+SINCE is the last push, read from `RUN_DIR/pushed_at`, which Step 5 writes just before pushing. Everything above is scored against it, inclusively: an event stamped the same second as the cutoff counts, since both carry one-second precision. That cutoff is what makes the whole scheme usable.
 
 The evidence is in this repo. PR #100 carries a `+1` reaction *and* five finding threads from the same reviewer, opened earlier the same day:
 

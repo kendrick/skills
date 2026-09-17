@@ -15,7 +15,9 @@ Without `--since`, every item on the pull request counts, and an approving
 reaction sits there forever. PR #100 of this repo carried a `+1` beside five
 finding threads from the same reviewer, so the reaction was a verdict on one
 push rather than on the pull request. `--since` takes the last push's timestamp, and
-every item at or before it is ignored.
+every item before it is ignored. An item stamped the same second as the cutoff
+counts: the marker is written just before the push, both carry one-second
+precision, and a strict comparison lost a review that landed in that second.
 
 `--input` reads the shape the `gh` calls below produce, so the fixtures under
 tests/fixtures/work-issue/review/ exercise the state rules with no network.
@@ -83,6 +85,8 @@ PROBE_FIELDS = (
     ("branch_local", "bool", ()),
     ("branch_remote", "bool", ()),
     ("run_dir", "bool", ()),
+    ("base_sha", "bool", ()),
+    ("baseline", "bool", ()),
     ("pr_state", "enum", ("OPEN", "MERGED", "CLOSED")),
     ("review_state", "enum", ("findings", "cleared", "pending")),
     ("has_waves", "bool", ()),
@@ -92,7 +96,7 @@ PROBE_FIELDS = (
     ("build_final", "bool", ()),
     ("redteam_rounds", "int", ()),
     ("redteam_last_failed", "bool", ()),
-    ("trigger_fired", "bool", ()),
+    ("trigger_fired", "enum", ("yes", "no", "absent")),
     ("ar_complete", "bool", ()),
     ("conflict", "bool", ()),
     ("rebase_in_progress", "bool", ()),
@@ -520,7 +524,10 @@ def classify(bundle, since, author):
     approving = False
 
     def newer(moment):
-        return moment is not None and (since is None or moment > since)
+        # Inclusive: GitHub stamps to the second and so does pushed_at, and the
+        # marker is written just before the push, so an event in the cutoff's
+        # own second reviewed the new push. Strict `>` lost it for good.
+        return moment is not None and (since is None or moment >= since)
 
     for index, thread in enumerate(bundle["threads"]):
         created = parse_ts(
@@ -716,6 +723,12 @@ def phase_of(probe):
         return "0", "row 5: a run dir with no branch anywhere; move it to closed/ first"
     if branch_anywhere and not flag(probe, "has_waves"):
         return "0", "row 6: the branch exists but plan.md has no ## Waves table; resume at the plan gate"
+    # Step 1 ends by writing base_sha and baseline.txt, and every later gate
+    # reads them. A run that stopped inside Step 1 has the branch and the Waves
+    # table and none of the reports, which used to read as "resume at wave 0"
+    # and dispatched workers with no fixed point and no baseline.
+    if flag(probe, "has_waves") and not (flag(probe, "base_sha") and flag(probe, "baseline")):
+        return "1", "row 7: the Waves table is written but Step 1 left no base_sha or baseline.txt; resume at Step 1"
     if flag(probe, "has_waves") and wave_reports < wave_tasks:
         return "2", f"row 7: {wave_reports} of {wave_tasks} wave reports on disk; resume at that wave"
     if every_wave_report and count(probe, "self_reviews") == 0:
@@ -734,7 +747,14 @@ def phase_of(probe):
     # state, not its run directory: the directory exists from that skill's
     # preflight onward, and a review interrupted after preflight left one
     # behind that this row once took for a finished review.
-    if redteam_clean and flag(probe, "trigger_fired") and not flag(probe, "ar_complete"):
+    # `trigger_fired` is three-valued. A run that stopped after its clean
+    # round file but before Step 4 wrote trigger.txt has no verdict, and a
+    # bool read that as "no" and let row 13 publish a diff whose trigger was
+    # never evaluated.
+    trigger = probe["trigger_fired"]
+    if redteam_clean and trigger == "absent":
+        return "4", "row 11: red-team is clean and trigger.txt is not written yet; resume at the trigger"
+    if redteam_clean and trigger == "yes" and not flag(probe, "ar_complete"):
         return "4", "row 11: trigger.txt says fired and adversarial-review has not finished"
     if flag(probe, "conflict") or flag(probe, "rebase_in_progress"):
         return "5", "row 12: a rebase conflict is in progress; resume at Step 5 item 1"
@@ -743,10 +763,11 @@ def phase_of(probe):
     # then push and reply), never to a fresh publish.
     if (
         redteam_clean
+        and trigger != "absent"
         and triage_rounds == 0
         and (pr_state is None or flag(probe, "ahead_of_origin"))
     ):
-        return "5", "row 13: red-team is clean, no triage round yet, and the branch is unpublished or ahead of origin"
+        return "5", "row 13: red-team is clean, the trigger is recorded, no triage round yet, and the branch is unpublished or ahead of origin"
     # Step 8 pushes before it replies, so a stop between those two leaves rows
     # that still owe a reply under a review that now reads `pending`. Without
     # this guard the poll preempts row 17 and the old findings are never
