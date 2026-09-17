@@ -96,6 +96,8 @@ PROBE_FIELDS = (
     ("build_final", "bool", ()),
     ("redteam_rounds", "int", ()),
     ("redteam_last_failed", "bool", ()),
+    ("redteam_failed_twice", "bool", ()),
+    ("repair_after_last_round", "bool", ()),
     ("trigger_fired", "enum", ("yes", "no", "absent")),
     ("ar_complete", "bool", ()),
     ("conflict", "bool", ()),
@@ -233,7 +235,7 @@ query($owner: String!, $name: String!, $pr: Int!, $pageSize: Int!, $after: Strin
             nodes { author { login } createdAt body databaseId url }
           }
           latest: comments(last: 1) {
-            nodes { author { login } createdAt }
+            nodes { author { login } createdAt body databaseId url }
           }
         }
         pageInfo { hasNextPage endCursor }
@@ -350,6 +352,9 @@ def gather(pr):
                 "root_url": root.get("url"),
                 "last_comment_at": latest.get("createdAt"),
                 "last_comment_author": _login(latest.get("author")),
+                "last_comment_body": latest.get("body"),
+                "last_comment_id": latest.get("databaseId"),
+                "last_comment_url": latest.get("url"),
             }
         )
 
@@ -560,7 +565,12 @@ def classify(bundle, since, author):
         findings = True
         stamp = f"created {show_ts(created)}"
         if reviewer_replied and not newer(created):
-            stamp = f"created {show_ts(created)}, reply {show_ts(last)}"
+            # The reply is the finding here, so its URL rides along; the
+            # reply-to id stays the root's, which is where a reply is posted.
+            stamp = (
+                f"created {show_ts(created)}, reply {show_ts(last)} "
+                f"{show_or_unknown(thread.get('last_comment_url'))}"
+            )
         lines.append(
             f"thread {thread['id']} unresolved, {stamp}, "
             f"{severity(thread['root_body'])}, reply-to "
@@ -762,14 +772,18 @@ def phase_of(probe):
         return "3", "row 9: a self-review with no build-final report; resume at the fix dispatch"
     if flag(probe, "build_final") and redteam_rounds == 0:
         return "4", "row 10: a build-final report with no red-team round yet"
-    # A failed round owns the run until a later round is clean, whether or not
-    # a repair report has followed: no report means dispatch the repair, a
-    # report means run round k+1 over it. Handing the repaired-but-unverified
-    # case to row 17 sent a pre-PR run to Step 8, which never opens the PR.
+    # A failed round owns the run until a later round is clean. Which way it
+    # resumes turns on order, not on counts: a repair report that predates the
+    # failed round is the code that round just refuted, and re-running the
+    # round over it re-tests unchanged code. Two failed rounds in a row is
+    # Step 4's stop, and a resume that kept cycling past it would never honor
+    # the stop.
     if flag(probe, "build_final") and flag(probe, "redteam_last_failed"):
-        if repair_reports == 0:
-            return "4", "row 10: the newest red-team round has NOT_REPRODUCED and no repair followed it"
-        return "4", "row 10: the newest red-team round has NOT_REPRODUCED and its repair is not yet re-verified; run round k+1"
+        if flag(probe, "redteam_failed_twice"):
+            return "stop", "row 10: two red-team rounds in a row have NOT_REPRODUCED; stop and report with the evidence"
+        if flag(probe, "repair_after_last_round"):
+            return "4", "row 10: the newest red-team round has NOT_REPRODUCED and a repair followed it; run round k+1"
+        return "4", "row 10: the newest red-team round has NOT_REPRODUCED and no repair has followed it; dispatch the repair"
     # `ar_complete` reads Step 4's record of adversarial-review's final ledger
     # state, not its run directory: the directory exists from that skill's
     # preflight onward, and a review interrupted after preflight left one

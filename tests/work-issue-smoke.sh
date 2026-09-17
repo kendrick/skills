@@ -89,6 +89,10 @@ require_file tests/fixtures/work-issue/probes/row-10-repair-unverified.json
 # A pre-PR repair, clean after its own round: Step 5 with the PR create, never
 # Step 8, which only pushes and replies.
 require_file tests/fixtures/work-issue/probes/row-13-prepr-repair-clean.json
+# The two ways a failed round resumes, and the one way it stops: no repair
+# since the round, a repair since the round, and two failed rounds in a row.
+require_file tests/fixtures/work-issue/probes/row-10-repair-needed.json
+require_file tests/fixtures/work-issue/probes/row-10-failed-twice.json
 # A reviewer's reply inside an old thread after a repair push, and the same
 # thread where the only reply is the author's own.
 require_file tests/fixtures/work-issue/review/thread-followup.json
@@ -569,7 +573,7 @@ declare -a probe_cases=(
   "row-01:done" "row-02:wait" "row-03:stop" "row-04:0" "row-05:0" "row-06:0"
   "row-07:2" "row-07-isolation-incomplete:1" "row-08:3" "row-09:3" "row-10:4" "row-11:4" "row-11-trigger-unrecorded:4" "row-12:5" "row-13:5"
   "row-14:6" "row-15:6" "row-16:7" "row-17:8" "row-17-queued:8" "row-17-postpush:8"
-  "row-10-repair-unverified:4" "row-13-prepr-repair-clean:5" "row-16-earlier-queued:8" "row-17-review-repair-unpushed:8" "row-18:done"
+  "row-10-repair-unverified:4" "row-10-repair-needed:4" "row-10-failed-twice:stop" "row-13-prepr-repair-clean:5" "row-16-earlier-queued:8" "row-17-review-repair-unpushed:8" "row-18:done"
 )
 for case in "${probe_cases[@]}"; do
   fixture="${case%%:*}"
@@ -601,6 +605,17 @@ set -e
 }
 grep -Fq "phase: stop reason: unknown probe fields: branch_remote" <<<"$null_out" || {
   echo "a null branch_remote should stop the run naming the field, got: $null_out" >&2
+  exit 1
+}
+
+# The two row-10 resumes share a phase, so the reason line is what tells them
+# apart: a repair that predates the failed round is the code it refuted.
+grep -Fq "dispatch the repair" <<<"$(python3 "$run_state" phase --probe "$probes_dir/row-10-repair-needed.json")" || {
+  echo "row-10-repair-needed.json should resume at the repair dispatch, not at round k+1" >&2
+  exit 1
+}
+grep -Fq "run round k+1" <<<"$(python3 "$run_state" phase --probe "$probes_dir/row-10-repair-unverified.json")" || {
+  echo "row-10-repair-unverified.json should resume at round k+1, not at the repair dispatch" >&2
   exit 1
 }
 
@@ -665,15 +680,31 @@ require_text work-issue/references/resume.md "| 13 | red-team clean; trigger rec
 require_text work-issue/SKILL.md "no \`base_sha\` or no \`baseline.txt\`, or \`reports/\` lacks a report"
 require_text work-issue/references/resume.md "no \`base_sha\` or no \`baseline.txt\`, or \`reports/\` lacks a report"
 # The wave count reads the Waves section and nothing after it.
-require_text work-issue/references/resume.md "f&&/^\\|/{t=1;print;next} f&&t{exit}"
+require_text work-issue/references/resume.md "f&&/^[[:space:]]*\\|/{t=1;print;next} f&&t{exit}"
 # A false left check is a red-team failure, and the probe has to read it.
 require_text work-issue/references/resume.md "\"holds\": *false"
+# A reviewer's reply inside an old thread is the finding; its body has to
+# reach the saved poll file, or the repair worker is handed the stale root.
+set +e
+python3 "$run_state" review 1 --since 2026-09-17T16:00:00Z --author kendrick \
+  --input "$review_dir/thread-followup.json" --save "$tmp/followup-bundle.json" >/dev/null 2>&1
+followup_status=$?
+set -e
+[[ "$followup_status" == "0" ]] || {
+  echo "run-state.py review --save on thread-followup.json should exit 0, got: $followup_status" >&2
+  exit 1
+}
+python3 -c "import json,sys; t=json.load(open(sys.argv[1]))['threads'][0]; sys.exit(0 if t.get('last_comment_body','').startswith('Still wrong') and t.get('last_comment_url') else 1)" "$tmp/followup-bundle.json" || {
+  echo "the saved bundle should carry the reply's body and URL" >&2
+  exit 1
+}
+require_text work-issue/references/triage.md "quote \`last_comment_body\` from the saved file"
 # Row 17 is post-PR; a pre-PR repair goes to row 10 or row 13, both of which
 # still open the pull request.
 require_text work-issue/SKILL.md "| 17 | PR open; repair report"
 require_text work-issue/references/resume.md "| 17 | PR open; repair report"
-require_text work-issue/SKILL.md "or round k+1 where a repair report already followed"
-require_text work-issue/references/resume.md "or round k+1 where a repair report already followed"
+require_text work-issue/SKILL.md "two failed rounds in a row stop with the evidence"
+require_text work-issue/references/resume.md "two failed rounds in a row stop with the evidence"
 # pushed_at goes down before the push, so a same-second review still counts.
 require_text work-issue/SKILL.md "Write \`date -u +%FT%TZ\` to \`RUN_DIR/pushed_at\`, then push"
 # Completion of adversarial-review is read from Step 4's record of its ledger
@@ -684,7 +715,7 @@ refute_text work-issue/references/resume.md "ar_run_dir"
 # Step 5 item 2 clears the conflict marker, or row 12 re-runs item 1 forever.
 require_text work-issue/SKILL.md "remove \`RUN_DIR/conflict.txt\`"
 # The wave_tasks count reads compact rows, since the vendored parser does.
-require_text work-issue/references/resume.md "grep -cE '^\\|\\s*[0-9]+\\s*\\|'"
+require_text work-issue/references/resume.md "grep -cE '^\\s*\\|\\s*[0-9]+\\s*\\|'"
 
 # `--save` writes gather()'s output, before classify() ever runs on it. Ledger
 # row 34 called it the "classified" bundle until a code-review pass on this

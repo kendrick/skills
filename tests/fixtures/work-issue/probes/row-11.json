@@ -14,6 +14,8 @@
   "build_final": true,
   "redteam_rounds": 1,
   "redteam_last_failed": false,
+  "redteam_failed_twice": false,
+  "repair_after_last_round": false,
   "trigger_fired": "yes",
   "ar_complete": false,
   "conflict": false,
