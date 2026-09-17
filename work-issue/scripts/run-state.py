@@ -229,8 +229,11 @@ query($owner: String!, $name: String!, $pr: Int!, $pageSize: Int!, $after: Strin
         nodes {
           id
           isResolved
-          comments(first: 1) {
+          root: comments(first: 1) {
             nodes { author { login } createdAt body databaseId url }
+          }
+          latest: comments(last: 1) {
+            nodes { author { login } createdAt }
           }
         }
         pageInfo { hasNextPage endCursor }
@@ -329,8 +332,13 @@ def gather(pr):
 
     threads = []
     for node in thread_nodes:
-        roots = ((node.get("comments") or {}).get("nodes")) or []
+        roots = ((node.get("root") or {}).get("nodes")) or []
         root = roots[0] if roots else {}
+        # The newest comment rides along with the root. A reviewer who answers
+        # inside an old thread after a repair push writes no new root, and a
+        # bundle carrying only roots scored that thread against the old date.
+        latests = ((node.get("latest") or {}).get("nodes")) or []
+        latest = latests[0] if latests else {}
         threads.append(
             {
                 "id": node.get("id"),
@@ -340,6 +348,8 @@ def gather(pr):
                 "root_body": root.get("body"),
                 "root_comment_id": root.get("databaseId"),
                 "root_url": root.get("url"),
+                "last_comment_at": latest.get("createdAt"),
+                "last_comment_author": _login(latest.get("author")),
             }
         )
 
@@ -533,11 +543,26 @@ def classify(bundle, since, author):
         created = parse_ts(
             thread["root_created_at"], f"threads[{index}].root_created_at", problems
         )
-        if thread["is_resolved"] or not newer(created):
+        if thread["is_resolved"]:
+            continue
+        # An unresolved thread counts on its root, or on a later comment from
+        # anyone but the author: the reviewer's "still wrong" after a repair
+        # push lands as a reply, not as a new thread.
+        last = parse_ts(
+            thread.get("last_comment_at"), f"threads[{index}].last_comment_at", problems
+        )
+        reviewer_replied = (
+            newer(last)
+            and normalize_login(thread.get("last_comment_author")) != author_key
+        )
+        if not newer(created) and not reviewer_replied:
             continue
         findings = True
+        stamp = f"created {show_ts(created)}"
+        if reviewer_replied and not newer(created):
+            stamp = f"created {show_ts(created)}, reply {show_ts(last)}"
         lines.append(
-            f"thread {thread['id']} unresolved, created {show_ts(created)}, "
+            f"thread {thread['id']} unresolved, {stamp}, "
             f"{severity(thread['root_body'])}, reply-to "
             f"{show_or_unknown(thread.get('root_comment_id'))} "
             f"{show_or_unknown(thread.get('root_url'))}"
@@ -737,12 +762,14 @@ def phase_of(probe):
         return "3", "row 9: a self-review with no build-final report; resume at the fix dispatch"
     if flag(probe, "build_final") and redteam_rounds == 0:
         return "4", "row 10: a build-final report with no red-team round yet"
-    if (
-        flag(probe, "build_final")
-        and flag(probe, "redteam_last_failed")
-        and repair_reports == 0
-    ):
-        return "4", "row 10: the newest red-team round has NOT_REPRODUCED and no repair followed it"
+    # A failed round owns the run until a later round is clean, whether or not
+    # a repair report has followed: no report means dispatch the repair, a
+    # report means run round k+1 over it. Handing the repaired-but-unverified
+    # case to row 17 sent a pre-PR run to Step 8, which never opens the PR.
+    if flag(probe, "build_final") and flag(probe, "redteam_last_failed"):
+        if repair_reports == 0:
+            return "4", "row 10: the newest red-team round has NOT_REPRODUCED and no repair followed it"
+        return "4", "row 10: the newest red-team round has NOT_REPRODUCED and its repair is not yet re-verified; run round k+1"
     # `ar_complete` reads Step 4's record of adversarial-review's final ledger
     # state, not its run directory: the directory exists from that skill's
     # preflight onward, and a review interrupted after preflight left one
@@ -794,11 +821,13 @@ def phase_of(probe):
         and not flag(probe, "newest_repair_report")
     ):
         return "7", "row 16: the newest triage round has in-scope rows and no repair report of its own"
-    # The repair-report leg stands alone: a red-team repair (row 10) writes a
-    # repair report with no triage round behind it, and gating it on a triage
-    # round sent that run to row 18's `done` with its commits still unpushed.
+    # Post-PR only: Step 8 pushes and replies but never opens a pull request,
+    # so a repair with no PR behind it belongs to row 10 (unverified) or row
+    # 13 (clean), never here. The repair-report leg still stands alone: a
+    # post-PR repair round may have no triage round of its own.
     if (
-        (repair_reports > 0 or (triage_rounds > 0 and count(probe, "triage_inscope_rows") == 0))
+        pr_state == "OPEN"
+        and (repair_reports > 0 or (triage_rounds > 0 and count(probe, "triage_inscope_rows") == 0))
         and (flag(probe, "ahead_of_origin") or count(probe, "triage_rows_unanswered") > 0)
     ):
         return (

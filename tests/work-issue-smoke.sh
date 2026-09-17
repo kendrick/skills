@@ -81,11 +81,18 @@ done
 # in-scope rows — and the fixture proving the first shape does not also cover
 # the second, so it gets its own file rather than replacing row-17.json.
 require_file tests/fixtures/work-issue/probes/row-17-queued.json
-# Two more row-17 shapes: a stop between the repair push and the replies, and
-# a red-team repair with no triage round behind it. Each was a probe the table
-# once sent somewhere else (row 14's poll and row 18's done).
+# A stop between the repair push and the replies, once sent to row 14's poll;
+# and a red-team repair not yet re-verified, once sent to row 18's done and
+# later to row 17's Step 8, which never opens the pull request.
 require_file tests/fixtures/work-issue/probes/row-17-postpush.json
-require_file tests/fixtures/work-issue/probes/row-17-redteam-repair.json
+require_file tests/fixtures/work-issue/probes/row-10-repair-unverified.json
+# A pre-PR repair, clean after its own round: Step 5 with the PR create, never
+# Step 8, which only pushes and replies.
+require_file tests/fixtures/work-issue/probes/row-13-prepr-repair-clean.json
+# A reviewer's reply inside an old thread after a repair push, and the same
+# thread where the only reply is the author's own.
+require_file tests/fixtures/work-issue/review/thread-followup.json
+require_file tests/fixtures/work-issue/review/thread-author-reply.json
 # A queued round followed by a repaired one, which a count comparison sent back
 # to Step 7; and a probe with one null, which a bool coercion read as "no".
 require_file tests/fixtures/work-issue/probes/row-16-earlier-queued.json
@@ -173,7 +180,7 @@ require_text work-issue/SKILL.md "rows 1 (money), 2 (authz), and 4 (schema) of \
 # `findings` outranks `cleared` for a reason: a reviewer can leave an approving
 # reaction and a blocking thread in one pass. A dropped row here is a state the
 # triage step can no longer reach.
-require_text work-issue/SKILL.md "| findings | any unresolved review thread whose root comment is newer than SINCE; or a \`CHANGES_REQUESTED\` review newer than SINCE; or a pull-request-level or issue comment newer than SINCE from a login other than the author that is not a bare approval |"
+require_text work-issue/SKILL.md "| findings | any unresolved review thread whose root comment, or whose latest comment from a login other than the author, is newer than SINCE; or a \`CHANGES_REQUESTED\` review newer than SINCE; or a pull-request-level or issue comment newer than SINCE from a login other than the author that is not a bare approval |"
 require_text work-issue/SKILL.md "| cleared | no findings, and either an \`APPROVED\` review newer than SINCE, or a \`+1\` reaction on the pull request (\`gh api repos/{owner}/{repo}/issues/<pr>/reactions\`) newer than SINCE from a login other than the author |"
 require_text work-issue/SKILL.md "| pending | neither |"
 
@@ -436,6 +443,8 @@ declare -a review_cases=(
   "stale-reaction.json:pending"
   "changes-requested.json:findings"
   "pr-comment-finding.json:findings"
+  "thread-followup.json:findings"
+  "thread-author-reply.json:pending"
 )
 for case in "${review_cases[@]}"; do
   fixture="${case%%:*}"
@@ -560,7 +569,7 @@ declare -a probe_cases=(
   "row-01:done" "row-02:wait" "row-03:stop" "row-04:0" "row-05:0" "row-06:0"
   "row-07:2" "row-07-isolation-incomplete:1" "row-08:3" "row-09:3" "row-10:4" "row-11:4" "row-11-trigger-unrecorded:4" "row-12:5" "row-13:5"
   "row-14:6" "row-15:6" "row-16:7" "row-17:8" "row-17-queued:8" "row-17-postpush:8"
-  "row-17-redteam-repair:8" "row-16-earlier-queued:8" "row-17-review-repair-unpushed:8" "row-18:done"
+  "row-10-repair-unverified:4" "row-13-prepr-repair-clean:5" "row-16-earlier-queued:8" "row-17-review-repair-unpushed:8" "row-18:done"
 )
 for case in "${probe_cases[@]}"; do
   fixture="${case%%:*}"
@@ -656,7 +665,15 @@ require_text work-issue/references/resume.md "| 13 | red-team clean; trigger rec
 require_text work-issue/SKILL.md "no \`base_sha\` or no \`baseline.txt\`, or \`reports/\` lacks a report"
 require_text work-issue/references/resume.md "no \`base_sha\` or no \`baseline.txt\`, or \`reports/\` lacks a report"
 # The wave count reads the Waves section and nothing after it.
-require_text work-issue/references/resume.md "awk '/^## Waves/{f=1;next} f&&/^## /{f=0} f'"
+require_text work-issue/references/resume.md "f&&/^\\|/{t=1;print;next} f&&t{exit}"
+# A false left check is a red-team failure, and the probe has to read it.
+require_text work-issue/references/resume.md "\"holds\": *false"
+# Row 17 is post-PR; a pre-PR repair goes to row 10 or row 13, both of which
+# still open the pull request.
+require_text work-issue/SKILL.md "| 17 | PR open; repair report"
+require_text work-issue/references/resume.md "| 17 | PR open; repair report"
+require_text work-issue/SKILL.md "or round k+1 where a repair report already followed"
+require_text work-issue/references/resume.md "or round k+1 where a repair report already followed"
 # pushed_at goes down before the push, so a same-second review still counts.
 require_text work-issue/SKILL.md "Write \`date -u +%FT%TZ\` to \`RUN_DIR/pushed_at\`, then push"
 # Completion of adversarial-review is read from Step 4's record of its ledger
@@ -683,9 +700,9 @@ require_text _maintenance/work-issue/RATIONALE.md "Reproduced against \`row-17-q
 # EVALS.md's own count of review bundles, so it can't drift from
 # tests/fixtures/work-issue/review/ the way it did when this diff added two
 # fixtures without touching the summary line.
-require_text _maintenance/work-issue/EVALS.md "against eight review bundles"
-[[ "$(find tests/fixtures/work-issue/review -maxdepth 1 -type f | wc -l | tr -d ' ')" == "8" ]] || {
-  echo "tests/fixtures/work-issue/review holds a different count than EVALS.md's 'eight review bundles'" >&2
+require_text _maintenance/work-issue/EVALS.md "against ten review bundles"
+[[ "$(find tests/fixtures/work-issue/review -maxdepth 1 -type f | wc -l | tr -d ' ')" == "10" ]] || {
+  echo "tests/fixtures/work-issue/review holds a different count than EVALS.md's 'ten review bundles'" >&2
   exit 1
 }
 

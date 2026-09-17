@@ -161,7 +161,7 @@ Three states, each scored relative to SINCE:
 
 | State | Rule (relative to SINCE) |
 |---|---|
-| findings | any unresolved review thread whose root comment is newer than SINCE; or a `CHANGES_REQUESTED` review newer than SINCE; or a pull-request-level or issue comment newer than SINCE from a login other than the author that is not a bare approval |
+| findings | any unresolved review thread whose root comment, or whose latest comment from a login other than the author, is newer than SINCE; or a `CHANGES_REQUESTED` review newer than SINCE; or a pull-request-level or issue comment newer than SINCE from a login other than the author that is not a bare approval |
 | cleared | no findings, and either an `APPROVED` review newer than SINCE, or a `+1` reaction on the pull request (`gh api repos/{owner}/{repo}/issues/<pr>/reactions`) newer than SINCE from a login other than the author |
 | pending | neither |
 
@@ -220,14 +220,14 @@ It prints `phase: <0-8|done|wait|stop> reason: <one line>` and exits 0, or exits
 | 7 | `## Waves` present; no `base_sha` or no `baseline.txt`, or `reports/` lacks a report for some task | Step 1 at the missing artifact; else Step 2 at that wave (re-record WAVE_BASE; revert a half-written wave with no report) |
 | 8 | all wave reports; no `review/self-*.md` | Step 3 at the `code-review` invocation |
 | 9 | `review/self-*` present; no `reports/build-final.json` | Step 3 at the fix dispatch |
-| 10 | `build-final.json`; no `redteam/round-*.json`, or newest round has NOT_REPRODUCED and no later repair report | Step 4 |
+| 10 | `build-final.json`; no `redteam/round-*.json`, or newest round has NOT_REPRODUCED | Step 4: the repair dispatch, or round k+1 where a repair report already followed |
 | 11 | red-team clean; `trigger.txt` absent, or its first line `fired: yes` with no `redteam/ar-state.txt` showing `UNVERIFIED: 0` | Step 4 at the trigger, or at the adversarial-review invocation |
 | 12 | `conflict.txt` exists, or a rebase in progress | Step 5 item 1 |
 | 13 | red-team clean; trigger recorded; no triage round yet; no PR, or local HEAD ahead of `origin/issue-N` | Step 5 |
 | 14 | PR open; review `pending`; no triage row without a reply URL | Step 6 poll |
 | 15 | PR open; `findings`; no `triage/round-<k>.md` newer than SINCE | Step 6 triage |
 | 16 | newest triage round has in-scope rows; no `reports/repair-<k>.json` for that round | Step 7 |
-| 17 | repair report, or a triage round with no in-scope rows; local ahead of origin, or a triage row without a reply URL | Step 8 |
+| 17 | PR open; repair report, or a triage round with no in-scope rows; local ahead of origin, or a triage row without a reply URL | Step 8 |
 | 18 | PR open; `cleared` | done: final report |
 
 ## Further Reading

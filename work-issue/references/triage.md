@@ -6,7 +6,7 @@ Read this at Step 6 to score what came back from review, and again at Step 8 to 
 
 | State | Rule (relative to SINCE) |
 |---|---|
-| findings | any unresolved review thread whose root comment is newer than SINCE; or a `CHANGES_REQUESTED` review newer than SINCE; or a pull-request-level or issue comment newer than SINCE from a login other than the author that is not a bare approval |
+| findings | any unresolved review thread whose root comment, or whose latest comment from a login other than the author, is newer than SINCE; or a `CHANGES_REQUESTED` review newer than SINCE; or a pull-request-level or issue comment newer than SINCE from a login other than the author that is not a bare approval |
 | cleared | no findings, and either an `APPROVED` review newer than SINCE, or a `+1` reaction on the pull request newer than SINCE from a login other than the author |
 | pending | neither |
 
