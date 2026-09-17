@@ -197,20 +197,29 @@ def check_d3(lines):
 
 
 def check_d4(lines):
+    """A box counts when any heading still open above it names a decision,
+    not only the nearest one. Tracking the nearest heading alone let
+    `## Open Questions` / `### Storage` / `- [ ] IndexedDB or localStorage?`
+    pass clean: the subheading replaced the section that made the box a
+    decision. The problem line names the nearest ancestor that matched."""
     problems = []
-    current_heading = ""
+    ancestors = []  # (level, text) for every heading still open above this line
     for lineno, line in enumerate(lines, start=1):
         level = heading_level(line)
         if level is not None:
-            current_heading = HEADING_RE.match(line).group(2)
+            text = HEADING_RE.match(line).group(2)
+            while ancestors and ancestors[-1][0] >= level:
+                ancestors.pop()
+            ancestors.append((level, text))
             continue
-        if CHECKBOX_RE.match(line) and re.search(
-            r"decision|question|open", current_heading, re.IGNORECASE
-        ):
-            problems.append(
-                f"check-plan: line {lineno}: D4 unchecked box under heading "
-                f"{current_heading!r}"
-            )
+        if not CHECKBOX_RE.match(line):
+            continue
+        for _, text in reversed(ancestors):
+            if re.search(r"decision|question|open", text, re.IGNORECASE):
+                problems.append(
+                    f"check-plan: line {lineno}: D4 unchecked box under heading {text!r}"
+                )
+                break
     return problems
 
 

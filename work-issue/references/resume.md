@@ -32,7 +32,7 @@ Every field below is present in the probe JSON, `null` where the probe could not
 | `triage_newer_than_since` | the newest `triage/round-*.md` is newer than SINCE: compare its mtime against `<RUN_DIR>/pushed_at`. Older means the rows describe review on a push that has since been replaced. |
 | `triage_inscope_rows` | rows marked in scope in the newest `triage/round-*.md` |
 | `repair_reports` | `find <RUN_DIR>/reports -name 'repair-*.json' \| wc -l` |
-| `triage_rows_unanswered` | triage rows carrying no reply URL, across every round newer than SINCE |
+| `triage_rows_unanswered` | triage rows carrying no reply URL, across every round. Not cut off at SINCE: Step 8 pushes before it replies, so the rows it owes are always older than the push that answered them |
 
 Write them to a JSON file and map them:
 
@@ -61,7 +61,7 @@ The same eighteen rows the script implements, written out so a reader can fail o
 | 11 | red-team clean; `trigger.txt` says fired; no adversarial-review run dir in the tree | Step 4 at the adversarial-review invocation |
 | 12 | `conflict.txt` exists, or a rebase in progress | Step 5 item 1 |
 | 13 | red-team clean; no PR, or local HEAD ahead of `origin/issue-N` | Step 5 |
-| 14 | PR open; review `pending` | Step 6 poll |
+| 14 | PR open; review `pending`; no triage row without a reply URL | Step 6 poll |
 | 15 | PR open; `findings`; no `triage/round-<k>.md` newer than SINCE | Step 6 triage |
 | 16 | triage round with in-scope rows; no matching `reports/repair-<k>.json` | Step 7 |
 | 17 | repair report, or a triage round with no in-scope rows; local ahead of origin, or a triage row without a reply URL | Step 8 |
@@ -73,4 +73,4 @@ Rows 4 and 5 are the two shapes of "nothing to resume", and they differ in what 
 
 Row 7 reverts before it re-dispatches. A wave that wrote files and returned no report left work nobody gated, and handing that to a second worker gives it the first one's leftovers to debug on the plan's budget.
 
-Rows 15 and 17 both turn on SINCE. Review signal older than the last push describes code that is no longer there, and triage rows written against it are answers to a question nobody is still asking.
+Row 15 turns on SINCE: review signal older than the last push describes code that is no longer there, and a triage round written against it is an answer to a question nobody is still asking. Row 17's unanswered leg deliberately does not. Step 8 pushes and writes `pushed_at` before it replies, so a stop between the two leaves rows older than SINCE that still owe a reply, and a cutoff there would hand them to row 14's poll for good. Row 14 carries the matching guard.

@@ -21,7 +21,7 @@ every item at or before it is ignored.
 tests/fixtures/work-issue/review/ exercise the state rules with no network.
 Nothing shells out while `--input` is given.
 
-`--save PATH` writes the classified bundle to PATH as JSON, whether or not
+`--save PATH` writes the gathered bundle to PATH as JSON, whether or not
 `--input` was given. A thread's or a review's deciding line carries an id, a
 URL, and (for a review) a state and timestamp — never the body a reply has to
 quote. The skill reads the saved file for that body instead of asking `gh`
@@ -365,6 +365,8 @@ def gather(pr):
                 "author": _login(c.get("user")),
                 "created_at": c.get("created_at"),
                 "body": c.get("body"),
+                "id": c.get("id"),
+                "url": c.get("html_url"),
             }
             for c in comments
         ],
@@ -403,9 +405,10 @@ def show_or_unknown(value):
     """`value`, or `unknown` where an older bundle has no value for it.
 
     An `--input` fixture written before this field existed has no
-    `root_comment_id` or review `url` at all, and `check_bundle` reads the
-    gap as null rather than refusing the bundle. The reply target is optional
-    information about a deciding item, not a condition of reading one."""
+    `root_comment_id`, review `url`, or comment `url` at all. `check_bundle`
+    does not require them, and `classify` reads the gap as null through
+    `.get`. The reply target is optional information about a deciding item,
+    not a condition of reading one."""
     return "unknown" if value is None else value
 
 
@@ -572,7 +575,10 @@ def classify(bundle, since, author):
         if is_bare_approval(comment["body"]):
             continue
         findings = True
-        lines.append(f"comment by {comment['author']} {show_ts(created)}")
+        lines.append(
+            f"comment by {comment['author']} {show_ts(created)} "
+            f"{show_or_unknown(comment.get('url'))}"
+        )
 
     if problems:
         raise InputError(problems)
@@ -713,7 +719,15 @@ def phase_of(probe):
         return "5", "row 12: a rebase conflict is in progress; resume at Step 5 item 1"
     if redteam_clean and (pr_state is None or flag(probe, "ahead_of_origin")):
         return "5", "row 13: red-team is clean and the branch is unpublished or ahead of origin"
-    if pr_state == "OPEN" and review_state == "pending":
+    # Step 8 pushes before it replies, so a stop between those two leaves rows
+    # that still owe a reply under a review that now reads `pending`. Without
+    # this guard the poll preempts row 17 and the old findings are never
+    # answered.
+    if (
+        pr_state == "OPEN"
+        and review_state == "pending"
+        and count(probe, "triage_rows_unanswered") == 0
+    ):
         return "6", "row 14: the PR is open and no review has landed since the last push; keep polling"
     if (
         pr_state == "OPEN"
@@ -727,9 +741,11 @@ def phase_of(probe):
         and repair_reports < triage_rounds
     ):
         return "7", "row 16: a triage round has in-scope rows and no matching repair report"
+    # The repair-report leg stands alone: a red-team repair (row 10) writes a
+    # repair report with no triage round behind it, and gating it on a triage
+    # round sent that run to row 18's `done` with its commits still unpushed.
     if (
-        triage_rounds > 0
-        and (repair_reports > 0 or count(probe, "triage_inscope_rows") == 0)
+        (repair_reports > 0 or (triage_rounds > 0 and count(probe, "triage_inscope_rows") == 0))
         and (flag(probe, "ahead_of_origin") or count(probe, "triage_rows_unanswered") > 0)
     ):
         return (
@@ -776,7 +792,7 @@ def parse_args(argv=None):
     r.add_argument(
         "--save",
         metavar="PATH",
-        help="write the classified bundle as JSON to PATH; allowed with --input",
+        help="write the gathered bundle as JSON to PATH; allowed with --input",
     )
     r.set_defaults(func=cmd_review)
 

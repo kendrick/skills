@@ -105,7 +105,7 @@ Continue `divvy-up` at its Step 5, in the work tree.
 
 Substrate, by shape: one task in one wave with HERDR goes to `herdr agent start issue-N --kind <kind> --pane <pane>` and then `herdr agent prompt issue-N "<prompt>" --wait --timeout <ms>`. Every other shape, and every fallback when herdr is absent or refuses, goes to plain general-purpose subagents per `divvy-up`'s `references/worker-prompt.md`. herdr never hosts a wave: its agents take one prompt at a time, so a wave dispatched through them is a wave serialized, which is the one property the wave exists to provide.
 
-Every dispatch carries this skill's [references/worker-prompt.md](references/worker-prompt.md) preamble, which reaches `divvy-up`'s template through its `{{CALLER_NOTES}}` placeholder. Under herdr the preamble heads the whole prompt instead. Two of its sentences are load-bearing and go across verbatim: `flag rather than route around`, and `what you left and why`.
+Every dispatch carries this skill's [references/worker-prompt.md](references/worker-prompt.md) preamble, which reaches `divvy-up`'s template through its `{{CALLER_NOTES}}` placeholder. Under herdr the preamble heads the whole prompt instead. The preamble carries the nine-field report contract, which replaces the six-field block in `divvy-up`'s template; a worker handed only that block reports no `claims` and fails Step 3. Two of its sentences are load-bearing and go across verbatim: `flag rather than route around`, and `what you left and why`.
 
 Reports are saved verbatim to `RUN_DIR/reports/<wave>-<task>.json`. Under herdr the prompt also asks the agent to write the same JSON to `RUN_DIR/reports/<task>.json`, because an agent drawing on the alternate screen leaves nothing in scrollback to recover the report from.
 
@@ -191,7 +191,7 @@ Gate it the way Step 3 gates: VERIFY_CMD, then `code-review` against BASE_SHA, w
 
 1. Red-team the repair: Step 4 over `repair-<k>.json`'s claims, with the trigger re-evaluated on the full diff.
 2. Rebase, verify, push, write `pushed_at` — Step 5 items 1 through 4.
-3. Reply to every finding thread with what changed and the commit SHA: `gh api repos/{owner}/{repo}/pulls/<pr>/comments/<id>/replies -f body=…`, and a pull-request comment for review-level and issue-level findings. A queued row gets "deferred: <Outside because>; tracked in the deferred-findings comment". Replies go through `technical-writing`. **Answer, never resolve**: marking a thread resolved is the reviewer's act, and taking it from them destroys the only signal they have that anyone read the finding.
+3. Reply to every finding thread with what changed and the commit SHA: `gh api repos/{owner}/{repo}/pulls/<pr>/comments/<id>/replies -f body=…`, where `<id>` is the `reply-to` id on the thread's deciding line, and a pull-request comment for review-level and issue-level findings. The push in item 2 moves SINCE past the rows being answered, and that is why `triage_rows_unanswered` counts every round: a stop between the push and these replies resumes here, at row 17, rather than at row 14's poll. A queued row gets "deferred: <Outside because>; tracked in the deferred-findings comment". Replies go through `technical-writing`. **Answer, never resolve**: marking a thread resolved is the reviewer's act, and taking it from them destroys the only signal they have that anyone read the finding.
 4. One pull-request comment headed `Deferred findings` carries the queue table, edited in place on later rounds rather than posted again.
 5. The final report: pull-request URL, review state, rounds run, per-model task counts, escalations, the queue, and "a human merges." Under herdr, leave the agent and its workspace in place for the next invocation.
 
@@ -224,7 +224,7 @@ It prints `phase: <0-8|done|wait|stop> reason: <one line>` and exits 0, or exits
 | 11 | red-team clean; `trigger.txt` says fired; no adversarial-review run dir in the tree | Step 4 at the adversarial-review invocation |
 | 12 | `conflict.txt` exists, or a rebase in progress | Step 5 item 1 |
 | 13 | red-team clean; no PR, or local HEAD ahead of `origin/issue-N` | Step 5 |
-| 14 | PR open; review `pending` | Step 6 poll |
+| 14 | PR open; review `pending`; no triage row without a reply URL | Step 6 poll |
 | 15 | PR open; `findings`; no `triage/round-<k>.md` newer than SINCE | Step 6 triage |
 | 16 | triage round with in-scope rows; no matching `reports/repair-<k>.json` | Step 7 |
 | 17 | repair report, or a triage round with no in-scope rows; local ahead of origin, or a triage row without a reply URL | Step 8 |

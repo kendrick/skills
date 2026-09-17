@@ -53,6 +53,23 @@ even where you have a whole shell to yourself and this repo's own agent docs
 tell you to commit your work: those docs were written for an agent working
 alone. The orchestrator commits each passing wave and owns every push.
 
+Your final message is exactly one fenced json block and nothing else. It
+carries nine fields: the six the instructions below this preamble describe,
+plus `claims`, `left`, and `plan_concerns`. This shape replaces the six-field
+block further down, so report all nine:
+
+    {
+      "task": "{{TASK}}",
+      "status": "done",
+      "files_changed": ["repo-relative paths"],
+      "summary": "one line on what changed",
+      "verify_output": "the verification command and the tail of its real output",
+      "question": "",
+      "claims": [{"claim": "what is now true", "command": "what proves it", "output": "what that command really printed"}],
+      "left": [{"what": "what was not done", "why": "the reason it was not"}],
+      "plan_concerns": [{"plan_said": "the plan's words", "found": "what the code showed", "did": "what was built instead"}]
+    }
+
 Write the same JSON report to {{REPORT_PATH}}.
 
 Review findings to repair, each quoted with its source URL:
@@ -62,7 +79,7 @@ Review findings to repair, each quoted with its source URL:
 
 ## The report contract
 
-`divvy-up`'s six fields, unchanged, plus three this skill's Steps 4, 5, and 6 read:
+`divvy-up`'s six fields, unchanged, plus three this skill's Steps 4, 5, and 6 read. The preamble above carries this shape verbatim, because the preamble is the only part of this file a worker sees: `divvy-up`'s template names a six-field block, and a worker handed only that block reports six fields and Step 3 refuses the empty `claims`.
 
 ```json
 {

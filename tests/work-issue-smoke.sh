@@ -81,6 +81,13 @@ done
 # in-scope rows — and the fixture proving the first shape does not also cover
 # the second, so it gets its own file rather than replacing row-17.json.
 require_file tests/fixtures/work-issue/probes/row-17-queued.json
+# Two more row-17 shapes: a stop between the repair push and the replies, and
+# a red-team repair with no triage round behind it. Each was a probe the table
+# once sent somewhere else (row 14's poll and row 18's done).
+require_file tests/fixtures/work-issue/probes/row-17-postpush.json
+require_file tests/fixtures/work-issue/probes/row-17-redteam-repair.json
+require_file tests/fixtures/work-issue/review/changes-requested.json
+require_file tests/fixtures/work-issue/review/pr-comment-finding.json
 
 [[ "$(find work-issue -maxdepth 1 -type f | wc -l | tr -d ' ')" == "2" ]] || {
   echo "work-issue/ must ship only SKILL.md and README.md at top level" >&2
@@ -294,6 +301,13 @@ grep -Fq "D4 unchecked box under heading 'Open Questions'" <<<"$thin_out" || {
   echo "plan-thin.md should fail D4 on its Open Questions box, got: $thin_out" >&2
   exit 1
 }
+# The second box sits under `### Storage`, a subheading inside Open Questions.
+# Tracking only the nearest heading let that one through, so D4 has to fire
+# twice here, both times naming the ancestor that makes the box a decision.
+[[ "$(grep -c "D4 unchecked box under heading 'Open Questions'" <<<"$thin_out")" == "2" ]] || {
+  echo "plan-thin.md should fail D4 on both boxes, the nested one included, got: $thin_out" >&2
+  exit 1
+}
 
 # A task with nowhere to write its output is a task whose worker picks a file
 # and nobody proved that file is unowned.
@@ -401,6 +415,8 @@ declare -a review_cases=(
   "findings-with-reaction.json:findings"
   "pending.json:pending"
   "stale-reaction.json:pending"
+  "changes-requested.json:findings"
+  "pr-comment-finding.json:findings"
 )
 for case in "${review_cases[@]}"; do
   fixture="${case%%:*}"
@@ -441,25 +457,52 @@ grep -Fq "reply-to 2199481001" <<<"$reply_out" || {
   exit 1
 }
 
-# --save has to work alongside --input (Step 6 always has a bundle in hand
-# by the time it polls) and the file it writes has to be the bundle, not the
-# printed lines, so a later step can read a finding's body out of it.
+# A CHANGES_REQUESTED review whose findings live in its body is what --save
+# exists for. Its deciding line has to end with the review's URL, and the
+# saved file has to carry the body Step 6 quotes; a file that only parses
+# would pass with both stripped. --save also has to work alongside --input,
+# since Step 6 always has a bundle in hand by the time it polls.
 set +e
-python3 "$run_state" review 1 --since 2026-09-17T16:00:00Z --author kendrick \
-  --input "$review_dir/cleared-by-review.json" --save "$tmp/saved-bundle.json" >/dev/null
+cr_out="$(python3 "$run_state" review 1 --since 2026-09-17T16:00:00Z --author kendrick \
+  --input "$review_dir/changes-requested.json" --save "$tmp/saved-bundle.json" 2>&1)"
 save_status=$?
 set -e
 [[ "$save_status" == "0" ]] || {
-  echo "run-state.py review --save should exit 0, got: $save_status" >&2
+  echo "run-state.py review --save should exit 0, got: $save_status: $cr_out" >&2
+  exit 1
+}
+grep -Fq "review CHANGES_REQUESTED by someone-else 2026-09-17T16:30:00Z https://github.com/kendrick/skills/pull/1#pullrequestreview-5100000001" <<<"$cr_out" || {
+  echo "a CHANGES_REQUESTED deciding line should end with the review's URL, got: $cr_out" >&2
   exit 1
 }
 set +e
-python3 -c "import json,sys; sys.exit(0 if 'author' in json.load(open(sys.argv[1])) else 1)" \
-  "$tmp/saved-bundle.json"
+python3 - "$tmp/saved-bundle.json" <<'PY'
+import json, sys
+bundle = json.load(open(sys.argv[1]))
+review = bundle["reviews"][0]
+sys.exit(0 if "author" in bundle and review.get("body", "").startswith("**P1**") and review.get("url") else 1)
+PY
 saved_bundle_status=$?
 set -e
 [[ "$saved_bundle_status" == "0" ]] || {
-  echo "--save should write parseable JSON carrying the author key" >&2
+  echo "--save should write the bundle with the review's body and url intact" >&2
+  exit 1
+}
+
+# A finding that arrives as a pull-request-level comment has no thread to
+# reply into, and its triage row still needs a Source URL. The comment line
+# carries it.
+set +e
+pc_out="$(python3 "$run_state" review 1 --since 2026-09-17T16:00:00Z --author kendrick \
+  --input "$review_dir/pr-comment-finding.json" 2>&1)"
+pc_status=$?
+set -e
+[[ "$pc_status" == "0" ]] || {
+  echo "run-state.py review on pr-comment-finding.json should exit 0, got: $pc_status: $pc_out" >&2
+  exit 1
+}
+grep -Fq "comment by someone-else 2026-09-17T16:45:00Z https://github.com/kendrick/skills/pull/1#issuecomment-3300000001" <<<"$pc_out" || {
+  echo "a pull-request comment's deciding line should end with its URL, got: $pc_out" >&2
   exit 1
 }
 
@@ -484,7 +527,8 @@ probes_dir=tests/fixtures/work-issue/probes
 declare -a probe_cases=(
   "row-01:done" "row-02:wait" "row-03:stop" "row-04:0" "row-05:0" "row-06:0"
   "row-07:2" "row-08:3" "row-09:3" "row-10:4" "row-11:4" "row-12:5" "row-13:5"
-  "row-14:6" "row-15:6" "row-16:7" "row-17:8" "row-17-queued:8" "row-18:done"
+  "row-14:6" "row-15:6" "row-16:7" "row-17:8" "row-17-queued:8" "row-17-postpush:8"
+  "row-17-redteam-repair:8" "row-18:done"
 )
 for case in "${probe_cases[@]}"; do
   fixture="${case%%:*}"
@@ -530,6 +574,16 @@ grep -Fq "pr_state" <<<"$short_probe_out" || {
 # in the table did either. The Resume table's own copy has to say what the
 # script now checks.
 require_text work-issue/SKILL.md "repair report, or a triage round with no in-scope rows"
+# The resume path reads references/resume.md, so its copy of the table is the
+# one that matters at run time, and it has to say the same thing.
+require_text work-issue/references/resume.md "repair report, or a triage round with no in-scope rows"
+# Row 14's guard is what keeps a stop between the repair push and the replies
+# out of the poll. Both copies carry it.
+require_text work-issue/SKILL.md "| 14 | PR open; review \`pending\`; no triage row without a reply URL | Step 6 poll |"
+require_text work-issue/references/resume.md "| 14 | PR open; review \`pending\`; no triage row without a reply URL | Step 6 poll |"
+# The preamble is the only part of worker-prompt.md a worker sees, so the
+# nine-field contract has to be inside it, not only documented after it.
+require_text work-issue/references/worker-prompt.md "This shape replaces the six-field"
 
 # The root README carries this skill's own install flag, in the map
 # table's third column. The command form around it is pinned once, in

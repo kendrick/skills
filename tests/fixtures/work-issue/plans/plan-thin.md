@@ -13,3 +13,7 @@ Shape of the queue row: ???
 ## Open Questions
 
 - [ ] Should check-inflight.py also warn on a task with zero owned paths?
+
+### Storage
+
+- [ ] IndexedDB or localStorage?

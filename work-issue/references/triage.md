@@ -51,7 +51,7 @@ Out-of-scope rows append to `RUN_DIR/queue.md`:
 | # | Source | Finding | Outside because | Recommendation | Status |
 ```
 
-- `Source` — the thread or comment URL, or the literal `worker` for a `plan_concerns` entry that came out of a build report rather than a review.
+- `Source` — the thread or comment URL, or the literal `worker` for a `plan_concerns` entry that came out of a build report rather than a review. A thread's URL is the second half of the `reply-to <id> <url>` on its deciding line; a review's or a pull-request comment's URL ends its own line; all three are in the saved poll file as `root_url` or `url`.
 - `Finding` — the reviewer's words, quoted. Paraphrased, it stops being searchable against the thread it came from. Neither a thread's deciding line nor a review's carries the finding's actual words — a thread's carries a severity marker, a review's carries a state, an author, and a timestamp — so the words to quote come from `RUN_DIR/review/poll-<k>.json`, written by `run-state.py review`'s `--save` flag.
 - `Outside because` — which leg of the in-scope test it failed, in a clause. This is the sentence that goes back to the reviewer, so it is written to be read by them.
 - `Recommendation` — usually a `file-issue` line for the human to run, with the finding and its URL. The skill writes the recommendation and leaves the filing to a person: an issue opened by an unattended run arrives with nobody's judgment attached to whether it should exist.
@@ -66,6 +66,8 @@ An in-scope fix, replied on the thread:
 ```
 gh api repos/{owner}/{repo}/pulls/<pr>/comments/<comment-id>/replies -f body='Fixed in <sha>. <one line on what changed and why that addresses the finding.>'
 ```
+
+`<comment-id>` is the `reply-to` id on the thread's deciding line, which the saved poll file carries as `threads[].root_comment_id`. It is the root comment's REST id, not the `PRRT_…` thread node id beside it.
 
 Review-level and issue-level findings have no thread to reply into; those get a pull-request comment naming the finding they answer.
 
