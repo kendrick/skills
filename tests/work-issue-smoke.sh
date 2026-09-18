@@ -745,6 +745,14 @@ require_text work-issue/references/resume.md "no \`base_sha\` or no \`baseline.t
 require_text work-issue/references/resume.md "awk '/^[[:space:]]*## Waves[[:space:]]*$/{f=1;next} f&&/^[[:space:]]*\\|/{t=1;print;next} f&&t{exit}"
 # has_waves reads the heading the way the parser does, whitespace stripped.
 require_text work-issue/references/resume.md "grep -qE '^[[:space:]]*## Waves[[:space:]]*$'"
+# Row 81: a worker's queue can reach Step 8 and publish its comment before any
+# review lands, and that state is deliberately routed back to Step 6's poll
+# rather than to a special-cased final report—RUN_DIR has no note of which
+# step ran last (row 13) to tell it apart from an ordinary unreviewed pull
+# request. The URL is what closes the gap that decision leaves.
+# The poll's stop is the only report a run gets when nothing has happened,
+# and it names the pull request so a run that never printed its final report
+# still leaves the user the URL.
 require_text work-issue/SKILL.md "no review yet on <PR URL>"
 # A false left check is a red-team failure, and the probe has to read it.
 require_text work-issue/references/resume.md "\"holds\": *false"
