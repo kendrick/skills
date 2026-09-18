@@ -189,7 +189,7 @@ Gate it the way Step 3 gates: VERIFY_CMD, then `code-review` against BASE_SHA, w
 
 ## Step 8 — Close
 
-1. Where the newest triage round has a repair report, red-team it: Step 4 over `repair-<k>.json`'s claims, with the trigger re-evaluated on the full diff. An entry that reached this step with no repair, an all-queued round or a worker row owed its comment, skips items 1 and 2.
+1. Where the newest triage round has a repair report, red-team it: Step 4 over `repair-<k>.json`'s claims, with the trigger re-evaluated on the full diff. An entry that reached this step with no repair, an all-queued round or a worker row owed its comment, skips this item; item 2 has its own guard.
 2. Where local HEAD is ahead of origin: rebase, verify, write `pushed_at`, push — Step 5 items 1 through 4. Never a no-op push: it moves SINCE past the review just triaged and makes it read as stale.
 3. Reply to every finding thread with what changed and the commit SHA: `gh api repos/{owner}/{repo}/pulls/<pr>/comments/<id>/replies -f body=…`, where `<id>` is the `reply-to` id on the thread's deciding line, and a pull-request comment for review-level and issue-level findings. The push in item 2 moves SINCE past the rows being answered, and that is why `triage_rows_unanswered` counts every round: a stop between the push and these replies resumes here, at row 17, rather than at row 14's poll. A queued row gets "deferred: <Outside because>; tracked in the deferred-findings comment". Replies go through `technical-writing`. **Answer, never resolve**: marking a thread resolved is the reviewer's act, and taking it from them destroys the only signal they have that anyone read the finding.
 4. One pull-request comment headed `Deferred findings` carries the queue table copied byte-for-byte, never reformatted as a link or wrapped in backticks (see [references/triage.md](references/triage.md)), edited in place on later rounds rather than posted again. The resume probe compares every queue row, whole, against that comment as literal text, so a round that added rows, or changed a row's Status without touching its Source, and stopped before this edit resumes here rather than at the poll.
@@ -215,7 +215,7 @@ It prints `phase: <0-8|done|wait|stop> reason: <one line>` and exits 0, or exits
 | 2 | HERDR and agent `working` | wait, re-probe |
 | 3 | HERDR and agent `blocked` | show the blocked UI, stop |
 | 4 | no `issue-N` branch locally or on origin, no RUN_DIR | Step 0 |
-| 5 | RUN_DIR exists, no branch anywhere | `plan.md` without `## Waves`: RUN_DIR → `closed/`, Step 0. With it: Step 0 at the confirmation, then Step 1 |
+| 5 | RUN_DIR exists, no branch anywhere | `plan.md` without `## Waves`: RUN_DIR → `closed/`, Step 0. With it: Step 0 redoes items 4, 6, and 7 (isolation, cross-run check, red-team mode) before the confirmation, then Step 1 |
 | 6 | branch exists; `plan.md` has no `## Waves` | Step 0 at the plan gate |
 | 7 | `## Waves` present; no `base_sha` or no `baseline.txt`, or `reports/` lacks a report for some task | Step 1 at the missing artifact; else Step 2 at that wave (re-record WAVE_BASE; revert a half-written wave with no report) |
 | 8 | all wave reports; no `review/self-*.md` | Step 3 at the `code-review` invocation |

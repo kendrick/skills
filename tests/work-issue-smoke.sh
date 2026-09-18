@@ -692,8 +692,11 @@ require_text work-issue/references/resume.md "reports/redteam-repair-*.json <RUN
 # there is something to push; a queue-only entry goes straight to its replies.
 require_text work-issue/SKILL.md "Where the newest triage round has a repair report, red-team it"
 require_text work-issue/SKILL.md "Never a no-op push"
-require_text work-issue/SKILL.md "With it: Step 0 at the confirmation, then Step 1 |"
-require_text work-issue/references/resume.md "With it: Step 0 at the confirmation, then Step 1 |"
+require_text work-issue/SKILL.md "With it: Step 0 redoes items 4, 6, and 7 (isolation, cross-run check, red-team mode) before the confirmation, then Step 1 |"
+require_text work-issue/references/resume.md "With it: Step 0 redoes items 4, 6, and 7 (isolation, cross-run check, red-team mode) before the confirmation, then Step 1 |"
+# None of items 4, 6, or 7 write anything durable, so a resume that named only
+# the confirmation could skip item 6's cross-run check on stale values.
+require_text work-issue/references/resume.md "item 6's cross-run check most of all"
 # Step 0 probes before it writes, or every fresh issue reads as row 5's dead run.
 require_text work-issue/SKILL.md "before anything is written under RUN_DIR"
 # Row 13 stays out of the way of a review repair, in both copies of the table.

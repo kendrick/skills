@@ -58,7 +58,7 @@ The same eighteen rows the script implements, written out so a reader can fail o
 | 2 | HERDR and agent `working` | wait, re-probe |
 | 3 | HERDR and agent `blocked` | show the blocked UI, stop |
 | 4 | no `issue-N` branch locally or on origin, no RUN_DIR | Step 0 |
-| 5 | RUN_DIR exists, no branch anywhere | `plan.md` without `## Waves`: RUN_DIR → `closed/`, Step 0. With it: Step 0 at the confirmation, then Step 1 |
+| 5 | RUN_DIR exists, no branch anywhere | `plan.md` without `## Waves`: RUN_DIR → `closed/`, Step 0. With it: Step 0 redoes items 4, 6, and 7 (isolation, cross-run check, red-team mode) before the confirmation, then Step 1 |
 | 6 | branch exists; `plan.md` has no `## Waves` | Step 0 at the plan gate |
 | 7 | `## Waves` present; no `base_sha` or no `baseline.txt`, or `reports/` lacks a report for some task | Step 1 at the missing artifact; else Step 2 at that wave (re-record WAVE_BASE; revert a half-written wave with no report) |
 | 8 | all wave reports; no `review/self-*.md` | Step 3 at the `code-review` invocation |
@@ -75,7 +75,7 @@ The same eighteen rows the script implements, written out so a reader can fail o
 
 Row order is the mechanism, not a convenience. Rows 1 through 3 read the world and outrank every RUN_DIR row below them: a pull request somebody closed while the session was away ends the run no matter how much unfinished state is on disk, and an agent still `working` is waited on rather than duplicated by a second dispatch into the same tree.
 
-Rows 4 and 5 are the two shapes of "nothing to resume", and they differ in what they leave behind. Row 5 has a third reading: a RUN_DIR whose `plan.md` carries a `## Waves` table is a run that passed its gate and stopped before Step 1 made the branch, and that resumes at the confirmation rather than being archived, because the table is the gate's own artifact and nothing else could produce it. No branch and no RUN_DIR is a fresh issue. A RUN_DIR with no branch anywhere is the wreckage of a run whose branch was deleted — it moves to `closed/` first, because leaving it in place makes the next invocation resume into a tree that no longer has the commits its reports describe.
+Rows 4 and 5 are the two shapes of "nothing to resume", and they differ in what they leave behind. Row 5 has a third reading: a RUN_DIR whose `plan.md` carries a `## Waves` table is a run that passed its gate and stopped before Step 1 made the branch, and that resumes at the confirmation rather than being archived, because the table is the gate's own artifact and nothing else could produce it. None of items 4, 6, or 7 write anything durable, so resuming here re-runs all three before the confirmation is re-asked — item 6's cross-run check most of all, since the crash that stranded this run is not the only thing that could have started in the meantime. No branch and no RUN_DIR is a fresh issue. A RUN_DIR with no branch anywhere is the wreckage of a run whose branch was deleted — it moves to `closed/` first, because leaving it in place makes the next invocation resume into a tree that no longer has the commits its reports describe.
 
 Row 7 reverts before it re-dispatches. A wave that wrote files and returned no report left work nobody gated, and handing that to a second worker gives it the first one's leftovers to debug on the plan's budget.
 
