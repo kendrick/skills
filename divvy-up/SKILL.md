@@ -88,13 +88,13 @@ When PLAN is still being shaped—plan mode, or the user has not approved it—s
 
 Put every question Step 1 recorded to the user before asking anything else, and settle each one. An ambiguous task that reaches a dispatch spends a rung and comes back `stopped`, by which time its peers have already written the tree it was guessing about.
 
-Ask once, in one question: execute wave 0, and commit after each passing wave. Drop the commit half when `--commit` already answered it.
+Ask once, in one question: execute wave 0, and commit after each passing wave. Drop the commit half when `--commit` already answered it. A wrapping skill that has already put the wave-0 and commit question to the user in its own confirmation answers it here on the user's behalf, and says so in its own shape line.
 
 **Done when:** every recorded question is answered, and the user has approved executing wave 0 with COMMIT settled—or the run stopped at the guild handoff or the unapproved plan.
 
 ## Step 5 — Dispatch a wave
 
-Read `references/worker-prompt.md` and instantiate it once per task in the wave. Dispatch every one of them in a SINGLE message so they run concurrently—one dispatch per message is exactly the serialization the wave exists to remove, and it looks identical in the transcript.
+Read `references/worker-prompt.md` and instantiate it once per task in the wave. Dispatch every one of them in a SINGLE message so they run concurrently—one dispatch per message is exactly the serialization the wave exists to remove, and it looks identical in the transcript. `{{CALLER_NOTES}}` is the seam through which a wrapping skill's own preamble reaches every dispatch; empty on a direct run.
 
 Every git write belongs to you, not to a worker. Workers write files; you stage, commit, and branch. A worker that commits stages its peers' half-written changes along with its own and moves HEAD out from under Step 6's revert, so a failed task survives its own rollback. Say so in the dispatch: a repo's own agent docs are usually written for an agent working alone, and this one is not.
 

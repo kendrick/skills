@@ -1,0 +1,15 @@
+{
+  "author": "kendrick",
+  "reactions": [],
+  "reviews": [],
+  "threads": [],
+  "comments": [
+    {
+      "author": "someone-else",
+      "created_at": "2026-09-17T16:45:00Z",
+      "body": "The queue table renders with a broken pipe on the last row.",
+      "id": 3300000001,
+      "url": "https://github.com/kendrick/skills/pull/1#issuecomment-3300000001"
+    }
+  ]
+}

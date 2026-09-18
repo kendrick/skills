@@ -1,0 +1,16 @@
+{
+  "author": "kendrick",
+  "reactions": [],
+  "reviews": [
+    {
+      "state": "CHANGES_REQUESTED",
+      "author": "someone-else",
+      "submitted_at": "2026-09-17T16:30:00Z",
+      "id": 5100000001,
+      "body": "**P1** check-plan.py exits 0 on a plan whose only task has no Files line when a Waves table is absent.",
+      "url": "https://github.com/kendrick/skills/pull/1#pullrequestreview-5100000001"
+    }
+  ],
+  "threads": [],
+  "comments": []
+}

@@ -21,13 +21,13 @@ Four skills predate the bar. `databricks-api`, `eli5`, and `technical-writing` c
 
 ## Invocation
 
-`disable-model-invocation: true` makes a skill user-invoked, which strips its description from the agent's reach and costs zero context. Choose by the asymmetry: when a misfire is expensive and a miss costs the user one word, take user-invoked. `adversarial-review`, `handoff`, `eli5`, `divvy-up`, and `jira-refine` are user-invoked for that reason, and each says so in its own body. Everything else carries a trigger-bearing description.
+`disable-model-invocation: true` makes a skill user-invoked, which strips its description from the agent's reach and costs zero context. Choose by the asymmetry: when a misfire is expensive and a miss costs the user one word, take user-invoked. `adversarial-review`, `handoff`, `eli5`, `divvy-up`, `jira-refine`, and `work-issue` are user-invoked for that reason, and each says so in its own body. Everything else carries a trigger-bearing description.
 
 A description that summarizes the workflow becomes a shortcut the model takes instead of reading the body. Write triggers, and let the steps live in the file.
 
 ## Vendoring
 
-Shared code is copied byte-identically with a provenance comment naming the source, the date, and the rule that upstream is authoritative: fix the bug there, then re-copy. `scaffold_digest.py` lives in three skills this way, and `paths_overlap` runs in both `adversarial-review` and `divvy-up`.
+Shared code is copied byte-identically with a provenance comment naming the source, the date, and the rule that upstream is authoritative: fix the bug there, then re-copy. `scaffold_digest.py` lives in three skills this way, and `paths_overlap` runs in `adversarial-review`, `divvy-up`, and `work-issue`.
 
 Copy the docstrings with the code. They record the incidents that set each rule, and a reader who trims them re-introduces the bug they describe.
 
@@ -37,7 +37,7 @@ Standard library only, Python 3, so a skill stays copy-in portable.
 
 A script exists where a job wants a diff tool rather than a fresh act of judgment every run. Where judgment is the job, leave it in the prose.
 
-A script that gates a run, rather than producing an artifact, follows the validator convention `check-territories.py` set and `check-waves.py` follows: exit 0 pass, 1 semantic failure with one line per problem on stderr, 3 usage or unreadable input. The Johnny.Decimal scripts predate it and use their own codes.
+A script that gates a run, rather than producing an artifact, follows the validator convention `check-territories.py` set and `check-waves.py`, `check-plan.py`, and `check-inflight.py` follow: exit 0 pass, 1 semantic failure with one line per problem on stderr, 3 usage or unreadable input. The Johnny.Decimal scripts predate it and use their own codes.
 
 ## Smoke tests
 

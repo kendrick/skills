@@ -76,7 +76,11 @@ require_text adversarial-review/SKILL.md "git rev-parse --verify"
 require_text adversarial-review/SKILL.md "When it is absent, ask."
 require_text adversarial-review/SKILL.md "git merge-base"
 require_text adversarial-review/SKILL.md "commit or stash first"
-require_text adversarial-review/SKILL.md ".git/info/exclude"
+require_text adversarial-review/SKILL.md "git rev-parse --git-path info/exclude"
+
+# `.git` is a file, not a directory, inside a linked worktree, so a hardcoded
+# `.git/info/exclude` path silently doesn't exist there and the append fails.
+refute_text adversarial-review/SKILL.md ".git/info/exclude"
 
 # Territories: literal paths, disjointness enforced by script, hard stop on
 # overlap. The overlap check is what the verification gate stands on.

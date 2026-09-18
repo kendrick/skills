@@ -12,7 +12,7 @@ If a worker returns something that does not parse as the JSON contract below, re
 
 ## Template
 
-Substitute the seven placeholders. Everything else goes across verbatim.
+Substitute the eight placeholders. Everything else goes across verbatim.
 
 ```
 You are one worker in a wave of parallel subagents building one implementation
@@ -64,6 +64,7 @@ A constraint names the path that satisfies the definition of done without
 doing the work. Taking it fails your task even when verification passes,
 and the orchestrator reads your report against it.
 
+{{CALLER_NOTES}}
 {{PRIOR}}
 
 Before you report, run the repo's verification command and record what it
@@ -105,6 +106,7 @@ failed in `question`). Leave `question` empty except for `stopped` or
 - `{{DONE_WHEN}}` — the wave table's Done when cell for this task, verbatim. It is the only acceptance bar the worker gets, so copying it exactly matters more than making it read smoothly.
 - `{{CONSTRAINTS}}` — the task's Constraints cell from the wave table, verbatim. An empty cell substitutes the literal `none recorded`, so the template goes across unchanged rather than growing a conditional paragraph the dispatcher has to decide about.
 - `{{VERIFY_CMD}}` — the repo's verification command (test suite, linter, build—whatever this repo runs). The worker runs it before reporting, so a task that reports `done` with a broken build is a worker that skipped this line, not a gap in the contract.
+- `{{CALLER_NOTES}}` — empty on a direct run. A wrapping skill that dispatches through divvy-up supplies its own preamble here, verbatim, and it goes across ahead of everything else the caller could not otherwise say.
 - `{{PRIOR}}` — empty on a first dispatch. On a re-dispatch after a failure, it carries the previous attempt's report, what the gate found wrong with it, and, if the failure was a constraint violation, which constraint was broken—a worker who does not know which shortcut was refused will reach for it again.
 
 ## Why the output is only JSON

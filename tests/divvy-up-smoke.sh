@@ -106,7 +106,7 @@ require_text divvy-up/SKILL.md "fable"
 # plan.
 require_text divvy-up/SKILL.md "/agent-guild:job"
 
-# Reference contracts: the seven placeholders every dispatch substitutes, and
+# Reference contracts: the eight placeholders every dispatch substitutes, and
 # the JSON-only rule that keeps the gate from having to arbitrate between a
 # report and a summary paragraph sitting next to it.
 require_text divvy-up/references/worker-prompt.md "{{TASK}}"
@@ -117,6 +117,16 @@ require_text divvy-up/references/worker-prompt.md "{{CONSTRAINTS}}"
 require_text divvy-up/references/worker-prompt.md "{{VERIFY_CMD}}"
 require_text divvy-up/references/worker-prompt.md "{{PRIOR}}"
 require_text divvy-up/references/worker-prompt.md "Your final message is exactly one fenced json block and nothing else"
+
+# {{CALLER_NOTES}}: the seam a wrapping skill uses to hand every worker a
+# preamble divvy-up's own template has no slot for. Blank by default, so a
+# direct run stays byte-identical to before the seam existed.
+require_text divvy-up/references/worker-prompt.md "{{CALLER_NOTES}}"
+
+# Step 4's folded question: a wrapping skill that already asked the user
+# whether to run wave 0 answers it here on the user's behalf instead of
+# asking a second time in the same turn.
+require_text divvy-up/SKILL.md "answers it here on the user's behalf"
 
 # The constraint mechanism and the coupling question are each one deleted
 # paragraph from being gone, and this smoke test is the only thing that would

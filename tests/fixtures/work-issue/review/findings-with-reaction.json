@@ -1,0 +1,41 @@
+{
+  "author": "kendrick",
+  "reactions": [
+    {
+      "content": "+1",
+      "user": "chatgpt-codex-connector[bot]",
+      "created_at": "2026-09-17T16:12:00Z"
+    }
+  ],
+  "reviews": [],
+  "threads": [
+    {
+      "id": "PRRT_kwDOA1",
+      "is_resolved": false,
+      "root_created_at": "2026-09-17T16:40:00Z",
+      "root_author": "chatgpt-codex-connector",
+      "root_body": "**P1** `owns_entry_problem` accepts a backticked entry, so a task that spells its path in a code span compares as disjoint from its bare twin.",
+      "root_comment_id": 2199481001,
+      "root_url": "https://github.com/kendrick/skills/pull/99#discussion_r2199481001"
+    },
+    {
+      "id": "PRRT_kwDOA2",
+      "is_resolved": false,
+      "root_created_at": "2026-09-17T16:41:00Z",
+      "root_author": "chatgpt-codex-connector",
+      "root_body": "**P1** The README map table and the install flag disagree about the skill name.",
+      "root_comment_id": 2199481002,
+      "root_url": "https://github.com/kendrick/skills/pull/99#discussion_r2199481002"
+    },
+    {
+      "id": "PRRT_kwDOA3",
+      "is_resolved": true,
+      "root_created_at": "2026-09-17T16:42:00Z",
+      "root_author": "chatgpt-codex-connector",
+      "root_body": "**P2** Heading case drifts from the sibling skills.",
+      "root_comment_id": 2199481003,
+      "root_url": "https://github.com/kendrick/skills/pull/99#discussion_r2199481003"
+    }
+  ],
+  "comments": []
+}
