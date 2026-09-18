@@ -756,6 +756,11 @@ def phase_of(probe):
     if not branch_anywhere and not flag(probe, "run_dir"):
         return "0", "row 4: no branch anywhere and no run dir, so this issue is fresh"
     if flag(probe, "run_dir") and not branch_anywhere:
+        # Step 0 writes plan.md's Waves table before Step 1 makes the branch,
+        # so a stop between the two is a live run, not a dead one: the table
+        # is the gate's own artifact, and archiving it re-ran the gate.
+        if flag(probe, "has_waves"):
+            return "0", "row 5: the gate ran but Step 1 never created the branch; resume at the confirmation, then Step 1"
         return "0", "row 5: a run dir with no branch anywhere; move it to closed/ first"
     if branch_anywhere and not flag(probe, "has_waves"):
         return "0", "row 6: the branch exists but plan.md has no ## Waves table; resume at the plan gate"

@@ -98,6 +98,8 @@ require_file tests/fixtures/work-issue/probes/row-17-deferred-owed.json
 # A worker's plan_concerns row queued at Step 4, before any triage round: the
 # owed comment alone has to reach Step 8.
 require_file tests/fixtures/work-issue/probes/row-17-worker-queue.json
+# A gated run that stopped before Step 1 made its branch: live, not dead.
+require_file tests/fixtures/work-issue/probes/row-05-gated.json
 # A reviewer's reply inside an old thread after a repair push, and the same
 # thread where the only reply is the author's own.
 require_file tests/fixtures/work-issue/review/thread-followup.json
@@ -582,7 +584,7 @@ set -e
 # The grep stops at `reason:` so a reworded reason does not fail the suite.
 probes_dir=tests/fixtures/work-issue/probes
 declare -a probe_cases=(
-  "row-01:done" "row-02:wait" "row-03:stop" "row-04:0" "row-05:0" "row-06:0"
+  "row-01:done" "row-02:wait" "row-03:stop" "row-04:0" "row-05:0" "row-05-gated:0" "row-06:0"
   "row-07:2" "row-07-isolation-incomplete:1" "row-08:3" "row-09:3" "row-10:4" "row-11:4" "row-11-trigger-unrecorded:4" "row-12:5" "row-13:5"
   "row-14:6" "row-15:6" "row-16:7" "row-17:8" "row-17-queued:8" "row-17-postpush:8"
   "row-10-repair-unverified:4" "row-10-repair-needed:4" "row-10-failed-twice:stop" "row-13-prepr-repair-clean:5" "row-16-earlier-queued:8" "row-17-review-repair-unpushed:8" "row-17-deferred-owed:8" "row-17-worker-queue:8" "row-18:done"
@@ -617,6 +619,16 @@ set -e
 }
 grep -Fq "phase: stop reason: unknown probe fields: branch_remote" <<<"$null_out" || {
   echo "a null branch_remote should stop the run naming the field, got: $null_out" >&2
+  exit 1
+}
+
+# Rows 5's two readings share a phase too: archive, or resume at the confirmation.
+grep -Fq "resume at the confirmation" <<<"$(python3 "$run_state" phase --probe "$probes_dir/row-05-gated.json")" || {
+  echo "row-05-gated.json should resume at the confirmation, not archive the run" >&2
+  exit 1
+}
+grep -Fq "move it to closed/" <<<"$(python3 "$run_state" phase --probe "$probes_dir/row-05.json")" || {
+  echo "row-05.json should still archive a run dir with no Waves table" >&2
   exit 1
 }
 
@@ -672,6 +684,16 @@ require_text work-issue/references/worker-prompt.md "This shape replaces the six
 # and never sees files_changed, so a claim without a path cannot be checked.
 require_text work-issue/references/worker-prompt.md '"path": "the repo-relative file the claim rests on"'
 require_text work-issue/references/redteam.md "\`claim\`, \`path\`, \`command\`, \`output\`"
+# Step 4's repairs and Step 7's carry different names, or a build repair
+# reads as the repair for triage round 1 and Step 7 is skipped.
+require_text work-issue/SKILL.md "lands at \`RUN_DIR/reports/redteam-repair-<k>.json\`"
+require_text work-issue/references/resume.md "reports/redteam-repair-*.json <RUN_DIR>/reports/repair-*.json"
+# Step 8's repair and push items run only where there is a repair and where
+# there is something to push; a queue-only entry goes straight to its replies.
+require_text work-issue/SKILL.md "Where the newest triage round has a repair report, red-team it"
+require_text work-issue/SKILL.md "Never a no-op push"
+require_text work-issue/SKILL.md "With it: Step 0 at the confirmation, then Step 1 |"
+require_text work-issue/references/resume.md "With it: Step 0 at the confirmation, then Step 1 |"
 # Step 0 probes before it writes, or every fresh issue reads as row 5's dead run.
 require_text work-issue/SKILL.md "before anything is written under RUN_DIR"
 # Row 13 stays out of the way of a review repair, in both copies of the table.
