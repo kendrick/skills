@@ -10,7 +10,7 @@ TODO: decide the exact wording of the stderr line.
 
 Shape of the queue row: ???
 
-## Open Questions
+  ## Open Questions
 
 - [ ] Should check-inflight.py also warn on a task with zero owned paths?
 

@@ -60,9 +60,9 @@ OPEN_MARKERS = (
 )
 
 TASK_HEADING_RES = (
-    re.compile(r"^##\s+Task\b"),
-    re.compile(r"^###\s+Task\b"),
-    re.compile(r"^###\s+T\d+\b"),
+    re.compile(r"^ {0,3}##\s+Task\b"),
+    re.compile(r"^ {0,3}###\s+Task\b"),
+    re.compile(r"^ {0,3}###\s+T\d+\b"),
 )
 # Any list marker, at any indent, the same widening D4 and D6 carry: a task
 # written as an indented checkbox was a task D2 never checked for files.
@@ -70,9 +70,12 @@ CHECKBOX_TASK_RE = re.compile(r"^\s*[-*+]\s*\[[ xX]\]\s*Task\b")
 # Any list marker, at any indent. A box nested under a bullet or written with
 # `*` is an ordinary Markdown checkbox, and column-1 `-` alone let it past D4.
 CHECKBOX_RE = re.compile(r"^\s*[-*+]\s*\[\s\]")
-HEADING_RE = re.compile(r"^(#{1,6})\s+(.*)$")
+# Up to three leading spaces, which CommonMark allows on a heading (four is a
+# code block). Column-1-only patterns lost D2, D4, and D6 their section
+# ancestry on an indented heading.
+HEADING_RE = re.compile(r"^ {0,3}(#{1,6})\s+(.*)$")
 FILES_LINE_RE = re.compile(r"Files:|\*\*Files:\*\*|owns:|Files owned")
-WAVES_HEADING_RE = re.compile(r"^##\s+Waves\s*$")
+WAVES_HEADING_RE = re.compile(r"^ {0,3}##\s+Waves\s*$")
 
 
 def read_file(path, label):

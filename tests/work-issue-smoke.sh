@@ -347,6 +347,8 @@ grep -Fq "D4 unchecked box under heading 'Open Questions'" <<<"$thin_out" || {
 # and it is indented. Tracking only the nearest heading let it through once,
 # and a column-1 checkbox pattern let it through again, so D4 has to fire
 # twice here, both times naming the ancestor that makes the box a decision.
+# The heading itself is indented two spaces in the fixture, which CommonMark
+# allows and a column-1 heading pattern read as prose, losing both boxes.
 [[ "$(grep -c "D4 unchecked box under heading 'Open Questions'" <<<"$thin_out")" == "2" ]] || {
   echo "plan-thin.md should fail D4 on both boxes, the nested one included, got: $thin_out" >&2
   exit 1
@@ -740,7 +742,10 @@ require_text work-issue/references/resume.md "| 13 | red-team clean; trigger rec
 require_text work-issue/SKILL.md "no \`base_sha\` or no \`baseline.txt\`, or \`reports/\` lacks a report"
 require_text work-issue/references/resume.md "no \`base_sha\` or no \`baseline.txt\`, or \`reports/\` lacks a report"
 # The wave count reads the Waves section and nothing after it.
-require_text work-issue/references/resume.md "f&&/^[[:space:]]*\\|/{t=1;print;next} f&&t{exit}"
+require_text work-issue/references/resume.md "awk '/^[[:space:]]*## Waves[[:space:]]*$/{f=1;next} f&&/^[[:space:]]*\\|/{t=1;print;next} f&&t{exit}"
+# has_waves reads the heading the way the parser does, whitespace stripped.
+require_text work-issue/references/resume.md "grep -qE '^[[:space:]]*## Waves[[:space:]]*$'"
+require_text work-issue/SKILL.md "no review yet on <PR URL>"
 # A false left check is a red-team failure, and the probe has to read it.
 require_text work-issue/references/resume.md "\"holds\": *false"
 # A reviewer's reply inside an old thread is the finding; its body has to

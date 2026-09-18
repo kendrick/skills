@@ -167,7 +167,7 @@ Three states, each scored relative to SINCE:
 
 `[bot]` is stripped before logins are compared: REST reports `chatgpt-codex-connector[bot]` where GraphQL reports `chatgpt-codex-connector`, and an unstripped comparison reads one reviewer as two different logins depending on which API answered.
 
-`pending` at ten minutes writes `RUN_DIR/triage/waiting` and stops: "no review yet; `work-issue N` resumes here." `cleared` goes to Step 8's final report. `findings` reads [references/triage.md](references/triage.md) and writes one row per finding into `RUN_DIR/triage/round-<k>.md`, each scored by the in-scope test: **in scope** when the finding points at a line inside `git diff BASE_SHA..HEAD`, names a CRITERIA line, or names a plan task; **out of scope** otherwise. Ambiguous is in scope where the reviewer marked it P0 and out otherwise, with the ambiguity recorded on the row.
+`pending` at ten minutes writes `RUN_DIR/triage/waiting` and stops: "no review yet on <PR URL>; `work-issue N` resumes here." The URL is there because this stop is the report a run gets when nothing has happened, and a run that entered Step 8 only to post a worker's queue and stopped before its final report reads `pending` here next. `cleared` goes to Step 8's final report. `findings` reads [references/triage.md](references/triage.md) and writes one row per finding into `RUN_DIR/triage/round-<k>.md`, each scored by the in-scope test: **in scope** when the finding points at a line inside `git diff BASE_SHA..HEAD`, names a CRITERIA line, or names a plan task; **out of scope** otherwise. Ambiguous is in scope where the reviewer marked it P0 and out otherwise, with the ambiguity recorded on the row.
 
 Out-of-scope rows append to `RUN_DIR/queue.md`:
 
