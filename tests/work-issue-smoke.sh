@@ -708,6 +708,13 @@ grep -Fq "reply 2026-09-17T16:20:00Z https://github.com/kendrick/skills/pull/1#d
 require_text work-issue/SKILL.md "or \`findings\` with the round triaged, answered, and its queue published | done: final report, then wait on the reviewer |"
 require_text work-issue/references/resume.md "or \`findings\` with the round triaged, answered, and its queue published | done: final report, then wait on the reviewer |"
 require_text work-issue/scripts/run-state.py "comments(last: 20)"
+# Row 18's second reading promises a "wait on the reviewer" ending in the
+# Resume tables; Step 8 item 5 (the instruction an agent actually follows)
+# has to print it, not just the unconditional cleared-only line, or the
+# documents disagree with each other inside the same skill.
+require_text work-issue/SKILL.md "\"a human merges\" where \`review_state\` is \`cleared\`; \"waiting on the reviewer\" where every finding is answered and the queue published but the round has not cleared (row 18's second reading)"
+require_text work-issue/SKILL.md "once the review is \`cleared\` — or, once every finding is answered and the queue published but nothing has cleared the round yet, \"waiting on the reviewer\" instead"
+require_text work-issue/README.md "The final report ends \"a human merges\" once the review clears — or \"waiting on the reviewer\" once every finding is answered and the queue published but nothing has cleared the round yet."
 require_text work-issue/SKILL.md "With it: Step 0 redoes items 4, 6, and 7 (isolation, cross-run check, red-team mode) before the confirmation, then Step 1 |"
 require_text work-issue/references/resume.md "With it: Step 0 redoes items 4, 6, and 7 (isolation, cross-run check, red-team mode) before the confirmation, then Step 1 |"
 # None of items 4, 6, or 7 write anything durable, so a resume that named only

@@ -224,6 +224,10 @@ query($owner: String!, $name: String!, $pr: Int!, $pageSize: Int!, $after: Strin
 }
 """
 
+# Twenty is a bound, not a measurement: a review thread that runs past twenty
+# comments after the reviewer's follow-up is not a shape any run has seen, and
+# an unbounded tail would page per thread on every poll. Raise it here if one
+# ever does.
 THREADS_QUERY = """
 query($owner: String!, $name: String!, $pr: Int!, $pageSize: Int!, $after: String) {
   repository(owner: $owner, name: $name) {
