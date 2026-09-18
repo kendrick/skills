@@ -16,7 +16,7 @@ Then there's the part nobody plans for. In the session this design came out of, 
 
 Preflight resolves your fixed point and pins the merge-base SHA, so a branch moving underneath a multi-day review can't silently change what's being reviewed. A bad ref or an empty diff dies here, in front of you, rather than inside six subagents.
 
-Then it greps the diff against a trigger table—money, authz, state transitions, schema, budgets—and partitions the changed files into territories. Each file has exactly one owner, but a territory carries every suspicion class its files earned, so a file that's both an authz change and a money change gets hunted both ways. A script proves the territories don't overlap before anything runs. Overlap is a hard error, not a warning.
+Then it greps the diff against a trigger table—money, authz, state transitions, schema, budgets, representation boundaries—and partitions the changed files into territories. Each file has exactly one owner, but a territory carries every suspicion class its files earned, so a file that's both an authz change and a money change gets hunted both ways. A script proves the territories don't overlap before anything runs. Overlap is a hard error, not a warning.
 
 One finder per territory, in parallel, each told what to be suspicious of, what's already settled and off-limits, and to trust code over comments. Their findings go into an append-only ledger as claims, not conclusions.
 
@@ -76,13 +76,14 @@ adversarial-review/
 - **It asks for a fixed point instead of guessing one.** Guessing produces a thorough review of the wrong code, which looks exactly like a thorough review of the right code.
 - **A dirty working tree stops it.** Verification evidence only means something against the code the diff describes. You can override, and the override gets recorded in the report.
 - **Territories are literal paths, never globs, and never decorated.** The overlap predicate is vendored from agent-guild, where a pattern entry is rejected outright because it silently owns nothing—which once put two agents on the same file. A backtick or a markdown link around a path fails the same way: it matches nothing, and it reads as a different string from the bare path another territory claims, so two territories that should collide look disjoint instead.
+- **A reproduction has to reach the value some other way than the code does.** Deriving it the way the code derives it proves the code equals itself, and it comes out the same whether or not the bug is there. This failure survives ordinary independence, because the agent checking it never wrote the code and still learned nothing. Where the code's own route is the only one available, the finding lands unverifiable instead of reproduced.
 - **Findings never get merged across territories.** Two territories reporting the same bug is information about the bug. There's also no single overall verdict, deliberately: one axis passing shouldn't mask another failing.
 - **Three rounds, then it escalates to you.** If three rounds of fixes keep introducing new blockers, something structural is wrong and a fourth automated round is less useful than you reading the escalation.
 - **`--report-only` still costs a full run.** It skips writing tests and filing issues, not the fan-out. Use `--fast` to spend less.
 
 ## Maintainers
 
-The decision ledger and eval suite live in [`_maintenance/adversarial-review/`](../_maintenance/adversarial-review/). Every contested choice has a row in [RATIONALE.md](../_maintenance/adversarial-review/RATIONALE.md), including the five mechanisms from the prior art that were deliberately cut. Smoke test: `bash tests/adversarial-review-smoke.sh` from the repo root. The live planted-bug procedure is in [EVALS.md](../_maintenance/adversarial-review/EVALS.md).
+The decision ledger and eval suite live in [`_maintenance/adversarial-review/`](../_maintenance/adversarial-review/). Every contested choice has a row in [RATIONALE.md](../_maintenance/adversarial-review/RATIONALE.md), including every mechanism this design deliberately cut. Smoke test: `bash tests/adversarial-review-smoke.sh` from the repo root. The live planted-bug procedure is in [EVALS.md](../_maintenance/adversarial-review/EVALS.md).
 
 ## License
 

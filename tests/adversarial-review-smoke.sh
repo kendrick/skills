@@ -117,6 +117,27 @@ require_text adversarial-review/SKILL.md "escalation.md"
 require_text adversarial-review/SKILL.md "no single cross-territory verdict"
 require_text adversarial-review/SKILL.md "calibration:"
 
+# The representation row and the renumber it forced. The depth condition is the
+# renumber's one live consequence, and it names `general` rather than a row
+# number because the number moves: left at 6 it would have fired Depth 0 on a
+# diff whose only substantive hit is the new row, and any literal breaks again on
+# the next insertion.
+require_text adversarial-review/references/trigger-table.md "| 6 | representation |"
+require_text adversarial-review/references/trigger-table.md "| 7 | general |"
+require_text adversarial-review/references/trigger-table.md "An assertion that recomputes the implementation rather than observing the result."
+require_text adversarial-review/references/trigger-table.md "A unit suffix matches against the number in front of it"
+require_text adversarial-review/SKILL.md 'no row above `general` matched'
+refute_text adversarial-review/SKILL.md "no row above 6 matched"
+refute_text adversarial-review/SKILL.md "no row above 7 matched"
+
+# Method independence. Authorship independence alone cleared a real defect four
+# rounds running, because the reproduction used the implementation's own method.
+require_text adversarial-review/SKILL.md "recomputes the implementation proves the code equals itself"
+require_text adversarial-review/SKILL.md "lands UNVERIFIABLE naming the method"
+require_text adversarial-review/references/verifier-prompt.md "measure where the value is consumed"
+require_text adversarial-review/references/verifier-prompt.md "no route to the quantity except the one the code itself"
+require_text adversarial-review/references/finder-prompt.md "agrees with it by construction"
+
 # Reference contracts.
 require_text adversarial-review/references/finder-prompt.md "Verify against code."
 require_text adversarial-review/references/finder-prompt.md "quoted_evidence"
@@ -154,6 +175,10 @@ refute_text adversarial-review/SKILL.md "glob"
 # A finder that writes a verdict paragraph reintroduces the parsing gap the
 # JSON-only contract closes.
 refute_text adversarial-review/references/finder-prompt.md "verdict"
+
+# The rule gates which verdict a verifier may record. A field holding the
+# verifier's own account of its independence has nothing checking that account.
+refute_text adversarial-review/assets/event.schema.json "independent_route"
 
 require_text _maintenance/adversarial-review/RATIONALE.md "## Decision Ledger"
 require_text _maintenance/adversarial-review/RATIONALE.md "## Deliberately Not Built"

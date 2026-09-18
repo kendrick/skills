@@ -7,7 +7,7 @@ disable-model-invocation: true
 
 # adversarial-review
 
-A review that ends at a report has produced opinions. Some of them are wrong, and nothing in the process can tell you which—so the reader does the verification work the review skipped, or skips it too. Findings here are treated as hypotheses until something that did not author them reproduces them, and **only a reproduced finding can block a merge**.
+A review that ends at a report has produced opinions. Some of them are wrong, and nothing in the process can tell you which—so the reader does the verification work the review skipped, or skips it too. Findings here are treated as hypotheses until something that did not author them reproduces them by a route the code does not take, and **only a reproduced finding can block a merge**.
 
 Two structural choices follow from that. Territories are disjoint, so no two finders review the same file: with verification carrying the confidence, agreement between reviewers is not needed, and reviewers who might agree mostly produce correlated noise. And the loop keeps going after fixes land, because in the session this design came from, two of three merge-blockers were defects introduced while fixing the previous round's finding. Code written under review pressure is the highest-suspicion code in the run.
 
@@ -45,7 +45,7 @@ Assign **depth**, which governs what the run costs:
 
 | Depth | Fires when | Shape |
 |---|---|---|
-| 0 | `--fast`, or no row above 6 matched anywhere in the diff | ≤2 territories, sonnet finders, one batched verifier |
+| 0 | `--fast`, or no row above `general` matched anywhere in the diff | ≤2 territories, sonnet finders, one batched verifier |
 | 1 | the default | ≤4 territories, tiers per the trigger table, opus verifier |
 | 2 | `--deep`, or three or more distinct high-stakes rows matched, or the diff exceeds ~40 files | ≤6 territories, opus on money/authz/state, one verifier per finding |
 
@@ -90,9 +90,11 @@ Read [references/verifier-prompt.md](references/verifier-prompt.md). Dispatch fr
 
 Record each returned event with `ledger.py append-event`, with `--actor verifier-r<round>-<territory>`. The script enforces the evidence rules, so a REPRODUCED event without its command and actual output is refused at the append.
 
+Independence has two halves, and the second one fails quietly. The verifier never authored the claim: that is the first. The second is that its reproduction must derive the quantity by a route the code does not take. A check that recomputes the implementation proves the code equals itself, and it reads the same whether or not the defect is there. Measure at the consumer instead—render it and read the pixel, parse it with the older schema, round-trip it through the archive, hand the value to the thing downstream and watch what that does. Where no such route exists the finding lands UNVERIFIABLE naming the method, never REPRODUCED.
+
 Only REPRODUCED can block. A finding nobody could reproduce is not a small finding—it is an unproven one, and it routes accordingly in Step 6.
 
-**Done when:** `ledger.py state` reports zero UNVERIFIED. Every finding is REPRODUCED with a command and its real output, NOT_REPRODUCED with counter-evidence, or UNVERIFIABLE with a reason.
+**Done when:** `ledger.py state` reports zero UNVERIFIED. Every finding is REPRODUCED with a command that reached the quantity some other way than the code does and its real output, NOT_REPRODUCED with counter-evidence, or UNVERIFIABLE with a reason.
 
 ## Step 6 — Disposition
 
