@@ -235,7 +235,7 @@ query($owner: String!, $name: String!, $pr: Int!, $pageSize: Int!, $after: Strin
           root: comments(first: 1) {
             nodes { author { login } createdAt body databaseId url }
           }
-          latest: comments(last: 1) {
+          latest: comments(last: 20) {
             nodes { author { login } createdAt body databaseId url }
           }
         }
@@ -337,11 +337,23 @@ def gather(pr):
     for node in thread_nodes:
         roots = ((node.get("root") or {}).get("nodes")) or []
         root = roots[0] if roots else {}
-        # The newest comment rides along with the root. A reviewer who answers
-        # inside an old thread after a repair push writes no new root, and a
-        # bundle carrying only roots scored that thread against the old date.
-        latests = ((node.get("latest") or {}).get("nodes")) or []
-        latest = latests[0] if latests else {}
+        # The thread's recent comments ride along with the root. A reviewer who
+        # answers inside an old thread after a repair push writes no new root,
+        # and a bundle carrying only roots scored that thread against the old
+        # date. The whole tail travels, not the last comment alone: when the
+        # author answers after the reviewer, the last comment is the author's
+        # and the reviewer's follow-up sat behind it unseen.
+        tail = [
+            {
+                "author": _login(c.get("author")),
+                "created_at": c.get("createdAt"),
+                "body": c.get("body"),
+                "id": c.get("databaseId"),
+                "url": c.get("url"),
+            }
+            for c in (((node.get("latest") or {}).get("nodes")) or [])
+        ]
+        latest = tail[-1] if tail else {}
         threads.append(
             {
                 "id": node.get("id"),
@@ -351,11 +363,12 @@ def gather(pr):
                 "root_body": root.get("body"),
                 "root_comment_id": root.get("databaseId"),
                 "root_url": root.get("url"),
-                "last_comment_at": latest.get("createdAt"),
-                "last_comment_author": _login(latest.get("author")),
+                "last_comment_at": latest.get("created_at"),
+                "last_comment_author": latest.get("author"),
                 "last_comment_body": latest.get("body"),
-                "last_comment_id": latest.get("databaseId"),
+                "last_comment_id": latest.get("id"),
                 "last_comment_url": latest.get("url"),
+                "comments": tail,
             }
         )
 
@@ -553,13 +566,25 @@ def classify(bundle, since, author):
             continue
         # An unresolved thread counts on its root, or on a later comment from
         # anyone but the author: the reviewer's "still wrong" after a repair
-        # push lands as a reply, not as a new thread.
-        last = parse_ts(
-            thread.get("last_comment_at"), f"threads[{index}].last_comment_at", problems
-        )
+        # push lands as a reply, not as a new thread. The comment that counts
+        # is the newest one not by the author, read from the thread's tail
+        # where the bundle carries one; a bundle from before the tail existed
+        # carries only the last comment, and that is what it is read from.
+        tail = [c for c in (thread.get("comments") or []) if isinstance(c, dict)]
+        reviewer_tail = [
+            c for c in tail if normalize_login(c.get("author")) != author_key
+        ]
+        if tail:
+            reply = reviewer_tail[-1] if reviewer_tail else {}
+        else:
+            reply = {
+                "author": thread.get("last_comment_author"),
+                "created_at": thread.get("last_comment_at"),
+                "url": thread.get("last_comment_url"),
+            }
+        last = parse_ts(reply.get("created_at"), f"threads[{index}].reply", problems)
         reviewer_replied = (
-            newer(last)
-            and normalize_login(thread.get("last_comment_author")) != author_key
+            newer(last) and normalize_login(reply.get("author")) != author_key
         )
         if not newer(created) and not reviewer_replied:
             continue
@@ -570,7 +595,7 @@ def classify(bundle, since, author):
             # reply-to id stays the root's, which is where a reply is posted.
             stamp = (
                 f"created {show_ts(created)}, reply {show_ts(last)} "
-                f"{show_or_unknown(thread.get('last_comment_url'))}"
+                f"{show_or_unknown(reply.get('url'))}"
             )
         lines.append(
             f"thread {thread['id']} unresolved, {stamp}, "
@@ -864,6 +889,12 @@ def phase_of(probe):
         )
     if pr_state == "OPEN" and review_state == "cleared":
         return "done", "row 18: the PR is open and the review is cleared; print the final report"
+    # `findings` never clears itself: resolving is the reviewer's act, and a
+    # queue-only round pushes nothing, so SINCE never moves past the threads
+    # it answered. Once rows 15 through 17 find nothing left to do, the run
+    # is finished with this round and waits on the reviewer.
+    if pr_state == "OPEN" and review_state == "findings" and flag(probe, "triage_newer_than_since"):
+        return "done", "row 18: every finding is answered and the queue is published; print the final report and wait on the reviewer"
     return (
         "stop",
         "no resume row matches this probe; gather it again per references/resume.md",

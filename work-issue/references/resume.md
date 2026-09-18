@@ -71,7 +71,7 @@ The same eighteen rows the script implements, written out so a reader can fail o
 | 15 | PR open; `findings`; no `triage/round-<k>.md` newer than SINCE | Step 6 triage |
 | 16 | newest triage round has in-scope rows; no `reports/repair-<k>.json` for that round | Step 7 |
 | 17 | PR open; a queue row missing from the `Deferred findings` comment, or a repair report or an all-queued triage round with local ahead of origin or a triage row without a reply URL | Step 8 |
-| 18 | PR open; `cleared` | done: final report |
+| 18 | PR open; `cleared`, or `findings` with the round triaged, answered, and its queue published | done: final report, then wait on the reviewer |
 
 Row order is the mechanism, not a convenience. Rows 1 through 3 read the world and outrank every RUN_DIR row below them: a pull request somebody closed while the session was away ends the run no matter how much unfinished state is on disk, and an agent still `working` is waited on rather than duplicated by a second dispatch into the same tree.
 

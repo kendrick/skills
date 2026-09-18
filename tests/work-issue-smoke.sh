@@ -100,6 +100,12 @@ require_file tests/fixtures/work-issue/probes/row-17-deferred-owed.json
 require_file tests/fixtures/work-issue/probes/row-17-worker-queue.json
 # A gated run that stopped before Step 1 made its branch: live, not dead.
 require_file tests/fixtures/work-issue/probes/row-05-gated.json
+# An all-queued round with everything answered and published: done, waiting
+# on the reviewer, since a queue-only round pushes nothing and SINCE stays.
+require_file tests/fixtures/work-issue/probes/row-18-answered.json
+# A reviewer follow-up with the author's answer after it: the follow-up is
+# still the finding, and the last comment alone would have hidden it.
+require_file tests/fixtures/work-issue/review/thread-followup-then-author.json
 # A reviewer's reply inside an old thread after a repair push, and the same
 # thread where the only reply is the author's own.
 require_file tests/fixtures/work-issue/review/thread-followup.json
@@ -463,6 +469,7 @@ declare -a review_cases=(
   "pr-comment-finding.json:findings"
   "thread-followup.json:findings"
   "thread-author-reply.json:pending"
+  "thread-followup-then-author.json:findings"
 )
 for case in "${review_cases[@]}"; do
   fixture="${case%%:*}"
@@ -587,7 +594,7 @@ declare -a probe_cases=(
   "row-01:done" "row-02:wait" "row-03:stop" "row-04:0" "row-05:0" "row-05-gated:0" "row-06:0"
   "row-07:2" "row-07-isolation-incomplete:1" "row-08:3" "row-09:3" "row-10:4" "row-11:4" "row-11-trigger-unrecorded:4" "row-12:5" "row-13:5"
   "row-14:6" "row-15:6" "row-16:7" "row-17:8" "row-17-queued:8" "row-17-postpush:8"
-  "row-10-repair-unverified:4" "row-10-repair-needed:4" "row-10-failed-twice:stop" "row-13-prepr-repair-clean:5" "row-16-earlier-queued:8" "row-17-review-repair-unpushed:8" "row-17-deferred-owed:8" "row-17-worker-queue:8" "row-18:done"
+  "row-10-repair-unverified:4" "row-10-repair-needed:4" "row-10-failed-twice:stop" "row-13-prepr-repair-clean:5" "row-16-earlier-queued:8" "row-17-review-repair-unpushed:8" "row-17-deferred-owed:8" "row-17-worker-queue:8" "row-18-answered:done" "row-18:done"
 )
 for case in "${probe_cases[@]}"; do
   fixture="${case%%:*}"
@@ -692,6 +699,15 @@ require_text work-issue/references/resume.md "reports/redteam-repair-*.json <RUN
 # there is something to push; a queue-only entry goes straight to its replies.
 require_text work-issue/SKILL.md "Where the newest triage round has a repair report, red-team it"
 require_text work-issue/SKILL.md "Never a no-op push"
+# The follow-up's own URL, not the author's later answer, is what the line
+# names, so triage quotes the reviewer and not the author.
+grep -Fq "reply 2026-09-17T16:20:00Z https://github.com/kendrick/skills/pull/1#discussion_r2199481010" <<<"$(python3 "$run_state" review 1 --since 2026-09-17T16:00:00Z --author kendrick --input "$review_dir/thread-followup-then-author.json")" || {
+  echo "thread-followup-then-author.json should name the reviewer's follow-up, not the author's answer" >&2
+  exit 1
+}
+require_text work-issue/SKILL.md "or \`findings\` with the round triaged, answered, and its queue published | done: final report, then wait on the reviewer |"
+require_text work-issue/references/resume.md "or \`findings\` with the round triaged, answered, and its queue published | done: final report, then wait on the reviewer |"
+require_text work-issue/scripts/run-state.py "comments(last: 20)"
 require_text work-issue/SKILL.md "With it: Step 0 redoes items 4, 6, and 7 (isolation, cross-run check, red-team mode) before the confirmation, then Step 1 |"
 require_text work-issue/references/resume.md "With it: Step 0 redoes items 4, 6, and 7 (isolation, cross-run check, red-team mode) before the confirmation, then Step 1 |"
 # None of items 4, 6, or 7 write anything durable, so a resume that named only
@@ -746,7 +762,7 @@ grep -Fq "reply 2026-09-17T16:20:00Z https://github.com/kendrick/skills/pull/1#d
   echo "the deciding line for thread-followup.json should carry the reply's timestamp and URL, got: $followup_line" >&2
   exit 1
 }
-require_text work-issue/references/triage.md "quote \`last_comment_body\` from the saved file"
+require_text work-issue/references/triage.md "the newest one not by the author, not always the last"
 # Row 17 is post-PR; a pre-PR repair goes to row 10 or row 13, both of which
 # still open the pull request.
 require_text work-issue/SKILL.md "| 17 | PR open; a queue row missing from the \`Deferred findings\` comment, or a repair report"
@@ -815,9 +831,9 @@ require_text _maintenance/work-issue/RATIONALE.md "Reproduced: \`row-10-failed-t
 # EVALS.md's own count of review bundles, so it can't drift from
 # tests/fixtures/work-issue/review/ the way it did when this diff added two
 # fixtures without touching the summary line.
-require_text _maintenance/work-issue/EVALS.md "against ten review bundles"
-[[ "$(find tests/fixtures/work-issue/review -maxdepth 1 -type f | wc -l | tr -d ' ')" == "10" ]] || {
-  echo "tests/fixtures/work-issue/review holds a different count than EVALS.md's 'ten review bundles'" >&2
+require_text _maintenance/work-issue/EVALS.md "against eleven review bundles"
+[[ "$(find tests/fixtures/work-issue/review -maxdepth 1 -type f | wc -l | tr -d ' ')" == "11" ]] || {
+  echo "tests/fixtures/work-issue/review holds a different count than EVALS.md's 'eleven review bundles'" >&2
   exit 1
 }
 

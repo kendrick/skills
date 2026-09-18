@@ -1,0 +1,38 @@
+{
+  "author": "kendrick",
+  "reactions": [],
+  "reviews": [],
+  "comments": [],
+  "threads": [
+    {
+      "id": "PRRT_old",
+      "is_resolved": false,
+      "root_created_at": "2026-09-17T15:00:00Z",
+      "root_author": "someone-else",
+      "root_body": "**P1** the gate passes a plan with no Files line.",
+      "root_comment_id": 2199481009,
+      "root_url": "https://github.com/kendrick/skills/pull/1#discussion_r2199481009",
+      "last_comment_at": "2026-09-17T16:25:00Z",
+      "last_comment_author": "kendrick",
+      "last_comment_body": "Looking at it now.",
+      "last_comment_id": 2199481011,
+      "last_comment_url": "https://github.com/kendrick/skills/pull/1#discussion_r2199481011",
+      "comments": [
+        {
+          "author": "someone-else",
+          "created_at": "2026-09-17T16:20:00Z",
+          "body": "Still wrong for a different reason: the OK line counts a task with an empty Files line.",
+          "id": 2199481010,
+          "url": "https://github.com/kendrick/skills/pull/1#discussion_r2199481010"
+        },
+        {
+          "author": "kendrick",
+          "created_at": "2026-09-17T16:25:00Z",
+          "body": "Looking at it now.",
+          "id": 2199481011,
+          "url": "https://github.com/kendrick/skills/pull/1#discussion_r2199481011"
+        }
+      ]
+    }
+  ]
+}

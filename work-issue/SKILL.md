@@ -228,7 +228,7 @@ It prints `phase: <0-8|done|wait|stop> reason: <one line>` and exits 0, or exits
 | 15 | PR open; `findings`; no `triage/round-<k>.md` newer than SINCE | Step 6 triage |
 | 16 | newest triage round has in-scope rows; no `reports/repair-<k>.json` for that round | Step 7 |
 | 17 | PR open; a queue row missing from the `Deferred findings` comment, or a repair report or an all-queued triage round with local ahead of origin or a triage row without a reply URL | Step 8 |
-| 18 | PR open; `cleared` | done: final report |
+| 18 | PR open; `cleared`, or `findings` with the round triaged, answered, and its queue published | done: final report, then wait on the reviewer |
 
 ## Further Reading
 
