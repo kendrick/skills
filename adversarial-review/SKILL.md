@@ -1,6 +1,6 @@
 ---
 name: adversarial-review
-description: "Adversarial review of a git diff, where a finding has to be reproduced by something that did not author it before it can block. Parallel finders hunt disjoint territories, a fresh verifier tries to break each claim, and reproduced blockers get a failing test before any fix. Use ONLY when the user explicitly invokes adversarial-review. For a general single-pass review use code-review, for a repo-wide vulnerability scan use security-review, and for stress-testing a plan use grilling."
+description: "Adversarial review of a git diff, where a finding has to be reproduced before it can block, by something that did not author it and by a route the code does not take. Parallel finders hunt disjoint territories, a fresh verifier tries to break each claim, and reproduced blockers get a failing test before any fix. Use ONLY when the user explicitly invokes adversarial-review. For a general single-pass review use code-review, for a repo-wide vulnerability scan use security-review, and for stress-testing a plan use grilling."
 argument-hint: '[fixed point, e.g. main or a SHA | --fast | --deep | --max-rounds N | --report-only]'
 disable-model-invocation: true
 ---

@@ -134,6 +134,13 @@ refute_text adversarial-review/SKILL.md "no row above 7 matched"
 # rounds running, because the reproduction used the implementation's own method.
 require_text adversarial-review/SKILL.md "recomputes the implementation proves the code equals itself"
 require_text adversarial-review/SKILL.md "lands UNVERIFIABLE naming the method"
+
+# The frontmatter description is the one line a person reads to learn what the
+# gate is, and this skill is user-invoked, so nothing else advertises it. It
+# shipped naming authorship independence alone, which row 27 quotes as the
+# defect. "and by" keeps this pin off the body's own phrasing at line 10.
+require_text adversarial-review/SKILL.md "and by a route the code does not take"
+refute_text adversarial-review/SKILL.md "did not author it before it can block"
 require_text adversarial-review/references/verifier-prompt.md "measure where the value is consumed"
 require_text adversarial-review/references/verifier-prompt.md "no route to the quantity except the one the code itself"
 require_text adversarial-review/references/finder-prompt.md "agrees with it by construction"
