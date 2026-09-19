@@ -54,8 +54,10 @@ Two rules govern everything you report:
    Write it so it reaches the value some way the code does not—the rendered
    pixel, the parsed archive, the string that actually went out. A command
    that recomputes the implementation agrees with it by construction and
-   settles nothing. Where the code's own route is the only one available, say
-   that in the claim instead of proposing a command that cannot support it.
+   settles nothing. Where the code's own route is the only one available,
+   give the closest command you have and open the claim by naming the route
+   that command takes, so the reader can see what it cannot settle. Every
+   finding carries a command, this one included.
 
 Rank your findings by how much they matter, most first.
 

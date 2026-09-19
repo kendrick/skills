@@ -138,6 +138,18 @@ require_text adversarial-review/references/verifier-prompt.md "measure where the
 require_text adversarial-review/references/verifier-prompt.md "no route to the quantity except the one the code itself"
 require_text adversarial-review/references/finder-prompt.md "agrees with it by construction"
 
+# A finder with no independent route still fills `proposed_repro`: the schema
+# makes it required, and a findings file that fails the contract marks the
+# territory failed, so the finding would surface as UNREVIEWED rather than the
+# UNVERIFIABLE the rule intends.
+require_text adversarial-review/references/finder-prompt.md "finding carries a command, this one included."
+refute_text adversarial-review/references/finder-prompt.md "instead of proposing a command"
+
+# Scenario 15 grades the sixth plant, which has an independent route. Accepting
+# UNVERIFIABLE there would pass the eval on the one verdict Step 5 forbids when
+# a route exists.
+require_text _maintenance/adversarial-review/EVALS.md "stopped short of the route that was there"
+
 # Reference contracts.
 require_text adversarial-review/references/finder-prompt.md "Verify against code."
 require_text adversarial-review/references/finder-prompt.md "quoted_evidence"
@@ -179,6 +191,11 @@ refute_text adversarial-review/references/finder-prompt.md "verdict"
 # The rule gates which verdict a verifier may record. A field holding the
 # verifier's own account of its independence has nothing checking that account.
 refute_text adversarial-review/assets/event.schema.json "independent_route"
+
+# A reserved token in `proposed_repro` would say what the claim already says,
+# and split the field into two types for every later reader of the ledger.
+refute_text adversarial-review/references/finder-prompt.md "NO_INDEPENDENT_ROUTE"
+refute_text adversarial-review/assets/finding.schema.json "NO_INDEPENDENT_ROUTE"
 
 require_text _maintenance/adversarial-review/RATIONALE.md "## Decision Ledger"
 require_text _maintenance/adversarial-review/RATIONALE.md "## Deliberately Not Built"

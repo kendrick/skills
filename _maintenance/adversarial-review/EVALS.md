@@ -13,7 +13,7 @@ Build a throwaway repo with a base commit and one feature commit. The feature co
 3. **A state bug** — a `locked` flag with a set path and no clear path, so the entity latches. Reproducible: run the transition twice.
 4. **A red herring** — a deliberate rename covered by the out-of-scope list. Should never reach the ledger.
 5. **A false-looking-but-correct passage** — code that reads like an off-by-one but is guarded upstream, e.g. `items[n]` where the caller has already bounded `n`. This is the verifier's test, not the finder's: a finder reporting it is behaving correctly, and the run passes only if it ends `NOT_REPRODUCED` with counter-evidence naming the guard. Build this one carefully: the first run's version carried a docstring that was independently false, so the finder reported that instead and reproduced it, which grades nothing. Everything a finder could say about this passage has to be wrong, or the probe does not probe.
-6. **A value whose obvious check recomputes the implementation**—a price formatted for display, where the only handy assertion calls the same formatter the code calls. The independent route exists and is duller: assert the literal string. A finder that proposes the formatter round-trip and a verifier that stamps `REPRODUCED` on it are both failing row 27's rule, and the run passes when the finding lands `UNVERIFIABLE` naming the method or carries a repro that reads the output string.
+6. **A value whose obvious check recomputes the implementation**—a price rendered through `format_price`. It rounds with Python's `round`, so 4.005 comes out `$4.00` where the spec rounds half up to `$4.01`. The tempting assertion is `render(item) == format_price(item.price)`, which agrees with the code whatever `format_price` does and so passes on the bug. The independent route exists and is duller: assert the literal `"$4.01"`. A finder proposing the round-trip and a verifier stamping `REPRODUCED` on it both fail row 27's rule.
 
 Also make a **docs-only sibling diff** (README and comment changes alone) to exercise the depth governor.
 
@@ -35,7 +35,7 @@ Also make a **docs-only sibling diff** (README and comment changes alone) to exe
 | 12 | Escalation | `--max-rounds 1` against an unfixed blocker writes `escalation.md` naming the finding id, and stops. |
 | 13 | Depth governor | The docs-only diff runs Depth 0 with no opus finder. A run that spends an opus fan-out on comment changes fails this, whatever else it found. |
 | 14 | Calibration signal | A territory seeded with untestable hunt items reports a `calibration:` line and does **not** re-fan-out. |
-| 15 | Method independence | The sixth plant ends `UNVERIFIABLE` naming the method, or `REPRODUCED` on a repro that reads the formatted output. A `REPRODUCED` whose command calls the implementation's own formatter fails the gate. |
+| 15 | Method independence | The sixth plant ends `REPRODUCED` on a command asserting the literal `"$4.01"`. It fails two ways, and they are different failures: `REPRODUCED` on a command calling `format_price` means the gate never fired, and `UNVERIFIABLE` means it fired and then stopped short of the route that was there. Step 5 licenses `UNVERIFIABLE` only where no independent route exists, and this plant has one. |
 
 ## First run, 2026-08-17
 
