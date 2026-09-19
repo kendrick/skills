@@ -56,7 +56,12 @@ require_file _maintenance/technical-writing/upstream/SKILL.md
 # Top level ships exactly SKILL.md, README.md, and the references/ dir —
 # nothing else. A plain file count (like the other smoke tests use) would
 # miss a stray directory, so compare the full listing.
-top_level="$(find technical-writing -maxdepth 1 -mindepth 1 | sort)"
+#
+# LC_ALL=C pins the collation, because the expected listing below is written in
+# C order (uppercase before lowercase). Under a UTF-8 locale `sort` ignores case
+# and puts `references` between README.md and SKILL.md, so the comparison failed
+# on a correct directory for everyone whose shell was not in the C locale.
+top_level="$(find technical-writing -maxdepth 1 -mindepth 1 | LC_ALL=C sort)"
 expected_top_level=$'technical-writing/README.md\ntechnical-writing/SKILL.md\ntechnical-writing/references'
 [[ "$top_level" == "$expected_top_level" ]] || {
   echo "technical-writing/ must ship only SKILL.md, README.md, and references/ at top level" >&2
