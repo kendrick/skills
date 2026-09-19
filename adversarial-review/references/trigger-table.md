@@ -8,7 +8,7 @@ The table turns "what does this diff touch" into "what should someone be suspici
 
 Rows are ordered. That order is the tiebreak when a file matches more than one row, which is what makes derivation reproducible.
 
-**Match signals as whole words or identifiers, case-insensitively—never as bare substrings.** A signal ending in `_` is a prefix (`max_` matches `max_retries`). Substring matching quietly wrecks derivation: `index` inside `page_index` files a paging helper as a schema change, `rate` inside `generate` makes every function a money change, and a territory built on those is hunting the wrong thing with a straight face. In practice, `grep -Ei '\bsignal\b'` over the hunks.
+**Match signals as whole words or identifiers, case-insensitively—never as bare substrings.** A signal ending in `_` is a prefix (`max_` matches `max_retries`). A unit suffix matches against the number in front of it—`grep -Ei '[0-9](px|rem|em)\b'`—because `\bpx\b` finds `const px` and never finds `padding: 12px`, which is the one place a unit mismatch lives. Substring matching quietly wrecks derivation: `index` inside `page_index` files a paging helper as a schema change, `rate` inside `generate` makes every function a money change, and a territory built on those is hunting the wrong thing with a straight face. In practice, `grep -Ei '\bsignal\b'` over the hunks.
 
 | # | Row | Diff signals (grep the hunks, not the file) | Suspicion class | Hunt items |
 |---|---|---|---|---|
@@ -17,15 +17,16 @@ Rows are ordered. That order is the tiebreak when a file matches more than one r
 | 3 | state | `status`, `state`, `phase`, `enum`, `transition`, `flag`, `sentinel`, `is_`, `has_`, `pending`, `complete`, `lock`, `acquire`, `release`, `PAUSED`, `retry` | Gate and state transition | Trace the **next** transition by reading the implementation, never the docstring. Prove both paths: the set and the clear. A gate with no clear path is a latch. Concurrent entry — two callers reaching the transition at once. What the state is after a mid-sequence failure. |
 | 4 | schema | `ALTER TABLE`, `CREATE TABLE`, `migration`, `NOT NULL`, `DEFAULT`, `CHECK (`, `UNIQUE`, `FOREIGN KEY`, `CASCADE`, `backfill`, `deleted_at`, `soft_delete`, `index` | Migration and schema | The constraint claimed in a comment versus the constraint in the DDL. Backfill against rows that already violate the new constraint. Soft-deleted rows in a uniqueness check. Whether the migration is reversible and whether the down path was tested. Column added `NOT NULL` with no default on a non-empty table. |
 | 5 | budget | `limit`, `max_`, `quota`, `budget`, `counter`, `remaining`, `throttle`, `rate_limit`, `timeout`, `retries`, `depth`, `cap` | Counter and limit | The path where the limit is exhausted **mid-flight** rather than at entry. Off-by-one at the boundary — is the limit inclusive. Whether the counter resets, and what resets it. What a caller sees on exhaustion: an error, a silent truncation, or a hang. Concurrent decrement. |
-| 6 | general | any changed file (this row always matches) | Test coverage | Do the tests exercise the changed path, or route around it — a test that mocks the function under review proves the mock works. A test asserting the shape of a result and never its value. A changed behavior whose test changed alongside it in the same direction, so both could be wrong together. |
+| 6 | representation | `hex`, `rgb`, `srgb`, `oklch`, `alpha`, `opacity`, `composite`, `blend`, `px`, `rem`, `em`, `toFixed`, `round(`, `serialize`, `deserialize`, `stringify`, `parse(`, `schemaVersion`, `migrate`, `adapter`, `getComputedStyle`, `getImageData`, `toDataURL` | Representation boundary | A value asserted in the producer's units and consumed in another's—assert it where it lands, never where it was made. Precision that survives the computation and dies in the serialized form. A shape change with no version change beside it. The same value stored twice with nothing enforcing agreement. A type that admits values its consumer rejects. An assertion that recomputes the implementation rather than observing the result. |
+| 7 | general | any changed file (this row always matches) | Test coverage | Do the tests exercise the changed path, or route around it — a test that mocks the function under review proves the mock works. A test asserting the shape of a result and never its value. A changed behavior whose test changed alongside it in the same direction, so both could be wrong together. |
 
-Row 6 matching everything is deliberate: every territory carries the coverage lens, because "was this actually exercised" is the one question that applies to every kind of change. It is named `general` rather than `tests` because it also becomes the owning territory for any file that matched nothing else, and those are rarely test files. A changed test file, meanwhile, usually matches the row its subject matches and lands with the code it covers—which is what you want, since one finder then sees both the change and the test that is supposed to catch it.
+Row 7 matching everything is deliberate: every territory carries the coverage lens, because "was this actually exercised" is the one question that applies to every kind of change. It is named `general` rather than `tests` because it also becomes the owning territory for any file that matched nothing else, and those are rarely test files. A changed test file, meanwhile, usually matches the row its subject matches and lands with the code it covers—which is what you want, since one finder then sees both the change and the test that is supposed to catch it.
 
 ## Deriving territories
 
 The output is a set of territories where each changed file has exactly one owner and each territory carries every lens its files earned. Ownership must be disjoint or `check-territories.py validate` fails the run; lenses layer freely, because a file that is both money and authz should lose neither.
 
-1. **Classify each file.** Grep the file's hunks in the diff for each row's signals, top to bottom. Record every row that matches as that file's class set. A file matching nothing still gets row 6.
+1. **Classify each file.** Grep the file's hunks in the diff for each row's signals, top to bottom. Record every row that matches as that file's class set. A file matching nothing still gets row 7.
 2. **Assign an owner.** Each file goes to a territory named after its **first** matching row. First-match by table order is the whole determinism mechanism: the same diff yields the same assignment on any run, on any machine, by any model.
 3. **Union the lenses.** A territory's `classes` is the union of its member files' class sets. So the money territory reviewing a file that also matched authz hunts the authz items too — on that file, in that territory, by that one finder.
 4. **Write the derivation record.** One entry per file naming its `matched_rows` and its `territory`. This is what a later reader (or a re-run) checks the assignment against.
@@ -39,7 +40,7 @@ Set each territory's `model_tier` from its highest-priority class, then let dept
 | Classes present | Base tier |
 |---|---|
 | money, authz, state | opus |
-| schema, budget | sonnet |
+| schema, budget, representation | sonnet |
 | tests alone | haiku |
 
 Depth 0 caps every territory at sonnet. Depth 2 raises money, authz, and state to opus and leaves the rest. The reason for tiering at all is that a full opus fan-out is genuinely expensive, and a docs-and-types diff does not earn one.

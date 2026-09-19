@@ -117,6 +117,52 @@ require_text adversarial-review/SKILL.md "escalation.md"
 require_text adversarial-review/SKILL.md "no single cross-territory verdict"
 require_text adversarial-review/SKILL.md "calibration:"
 
+# The representation row and the renumber it forced. The depth condition is the
+# renumber's one live consequence, and it names `general` rather than a row
+# number because the number moves: left at 6 it would have fired Depth 0 on a
+# diff whose only substantive hit is the new row, and any literal breaks again on
+# the next insertion.
+require_text adversarial-review/references/trigger-table.md "| 6 | representation |"
+require_text adversarial-review/references/trigger-table.md "| 7 | general |"
+require_text adversarial-review/references/trigger-table.md "An assertion that recomputes the implementation rather than observing the result."
+require_text adversarial-review/references/trigger-table.md "A unit suffix matches against the number in front of it"
+require_text adversarial-review/SKILL.md 'no row above `general` matched'
+refute_text adversarial-review/SKILL.md "no row above 6 matched"
+refute_text adversarial-review/SKILL.md "no row above 7 matched"
+
+# Method independence. Authorship independence alone cleared a real defect four
+# rounds running, because the reproduction used the implementation's own method.
+require_text adversarial-review/SKILL.md "recomputes the implementation proves the code equals itself"
+require_text adversarial-review/SKILL.md "lands UNVERIFIABLE naming the method"
+
+# The frontmatter description is the one line a person reads to learn what the
+# gate is, and this skill is user-invoked, so nothing else advertises it. It
+# shipped naming authorship independence alone, which row 27 quotes as the
+# defect. "and by" keeps this pin off the body's own phrasing at line 10.
+require_text adversarial-review/SKILL.md "and by a route the code does not take"
+refute_text adversarial-review/SKILL.md "did not author it before it can block"
+
+# The README states the same rule for a human reader. Pinned because this repo's
+# documents describe each other, so the README can drift away from a SKILL.md
+# that still carries the rule, and a reader trusting the README learns the old
+# gate.
+require_text adversarial-review/README.md "reach the value some other way than the code does"
+require_text adversarial-review/references/verifier-prompt.md "measure where the value is consumed"
+require_text adversarial-review/references/verifier-prompt.md "no route to the quantity except the one the code itself"
+require_text adversarial-review/references/finder-prompt.md "agrees with it by construction"
+
+# A finder with no independent route still fills `proposed_repro`: the schema
+# makes it required, and a findings file that fails the contract marks the
+# territory failed, so the finding would surface as UNREVIEWED rather than the
+# UNVERIFIABLE the rule intends.
+require_text adversarial-review/references/finder-prompt.md "finding carries a command, this one included."
+refute_text adversarial-review/references/finder-prompt.md "instead of proposing a command"
+
+# Scenario 15 grades the sixth plant, which has an independent route. Accepting
+# UNVERIFIABLE there would pass the eval on the one verdict Step 5 forbids when
+# a route exists.
+require_text _maintenance/adversarial-review/EVALS.md "stopped short of the route that was there"
+
 # Reference contracts.
 require_text adversarial-review/references/finder-prompt.md "Verify against code."
 require_text adversarial-review/references/finder-prompt.md "quoted_evidence"
@@ -154,6 +200,15 @@ refute_text adversarial-review/SKILL.md "glob"
 # A finder that writes a verdict paragraph reintroduces the parsing gap the
 # JSON-only contract closes.
 refute_text adversarial-review/references/finder-prompt.md "verdict"
+
+# The rule gates which verdict a verifier may record. A field holding the
+# verifier's own account of its independence has nothing checking that account.
+refute_text adversarial-review/assets/event.schema.json "independent_route"
+
+# A reserved token in `proposed_repro` would say what the claim already says,
+# and split the field into two types for every later reader of the ledger.
+refute_text adversarial-review/references/finder-prompt.md "NO_INDEPENDENT_ROUTE"
+refute_text adversarial-review/assets/finding.schema.json "NO_INDEPENDENT_ROUTE"
 
 require_text _maintenance/adversarial-review/RATIONALE.md "## Decision Ledger"
 require_text _maintenance/adversarial-review/RATIONALE.md "## Deliberately Not Built"

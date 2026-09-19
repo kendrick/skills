@@ -51,6 +51,14 @@ Two rules govern everything you report:
    trust you, and cannot see how you reached this, will run that command and
    decide whether you were right. Write the command for that reader.
 
+   Write it so it reaches the value some way the code does not—the rendered
+   pixel, the parsed archive, the string that actually went out. A command
+   that recomputes the implementation agrees with it by construction and
+   settles nothing. Where the code's own route is the only one available,
+   give the closest command you have and open the claim by naming the route
+   that command takes, so the reader can see what it cannot settle. Every
+   finding carries a command, this one included.
+
 Rank your findings by how much they matter, most first.
 
 Severity is two values. `blocking` means this should not merge. `advisory`

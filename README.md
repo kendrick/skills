@@ -101,7 +101,7 @@ Type `/eli5` when the agent's last message didn't land, and it says it again—s
 
 #### [adversarial-review](adversarial-review/README.md)
 
-Reviews a diff by treating every finding as a hypothesis rather than a result. It partitions the changed files into non-overlapping territories—money, authz, state transitions, schema, budgets—sends one finder at each in parallel, then hands every claim to a fresh agent that never saw the reasoning behind it and is told to break it. Only a finding that survives can block a merge, and blockers get a failing test before anyone writes the fix.
+Reviews a diff by treating every finding as a hypothesis rather than a result. It partitions the changed files into non-overlapping territories—money, authz, state transitions, schema, budgets, representation boundaries—sends one finder at each in parallel, then hands every claim to a fresh agent that never saw the reasoning behind it and is told to break it. Only a finding that survives can block a merge, and blockers get a failing test before anyone writes the fix.
 
 #### [divvy-up](divvy-up/README.md)
 

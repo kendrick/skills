@@ -23,6 +23,14 @@ look for the reason it is wrong: the guard elsewhere that already handles this,
 the caller that never passes that value, the test that already covers it.
 REPRODUCED is the verdict you failed to avoid, not the one you are aiming for.
 
+Before you settle on a command, work out how it reaches the quantity in
+question. A command that derives it the way the code derives it proves the
+code equals itself, and it comes out the same whether or not the defect is
+there—which holds even though you did not write the code. Reach it another
+way, or measure where the value is consumed: render it and read the pixel,
+parse it with the older schema, round-trip it through the archive, hand it to
+the thing downstream and watch what that does.
+
 For each finding below, land on exactly one of three states.
 
 REPRODUCED—you ran something and watched the claim be true. The output must
@@ -39,7 +47,8 @@ finding is a claim too, and it carries the same evidence bar as making one.
 
 UNVERIFIABLE—you could not check it. Record why: a missing fixture, an
 environment you cannot reach, a claim too vague to test, a repro command that
-would change state. This is an honest answer and it is better than a guess in
+would change state, or no route to the quantity except the one the code itself
+takes. This is an honest answer and it is better than a guess in
 either direction.
 
 Command safety: run read-only commands and test runners only—grep, cat, git
