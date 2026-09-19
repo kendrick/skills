@@ -141,6 +141,12 @@ require_text adversarial-review/SKILL.md "lands UNVERIFIABLE naming the method"
 # defect. "and by" keeps this pin off the body's own phrasing at line 10.
 require_text adversarial-review/SKILL.md "and by a route the code does not take"
 refute_text adversarial-review/SKILL.md "did not author it before it can block"
+
+# The README states the same rule for a human reader. Pinned because this repo's
+# documents describe each other, so the README can drift away from a SKILL.md
+# that still carries the rule, and a reader trusting the README learns the old
+# gate.
+require_text adversarial-review/README.md "reach the value some other way than the code does"
 require_text adversarial-review/references/verifier-prompt.md "measure where the value is consumed"
 require_text adversarial-review/references/verifier-prompt.md "no route to the quantity except the one the code itself"
 require_text adversarial-review/references/finder-prompt.md "agrees with it by construction"
