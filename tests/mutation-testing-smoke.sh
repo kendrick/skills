@@ -98,7 +98,7 @@ require_text mutation-testing/SKILL.md "Reach for the plausible version rather t
 
 require_text mutation-testing/SKILL.md "**Restore by name**, one path at a time, never by directory."
 require_text mutation-testing/SKILL.md "the suite came back green without it"
-require_text mutation-testing/SKILL.md "against BASELINE's snapshot"
+require_text mutation-testing/SKILL.md "against BASELINE's snapshot: \`git status --porcelain\` matches it"
 
 # --- Re-measuring is required before a count leaves the run, not before the run
 # ends. Acceptance criterion 4. The trigger matters: bound to the run's end, a
@@ -218,6 +218,28 @@ require_text mutation-testing/SKILL.md "That is an equivalent mutant"
 require_text mutation-testing/SKILL.md "awaiting a human ruling, and it is not reported as a defect"
 refute_text mutation-testing/SKILL.md "A \`slipped\` adversarial verdict is a defect in the guard, not a measurement"
 
+# --- Found by a reproducer after two external passes had cleared this area.
+# git checkout -- <dir> restores tracked files from the index, so an untracked
+# file is never the casualty; the run looks for a tracked file's " M" line to
+# vanish. SKILL.md said "?? to absent" while EVALS.md said the opposite. ---
+
+require_text mutation-testing/SKILL.md "leaves untracked ones where they are"
+refute_text mutation-testing/SKILL.md "the new test went from \`??\` to absent"
+
+# The mode comparison runs against the backup, never against HEAD: git diff
+# --summary is relative to the commit, so on the dirty tree this skill runs in
+# it reports nothing while the restored mode is wrong.
+require_text mutation-testing/SKILL.md "Compare against the backup rather than against HEAD"
+require_text mutation-testing/SKILL.md "matches its backup in contents and in mode"
+
+# The README stated the unqualified slipped rule twice; only one was fixed.
+require_text mutation-testing/README.md "A slipped verdict that names a real gap goes first"
+refute_text mutation-testing/README.md "A slipped adversarial verdict goes first"
+
+# Scenario 4 named a directory its own fixture never defines.
+require_text _maintenance/mutation-testing/EVALS.md "uncommitted edit to the tracked \`tests/test_storage.py\`"
+refute_text _maintenance/mutation-testing/EVALS.md "app/storage/impl.py"
+
 # --- The README is a separate document that can drift from the skill. Pin the
 # install flag the root README's map table is checked against, and the two rules
 # a reader would act on without opening SKILL.md. ---
@@ -229,14 +251,14 @@ require_text mutation-testing/README.md "The only safe fan-out is a worktree per
 # --- The README and the evals carry rules of their own now, and reverting
 # either stayed green until these landed. ---
 
-require_text mutation-testing/README.md "compared byte-for-byte against the backup taken outside the repo"
+require_text mutation-testing/README.md "compared against the backup taken outside the repo, in contents and in mode"
 require_text mutation-testing/README.md "An equivalent mutant is reported unresolved, not as a defect."
 require_text mutation-testing/README.md "a \`cmp\` against the backup and a \`git status\` comparison"
 
 # Scenario 4 could not fail as first written, twice over: a collateral file in a
 # sibling directory is never reached, and an untracked one under the restored
 # path is not either, since git checkout -- <dir> restores tracked files only.
-require_text _maintenance/mutation-testing/EVALS.md "uncommitted edit to a tracked file beneath that path"
+require_text _maintenance/mutation-testing/EVALS.md "has to be an edit to a **tracked** file"
 require_text _maintenance/mutation-testing/EVALS.md "restores tracked files from the index and leaves untracked ones alone"
 
 # --- The ledger. The tier legend is what makes an [E] row a claim about a

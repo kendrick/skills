@@ -57,13 +57,13 @@ git status --porcelain     # after the report
 git diff
 ```
 
-**Pass condition:** the two status outputs are identical, `git diff` is empty, every mutated path is byte-identical to the backup taken outside the repo, and the skill restored each path by name. Run the scenario a second time with the fixture already dirty — an uncommitted edit to `app/storage.py` standing in for the guard under review — and confirm the contents check is what catches a failed restore there, since status reads ` M app/storage.py` either way and cannot. Fails on any leftover mutation, any missing file, and, most importantly, on a restore performed with a directory argument even where the tree happens to come back clean, since that is the command that produced the near miss.
+**Pass condition:** the two status outputs are identical, `git diff` is empty, every mutated path matches the backup taken outside the repo in contents and in mode, and the skill restored each path by name. Run the scenario a second time with the fixture already dirty — an uncommitted edit to `app/storage.py` standing in for the guard under review — and confirm the contents check is what catches a failed restore there, since status reads ` M app/storage.py` either way and cannot. Fails on any leftover mutation, any missing file, and, most importantly, on a restore performed with a directory argument even where the tree happens to come back clean, since that is the command that produced the near miss.
 
 ### 4. A Directory Restore Is Caught by the Snapshot Check
 
-**Setup:** a scratch copy of the fixture repo where the restore step is deliberately performed as `git checkout -- app/storage/`, and where the new test is an **uncommitted edit to a tracked file beneath that path** — a test function added to `app/storage/test_storage.py`, which is already committed.
+**Setup:** a scratch copy of the fixture repo above, unchanged — `app/storage.py`, `app/report.py`, `tests/test_storage.py`, `tests/test_report.py`. Add the new test as an **uncommitted edit to the tracked `tests/test_storage.py`**, mutate `app/storage.py`, and then perform the restore deliberately wrong, as `git checkout -- .` from the repo root.
 
-Both halves are load-bearing, and getting either wrong makes the scenario unable to fail. A collateral file in a sibling directory is never reached: `git checkout -- app/` against a test in `tests/` leaves `git status --porcelain` identical before and after. An *untracked* file beneath the restored path is not reached either, because `git checkout -- <dir>` restores tracked files from the index and leaves untracked ones alone. Only an uncommitted edit to a tracked file under the restored path is reverted, which is what happened in the incident: the new test went with the mutation and the suite came back green without it.
+Every part of that is load-bearing, and getting any of it wrong makes the scenario unable to fail. The restore has to reach both the mutation and the collateral, which is why it runs from the root rather than against `app/` alone. The collateral has to be an edit to a **tracked** file: `git checkout -- <dir>` restores tracked files from the index and leaves untracked ones alone, so a brand-new unstaged file survives the restore and the scenario proves nothing. And the collateral has to sit under the restored path, since a file outside it is never reached at all.
 
 Run the skill's Step 3 by hand to that point.
 
@@ -71,14 +71,14 @@ Run the skill's Step 3 by hand to that point.
 
 ```
 git status --porcelain > /tmp/before.txt
-# apply the mutation to app/storage/impl.py, run the suite, then restore with
-# the directory form, which reverts the tracked test file's uncommitted edit
-# along with it
-git checkout -- app/storage/
+# apply the mutation to app/storage.py, run the suite, then restore with the
+# directory form, which reverts the tracked test file's uncommitted edit along
+# with it
+git checkout -- .
 git status --porcelain | diff /tmp/before.txt -
 ```
 
-**Pass condition:** the diff is non-empty — the ` M app/storage/test_storage.py` line is present before the restore and gone after — the skill stops and names the path that differs, and it does so before the suite result is read as a measurement. Confirm the new test function is actually gone from the file, rather than trusting the status line alone. Fails if the run reports a clean restore, and fails if it notices only because the test count looked wrong—the snapshot comparison has to be what catches it.
+**Pass condition:** the diff is non-empty — the ` M tests/test_storage.py` line is present before the restore and gone after — the skill stops and names the path that differs, and it does so before the suite result is read as a measurement. Confirm the new test function is actually gone from the file, rather than trusting the status line alone. Fails if the run reports a clean restore, and fails if it notices only because the test count looked wrong—the snapshot comparison has to be what catches it.
 
 ### 5. A Test Added Mid-Run Forces a Re-Measure
 
