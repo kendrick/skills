@@ -177,6 +177,12 @@ require_text work-issue/SKILL.md "reaches this run through route 1 or route 3 an
 require_text work-issue/SKILL.md "Route 4 is where missing both of those lands, and it lands silently"
 require_text work-issue/SKILL.md "starts over at Step 0, where PLAN resolves in a session that no longer holds the plan"
 
+# The README's resume line used to say "type the first line again", pointing at
+# the pathless example. A user whose plan lives outside the tree would then
+# resume without the path and land in exactly the row-5 window the paragraph
+# below it warns about. Codex caught it on PR #115.
+require_text work-issue/README.md "plan path included if you passed one"
+
 # --- Every step heading. The resume table, the references, and the README all
 # point at steps by number, so a step folded into its neighbor leaves every one
 # of those cross-references aimed at nothing. ---
