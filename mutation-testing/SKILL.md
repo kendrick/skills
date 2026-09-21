@@ -1,0 +1,80 @@
+---
+name: mutation-testing
+description: "A guard nobody has watched fail is not a guard. This measures which tests actually catch one, by breaking it. Use when a diff adds a rejection, a validation, an invariant, a limit, a permission or ownership check, a branch that refuses input, or a test pinning one of those, and before that work is called done. For a review of the whole diff use adversarial-review or code-review."
+---
+
+# mutation-testing
+
+A guard nobody has watched fail is not a guard. A diff tells you the rejection is there; it cannot tell you whether anything would notice its absence. Two `code-review` passes across four subagents returned nothing that changed a line on a ticket whose entire content was a new rejection rule. One mutation run, on the same code, produced the sentence that mattered: hoisting a read out of its write transaction fails exactly one test and leaves 62 green, so a reasonable-looking refactor reintroduces the original defect with the suite still passing.
+
+Every guard gets two mutations, because there are two questions and one mutation cannot answer both. The **plausible** mutation asks whether a reasonable refactor would slip past this suite, and its output is a measurement. The **adversarial** mutation asks whether the guard is watching the right quantity at all, and its output is a verdict.
+
+This skill is model-invoked, the opposite call from `adversarial-review` and `work-issue`. The premise of the work is that nothing else in the toolkit asks for this measurement, so a missed trigger costs a guard its only check, while a misfire costs one mutation run and a restore.
+
+A **mutation** here is a deliberate edit to working code, made to be reverted. `work-issue` uses the word for an edit that may have silently failed to apply; both senses want the change proved on disk before anything reads a result that depends on it.
+
+Where a step names a shell command, treat it as the intent and use your native shell or file tools.
+
+Resolve once per invocation:
+
+- **GUARDS** — the guards the diff adds, from Step 1. Each carries its file and lines, the quantity it watches, and the test that pins it.
+- **SUITE_CMD** — the project's own test command, read off its manifest or config; ask where the project has none. Every count in the report comes from this one command, so a run that switches commands midway is a run whose rows cannot be compared.
+- **BASELINE** — one green run of SUITE_CMD taken before any mutation, its summary line saved verbatim, with `git status --porcelain` saved beside it. A red baseline stops the run: a failure that was already there is indistinguishable from one a mutation caused, and every count downstream inherits the ambiguity. The saved status is the snapshot Step 3 restores against.
+
+## Step 1 — Name the guards
+
+Read the diff for what it **adds**, not for which files it touches. A guard is added behavior that refuses, bounds, or asserts: a rejection, a validation, an invariant, a limit, a permission or ownership check, a branch that turns input away, or a test that pins one of those. A formatting change to a file full of guards adds none; a single line added to a controller may add one.
+
+For each guard, write down three things: where it lives, **the quantity it watches**, and the test that pins it. The quantity is the load-bearing column, and Step 2's adversarial mutation is built entirely out of it. Name what the guard actually reads—the value in the variable it compares—rather than the outcome somebody intended it to protect.
+
+A guard with no test is reported as such, in the report, before any mutation runs. There is nothing to measure there, and the absence is the finding.
+
+**Done when:** every guard the diff adds is listed with its quantity and its pinning test, and every guard with no test is named in the report ahead of the first mutation.
+
+## Step 2 — Write the mutations
+
+Two per guard, one per question.
+
+**The plausible mutation** is the edit a person cleaning up this code would actually make, applied to the quantity the guard watches. Hoisting a read above the transaction that writes it is one. Caching a value the guard re-reads is another. Write the version a reviewer would approve without comment.
+
+Reach for the plausible version rather than an arbitrary break, because an arbitrary break measures nothing. The first attempt in the run this skill came from mutated a read into a form that stalls under the test double, produced 21 failures, and said only that the test double was load-bearing. The hoisted read fails one test, and that one test is the answer.
+
+**The adversarial mutation** makes the failure the guard exists to catch happen by a route the guard's proxy does not see. A guard rarely watches the thing it protects; it watches a stand-in, and the gap between the two is where it fails silently. In the reference case, a guard read the file count a formatter printed about itself and passed cleanly, while the tree-wide write it existed to catch had already happened. The plausible mutation could not reach that: a guard watching the wrong quantity survives every reasonable edit to the right one.
+
+**Done when:** every guard carries one mutation of each kind, each written as a named-path edit a reviewer could read as a diff, and each tagged with the question it answers.
+
+## Step 3 — Run one at a time
+
+Per mutation, in order:
+
+1. Copy each path the mutation touches aside.
+2. Apply the edit, then prove it landed: `git diff -- <path>` is non-empty, or a grep finds the inserted text with its line number. An edit that silently failed to apply leaves the suite green, and a green suite reads here as "no test catches this"—the exact inverse of what happened.
+3. Run SUITE_CMD. Capture its summary line verbatim, and the names of the failing tests.
+4. **Restore by name**, one path at a time, never by directory. `git checkout -- app/storage/` reverted the new test alongside the mutation, and the suite came back green without it. That was caught on the test count rather than by noticing, so treat it as a near miss rather than a save.
+5. Diff `git status --porcelain` against BASELINE's snapshot. A difference stops the run and names the path, since item 4's failure is invisible in a passing suite and this comparison is the only thing that sees it.
+
+**Done when:** every mutation was applied with its change proved on disk, measured, and restored; and post-restore status equals the snapshot for every one of them, or the run stopped naming the path that differs.
+
+## Step 4 — Re-measure after the suite grows
+
+Any edit to a test file after a measurement invalidates every count taken before it. One mutation in the reference run moved from 2 failures to 4 once a later test began exercising the same return value, and extrapolating from the earlier run would have put a wrong number in a pull request.
+
+So before any count leaves this run—into a report, a pull-request description, a commit message, or a reply to a reviewer—re-run every mutation through Step 3 against the suite as it now stands.
+
+**Done when:** every count in the report comes from a run against the suite as it stands at reporting time, and no number has left the run ahead of that.
+
+## Step 5 — Report
+
+One row per mutation, carrying: the guard, which question it answers, the mutation in one line, the runner's summary line verbatim, the failing tests by name, how many passed, and the reading: `caught` or `slipped` for an adversarial mutation, `fails N, leaves M green` for a plausible one.
+
+Quote the runner's own summary line rather than a count assembled by hand. Runners disagree about what they report and about how they phrase it, and the line as printed is what a reader can check.
+
+A `slipped` adversarial verdict is a defect in the guard, not a measurement of the suite, so it goes first and says what quantity the guard should have been watching instead.
+
+Close with the one sentence worth carrying into the pull-request description: the guard, the refactor that would slip past it, and the numbers.
+
+**Done when:** the report is in the reply, every guard from Step 1 appears in it, and every count in it traces to a row that names the run it came from.
+
+## One at a time
+
+One mutation, one checkout, in sequence. Restore is already the fragile step at concurrency one, and two mutations sharing a tree restore against the same snapshot and race over the same paths, which turns a fragile step into a correctness bug that reports a clean run. The only safe fan-out is a worktree per mutation. This skill builds none, and a run that wants one is a run that should wait.
