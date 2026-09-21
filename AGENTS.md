@@ -76,11 +76,15 @@ For an agent reviewing a pull request against this repo. You are reviewing the d
 
 Review what the diff changes, plus anything the diff makes wrong. That second half is where the real findings are here, because this repo's documents cross-reference each other: a step in a `SKILL.md` naming a script flag, a `README.md` describing a mechanism, a smoke test pinning a string, a ledger row justifying a choice. A change to one leaves the other three describing something that no longer exists, and every one of those is a live defect rather than a style note.
 
+The same holds inside one document. A sentence added to a bullet can be refuted by that bullet's own list four lines above, and a paragraph's opening instruction can be undone by its closing one. The diff shows the changed line; the contradiction lives in what that line now sits beside, so read the whole bullet or paragraph it lands in and the section around it.
+
+Sweep a confirmed claim across every place it appears, the file it surfaced in included. A sweep that stops at the first file is how one error ships twice: found in the `README.md`, then cleared in the `SKILL.md` on the strength of a nearby line that happened to be right.
+
 Out of scope: the choice of what to build, taste disagreements with a decision that has a ledger row, vendored code that matches its upstream, and prose style that follows the house rules above.
 
 ### Severity
 
-**P0 — blocks merge.** The change makes an agent do the wrong thing at runtime. A script that fails on valid input or passes on invalid input. A step that contradicts another document in the same skill. A smoke test that passes while the behavior it names is gone. A `SKILL.md` claiming something its script does not implement. A vendored copy that has drifted from its upstream. Anything that would make a skill destructive or lossy on a user's files.
+**P0 — blocks merge.** The change makes an agent do the wrong thing at runtime. A script that fails on valid input or passes on invalid input. A step that contradicts another document in the same skill, or the document it sits in. A smoke test that passes while the behavior it names is gone. A `SKILL.md` claiming something its script does not implement. A vendored copy that has drifted from its upstream. Anything that would make a skill destructive or lossy on a user's files.
 
 **P1 — fix before merge, or record why not.** The repo's own discipline is broken, though nothing misbehaves yet. A contested choice with no ledger row. A cut feature with no refute pinning it. A new skill missing one of its four artifacts. A load-bearing string no test pins. A script reaching outside the standard library. Prose that skipped the skill that owns it.
 

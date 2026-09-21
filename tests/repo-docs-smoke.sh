@@ -97,8 +97,20 @@ done
 
 # The severity vocabulary the review output is written against.
 require_text AGENTS.md "**P0 — blocks merge.**"
+
+# The P0 band has to reach the case Scope now names. Left at "another
+# document", an intra-document contradiction is in scope with no severity to
+# land in, and a reviewer files it as a P2 wording nit.
+require_text AGENTS.md "A step that contradicts another document in the same skill, or the document it sits in."
 require_text AGENTS.md "**P1 — fix before merge, or record why not.**"
 require_text AGENTS.md "**P2 — non-blocking.**"
+
+# The Scope rule reaches inside one file, not only across the four artifacts
+# its examples name. Both P0s on #115 were one document contradicting itself
+# within a bullet or a paragraph, and three reviewers read the cross-document
+# half of this rule and looked outward.
+require_text AGENTS.md "read the whole bullet or paragraph it lands in and the section around it"
+require_text AGENTS.md "A sweep that stops at the first file is how one error ships twice"
 
 # The single fact the rest of the conventions follow from.
 require_text AGENTS.md "a skill lands alone"
