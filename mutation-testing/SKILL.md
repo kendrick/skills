@@ -19,7 +19,7 @@ Resolve once per invocation:
 
 - **GUARDS** — the guards the diff adds, from Step 1. Each carries its file and lines, the quantity it watches, and the test that pins it.
 - **SUITE_CMD** — the project's own test command, read off its manifest or config; ask where the project has none. Every count in the report comes from this one command, so a run that switches commands midway is a run whose rows cannot be compared.
-- **BASELINE** — one green run of SUITE_CMD taken before any mutation, its summary line saved verbatim, with `git status --porcelain` saved beside it. A red baseline stops the run: a failure that was already there is indistinguishable from one a mutation caused, and every count downstream inherits the ambiguity. The saved status is the snapshot Step 3 restores against.
+- **BASELINE** — one green run of SUITE_CMD, its summary line saved verbatim, with `git status --porcelain` saved beside it as the snapshot Step 3 restores against. A red baseline stops the run: a failure that was already there is indistinguishable from one a mutation caused, and every count downstream inherits the ambiguity. The tree does not have to be clean, and usually is not — this skill fires on a diff somebody is still working on, so the snapshot records the working tree as it stands rather than demanding a commit first. Step 4 re-takes BASELINE when the suite grows, and only there.
 
 ## Step 1 — Name the guards
 
@@ -33,7 +33,7 @@ A guard with no test is reported as such, in the report, before any mutation run
 
 ## Step 2 — Write the mutations
 
-Two per guard, one per question.
+Two per guard that Step 1 paired with a test, one per question. A guard Step 1 found no test for is already reported and gets no mutation: with nothing pinning it, its run comes back zero-failures, and zero failures is what this skill reads as a real gap. The two cases would be indistinguishable in the report.
 
 **The plausible mutation** is the edit a person cleaning up this code would actually make, applied to the quantity the guard watches. Hoisting a read above the transaction that writes it is one. Caching a value the guard re-reads is another. Write the version a reviewer would approve without comment.
 
@@ -41,13 +41,13 @@ Reach for the plausible version rather than an arbitrary break, because an arbit
 
 **The adversarial mutation** makes the failure the guard exists to catch happen by a route the guard's proxy does not see. A guard rarely watches the thing it protects; it watches a stand-in, and the gap between the two is where it fails silently. In the reference case, a guard read the file count a formatter printed about itself and passed cleanly, while the tree-wide write it existed to catch had already happened. The plausible mutation could not reach that: a guard watching the wrong quantity survives every reasonable edit to the right one.
 
-**Done when:** every guard carries one mutation of each kind, each written as a named-path edit a reviewer could read as a diff, and each tagged with the question it answers.
+**Done when:** every guard with a pinning test carries one mutation of each kind, each written as a named-path edit a reviewer could read as a diff, and each tagged with the question it answers; and every guard without one carries no mutation and its Step 1 row instead.
 
 ## Step 3 — Run one at a time
 
 Per mutation, in order:
 
-1. Copy each path the mutation touches aside.
+1. Copy each path the mutation touches to a scratch location outside the repository. A backup left beside the file is untracked, so it lands in the comparison item 5 makes and halts a valid run on its first mutation.
 2. Apply the edit, then prove it landed: `git diff -- <path>` is non-empty, or a grep finds the inserted text with its line number. An edit that silently failed to apply leaves the suite green, and a green suite reads here as "no test catches this"—the exact inverse of what happened.
 3. Run SUITE_CMD. Capture its summary line verbatim, and the names of the failing tests.
 4. **Restore by name**, one path at a time, never by directory. `git checkout -- app/storage/` reverted the new test alongside the mutation, and the suite came back green without it. That was caught on the test count rather than by noticing, so treat it as a near miss rather than a save.
@@ -59,9 +59,17 @@ Per mutation, in order:
 
 Any edit to a test file after a measurement invalidates every count taken before it. One mutation in the reference run moved from 2 failures to 4 once a later test began exercising the same return value, and extrapolating from the earlier run would have put a wrong number in a pull request.
 
-So before any count leaves this run—into a report, a pull-request description, a commit message, or a reply to a reviewer—re-run every mutation through Step 3 against the suite as it now stands.
+So before any count leaves this run—into a report, a pull-request description, a commit message, or a reply to a reviewer—re-take BASELINE and re-run every mutation through Step 3 against the suite as it now stands.
 
-**Done when:** every count in the report comes from a run against the suite as it stands at reporting time, and no number has left the run ahead of that.
+Re-take it in this order, because the order is what keeps Step 3 item 5 armed:
+
+1. Confirm the tree has just passed item 5 against the **current** snapshot, so every mutation is restored. Skipping this bakes a live mutation into the new snapshot, and item 5 then passes for the rest of the run with that mutation still on disk—the near miss it exists to catch, made permanent.
+2. Run SUITE_CMD and save the new summary line. Red here stops the run for the same reason a red baseline does.
+3. Save `git status --porcelain` as the new snapshot, which now carries the grown suite.
+
+Absorbing the new test file into the snapshot is the whole point: it is a deliberate edit, and item 5 compares against a snapshot taken before it existed, so without this the re-measure halts on its first mutation at exactly the moment this step exists for.
+
+**Done when:** every count in the report comes from a run against the suite as it stands at reporting time, BASELINE was re-taken from a fully restored tree, and no number has left the run ahead of that.
 
 ## Step 5 — Report
 

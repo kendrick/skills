@@ -128,12 +128,57 @@ require_text mutation-testing/SKILL.md "An edit that silently failed to apply le
 # against SKILL.md alone, because the ledger names every cut by its own spelling
 # and a refute there would fail on the row that justifies it. ---
 
-refute_text mutation-testing/SKILL.md "git checkout -- ."   # directory-form restore
-refute_text mutation-testing/SKILL.md "--parallel"          # parallel mutations
-refute_text mutation-testing/SKILL.md "--jobs"              # parallel mutations
-refute_text mutation-testing/SKILL.md "mutmut"              # mutation-operator engine
-refute_text mutation-testing/SKILL.md "Stryker"             # mutation-operator engine
-refute_text mutation-testing/SKILL.md "RUN_DIR"             # persisted run directory
+# A CLI token is not the mechanism. The first version of this block pinned
+# `--parallel` and `--jobs` alone, and a scratch SKILL.md carrying "Dispatch the
+# mutations concurrently, one git worktree per mutation" passed green. Each row
+# now gets its tooling names AND the ordinary words somebody would write.
+
+# Row: parallel mutations or a worktree fan-out.
+refute_text mutation-testing/SKILL.md "--parallel"
+refute_text mutation-testing/SKILL.md "--jobs"
+refute_text mutation-testing/SKILL.md "concurrently"
+refute_text mutation-testing/SKILL.md "in parallel"
+
+# Row: a mutation-operator engine.
+refute_text mutation-testing/SKILL.md "mutmut"
+refute_text mutation-testing/SKILL.md "Stryker"
+refute_text mutation-testing/SKILL.md "mutation operator"
+
+# Row: a persisted run directory.
+refute_text mutation-testing/SKILL.md "RUN_DIR"
+refute_text mutation-testing/SKILL.md "run directory"
+
+# Row: parsing the runner's output into structured numbers. Previously unpinned.
+refute_text mutation-testing/SKILL.md "structured numbers"
+refute_text mutation-testing/SKILL.md "Parse the runner"
+require_text mutation-testing/SKILL.md "rather than a count assembled by hand"
+
+# Row: mutating anything the diff did not add. Previously unpinned. The positive
+# rule is pinned above at Step 1; this catches the wording that would undo it.
+refute_text mutation-testing/SKILL.md "nearby guard"
+refute_text mutation-testing/SKILL.md "outside the diff"
+
+# Row: a directory-form restore.
+refute_text mutation-testing/SKILL.md "git checkout -- ."
+
+# --- Three rules added after round 1 of code-review found them contradicting
+# their own neighbors. Each pin below goes red if the contradiction comes back. ---
+
+# The copy-aside lands outside the repo. Inside it, the backup is untracked, so
+# it trips the status comparison two items later and halts every valid run.
+require_text mutation-testing/SKILL.md "to a scratch location outside the repository"
+
+# Step 4's re-measure re-takes BASELINE, and does it from a restored tree. Both
+# halves matter: without the re-take the re-measure deadlocks against the restore
+# check, and without the ordering the re-take disarms that check for good.
+require_text mutation-testing/SKILL.md "re-take BASELINE and re-run every mutation"
+require_text mutation-testing/SKILL.md "so every mutation is restored"
+require_text mutation-testing/SKILL.md "BASELINE was re-taken from a fully restored tree"
+
+# An unpinned guard gets no mutation: zero failures there is indistinguishable
+# from the reading this skill gives a real gap.
+require_text mutation-testing/SKILL.md "Two per guard that Step 1 paired with a test"
+require_text mutation-testing/SKILL.md "every guard with a pinning test carries one mutation of each kind"
 
 # --- The README is a separate document that can drift from the skill. Pin the
 # install flag the root README's map table is checked against, and the two rules
@@ -150,7 +195,7 @@ require_text mutation-testing/README.md "The only safe fan-out is a worktree per
 require_text _maintenance/mutation-testing/RATIONALE.md "**[E]** measured or observed in a real run"
 require_text _maintenance/mutation-testing/RATIONALE.md "## Deliberately Not Built"
 require_text _maintenance/mutation-testing/RATIONALE.md "## Known Limitations"
-require_text _maintenance/mutation-testing/RATIONALE.md "pinned by a \`refute_text\` assertion"
+require_text _maintenance/mutation-testing/RATIONALE.md "pinned by at least one \`refute_text\` assertion"
 
 # --- The evals record no results, and say so. A file that starts recording them
 # becomes a claim that somebody ran these, which is exactly what it cannot be. ---
