@@ -164,6 +164,19 @@ require_text work-issue/SKILL.md "**RUN_DIR** — \`<COMMON>/work-issue/issue-<N
 require_text work-issue/SKILL.md "**BASE_SHA** — \`git merge-base origin/<DEFAULT> <BRANCH>\`"
 require_text work-issue/SKILL.md "**SINCE** — the contents of \`RUN_DIR/pushed_at\`"
 
+# --- Where the plan comes from. SKILL.md's PLAN bullet is the only place the
+# four routes are written down: no script globs `docs/plans`, so a quiet edit to
+# the search path changes what the skill resolves with nothing to catch it.
+# Issue #112: a plan kept outside the working tree reaches a run through route 1
+# or route 3 alone, and the silent fall-through to route 4 is what costs a resume. Pinned
+# positively, because a refute passes just as happily on a file that dropped the
+# whole bullet. ---
+
+require_text work-issue/SKILL.md "2. \`<ROOT>/docs/plans/*issue-<N>*.md\` or \`<ROOT>/docs/plans/*-<N>-*.md\`, newest by name"
+require_text work-issue/SKILL.md "reaches this run through route 1 or route 3 and no other: pass its path on the argument line, or link it from the issue"
+require_text work-issue/SKILL.md "Route 4 is where missing both of those lands, and it lands silently"
+require_text work-issue/SKILL.md "starts over at Step 0, where PLAN resolves in a session that no longer holds the plan"
+
 # --- Every step heading. The resume table, the references, and the README all
 # point at steps by number, so a step folded into its neighbor leaves every one
 # of those cross-references aimed at nothing. ---

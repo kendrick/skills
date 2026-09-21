@@ -34,7 +34,18 @@ Resolve once per invocation:
 - **WORKTREE** — `<ROOT>/../<PROJECT>-issue-<N>/`
 - **WORKER** — `issue-<N>`: the herdr agent name, and the label for a plain subagent
 - **RUN_DIR** — `<COMMON>/work-issue/issue-<N>/`. Subpaths: `issue.md`, `plan.md`, `base_sha`, `baseline.txt`, `pushed_at`, `conflict.txt`, `reports/`, `review/`, `redteam/`, `triage/`, `queue.md`, `pr-body.md`. A finished run moves to `<COMMON>/work-issue/closed/issue-<N>/`. Under the common dir it is one location visible from every worktree, invisible to `git status` without an exclude entry, and it survives `git worktree remove`. It holds phase *outputs* — reports, verdicts, triage rows — and the resume probe reads those outputs. Nothing in it records which phase the run believes it reached: a note saying "phase 4" outlives the crash that stranded the run at 3.
-- **PLAN** — first hit wins: the path in the arguments; `docs/plans/*issue-<N>*.md` or `docs/plans/*-<N>-*.md`, newest by name; a path linked from the issue under a `Plan` heading; the approved plan held in the conversation. The hit is **copied** to `RUN_DIR/plan.md`, and every later step reads the copy. `divvy-up` writes its `## Waves` table into whatever it is handed, and a tracked plan file must not gain a table in the pull-request diff.
+- **PLAN** — first hit wins:
+
+  1. the path in the arguments
+  2. `<ROOT>/docs/plans/*issue-<N>*.md` or `<ROOT>/docs/plans/*-<N>-*.md`, newest by name
+  3. a path linked from the issue under a `Plan` heading
+  4. the approved plan held in the conversation
+
+  Route 2 globs `<ROOT>/docs/plans/` and looks nowhere else. A plan held outside that directory—`~/.claude/plans/`, a scratch path, a second checkout—reaches this run through route 1 or route 3 and no other: pass its path on the argument line, or link it from the issue under a `Plan` heading.
+
+  Route 4 is where missing both of those lands, and it lands silently: routes 2 and 3 miss, the conversation supplies the plan, the run proceeds, and nothing says so. `RUN_DIR/plan.md` is then the only copy. An ordinary resume survives that—row 6 of the [Resume](#resume) table sends the run back to the plan gate, which re-reads the copy. Row 5's first leg does not: a run that stopped before `divvy-up` wrote its `## Waves` table, with no branch made yet, has its RUN_DIR moved to `closed/` and starts over at Step 0, where PLAN resolves in a session that no longer holds the plan, every route misses, and the run takes the `writing-plans` refusal it should have taken on the first invocation. The plan survives at `closed/issue-<N>/plan.md`, out of the resolution path and recoverable only by hand. A path on the argument line, or a link in the issue, is one that resolves again next time—which is the whole of the fix.
+
+  The hit is **copied** to `RUN_DIR/plan.md`, and every later step reads the copy. `divvy-up` writes its `## Waves` table into whatever it is handed, and a tracked plan file must not gain a table in the pull-request diff.
 - **CRITERIA** — every `- [ ]` / `- [x]` line under a heading containing `Acceptance` in the issue body, saved into `RUN_DIR/issue.md`
 - **BASE_SHA** — `git merge-base origin/<DEFAULT> <BRANCH>` once BRANCH exists; before that, `git rev-parse origin/<DEFAULT>` after `git fetch origin <DEFAULT>`. Written to `RUN_DIR/base_sha`. It is the one fixed point `code-review`, the reproducer, and `adversarial-review` all measure against, so it is read from that file rather than re-resolved: a ref moves, and a run that re-resolves it reviews different code on Tuesday than it did on Monday.
 - **PR** — `gh pr list --head <BRANCH> --state all --json number,state,url --jq '.[0]'`

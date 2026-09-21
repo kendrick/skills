@@ -16,7 +16,7 @@ None of that substitutes for the scenarios below. A bundle proves `run-state.py`
 
 ### 1. A Missing Plan Refuses and Names `writing-plans`
 
-**Setup:** an issue in the sandbox repo with no plan anywhere—nothing at `docs/plans/*issue-<N>*.md`, no path linked under a `Plan` heading in the issue, and no approved plan in the conversation.
+**Setup:** an issue in the sandbox repo with no plan anywhere—nothing matching `docs/plans/*issue-<N>*.md` or `docs/plans/*-<N>-*.md`, no path linked under a `Plan` heading in the issue, and no approved plan in the conversation.
 
 **Commands:**
 
