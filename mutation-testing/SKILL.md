@@ -51,9 +51,13 @@ Per mutation, in order:
 2. Apply the edit, then prove it landed: `git diff -- <path>` is non-empty, or a grep finds the inserted text with its line number. An edit that silently failed to apply leaves the suite green, and a green suite reads here as "no test catches this"—the exact inverse of what happened.
 3. Run SUITE_CMD. Capture its summary line verbatim, and the names of the failing tests.
 4. **Restore by name**, one path at a time, never by directory. `git checkout -- app/storage/` reverted the new test alongside the mutation, and the suite came back green without it. That was caught on the test count rather than by noticing, so treat it as a near miss rather than a save.
-5. Diff `git status --porcelain` against BASELINE's snapshot. A difference stops the run and names the path, since item 4's failure is invisible in a passing suite and this comparison is the only thing that sees it.
+5. Verify the restore twice, because neither check sees what the other does.
+   - **Contents**, against the backups item 1 made: every mutated path matches its backup in both contents and mode (`cmp` plus a mode comparison, or `git diff --summary` reporting no mode change). Contents alone is not enough: `cmp` passes on a file whose executable bit moved, and so does the status check below, so a mode-only restore failure clears both. `git status --porcelain` reports status codes rather than contents, so a tracked file the user had already modified reads ` M path` before the mutation and ` M path` again after a restore that silently failed. The status comparison passes while the mutation sits live on disk. That file is the normal case here rather than an edge, since the guard under test is itself an uncommitted change.
+   - **Collateral**, against BASELINE's snapshot: `git status --porcelain` matches it. This is what catches a restore that reverted something it should not have, which the contents check cannot see because the casualty is a path no mutation touched. It is item 4's near miss exactly: the new test went from `??` to absent.
 
-**Done when:** every mutation was applied with its change proved on disk, measured, and restored; and post-restore status equals the snapshot for every one of them, or the run stopped naming the path that differs.
+   Either check failing stops the run and names the path.
+
+**Done when:** every mutation was applied with its change proved on disk, measured, and restored; every mutated path is byte-identical to its backup and post-restore status equals the snapshot, for every one of them; or the run stopped naming the path that differs.
 
 ## Step 4 — Re-measure after the suite grows
 
@@ -77,11 +81,15 @@ One row per mutation, carrying: the guard, which question it answers, the mutati
 
 Quote the runner's own summary line rather than a count assembled by hand. Runners disagree about what they report and about how they phrase it, and the line as printed is what a reader can check.
 
-A `slipped` adversarial verdict is a defect in the guard, not a measurement of the suite, so it goes first and says what quantity the guard should have been watching instead.
+A `slipped` adversarial verdict splits in two, and the row says which.
+
+Where the mutation changed behaviour a caller could observe and no test caught it, that is a defect in the guard rather than a measurement of the suite. It goes first, and it names the quantity the guard should have been watching instead.
+
+Where the mutation changed nothing a caller could observe, no test could have caught it and the guard may be perfectly sound. That is an equivalent mutant: the row is unresolved, marked as awaiting a human ruling, and it is not reported as a defect. Where you cannot tell the two apart, say so on the row and leave it unresolved, because calling an equivalent mutant a defect sends somebody to repair a guard that works.
 
 Close with the one sentence worth carrying into the pull-request description: the guard, the refactor that would slip past it, and the numbers.
 
-**Done when:** the report is in the reply, every guard from Step 1 appears in it, and every count in it traces to a row that names the run it came from.
+**Done when:** the report is in the reply, every guard from Step 1 appears in it, every count traces to a row that names the run it came from, and every `slipped` row reads as a defect or as awaiting a ruling rather than as both.
 
 ## One at a time
 

@@ -21,7 +21,7 @@ Then two mutations per guard that has a test, because there are two questions an
 
 Mutations run one at a time, each against a tree the previous one put back. Apply, prove the edit actually landed on disk, run the suite, restore, compare. Proving the edit matters here: an edit that silently failed to apply leaves the suite green, and green reads in this skill as "no test catches this", which is the exact inverse of what happened.
 
-Restore happens **by name**, one path at a time. `git checkout -- app/storage/` once reverted a new test alongside the mutation, and the suite came back green without it, caught on the test count rather than noticed, which makes it a near miss rather than a save. So after every restore the run diffs `git status --porcelain` against a snapshot taken before the first mutation, and any difference stops it and names the path. That comparison is the only thing in the loop that can see this failure, since it is invisible in a passing suite.
+Restore happens **by name**, one path at a time. `git checkout -- app/storage/` once reverted a new test alongside the mutation, and the suite came back green without it, caught on the test count rather than noticed, which makes it a near miss rather than a save. So every restore is checked twice. Each mutated path is compared byte-for-byte against the backup taken outside the repo, and the whole tree's `git status --porcelain` is compared against a snapshot from before the first mutation. Neither check sees what the other does: status reports codes rather than contents, so a file you had already edited reads ` M path` whether it holds your work or a live mutation, while the contents check is blind to a casualty among the files no mutation touched.
 
 Counts go stale, so the baseline and its snapshot are re-taken and every mutation re-runs against the final suite before any number leaves the run. The re-take happens only from a tree whose restores have just passed, because absorbing a still-applied mutation into the snapshot would retire the restore check for the rest of the run. One mutation moved from 2 failures to 4 once a later test began exercising the same return value, and extrapolating from the earlier run would have put a wrong number in a pull request, where it reads as a measurement.
 
@@ -66,7 +66,7 @@ mutation-testing/
 └── README.md     # this file
 ```
 
-There is no `references/` and no `scripts/`, because choosing a mutation is judgment, the suite is your own command, and restoring is a copy-back plus one `git status` comparison.
+There is no `references/` and no `scripts/`, because choosing a mutation is judgment, the suite is your own command, and restoring is a copy-back checked by a `cmp` against the backup and a `git status` comparison against the snapshot.
 
 ## Gotchas
 
@@ -74,7 +74,7 @@ There is no `references/` and no `scripts/`, because choosing a mutation is judg
 - **One mutation, one checkout, in sequence.** Restore is already the fragile step at concurrency one, and two mutations sharing a tree restore against the same snapshot and race over the same paths. The only safe fan-out is a worktree per mutation, and this skill builds none.
 - **A red suite stops it before it starts.** Fix the baseline first, or every number it hands you is ambiguous.
 - **The measurement is of your suite, not your guard.** "Fails 1, leaves 62 green" says one test noticed. Whether one is enough is your call, and the report is deliberately silent on it.
-- **An equivalent mutant reads as slipped.** A mutation that changes no observable behavior produces the same verdict as a real gap in the guard. The report says which rows are waiting on that ruling; making it is yours.
+- **An equivalent mutant is reported unresolved, not as a defect.** A mutation that changes nothing a caller could observe could not have been caught by any test, so the guard may be sound. Those rows say they are waiting on a human ruling, and making it is yours. Where the run cannot tell an equivalent mutant from a real gap, the row says that too.
 - **Ignored files restore unverified.** `git status --porcelain` says nothing about anything in `.gitignore`, so a mutation that writes into an ignored build directory sits outside the snapshot check.
 - **A slow suite bounds the run.** Two mutations per guard, re-run at the end, against a ten-minute suite is a long afternoon. Fewer guards per run beats fewer mutations per guard.
 - **It stays inside what the diff added.** It will not wander into surrounding code to find something else worth mutating.

@@ -98,7 +98,7 @@ require_text mutation-testing/SKILL.md "Reach for the plausible version rather t
 
 require_text mutation-testing/SKILL.md "**Restore by name**, one path at a time, never by directory."
 require_text mutation-testing/SKILL.md "the suite came back green without it"
-require_text mutation-testing/SKILL.md "Diff \`git status --porcelain\` against BASELINE's snapshot"
+require_text mutation-testing/SKILL.md "against BASELINE's snapshot"
 
 # --- Re-measuring is required before a count leaves the run, not before the run
 # ends. Acceptance criterion 4. The trigger matters: bound to the run's end, a
@@ -112,7 +112,7 @@ require_text mutation-testing/SKILL.md "moved from 2 failures to 4"
 
 require_text mutation-testing/SKILL.md "the runner's summary line verbatim, the failing tests by name, how many passed"
 require_text mutation-testing/SKILL.md "\`fails N, leaves M green\`"
-require_text mutation-testing/SKILL.md "A \`slipped\` adversarial verdict is a defect in the guard"
+require_text mutation-testing/SKILL.md "that is a defect in the guard rather than a measurement of the suite"
 
 # --- The boundary. One mutation, one checkout. ---
 
@@ -197,6 +197,27 @@ require_text mutation-testing/SKILL.md "The tree does not have to be clean, and 
 refute_text mutation-testing/SKILL.md "commit or stash first"
 refute_text mutation-testing/SKILL.md "dirty tree stops"
 
+# --- Codex found both of these on the pull request, and both are the same
+# shape: a rule stated in one document and contradicted or unimplemented in the
+# one that executes. ---
+
+# The restore check is two comparisons. Status alone cannot see a failed restore
+# on a dirty tree, which is the tree this skill always runs in: an
+# already-modified file reads " M path" before the mutation and after it.
+require_text mutation-testing/SKILL.md "matches its backup in both contents and mode"
+# cmp passes on a file whose executable bit moved, and so does the status check,
+# so a mode-only restore failure cleared both until this clause landed.
+require_text mutation-testing/SKILL.md "Contents alone is not enough"
+require_text mutation-testing/SKILL.md "reports status codes rather than contents"
+require_text mutation-testing/SKILL.md "Verify the restore twice"
+
+# A slipped verdict is a defect only where behaviour a caller could observe
+# changed. README, RATIONALE and EVALS all promised the report marks an
+# equivalent mutant as unresolved; SKILL.md, the file that executes, did not.
+require_text mutation-testing/SKILL.md "That is an equivalent mutant"
+require_text mutation-testing/SKILL.md "awaiting a human ruling, and it is not reported as a defect"
+refute_text mutation-testing/SKILL.md "A \`slipped\` adversarial verdict is a defect in the guard, not a measurement"
+
 # --- The README is a separate document that can drift from the skill. Pin the
 # install flag the root README's map table is checked against, and the two rules
 # a reader would act on without opening SKILL.md. ---
@@ -204,6 +225,19 @@ refute_text mutation-testing/SKILL.md "dirty tree stops"
 require_text mutation-testing/README.md "--skill mutation-testing"
 require_text mutation-testing/README.md "Restore happens **by name**, one path at a time."
 require_text mutation-testing/README.md "The only safe fan-out is a worktree per mutation, and this skill builds none."
+
+# --- The README and the evals carry rules of their own now, and reverting
+# either stayed green until these landed. ---
+
+require_text mutation-testing/README.md "compared byte-for-byte against the backup taken outside the repo"
+require_text mutation-testing/README.md "An equivalent mutant is reported unresolved, not as a defect."
+require_text mutation-testing/README.md "a \`cmp\` against the backup and a \`git status\` comparison"
+
+# Scenario 4 could not fail as first written, twice over: a collateral file in a
+# sibling directory is never reached, and an untracked one under the restored
+# path is not either, since git checkout -- <dir> restores tracked files only.
+require_text _maintenance/mutation-testing/EVALS.md "uncommitted edit to a tracked file beneath that path"
+require_text _maintenance/mutation-testing/EVALS.md "restores tracked files from the index and leaves untracked ones alone"
 
 # --- The ledger. The tier legend is what makes an [E] row a claim about a
 # measurement rather than a confidence marker, and the refute intro is what ties
