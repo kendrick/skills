@@ -212,6 +212,93 @@ require_text work-issue/references/worker-prompt.md "what you left and why"
 # the step still reads as intact, with nothing in the output to say otherwise.
 require_text work-issue/SKILL.md "rows 1 (money), 2 (authz), and 4 (schema) of \`adversarial-review/references/trigger-table.md\`"
 
+# --- Step 4's caller rule. The worker and the reproducer both build their
+# fixtures by hand, so both hand the seam an input shaped by the same
+# assumptions, and the production caller shares none of them. Issue #109
+# records a seam that shipped with five mutations and a five-case probe behind
+# it and its boundary never examined. Four documents state the rule. Drop it
+# from one of them and the run stops following it with nothing in the output
+# to say so, so each of the four gets a pin below. ---
+
+# The rule itself, in Step 4 item 2. A sentence that names callers without
+# telling the reproducer to drive one satisfies a grep while leaving the
+# caller undriven, so the pin carries the verb. The ledger's "Moving the
+# caller rule into `adversarial-review`" row names this pin as its hold. That
+# skill fires on trigger rows 1, 2, and 4 only, and this rule has to run on
+# every claim.
+require_text work-issue/SKILL.md "Where a claim concerns a seam some production caller reaches at HEAD, its last reproduction drives that caller rather than the seam."
+
+# Step 4's Done-when. Drop the caller-versus-seam clause and the step
+# completes on a verdict that never says where it ran, so nobody reading the
+# pull request can see the weaker case: the seam held against an input the
+# reproducer built itself.
+require_text work-issue/SKILL.md "every \`REPRODUCED\` claim says whether it was reproduced at the caller or at the seam, and a seam-only one carries the caller search that decided it"
+
+# The subsection heading. Step 4 item 2 sends the orchestrator to
+# references/redteam.md before it dispatches, and this heading is where the
+# rule the reproducer follows begins.
+require_text work-issue/references/redteam.md "### Drive the nearest production caller"
+
+# The ordering, which is issue #109's first non-goal: the caller reproduction
+# is added to the seam reproduction, never swapped for it. A caller-only run
+# loses the comparison that separates a seam wrong everywhere from a seam
+# wrong only at its caller. The ledger's "Replacing the seam reproduction with
+# the caller reproduction" row names this pin as its hold.
+require_text work-issue/references/redteam.md "The seam reproduction stays and the caller reproduction comes last: run the claim's command at the seam first, then find the change's production callers at HEAD and drive the nearest one."
+
+# Where the input goes in decides whether the caller run buys anything. A
+# reproducer that hands the seam an argument it built itself has rebuilt the
+# worker's fixture, however many hops it took to get there, and the boundary
+# stays unexamined.
+require_text work-issue/references/redteam.md "Whatever the reproducer supplies goes in at the caller's boundary, and the caller constructs what reaches the seam."
+
+# No production caller at HEAD is an answer, not a stop and not an
+# `UNVERIFIABLE`. Step 4 item 5 spends `UNVERIFIABLE` on claims nobody could
+# check at all, and this claim was checked. The empty search is the evidence
+# for it, so the step has to record that search rather than leave a reader to
+# infer it from a missing field.
+require_text work-issue/references/redteam.md "**No production caller at HEAD.** \`caller.path\` is null, \`caller.search\` carries the grep and \`caller.output\` its empty result, and \`reproduced_at\` is \`seam\`."
+
+# The two fields every verdict entry carries beside `verdict`, pinned on the
+# example the reproducer copies its shape from. `caller` is pinned whole: a
+# file that keeps the key and drops `search` loses the one field that lets a
+# reader audit a seam-only verdict.
+require_text work-issue/references/redteam.md "\"reproduced_at\": \"caller\","
+require_text work-issue/references/redteam.md "\"caller\": {\"search\": \"\", \"path\": \"\", \"command\": \"\", \"output\": \"\"}"
+
+# The prompt block is the only part of redteam.md the dispatched reproducer
+# ever sees. A caller rule written into the prose above it and left out of the
+# prompt reads correct to whoever reviews the file and never reaches the
+# agent, which makes the subsection documentation of a step nothing performs.
+# So both greps below are scoped to the block instead of to the file. The
+# block is unwrapped first, because it is hard-wrapped and every sentence in
+# it spans lines. Its range ends at the next `### ` heading rather than at
+# Verdict JSON by name, so renaming that heading cannot widen the range far
+# enough for a prose copy of the rule to satisfy the grep.
+prompt_block="$(sed -n '/^### The prompt$/,$p' work-issue/references/redteam.md | sed '1d' | sed '/^### /,$d' | tr '\n' ' ' | tr -s ' ')"
+
+grep -Fq -- "Drive the nearest one, and let the caller build the seam's input out of whatever you supply at its boundary" <<<"$prompt_block" || {
+  echo "work-issue/references/redteam.md: the prompt block no longer tells the reproducer to drive the nearest production caller" >&2
+  exit 1
+}
+
+grep -Fq -- "Report \`reproduced_at\` as \`caller\` or \`seam\`, and a \`caller\` object carrying that search" <<<"$prompt_block" || {
+  echo "work-issue/references/redteam.md: the prompt block no longer asks the reproducer for reproduced_at and the caller object" >&2
+  exit 1
+}
+
+# The README's red-team paragraph is where a human learns what the phase does.
+# A copy that stops at the seam describes a weaker check than the one Step 4
+# runs, and no other assertion in this file covers that sentence.
+require_text work-issue/README.md "the reproducer searches HEAD for the change's production callers and drives the nearest one, since the caller builds the seam's input by a route no hand-made fixture takes"
+
+# The ledger row behind the `REPRODUCED_AT_CALLER` refute in the cut-features
+# loop below. AGENTS.md asks every refute to correspond to a Deliberately Not
+# Built row, so pinning the cut name keeps that refute traceable to the
+# decision that made it instead of leaving a bare string nobody can account
+# for.
+require_text _maintenance/work-issue/RATIONALE.md "A fourth verdict value such as \`REPRODUCED_AT_CALLER\`"
+
 # Step 6's three review states, copied off the table a poll scores against.
 # `findings` outranks `cleared` for a reason: a reviewer can leave an approving
 # reaction and a blocking thread in one pass. A dropped row here is a state the
@@ -265,6 +352,18 @@ for doc in "${work_issue_docs[@]}"; do
   # rebase from somebody else's push. The trailing space is what keeps
   # `--force-with-lease` out of this refute's reach.
   refute_text "$doc" "push --force "
+
+  # A fourth verdict value. Step 4's routing, references/resume.md's
+  # `redteam_last_failed` grep, and run-state.py's row 10 all split on the
+  # same three values, and that grep's alternation is unanchored:
+  # REPRODUCED_AT_CALLER scores as nothing to it, and
+  # NOT_REPRODUCED_AT_CALLER scores as a plain failure. `reproduced_at`
+  # carries the distinction past all three readers instead. The substring
+  # catches both spellings. RATIONALE.md stays outside work_issue_docs for
+  # this refute's sake. The ledger row documenting the cut spells the value
+  # out, so a refute reaching the ledger would fail on the row that records
+  # the decision.
+  refute_text "$doc" "REPRODUCED_AT_CALLER"
 
   # Attribution trailers and generation footers. Every commit message, pull
   # request body, and thread reply this skill authors goes out without one.
