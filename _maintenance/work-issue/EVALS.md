@@ -170,6 +170,24 @@ python3 work-issue/scripts/run-state.py review <PR> --since "$(cat RUN_DIR/pushe
 
 **Pass condition:** the schema issue's `trigger.txt` records the fire with the row name, and `adversarial-review` ran with FIXED_POINT equal to `RUN_DIR/base_sha`. The docs issue's `trigger.txt` records no fire and no run directory exists. `--deep` fires it on the docs issue anyway, and `--fast` does not suppress it on the schema issue. Fails if the docs diff fires it, if the schema diff does not, if the trigger signals were read from a copy in `work-issue` rather than re-derived from the sibling's table, or if `--fast` suppresses the trigger.
 
+### 16. A Seam Green on Its Fixture Fails at Its Caller
+
+**Setup:** a sandbox issue whose plan changes one seam in the shape issue #109 recorded: a comparison or a normalizer with a production caller above it. Give the seam tests that pass, with the fixture building both sides of its input the same way, since one hand builds both. Then have the caller build that input differently, one side re-parsed and the other carried straight through from an object the caller never re-parses, so the seam's own command is green and the caller's is red. Keep the caller on a non-test path, where the reproducer's search can find it.
+
+**Commands:** let Step 3 and Step 4 run, then read `RUN_DIR/redteam/round-1.json`.
+
+**Pass condition:** the seam's own command is green in the verdict and the claim still comes back `NOT_REPRODUCED`, carrying `"reproduced_at": "caller"`, the caller's path in `caller.path`, what drove it in `caller.command`, its real red output in `caller.output`, and the grep that found it in `caller.search`. A repair round follows with that command and output attached as the evidence. Fails if the claim comes back `REPRODUCED` on the seam command alone, if any verdict in the file omits `reproduced_at`, or if the verdict reaches for a fourth value instead of pairing `NOT_REPRODUCED` with `reproduced_at`. It fails too where `caller.command` calls the seam itself: a reproducer that hand-builds the seam's argument has built the fixture over again, and that run belongs at the seam.
+
+### 17. A Seam With No Caller Says So and the Run Goes On
+
+**Setup:** a sandbox issue whose plan adds a seam nothing calls at HEAD: a helper or a handler nothing is wired to yet, with tests of its own that pass.
+
+**Commands:** let Step 4 and Step 5 run, then read `RUN_DIR/redteam/round-1.json` and the verification section of `RUN_DIR/pr-body.md`.
+
+**Pass condition:** the claim is `REPRODUCED` with `"reproduced_at": "seam"`, `caller.path` null, the search grep in `caller.search`, and that search's empty result in `caller.output`. The run goes on to Step 5, and the pull request's verification section marks the claim seam only and gives the absent caller as the reason. Fails if the absent caller downgrades the claim to `UNVERIFIABLE`, triggers a repair round, or stops the run, and fails if the pull-request body reads the same here as it does for a claim reproduced at its caller.
+
 ## What These Evals Do Not Cover
 
-The cross-run race in `RATIONALE.md`'s Known Limitations has no scenario, because reproducing it means winning a race between two invocations inside the same second and there is no proposed fix to validate. Neither does the in-scope test's judgment at the edges: a scenario can check that an ambiguous finding was recorded as ambiguous, which Scenario 12 does, but not that the call was right. herdr flag drift is watched rather than tested—Scenario 11 checks the fallback fires, not that any particular flag name is still current, since the installed binary is the authority and it changes on its own schedule. Treat all three as open risks to watch while running the scenarios above.
+The cross-run race in `RATIONALE.md`'s Known Limitations has no scenario, because reproducing it means winning a race between two invocations inside the same second and there is no proposed fix to validate. Neither does the in-scope test's judgment at the edges: a scenario can check that an ambiguous finding was recorded as ambiguous, which Scenario 12 does, but not that the call was right. herdr flag drift is watched rather than tested—Scenario 11 checks the fallback fires, not that any particular flag name is still current, since the installed binary is the authority and it changes on its own schedule.
+
+The caller search has two blind spots and no scenario reaches either. It is a grep, so it finds the callers that spell the symbol and misses the ones that do not: dynamic dispatch, a string-keyed registry, reflection, a framework that binds by convention. A scenario for that would have to plant a caller the grep was built to miss, which measures the planted caller and not the search. So Scenario 17 cannot tell a seam nothing calls from a seam whose caller is hidden, and neither can whoever reads the verdict. Nearest is judgment as well: where several production paths reach the symbol directly, Scenario 16 checks that a caller was driven, not that the closest one was. Treat each of these as an open risk to watch while running the scenarios above.

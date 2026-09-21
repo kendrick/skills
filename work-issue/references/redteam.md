@@ -38,6 +38,27 @@ Empty output is the verdict. The claim is `NOT_REPRODUCED` with that grep as its
 
 The same rule binds the reproducer's own writes: every edit is proved before anything reads a result that depends on it. Where it edits a fixture to provoke a failure, it shows the changed bytes first, then runs the suite. A provocation that never landed produces a green suite and the false conclusion that the guard works.
 
+### Drive the nearest production caller
+
+The seam reproduction stays and the caller reproduction comes last: run the claim's command at the seam first, then find the change's production callers at HEAD and drive the nearest one. The caller's result is the deciding one. A fixture built by hand shares the assumptions of whoever built it, worker and reproducer alike, and the caller shares none of them—it builds the seam's input out of whatever production hands it.
+
+Find callers with the symbol the change-exists grep already named:
+
+```
+git -C TREE grep -n -w <symbol> HEAD -- . ':!<claim path>' ':!*test*' ':!*spec*' ':!*fixture*'
+```
+
+A **production caller** is a non-test path that reaches the changed symbol. **Nearest** is the one that calls it directly; where several do, take the one whose own input comes from furthest outside the seam. For a script or a CLI, the caller is the command line production runs it with, driven the way production drives it.
+
+**The caller builds the seam's input.** Whatever the reproducer supplies goes in at the caller's boundary, and the caller constructs what reaches the seam. A run that hand-builds the seam's argument has built the same fixture again, and it records `reproduced_at: seam`.
+
+Two cases stop at the seam, and each is an answer rather than a failure:
+
+- **No production caller at HEAD.** `caller.path` is null, `caller.search` carries the grep and `caller.output` its empty result, and `reproduced_at` is `seam`. The verdict is whatever the seam said, and the run continues—an unexercised seam is worth knowing about, and it reaches the pull-request body as seam only.
+- **A caller found and not drivable**, because it needs a live service, credentials, or hardware. `caller.path` is set, `caller.command` is null, and `caller.output` is the reason. `reproduced_at` is `seam` and the verdict is whatever the seam said.
+
+A seam-level `NOT_REPRODUCED` stops there with `reproduced_at: seam`; there is nothing left to drive. A caller-level failure is `NOT_REPRODUCED` with `reproduced_at: caller`, and the caller's command and output are the repair evidence.
+
 ### The prompt
 
 ```
@@ -67,6 +88,17 @@ exists at the head commit, with `git diff BASE_SHA..HEAD -- <path> | grep -n
 <symbol>`. Empty output means NOT_REPRODUCED, and that grep is your evidence.
 Do not run the claim's command in that case.
 
+Once the claim's command has run at the seam, find the change's production
+callers at HEAD: `git -C TREE grep -n -w <symbol> HEAD -- . ':!<claim path>'
+':!*test*' ':!*spec*' ':!*fixture*'`. Drive the nearest one, and let the
+caller build the seam's input out of whatever you supply at its boundary,
+rather than handing the seam an argument you built yourself. Report
+`reproduced_at` as `caller` or `seam`, and a `caller` object carrying that
+search, the caller's path and the command that drove it, and its real
+output. Where the search found nothing, or the caller needs a live service,
+credentials or hardware you do not have, put that in `caller.output` and
+report `reproduced_at: seam`.
+
 Every edit you make is proved before anything reads a result that depends on
 it. Where you edit a fixture to provoke a failure, show the changed bytes
 first, then run the suite. A provocation that never landed leaves the suite
@@ -81,12 +113,20 @@ Your final message is exactly one fenced json block and nothing else.
 
 ```json
 {
-  "verdicts": [{"claim": "", "command": "", "output": "", "verdict": "REPRODUCED"}],
+  "verdicts": [{
+    "claim": "", "command": "", "output": "", "verdict": "REPRODUCED",
+    "reproduced_at": "caller",
+    "caller": {"search": "", "path": "", "command": "", "output": ""}
+  }],
   "left_checks": [{"what": "", "holds": true, "evidence": ""}]
 }
 ```
 
 `verdict` is `REPRODUCED`, `NOT_REPRODUCED`, or `UNVERIFIABLE`. The three route differently and the difference matters: `NOT_REPRODUCED` is a repair dispatch with the reproducer's command and output attached; `UNVERIFIABLE` is a pull-request section naming what nobody could check; `REPRODUCED` is the only one that lets the claim stand.
+
+`reproduced_at` says where the last reproduction ran: `caller` where a production caller drove it, `seam` where the claim's own command was the end of it. It sits beside `verdict`, which stays those same three values. `caller` carries the search that looked for callers, the caller driven and the command that drove it, and that command's real output—or, where nothing was driven, the reason in `caller.output` with `path` or `command` null.
+
+`REPRODUCED` with `reproduced_at: seam` is the weaker of the two: the seam held against an input the reproducer built, and no production caller was driven against it. Step 5's verification section marks that claim seam only and says which of the two cases above it was.
 
 `holds` is the reproducer's read of a `left` entry's stated reason against the code. `false` with evidence is a finding, and it routes like a `NOT_REPRODUCED` claim.
 
