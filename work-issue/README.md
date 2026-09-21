@@ -59,7 +59,7 @@ It only runs when you ask for it by name—see the Gotchas for why.
 > /work-issue https://github.com/you/repo/issues/42 --no-isolate
 ```
 
-Type the first line again to resume. The run probes the world, works out where it stopped, and picks up there. Without a plan path it looks under `docs/plans/`, then for a path linked from the issue, then for the approved plan in the conversation. `--isolate` and `--no-isolate` pin the isolation decision, `--deep` forces `adversarial-review`, and `--dry-run` runs every gate and every derivation while dispatching nothing and pushing nothing.
+Type the same invocation again to resume, plan path included if you passed one. The run probes the world, works out where it stopped, and picks up there. Without a plan path it looks under `docs/plans/` in this repo, then for a path linked from the issue, then for the approved plan in the conversation. It finds a plan you keep anywhere else only if you pass the path or the issue links it, so a resume that drops the path can reach the plan gate with nothing to satisfy it. `--isolate` and `--no-isolate` pin the isolation decision, `--deep` forces `adversarial-review`, and `--dry-run` runs every gate and every derivation while dispatching nothing and pushing nothing.
 
 ## What's Here
 
@@ -85,6 +85,7 @@ work-issue/
 - **`adversarial-review` fires only when the diff earns it.** It matches the committed diff against the money, authz, and schema rows of `adversarial-review`'s own trigger table, re-derived from that table at run time so the rows stay current, and `--deep` fires it outright. A docs-and-types diff gets the lightweight reproducer and nothing heavier. The trigger needs that sibling installed to derive from, and without it the step stops rather than guessing at a signal list.
 - **A `+1` clears the run only if it landed after the last push.** It scores every approval and reaction against that push, so an approval of the branch as it stood before your repair commits leaves the run in `findings` or `pending`. It strips `[bot]` before comparing logins, because REST and GraphQL disagree on whether the suffix is there and an unstripped comparison reads one reviewer as two.
 - **The queue is never filed.** An out-of-scope finding gets a row, the reason it's outside, and a `file-issue` line for you to run. A walk-away run that files tickets turns one reviewer's aside into backlog nobody triaged, so the deferred-findings comment on the pull request is where that triage happens instead.
+- **A plan outside the repo needs the path or an issue link.** The search covers `docs/plans/` in the working tree and nothing else, so a plan you keep in `~/.claude/plans/` or a scratch directory is found only through the path you pass or a link in the issue itself. Miss both and the run falls back to the copy held in the conversation—quietly, and that copy dies with the session, so a resume can reach the plan gate with nothing left to satisfy it. Pass the path on the command line and the next invocation finds it the same way this one did.
 - **Resume reads the world, not its own notes.** Nothing on disk records which phase the run thinks it reached, so it probes git, `gh`, and herdr and infers the phase from what exists. It reverts a half-written wave that left no report rather than trusting it.
 
 ## Maintainers
