@@ -5,11 +5,13 @@
 # back to "which files changed", a restore rule that loses the failure that
 # taught it, a report row that stops naming the runner's own line.
 #
-# The refutes carry more weight than the requires. Each one maps to a row in
-# Deliberately Not Built, and every one of those cuts is a reasonable-sounding
-# idea somebody will re-propose. A parallel mutation runner is the obvious
+# The refutes carry more weight than the requires. Every row in Deliberately Not
+# Built has at least one, and each of those cuts is a reasonable-sounding idea
+# somebody will re-propose. A parallel mutation runner is the obvious
 # optimization; a directory-form restore is the obvious shorthand. The refute is
-# what makes re-adding one a red suite rather than a quiet regression.
+# what makes re-adding one a red suite rather than a quiet regression. The
+# mapping runs row-to-assertion and not the reverse: the disable-model-invocation
+# refute below pins the invocation mode and answers to no row.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -172,7 +174,11 @@ require_text mutation-testing/SKILL.md "to a scratch location outside the reposi
 # halves matter: without the re-take the re-measure deadlocks against the restore
 # check, and without the ordering the re-take disarms that check for good.
 require_text mutation-testing/SKILL.md "re-take BASELINE and re-run every mutation"
-require_text mutation-testing/SKILL.md "so every mutation is restored"
+require_text mutation-testing/SKILL.md "so every mutation is already restored"
+# The past-event reading is the whole of item 1. Read as a check to run at Step 4
+# time it is unsatisfiable, since the grown suite is itself the difference, and a
+# red-team round found exactly that ambiguity in the first wording.
+require_text mutation-testing/SKILL.md "never a check to run now"
 require_text mutation-testing/SKILL.md "BASELINE was re-taken from a fully restored tree"
 
 # An unpinned guard gets no mutation: zero failures there is indistinguishable

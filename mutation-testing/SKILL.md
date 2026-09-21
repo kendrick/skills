@@ -63,7 +63,7 @@ So before any count leaves this run—into a report, a pull-request description,
 
 Re-take it in this order, because the order is what keeps Step 3 item 5 armed:
 
-1. Confirm the tree has just passed item 5 against the **current** snapshot, so every mutation is restored. Skipping this bakes a live mutation into the new snapshot, and item 5 then passes for the rest of the run with that mutation still on disk—the near miss it exists to catch, made permanent.
+1. Confirm the Step 3 cycle that just finished ended with its item 5 passing, so every mutation is already restored. This is a fact about that finished cycle, never a check to run now: the new test file is itself a difference against the current snapshot, so item 5 evaluated at this moment fails by construction. Skipping the confirmation bakes a live mutation into the new snapshot, and item 5 then passes for the rest of the run with that mutation still on disk—the near miss it exists to catch, made permanent.
 2. Run SUITE_CMD and save the new summary line. Red here stops the run for the same reason a red baseline does.
 3. Save `git status --porcelain` as the new snapshot, which now carries the grown suite.
 
