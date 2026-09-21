@@ -186,6 +186,17 @@ require_text mutation-testing/SKILL.md "BASELINE was re-taken from a fully resto
 require_text mutation-testing/SKILL.md "Two per guard that Step 1 paired with a test"
 require_text mutation-testing/SKILL.md "every guard with a pinning test carries one mutation of each kind"
 
+# --- The dirty-tree divergence, ledger row 15. Both sibling skills refuse a
+# dirty tree; this one snapshots it, because it fires DURING the work on a guard
+# nobody has committed yet, so refusing one would refuse every run the trigger
+# describes. A maintainer pattern-matching on adversarial-review or divvy-up
+# would reintroduce their precondition in their words, so the refutes pin that
+# wording rather than a phrase invented here. ---
+
+require_text mutation-testing/SKILL.md "The tree does not have to be clean, and usually is not"
+refute_text mutation-testing/SKILL.md "commit or stash first"
+refute_text mutation-testing/SKILL.md "dirty tree stops"
+
 # --- The README is a separate document that can drift from the skill. Pin the
 # install flag the root README's map table is checked against, and the two rules
 # a reader would act on without opening SKILL.md. ---
