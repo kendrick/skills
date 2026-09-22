@@ -80,7 +80,7 @@ Checks a Johnny.Decimal system for drift and walks you through reconciling what 
 
 #### [technical-writing](technical-writing/README.md)
 
-Routes developer-facing prose—commit messages, code comments, PR descriptions, API reference, READMEs—to a profile that names which public standards apply: [Diátaxis](https://diataxis.fr/start-here/), [Google developer style](https://developers.google.com/style), [ASD-STE100](https://www.techwriter.ai/s1000d/writing-for-s1000d/simplified-technical-english) principles, and [Kohl's Global English](https://books.google.com/books?id=r0AiqqRBPF0C&printsec=frontcover#v=onepage&q&f=false). Four profiles ship today; the rest fall back to global rules. Every draft ends in a mandatory audit.
+Routes developer-facing prose—commit messages, code comments, PR descriptions, review correspondence, API reference, READMEs—to a profile that names which public standards apply: [Diátaxis](https://diataxis.fr/start-here/), [Google developer style](https://developers.google.com/style), [ASD-STE100](https://www.techwriter.ai/s1000d/writing-for-s1000d/simplified-technical-english) principles, and [Kohl's Global English](https://books.google.com/books?id=r0AiqqRBPF0C&printsec=frontcover#v=onepage&q&f=false). Artifacts with no profile yet fall back to the global rules. Every draft ends in a mandatory audit.
 
 #### [readme-coauthorship](readme-coauthorship/)
 
