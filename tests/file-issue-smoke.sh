@@ -151,6 +151,35 @@ require_text file-issue/SKILL.md "exercise the change, not merely pass beside it
 require_text file-issue/SKILL.md "declaring its prerequisite as a blocker, or by naming the issue where verification lands"
 require_text file-issue/SKILL.md "what preparatory change would make the work small and verifiable on its own"
 
+# The derived-rule gate (#110). A ticket that introduces a derived value ships
+# the rule for deriving it. Stated in prose, that rule can key on the wrong thing
+# and still read correctly: one provenance ticket cost four reclassifications
+# across four modules before anyone caught it. Six strings hold the gate: the
+# heading, the trigger in the ticket's own language, both halves of the
+# two-outcome property that makes the gate a demand for a falsifier rather than
+# for more precision, and the two fences that keep the gate off every acceptance
+# criterion and off the test itself. The second half gets its own line because a
+# reword drops that half first, and it is the only half asserting a non-effect.
+# Without it the gate reads as a request to tighten a sentence.
+require_text file-issue/SKILL.md "**Falsifier for a derived rule**"
+require_text file-issue/SKILL.md '"is", "counts as", or "should be marked"'
+require_text file-issue/SKILL.md "most plausible wrong neighbor: perturb what the rule keys on"
+require_text file-issue/SKILL.md "perturb the nearest thing the rule could have keyed on instead and the value has to stay put"
+require_text file-issue/SKILL.md "Acceptance criteria observe the value and this gate reaches the rule behind it"
+require_text file-issue/SKILL.md "rather than a rewrite or the test itself"
+
+# Step 7 may reword a falsifier but never disarm it. Disarming by reword already
+# shipped once for acceptance criteria: Step 7's protected list omitted them, a
+# reword slipped through (EVALS scenario 7), and naming them closed the hole. A
+# falsifier left to the generic "every fact the gates passed" clause reopens that
+# hole, because the half a reword drops is the non-effect half.
+require_text file-issue/SKILL.md "both outcomes it asserts survive the pass"
+
+# The template carries the gate's drafting counterpart. Without that prompt, a
+# drafter first meets the gate at Step 6 with the body already written, which
+# forces the rewrite the gate exists to avoid.
+require_text file-issue/assets/feature.template.md "state the rule as a property and name the check that would fail it"
+
 # Parent and Blocked-by slots (#19). A prerequisite smuggled into prose sends
 # an agent to run a file another ticket has yet to create, so every template
 # carries both slots, Blocked by resolves to references or an explicit "None"
@@ -168,11 +197,14 @@ require_text file-issue/SKILL.md "fails unless that artifact is declared on the 
 require_text file-issue/references/evidence-map.md "Stranger test"
 require_text file-issue/references/evidence-map.md "Runnable repro"
 require_text file-issue/references/evidence-map.md "Agent-readiness"
+require_text file-issue/references/evidence-map.md "Falsifier for a derived rule"
 # The verify-alone row is practitioner-backed, not measured, and must say so.
 require_text file-issue/references/evidence-map.md "Verify-alone, agent-targeted issues"
 # The existing-artifact row is convention, not measured, and must say so.
 require_text file-issue/references/evidence-map.md "Requiring the artifact on the Blocked by line makes the prerequisite recoverable by the one audience that cannot ask. Dependency links are universal tracker practice; nothing measures them. | [C] |"
 require_text file-issue/references/evidence-map.md "practitioner consensus and \`to-tickets\`' central rule; no study measures its effect on agent outcomes. | [P] |"
+# The derived-rule row is convention from one run, not measured, and must say so.
+require_text file-issue/references/evidence-map.md "Found by one real run (#110); nothing measures whether naming the falsifier changes outcomes. | [C] |"
 require_text file-issue/references/evidence-map.md "Things Deliberately Not in the Rubric"
 
 # The uncited Gherkin statistic is marketing. It may appear only in the evidence
