@@ -333,7 +333,7 @@ grep -Fq -- "Drive the nearest one, and let the caller build the seam's input ou
   exit 1
 }
 
-grep -Fq -- "Report \`reproduced_at\` as \`caller\` or \`seam\`, and a \`caller\` object carrying that search" <<<"$prompt_block" || {
+grep -Fq -- "Where a command ran, report \`reproduced_at\` as \`caller\` or \`seam\`, and a \`caller\` object carrying that search" <<<"$prompt_block" || {
   echo "work-issue/references/redteam.md: the prompt block no longer asks the reproducer for reproduced_at and the caller object" >&2
   exit 1
 }

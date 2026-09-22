@@ -98,9 +98,9 @@ caller often sits in the same file as the seam it calls. The search is wide
 and returns prose that only names the symbol, so pick a hit that runs it.
 Drive the nearest one, and let the caller build the seam's input out of
 whatever you supply at its boundary, rather than handing the seam an argument
-you built yourself. Report `reproduced_at` as `caller` or `seam`, and a
-`caller` object carrying that search, the caller's path and the command that
-drove it, and its real output.
+you built yourself. Where a command ran, report `reproduced_at` as `caller`
+or `seam`, and a `caller` object carrying that search, the caller's path and
+the command that drove it, and its real output.
 
 Three runs report `reproduced_at: seam`, and each puts its reason in
 `caller.output`. Where no hit runs the symbol, give the search and whatever it
