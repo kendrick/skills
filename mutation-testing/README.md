@@ -21,7 +21,7 @@ Then two mutations per guard that has a test, because there are two questions an
 
 Mutations run one at a time, each against a tree the previous one put back. Apply, prove the edit actually landed on disk, run the suite, restore, compare. Proving the edit matters here: an edit that silently failed to apply leaves the suite green, and green reads in this skill as "no test catches this", which is the exact inverse of what happened.
 
-Restore happens by **copying the backup back**, one path at a time, and never with `git checkout`. On the tree this skill runs on, the index holds the state before your guard existed, so a checkout would delete the work you invoked it to measure. The backup is the only copy of that work the run holds. `git checkout -- app/storage/` once reverted a new test alongside the mutation, and the suite came back green without it, caught on the test count rather than noticed, which makes it a near miss rather than a save. So every restore is checked twice. Each mutated path is compared against the backup taken outside the repo, in contents and in mode, or in link identity where the path is a symlink, and the whole tree's `git status --porcelain -uall` is compared against a snapshot from before the first mutation. The `-uall` is not decoration: without it git collapses a wholly-untracked directory to one line and a file lost inside it never shows up. Neither check sees what the other does: status reports codes rather than contents, so a file you had already edited reads ` M path` whether it holds your work or a live mutation, while the contents check is blind to a casualty among the files no mutation touched.
+Restore happens by **copying the backup back**, one path at a time, and never with `git checkout`. On the tree this skill runs on, the index holds the state before your guard existed, so a checkout would delete the work you invoked it to measure. The backup is the only copy of that work the run holds. `git checkout -- app/storage/` once reverted a new test alongside the mutation, and the suite came back green without it, caught on the test count rather than noticed, which makes it a near miss rather than a save. So every restore is checked twice. Each mutated path is compared against the backup taken outside the repo, in contents and in mode, and the whole tree's `git status --porcelain -uall` is compared against a snapshot from before the first mutation. The `-uall` is not decoration: without it git collapses a wholly-untracked directory to one line and a file lost inside it never shows up. Neither check sees what the other does: status reports codes rather than contents, so a file you had already edited reads ` M path` whether it holds your work or a live mutation, while the contents check is blind to a casualty among the files no mutation touched.
 
 Counts go stale, so the baseline and its snapshot are re-taken and every mutation re-runs against the final suite before any number leaves the run. The re-take happens only from a tree whose restores have just passed, because absorbing a still-applied mutation into the snapshot would retire the restore check for the rest of the run. One mutation moved from 2 failures to 4 once a later test began exercising the same return value, and extrapolating from the earlier run would have put a wrong number in a pull request, where it reads as a measurement.
 
@@ -63,10 +63,12 @@ It asks for your test command when the project's config does not name one, and i
 ```
 mutation-testing/
 ├── SKILL.md      # the skill: name the guards, write both mutations, run, re-measure, report
-└── README.md     # this file
+├── README.md     # this file
+└── references/
+    └── what-each-check-sees.md   # what each restore check sees, per kind of path
 ```
 
-There is no `references/` and no `scripts/`, because choosing a mutation is judgment, the suite is your own command, and restoring is a copy-back checked by a `cmp` against the backup and a `git status` comparison against the snapshot.
+There is no `scripts/`, because choosing a mutation is judgment, the suite is your own command, and restoring is a copy-back checked by a `cmp` against the backup, a mode comparison, and a `git status --porcelain -uall` comparison against the snapshot. The one reference file is a table of what each of those checks can and cannot see, per kind of path, which exists because almost every bug found in this skill was a change to one check made without asking what the others still covered.
 
 ## Gotchas
 
@@ -76,6 +78,7 @@ There is no `references/` and no `scripts/`, because choosing a mutation is judg
 - **The measurement is of your suite, not your guard.** "Fails 1, leaves 62 green" says one test noticed. Whether one is enough is your call, and the report is deliberately silent on it.
 - **An equivalent mutant is reported unresolved, not as a defect.** A mutation that changes nothing a caller could observe could not have been caught by any test, so the guard may be sound. Those rows say they are waiting on a human ruling, and making it is yours. Where the run cannot tell an equivalent mutant from a real gap, the row says that too.
 - **It sees your brand-new files.** A guard and its test in files you have not added yet are still in scope, which matters because that is how a guard usually arrives. Their backups are the only copies anywhere, though, since git holds no version to fall back on.
+- **It refuses symlinks.** A mutation written through a link lands on the link's target, which the run has no copy of, so it names the path and stops instead of measuring something it cannot put back.
 - **Ignored files restore unverified.** `git status --porcelain` says nothing about anything in `.gitignore`, so a mutation that writes into an ignored build directory sits outside the snapshot check.
 - **A slow suite bounds the run.** Two mutations per guard, re-run at the end, against a ten-minute suite is a long afternoon. Fewer guards per run beats fewer mutations per guard.
 - **It stays inside what the diff added.** It will not wander into surrounding code to find something else worth mutating.

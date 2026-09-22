@@ -96,7 +96,7 @@ require_text mutation-testing/SKILL.md "Reach for the plausible version rather t
 # rule is an unexplained preference, and the next author picks the shorter
 # command. ---
 
-require_text mutation-testing/SKILL.md "**Restore by copying item 1's backup back**"
+require_text mutation-testing/SKILL.md "**Restore** — copy the backup back to its named path"
 require_text mutation-testing/SKILL.md "the suite came back green without it"
 require_text mutation-testing/SKILL.md "against BASELINE's snapshot: \`git status --porcelain -uall\` matches it"
 
@@ -216,12 +216,11 @@ refute_text mutation-testing/SKILL.md "dirty tree stops"
 # The restore check is two comparisons. Status alone cannot see a failed restore
 # on a dirty tree, which is the tree this skill always runs in: an
 # already-modified file reads " M path" before the mutation and after it.
-require_text mutation-testing/SKILL.md "matches its backup in both contents and mode"
 # cmp passes on a file whose executable bit moved, and so does the status check,
 # so a mode-only restore failure cleared both until this clause landed.
 require_text mutation-testing/SKILL.md "Contents alone is not enough"
 require_text mutation-testing/SKILL.md "reports status codes rather than contents"
-require_text mutation-testing/SKILL.md "Verify the restore twice"
+require_text mutation-testing/SKILL.md "verify the restore two ways"
 
 # A slipped verdict is a defect only where behaviour a caller could observe
 # changed. README, RATIONALE and EVALS all promised the report marks an
@@ -239,13 +238,12 @@ require_text mutation-testing/SKILL.md "leaves untracked ones where they are"
 refute_text mutation-testing/SKILL.md "the new test went from \`??\` to absent"
 # The claim is about the directory-restore mechanism, not about untracked paths
 # in general — they are in DIFF now and can be lost by other routes.
-require_text mutation-testing/SKILL.md "For that mechanism specifically, an untracked file is not the shape to look for"
 
 # The mode comparison runs against the backup, never against HEAD: git diff
 # --summary is relative to the commit, so on the dirty tree this skill runs in
 # it reports nothing while the restored mode is wrong.
 require_text mutation-testing/SKILL.md "Compare against the backup rather than against HEAD"
-require_text mutation-testing/SKILL.md "matches its backup in contents, in mode, and in link identity"
+require_text mutation-testing/SKILL.md "matches its backup in contents and in mode"
 
 # The README stated the unqualified slipped rule twice; only one was fixed.
 require_text mutation-testing/README.md "A slipped verdict that names a real gap goes first"
@@ -262,7 +260,7 @@ refute_text _maintenance/mutation-testing/EVALS.md "app/storage/impl.py"
 # The mutation proof runs against the backup. `git diff -- <path>` is non-empty
 # because of the guard itself, so it reports success for a mutation that never
 # applied, and the unchanged suite then reports a false coverage gap.
-require_text mutation-testing/SKILL.md "prove it landed **against item 1's backup**"
+require_text mutation-testing/SKILL.md "prove it landed against the backup"
 require_text mutation-testing/SKILL.md "reports success for a mutation that never applied"
 
 # Restore is a copy-back, never git checkout: on this tree the index holds the
@@ -293,7 +291,7 @@ require_text mutation-testing/SKILL.md "Flattening to basenames collides"
 
 # cp without -p fabricates the backup's mode through the umask, and cp onto an
 # existing file keeps the destination's mode, so mode never comes back.
-require_text mutation-testing/SKILL.md "preserving mode and link identity (\`cp -Pp\`)"
+require_text mutation-testing/SKILL.md "preserving mode (\`cp -p\`)"
 require_text mutation-testing/SKILL.md "keeps the destination's mode"
 
 # Which diff the skill reads was never stated; the README advertises a by-name
@@ -339,7 +337,7 @@ require_text _maintenance/mutation-testing/EVALS.md "makes every scenario vacuou
 # measured nothing". The routes are not enumerable, so the stop lives at the one
 # place they all converge: an empty GUARDS. ---
 
-require_text mutation-testing/SKILL.md "**An empty GUARDS stops the run.**"
+require_text mutation-testing/SKILL.md "**Stop the run where nothing will be mutated.**"
 require_text mutation-testing/SKILL.md "A report with nothing in it is indistinguishable from a report of a run that measured something"
 
 # Under the guardless base every scenario's tree is dirty by construction, so an
@@ -352,21 +350,55 @@ require_text _maintenance/mutation-testing/EVALS.md "compared against what it pr
 # writes a regular file where the link was. Both other checks clear it: cmp
 # reads through, and two regular files agree on mode. Checked first for that
 # reason.
-require_text mutation-testing/SKILL.md "**Link identity**, for any path that was a symlink"
+require_text mutation-testing/SKILL.md "**Refuse** — any path that is not a regular file"
 # For a linked path the contents check cannot stand in: cmp follows both sides,
 # and a relative link in the backup resolves against the backup directory.
-require_text mutation-testing/SKILL.md "**replaces** the contents comparison rather than joining it"
-require_text mutation-testing/SKILL.md "follows a symlink instead of copying it"
+require_text mutation-testing/SKILL.md "stop rather than measure what the run cannot put back"
+require_text mutation-testing/SKILL.md "writing through a link lands on the target"
 
 # A pinning test is why the skill fires, never an entry in GUARDS: listed as a
 # guard it gets looked up for a test that pins the test.
-require_text mutation-testing/SKILL.md "is a **trigger, never a guard**"
+require_text mutation-testing/SKILL.md "is a **trigger, never a guard of its own**"
 refute_text mutation-testing/SKILL.md "a branch that turns input away, or a test that pins one of those"
 
 # go test prints no pass total, so the row asked for a number the runner never
 # emits beside a rule forbidding one assembled by hand.
 require_text mutation-testing/SKILL.md "passed: not reported by <runner>"
 require_text mutation-testing/SKILL.md "reads exactly like a measurement"
+
+# Restored after the Step 3 rewrite: both pins below lost their exact wording
+# when the items were renamed, and dropping them would have traded a stale pin
+# for no pin.
+require_text mutation-testing/SKILL.md "matches it in both contents and mode"
+require_text mutation-testing/SKILL.md "an untracked file is not the shape to look for"
+
+# The items are named, not numbered, because their numbers shifted twice and
+# every cross-reference went stale without a test noticing.
+require_text mutation-testing/SKILL.md "The steps are named rather than numbered"
+item_refs="$(grep -c 'item [0-9]' mutation-testing/SKILL.md || true)"
+[[ "$item_refs" == "0" ]] || {
+  echo "SKILL.md carries $item_refs numbered item cross-references; Step 3's items are named, and a number here goes stale the next time one moves" >&2
+  exit 1
+}
+
+# The stop covers both ways a run reaches no measurement: no guards at all, and
+# guards none of which will be mutated because none is pinned by a test.
+require_text mutation-testing/SKILL.md "equally a GUARDS whose every entry is a guard with no pinning test"
+
+# The test-only trigger had no route to a measurement: no guard added, GUARDS
+# empty, stop every time the skill fires the way its description advertises.
+require_text mutation-testing/SKILL.md "**the guard it pins goes into GUARDS** even though the diff did not add it"
+
+# go test prints no failing total either, so the reason given had to separate
+# reading the runner's named failures from reconstructing a count.
+require_text mutation-testing/SKILL.md "counting the lines it printed is reading its output rather than reconstructing it"
+
+# The reference table, and the README's inventory of it.
+require_file mutation-testing/references/what-each-check-sees.md
+require_text mutation-testing/SKILL.md "is the table of what every comparison here can and cannot see"
+require_text mutation-testing/SKILL.md "what the proof, contents, mode and collateral checks each see and are blind to"
+require_text mutation-testing/README.md "what-each-check-sees.md"
+require_text mutation-testing/references/what-each-check-sees.md "A new row is a new path kind"
 
 # --- The README is a separate document that can drift from the skill. Pin the
 # install flag the root README's map table is checked against, and the two rules
@@ -386,7 +418,7 @@ require_text mutation-testing/README.md "The only safe fan-out is a worktree per
 
 require_text mutation-testing/README.md "compared against the backup taken outside the repo, in contents and in mode"
 require_text mutation-testing/README.md "An equivalent mutant is reported unresolved, not as a defect."
-require_text mutation-testing/README.md "a \`cmp\` against the backup and a \`git status\` comparison"
+require_text mutation-testing/README.md "a \`cmp\` against the backup, a mode comparison, and a \`git status --porcelain -uall\` comparison"
 
 # Scenario 4 could not fail as first written, twice over: a collateral file in a
 # sibling directory is never reached, and an untracked one under the restored

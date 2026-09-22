@@ -104,7 +104,7 @@ git status --porcelain -uall | diff /tmp/before.txt -
 
 ### 6. A Guard With No Test Is Reported Before Any Mutation Runs
 
-**Setup:** the guardless base with uncommitted work adding a third guard to `app/storage.py` and, deliberately, no test for it. This is the one scenario where the guard arrives unpaired, which is the condition it exists to check.
+**Setup:** the guardless base with uncommitted work adding **two** guards to `app/storage.py`: scenario 1's `save()` guard with its pinning test, and a third guard with, deliberately, no test for it. The paired guard is not decoration — it is what produces the mutation results the unpaired guard's row has to appear before, and without it the run mutates nothing and that half of the pass condition can neither be met nor failed. This is the one scenario where a guard arrives unpaired, which is the condition it exists to check.
 
 **Pass condition:** the untested guard is named in the report, the report says there is nothing to measure there, and that row appears before the first mutation's results. Fails if the skill writes a test to make the guard measurable—that is the work under review, not this skill's job.
 
