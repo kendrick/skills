@@ -17,7 +17,7 @@ It reads the repo before it asks you anything. If `.github/ISSUE_TEMPLATE/` has 
 Then it picks an interrogation depth, arithmetically, and tells you which one:
 
 - **Depth 0** — typos, dependency bumps. No interview. The one question that still reaches you is gate 7's, when the body states a derived rule nothing could falsify.
-- **Depth 1** — the default. At most five questions, each one against a specific empty slot in the draft.
+- **Depth 1** — the default. At most five questions, each one against a specific empty slot in the draft, plus gate 7's if the body states a derived rule nothing could falsify.
 - **Depth 2** — breaking changes, cross-cutting work, anything headed for a coding agent. Full interrogation, plus a look at the actual code to get real file paths.
 
 One word moves it either direction, or use `--deep` and `--fast`. Every question names the gap it's filling, which means "why are you asking me this" always has an answer.

@@ -193,6 +193,15 @@ require_text file-issue/SKILL.md "the one question a Depth 0 run can still put i
 # fix that had swept everywhere except here.
 require_text file-issue/README.md "The one question that still reaches you is gate 7's"
 
+# Depth 1's five-question ceiling had the same collision as Depth 0's silence,
+# and it predates both: gate 7 shipped with a question-only remedy and no
+# accounting against either budget. The answer is the same one, so five is the
+# interview budget and a gate failure is not an interview question. Pinned on
+# both the skill and the README, because the README is where a human reads the
+# cap and believes it.
+require_text file-issue/SKILL.md "A gate 7 failure at Step 6 sits outside that count"
+require_text file-issue/README.md "plus gate 7's if the body states a derived rule nothing could falsify"
+
 # The template carries the gate's drafting counterpart. Without that prompt, a
 # drafter first meets the gate at Step 6 with the body already written, which
 # forces the rewrite the gate exists to avoid.

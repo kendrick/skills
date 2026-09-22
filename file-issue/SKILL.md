@@ -72,7 +72,7 @@ Depth 2 additionally earns a targeted code probe: locate the component the ask n
 
 Depth 0 asks nothing here. Draft straight from ASK; the one question a Depth 0 run can still put is a gate 7 failure at Step 6, which no draft can close on its own.
 
-Depth 1 asks at most five questions, and only against slots the ask left empty. Treat five as a ceiling, not a target. Depth 2 keeps going past the rubric into edge cases, failure modes, non-goals, and how you would know this was done wrong.
+Depth 1 asks at most five questions, and only against slots the ask left empty. Treat five as a ceiling, not a target. A gate 7 failure at Step 6 sits outside that count, the same way it sits outside Depth 0's silence, because it is the one gate no draft can close. Depth 2 keeps going past the rubric into edge cases, failure modes, non-goals, and how you would know this was done wrong.
 
 Rules that hold at every depth:
 
