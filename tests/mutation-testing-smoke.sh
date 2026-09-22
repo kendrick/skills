@@ -225,6 +225,9 @@ refute_text mutation-testing/SKILL.md "A \`slipped\` adversarial verdict is a de
 
 require_text mutation-testing/SKILL.md "leaves untracked ones where they are"
 refute_text mutation-testing/SKILL.md "the new test went from \`??\` to absent"
+# The claim is about the directory-restore mechanism, not about untracked paths
+# in general — they are in DIFF now and can be lost by other routes.
+require_text mutation-testing/SKILL.md "For that mechanism specifically, an untracked file is not the shape to look for"
 
 # The mode comparison runs against the backup, never against HEAD: git diff
 # --summary is relative to the commit, so on the dirty tree this skill runs in
