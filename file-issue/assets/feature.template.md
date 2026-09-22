@@ -42,6 +42,14 @@ If this section reads like a description of the solution, it is not done.
 <!--
 What the system should do once this exists. Behavior, not design — unless the
 implementation is genuinely constrained, in which case say why.
+
+[gate where applicable] Where this section rules that a value
+"is", "counts as", or "should be marked" something under a stated condition,
+state the rule as a property and name the check that would fail it:
+perturb what the rule keys on and the value moves, perturb the nearest
+thing the rule could have keyed on instead and the value stays put.
+Prose hides the error here—a rule can name which field was absent when it
+meant which field the value traces to, and read correctly either way.
 -->
 
 ## Acceptance Criteria
