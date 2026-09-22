@@ -144,6 +144,22 @@ Fails if the missing skill blocks the run, or if the transcript claims a prose p
 
 *Runner note: technical-writing is installed on the author's machine, so producing the "absent" environment for this scenario needs a scratch skills directory or the installed skill temporarily renamed.*
 
+### 9. Derived rule stated in prose
+
+**Prompt:** "file a feature: provenance tokens should be marked invented when the field that governs them is null"
+**Repo:** `fixture-bare`
+
+| Expect | Pass condition |
+| --- | --- |
+| Depth | 1 |
+| Gate | The derived-rule gate fires on "should be marked … when" |
+| Remedy | One question — what experiment tells this rule apart from its nearest wrong neighbor — not a rewritten Proposed Behavior |
+| Draft after | A property naming what the value traces to, with both outcomes stated: perturb it and the value moves, perturb the nearest thing the rule could have keyed on instead and it holds |
+| Criteria gate | Unaffected — the acceptance criteria are still graded on their own falsifiability, not on the rule |
+| Control | Rerun with a prompt carrying no derived rule; the gate does not fire and nothing is added to the draft |
+
+Fails if the skill rewrites the rule instead of asking, if it demands the test rather than the falsifier, or if it extends the property demand to every acceptance criterion.
+
 ## Grading
 
 Per scenario, record `passed` plus verbatim `evidence` for each row. The rows are deliberately binary — anything that needs a judgment call is a badly specified expectation, not a hard grading problem.

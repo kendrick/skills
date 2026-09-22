@@ -70,9 +70,9 @@ Depth 2 additionally earns a targeted code probe: locate the component the ask n
 **Out:** the same list, where every slot holds a value, an explicit `n/a — <reason>`, or `unknown — asked, declined`. No blanks.
 **Exit:** the moment the rubric in Step 6 becomes satisfiable. Not when a question budget runs out.
 
-Depth 0 asks nothing. Draft straight from ASK.
+Depth 0 asks nothing here. Draft straight from ASK; the one question a Depth 0 run can still put is a gate 7 failure at Step 6, which no draft can close on its own.
 
-Depth 1 asks at most five questions, and only against slots the ask left empty. Treat five as a ceiling, not a target. Depth 2 keeps going past the rubric into edge cases, failure modes, non-goals, and how you would know this was done wrong.
+Depth 1 asks at most five questions, and only against slots the ask left empty. Treat five as a ceiling, not a target. A gate 7 failure at Step 6 sits outside that count, the same way it sits outside Depth 0's silence, because it is the one gate no draft can close. Depth 2 keeps going past the rubric into edge cases, failure modes, non-goals, and how you would know this was done wrong.
 
 Rules that hold at every depth:
 
@@ -121,12 +121,13 @@ Gates:
 4. **Error output** where the failure produces any. Bugs only; drop it for silent visual defects rather than padding.
 5. **At least one falsifiable acceptance criterion.** All types. A criterion a reviewer cannot fail is not one.
 6. **Agent-readiness**, when the issue is agent-targeted: single-interpretation problem statement, binary criteria, a runnable verification command, environment pointers, file hints, explicit done-criteria, non-goals. The verification command has to exercise the change, not merely pass beside it—an agent that finishes and cannot verify reports done regardless. A change that genuinely cannot be verified alone passes only by declaring its prerequisite as a blocker, or by naming the issue where verification lands. The same test runs on every named artifact: a verification command or file pointer naming something the repo does not yet hold fails unless that artifact is declared on the Blocked by line—an agent will otherwise try to run a file another ticket has yet to create.
+7. **Falsifier for a derived rule** — where the body rules that a value "is", "counts as", or "should be marked" something under a stated condition, the ticket states that rule as a property and names the check that would fail it. All types. The question to put is what experiment tells the rule apart from its most plausible wrong neighbor: perturb what the rule keys on and the value has to move, perturb the nearest thing the rule could have keyed on instead and the value has to stay put. Acceptance criteria observe the value and this gate reaches the rule behind it, so a ticket stating no such rule passes untouched, and one stating a rule it cannot falsify owes that sentence rather than a rewrite or the test itself.
 
 Defaults: non-goals when scope is ambiguous; Ko-structured title; labels matching observed repo convention; environment metadata.
 
 Say which items are convention rather than evidence as you surface them, so a user overriding one knows what they are overriding. [references/evidence-map.md](references/evidence-map.md) carries the traceability.
 
-A failing gate means fix the draft, or ask the single question that closes it. Never quietly downgrade a gate to a warning.
+A failing gate means fix the draft, or ask the single question that closes it. Never quietly downgrade a gate to a warning. Gate 7 is the only one a draft cannot close by itself, because inventing the falsifier is the thing it exists to prevent, so its question gets asked even at Depth 0 where nothing else is.
 
 Where the repo's label taxonomy has a ready-for-agent-style label, apply it only after gate 6 passes. The label should mean something.
 
@@ -140,7 +141,7 @@ At Depths 1 and 2, where the `technical-writing` skill is installed, invoke it v
 
 Keep the body as it entered this step. Without that copy, nothing below is checkable afterward.
 
-The pass changes wording only. Section structure, the title's harvested prefix convention, commands, paths, error output, and every fact the Step 6 gates passed survive it; where a revision would alter one, keep the original. Acceptance criteria may be reworded, but every symbol and condition inside them survives, and a criterion that comes out unfalsifiable has failed the pass rather than passed it.
+The pass changes wording only. Section structure, the title's harvested prefix convention, commands, paths, error output, and every fact the Step 6 gates passed survive it; where a revision would alter one, keep the original. Acceptance criteria may be reworded, but every symbol and condition inside them survives, and a criterion that comes out unfalsifiable has failed the pass rather than passed it. A named falsifier is protected the same way: reword it freely, but what it perturbs and both outcomes it asserts survive the pass.
 
 This is not the delegation Step 3 rules out. The interview carries the depth governor—judgment this skill owns, and lost the moment another skill runs it. A wording pass has no governor to lose. The audit is mechanical, and where the skill is missing the cost is polish, not correctness.
 

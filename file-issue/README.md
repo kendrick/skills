@@ -8,7 +8,7 @@ Plenty of tooling will check that you filled in the template. Almost none of it 
 
 The research points at one place in particular. Developers rank steps-to-reproduce first by a wide margin, and errors in those steps are the single most severe problem they report. Reporters know this and supply them anyway less than half the time, because reproduction steps are also the hardest thing to write. That gap is the one worth closing.
 
-So the gates here are content gates. Can a stranger run the reproduction on a clean checkout? Can the acceptance criteria fail? Does the scope have an edge? If a coding agent picks this up, does it know how to verify its own work? Each gate traces to a measured finding, and the ones that are convention rather than evidence say so out loud. The full survey is in [file-issue-research.md](../_docs/file-issue-research.md); the mapping from each gate to its claim is in [evidence-map.md](references/evidence-map.md).
+So the gates here are content gates. Can a stranger run the reproduction on a clean checkout? Can the acceptance criteria fail? If the issue rules that a value counts as something, does it name what would prove that rule wrong? Does the scope have an edge? If a coding agent picks this up, does it know how to verify its own work? Each gate traces to a claim, and the ones that are convention rather than measurement say so out loud. The full survey is in [file-issue-research.md](../_docs/file-issue-research.md); the mapping from each gate to its claim is in [evidence-map.md](references/evidence-map.md).
 
 ## How It Works
 
@@ -16,8 +16,8 @@ It reads the repo before it asks you anything. If `.github/ISSUE_TEMPLATE/` has 
 
 Then it picks an interrogation depth, arithmetically, and tells you which one:
 
-- **Depth 0** — typos, dependency bumps. No questions at all.
-- **Depth 1** — the default. At most five questions, each one against a specific empty slot in the draft.
+- **Depth 0** — typos, dependency bumps. No interview. The one question that still reaches you is gate 7's, when the body states a derived rule nothing could falsify.
+- **Depth 1** — the default. At most five questions, each one against a specific empty slot in the draft, plus gate 7's if the body states a derived rule nothing could falsify.
 - **Depth 2** — breaking changes, cross-cutting work, anything headed for a coding agent. Full interrogation, plus a look at the actual code to get real file paths.
 
 One word moves it either direction, or use `--deep` and `--fast`. Every question names the gap it's filling, which means "why are you asking me this" always has an answer.
