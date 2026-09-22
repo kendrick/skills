@@ -57,7 +57,7 @@ git status --porcelain     # after the report
 git diff
 ```
 
-**Pass condition:** the two status outputs are identical, every mutated path matches the backup taken outside the repo in contents and in mode, and the skill restored each path by copying its backup back. On the clean run `git diff` is also empty. On the dirty run it is not, and must not be: the user's uncommitted guard is still there, which is the whole point — a run that leaves `git diff` empty on the dirty fixture has deleted the work it was measuring. Run the scenario a second time with the fixture already dirty — an uncommitted edit to `app/storage.py` standing in for the guard under review — and confirm the contents check is what catches a failed restore there, since status reads ` M app/storage.py` either way and cannot. Fails on any leftover mutation, any missing file, and, most importantly, on a restore performed with a directory argument even where the tree happens to come back clean, since that is the command that produced the near miss.
+**Pass condition:** the two status outputs are identical, every mutated path matches the backup taken outside the repo in contents and in mode, and the skill restored each path by copying its backup back. On the clean run `git diff` is also empty. On the dirty run it is not, and must not be: the user's uncommitted guard is still there, which is the whole point — a run that leaves `git diff` empty on the dirty fixture has deleted the work it was measuring. Run the scenario a second time with the fixture already dirty — an uncommitted edit to `app/storage.py` standing in for the guard under review — and confirm the contents check is what catches a failed restore there, since status reads ` M app/storage.py` either way and cannot. Fails on any leftover mutation, any missing file, and on a restore performed with `git checkout` in any form, by directory or by name, even where the tree happens to come back clean. The directory form is the one that produced the near miss; the by-name form is the one that deletes the user's uncommitted guard, so a run that restored with `git checkout -- app/storage.py` fails this scenario outright.
 
 ### 4. A Directory Restore Is Caught by the Snapshot Check
 
@@ -97,6 +97,23 @@ git status --porcelain | diff /tmp/before.txt -
 **Setup:** the fixture repo with a diff that adds a third guard to `app/storage.py` and no test for it.
 
 **Pass condition:** the untested guard is named in the report, the report says there is nothing to measure there, and that row appears before the first mutation's results. Fails if the skill writes a test to make the guard measurable—that is the work under review, not this skill's job.
+
+### 7. Two Guards Sharing a Basename Keep Separate Backups
+
+**Setup:** extend the fixture with `lib/storage.py` alongside `app/storage.py`, each carrying its own uncommitted guard, and a diff that adds both. The basenames collide; the paths do not.
+
+**Commands:**
+
+```
+# after the run, for each path:
+cmp app/storage.py <its backup>
+cmp lib/storage.py <its backup>
+grep -c 'APP' app/storage.py ; grep -c 'LIB' lib/storage.py
+```
+
+**Pass condition:** each path has its own backup at a destination mirroring its full repo path, and each file comes back holding its own guard. Fails if one backup overwrote the other, which is the case worth constructing deliberately: with a flat scratch directory both `cmp` checks pass and `git status --porcelain` is unchanged, while `app/storage.py` holds `lib`'s contents and nothing in git has a copy of what was lost. Check the file contents, never the checks' verdicts, since the verdicts are what the defect corrupts.
+
+**Also check mode.** Give one fixture file mode 755, run under `umask 077`, and confirm the backup's mode matches the source rather than the umask, and that the restored file's mode matches the backup rather than the mutated file's.
 
 ## What These Evals Do Not Cover
 

@@ -17,13 +17,14 @@ Where a step names a shell command, treat it as the intent and use your native s
 
 Resolve once per invocation:
 
-- **GUARDS** — the guards the diff adds, from Step 1. Each carries its file and lines, the quantity it watches, and the test that pins it.
+- **DIFF** — what "the diff" means for this run, resolved before Step 1 and never re-resolved. Uncommitted work in the tree is the default and the common case, `git diff` plus `git diff --cached`: the skill usually fires on a guard somebody just wrote. Invoked by name against work already on the branch, it is `git diff <merge-base with the default branch>..HEAD`, and where that is ambiguous, ask rather than guess. A run that picks a different base than the one the user meant reviews guards nobody asked about and misses the ones they did.
+- **GUARDS** — the guards DIFF adds, from Step 1. Each carries its file and lines, the quantity it watches, and the test that pins it.
 - **SUITE_CMD** — the project's own test command, read off its manifest or config; ask where the project has none. Every count in the report comes from this one command, so a run that switches commands midway is a run whose rows cannot be compared.
 - **BASELINE** — one green run of SUITE_CMD, its summary line saved verbatim, with `git status --porcelain` saved beside it as the snapshot Step 3 restores against. A red baseline stops the run: a failure that was already there is indistinguishable from one a mutation caused, and every count downstream inherits the ambiguity. The tree does not have to be clean, and usually is not — this skill fires on a diff somebody is still working on, so the snapshot records the working tree as it stands rather than demanding a commit first. Step 4 re-takes BASELINE when the suite grows, and only there.
 
 ## Step 1 — Name the guards
 
-Read the diff for what it **adds**, not for which files it touches. A guard is added behavior that refuses, bounds, or asserts: a rejection, a validation, an invariant, a limit, a permission or ownership check, a branch that turns input away, or a test that pins one of those. A formatting change to a file full of guards adds none; a single line added to a controller may add one.
+Read DIFF for what it **adds**, not for which files it touches. A guard is added behavior that refuses, bounds, or asserts: a rejection, a validation, an invariant, a limit, a permission or ownership check, a branch that turns input away, or a test that pins one of those. A formatting change to a file full of guards adds none; a single line added to a controller may add one.
 
 For each guard, write down three things: where it lives, **the quantity it watches**, and the test that pins it. The quantity is the load-bearing column, and Step 2's adversarial mutation is built entirely out of it. Name what the guard actually reads—the value in the variable it compares—rather than the outcome somebody intended it to protect.
 
@@ -47,12 +48,18 @@ Reach for the plausible version rather than an arbitrary break, because an arbit
 
 Per mutation, in order:
 
-1. Copy each path the mutation touches to a scratch location outside the repository. A backup left beside the file is untracked, so it lands in the comparison item 5 makes and halts a valid run on its first mutation.
+1. Copy each path the mutation touches to a scratch location outside the repository, preserving mode (`cp -p`), at a destination that **mirrors the path's full position in the repo** rather than its basename alone.
+
+   Both details are load-bearing, and the backup is the only copy of the user's uncommitted work the run holds.
+
+   - A backup left beside the file is untracked, so it lands in the comparison item 5 makes and halts a valid run on its first mutation.
+   - Flattening to basenames collides. `app/storage.py` and `lib/storage.py` back up to one file; the second copy destroys the first; the restore then writes one file's contents into the other path; and both of item 5's checks pass, because each path matches the single backup it was restored from and a tracked file's status stays ` M` whatever it now contains. Git holds no copy of what was lost.
+   - `cp` without `-p` sets a new file's mode through the umask, so the backup records a mode the source never had and item 5 compares against a fabricated authority. Restoring needs the same care: `cp` onto an existing file keeps the destination's mode, so remove the path first or set the mode explicitly, or the bytes come back and the mode does not.
 2. Apply the edit, then prove it landed **against item 1's backup**: `cmp` reports the file and its backup as differing. That comparison is the proof, and it has no alternatives. `git diff -- <path>` cannot answer the question here, because the guard's own uncommitted change already makes that diff non-empty, so it reports success for a mutation that never applied. A grep for the inserted text fails the same way whenever that text already appears in the user's work. An edit that silently failed to apply leaves the suite green, and a green suite reads here as "no test catches this", the exact inverse of what happened.
 3. Run SUITE_CMD. Capture its summary line verbatim, and the names of the failing tests.
 4. **Restore by copying item 1's backup back** to its named path, one path at a time.
 
-   Never with `git checkout`. That restores from the index, which on the tree this skill runs on is the state *before* the guard existed, so it deletes the very work the run was called to measure: `git checkout -- guard.py` against an unstaged new guard replaces it with the committed version, and the user's edit is gone. The backup is the only copy of that work the run holds.
+   Never with `git checkout`. That restores from the index, which on the tree this skill runs on is the state *before* the guard existed, so it deletes the very work the run was called to measure: `git checkout -- guard.py`, where the guard is an uncommitted change to a tracked file, replaces it with the committed version and the user's edit is gone. A guard in a brand-new untracked file is safe from that particular command, which errors instead, so the tracked case is the one to picture. The backup is the only copy of that work the run holds.
 
    Never by directory either. `git checkout -- app/storage/` reverted the new test alongside the mutation, and the suite came back green without it. That was caught on the test count rather than by noticing, so treat it as a near miss rather than a save.
 5. Verify the restore twice, because neither check sees what the other does.

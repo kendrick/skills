@@ -72,7 +72,7 @@ require_text mutation-testing/SKILL.md "This skill is model-invoked"
 # controller line that added the guard. ---
 
 require_text mutation-testing/SKILL.md "Use when a diff adds a rejection, a validation, an invariant, a limit, a permission or ownership check, a branch that refuses input, or a test pinning one of those"
-require_text mutation-testing/SKILL.md "Read the diff for what it **adds**, not for which files it touches."
+require_text mutation-testing/SKILL.md "Read DIFF for what it **adds**, not for which files it touches."
 require_text mutation-testing/SKILL.md "A formatting change to a file full of guards adds none"
 
 # --- Two questions, two mutations. Collapsing them back into one rule with a
@@ -114,7 +114,7 @@ require_text mutation-testing/SKILL.md "the runner's summary line verbatim, the 
 require_text mutation-testing/SKILL.md "\`fails N, leaves M green\`"
 require_text mutation-testing/SKILL.md "that is a defect in the guard rather than a measurement of the suite"
 
-# --- The boundary. One mutation, one checkout. ---
+# --- The boundary. One mutation, one working tree. ---
 
 require_text mutation-testing/SKILL.md "One mutation, one working tree, in sequence."
 require_text mutation-testing/SKILL.md "worktree per mutation"
@@ -265,6 +265,29 @@ refute_text mutation-testing/SKILL.md "or a grep finds the inserted text with it
 # `git checkout` is a forbidden command in this document, so "checkout" as a
 # noun for the working copy is a collision an agent should not have to resolve.
 refute_text mutation-testing/SKILL.md "one checkout, in sequence"
+
+# --- A reproducer found these after two Codex rounds and two external passes.
+# The backup is the only copy of the user's uncommitted work the run holds, and
+# item 1 had said only "copy to a scratch location". ---
+
+# Flattening to basenames collides: app/storage.py and lib/storage.py share one
+# backup, the restore writes one file's contents into the other path, and BOTH
+# item 5 checks pass while the user's guard is gone.
+require_text mutation-testing/SKILL.md "mirrors the path's full position in the repo"
+require_text mutation-testing/SKILL.md "Flattening to basenames collides"
+
+# cp without -p fabricates the backup's mode through the umask, and cp onto an
+# existing file keeps the destination's mode, so mode never comes back.
+require_text mutation-testing/SKILL.md "preserving mode (\`cp -p\`)"
+require_text mutation-testing/SKILL.md "keeps the destination's mode"
+
+# Which diff the skill reads was never stated; the README advertises a by-name
+# mode where the tree is clean and `git diff` is empty.
+require_text mutation-testing/SKILL.md "what \"the diff\" means for this run, resolved before Step 1"
+require_text mutation-testing/SKILL.md "merge-base with the default branch"
+
+# Deliberately Not Built records the whole cut, not only the directory form.
+require_text _maintenance/mutation-testing/RATIONALE.md "Restoring with \`git checkout\` in any form, by directory or by name"
 
 # --- The README is a separate document that can drift from the skill. Pin the
 # install flag the root README's map table is checked against, and the two rules

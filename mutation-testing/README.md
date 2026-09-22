@@ -50,7 +50,7 @@ It fires on its own, which is the one place it differs from `adversarial-review`
 > add the tenant check to the list endpoint
 ```
 
-It runs when that work is about to be called done. You can also name it directly, against work already on the branch:
+It runs when that work is about to be called done, against the uncommitted work in your tree. You can also name it directly, against work already committed on the branch, where it reads the diff from the merge-base with your default branch:
 
 ```
 > /mutation-testing
