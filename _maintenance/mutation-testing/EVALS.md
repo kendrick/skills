@@ -17,7 +17,11 @@ A throwaway git repo, created fresh per scenario run, holding one guard and a sm
 - `tests/test_storage.py` — one test pinning the rejection, plus enough unrelated passing tests that a count like "fails 1, leaves 12 green" is a real measurement rather than an arithmetic accident.
 - `tests/test_report.py` — a test asserting `formatted_count()` matches the batch size, and nothing asserting anything about rows outside it.
 
-**Commit a guardless base first.** The fixture above describes the repo *after* the work; the scenarios need the state before it. So commit a version of `app/storage.py` and `app/report.py` with their guards removed, and the tests that pin those guards absent, and check the suite is green on that base. Each scenario then applies its own guard as uncommitted work, which is the diff the skill is invoked on.
+**Commit a guardless base first.** The fixture above describes the repo *after* the work; the scenarios need the state before it. So commit a version of `app/storage.py` and `app/report.py` with their guards removed, and the tests that pin those guards absent, and check the suite is green on that base.
+
+**Each scenario's uncommitted work is the guard *and* its pinning test, together.** That pairing is not optional, and leaving it out makes every scenario vacuous in a way that looks like a pass: Step 1 finds a guard with no test, reports it as such, and Step 2 runs no mutation for it at all, so nothing any scenario measures ever happens. Scenario 7 needs a pinning test for `lib/storage.py` as well as for `app/storage.py`, since it runs two guards.
+
+That uncommitted pair is the diff the skill is invoked on.
 
 Committing the fixture as described instead — guards and all — leaves no diff adding a guard, so Step 1 finds nothing and every scenario passes vacuously while testing none of the behaviour it names.
 
@@ -27,7 +31,7 @@ Take the base as a fresh clone or a `git worktree` per scenario, so one scenario
 
 ### 1. The Plausible Mutation Fails Exactly the Pinning Test
 
-**Setup:** the fixture repo, clean and green. A diff that adds the `save()` guard, presented as work about to be called done.
+**Setup:** the guardless base, clean and green. Uncommitted work adding the `save()` guard **and** the test in `tests/test_storage.py` that pins it, presented as work about to be called done.
 
 **Commands:**
 
@@ -39,7 +43,7 @@ Take the base as a fresh clone or a `git worktree` per scenario, so one scenario
 
 ### 2. The Adversarial Mutation Slips, and Is Reported First
 
-**Setup:** the fixture repo, with a diff adding the `formatted_count()` guard.
+**Setup:** the guardless base, with uncommitted work adding the `formatted_count()` guard and the test in `tests/test_report.py` that pins it.
 
 **Commands:**
 
@@ -56,8 +60,8 @@ Take the base as a fresh clone or a `git worktree` per scenario, so one scenario
 **Commands:**
 
 ```
-git status --porcelain     # before the run
-git status --porcelain     # after the report
+git status --porcelain -uall     # before the run
+git status --porcelain -uall     # after the report
 git diff
 ```
 
@@ -74,12 +78,12 @@ Run the skill's Step 3 by hand to that point.
 **Commands:**
 
 ```
-git status --porcelain > /tmp/before.txt
+git status --porcelain -uall > /tmp/before.txt
 # apply the mutation to app/storage.py, run the suite, then restore with the
 # directory form, which reverts the tracked test file's uncommitted edit along
 # with it
 git checkout -- .
-git status --porcelain | diff /tmp/before.txt -
+git status --porcelain -uall | diff /tmp/before.txt -
 ```
 
 **Pass condition:** the diff is non-empty — the ` M tests/test_storage.py` line is present before the restore and gone after — the skill stops and names the path that differs, and it does so before the suite result is read as a measurement. Confirm the new test function is actually gone from the file, rather than trusting the status line alone. Fails if the run reports a clean restore, and fails if it notices only because the test count looked wrong—the snapshot comparison has to be what catches it.
@@ -98,13 +102,13 @@ git status --porcelain | diff /tmp/before.txt -
 
 ### 6. A Guard With No Test Is Reported Before Any Mutation Runs
 
-**Setup:** the fixture repo with a diff that adds a third guard to `app/storage.py` and no test for it.
+**Setup:** the guardless base with uncommitted work adding a third guard to `app/storage.py` and, deliberately, no test for it. This is the one scenario where the guard arrives unpaired, which is the condition it exists to check.
 
 **Pass condition:** the untested guard is named in the report, the report says there is nothing to measure there, and that row appears before the first mutation's results. Fails if the skill writes a test to make the guard measurable—that is the work under review, not this skill's job.
 
 ### 7. Two Guards Sharing a Basename Keep Separate Backups
 
-**Setup:** extend the fixture with `lib/storage.py` alongside `app/storage.py`, each carrying its own uncommitted guard, and a diff that adds both. The basenames collide; the paths do not.
+**Setup:** extend the guardless base with `lib/storage.py` alongside `app/storage.py`, each carrying its own uncommitted guard and its own uncommitted pinning test, and a diff that adds all four. The basenames collide; the paths do not.
 
 **Commands:**
 

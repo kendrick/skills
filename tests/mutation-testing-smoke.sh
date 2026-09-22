@@ -98,7 +98,7 @@ require_text mutation-testing/SKILL.md "Reach for the plausible version rather t
 
 require_text mutation-testing/SKILL.md "**Restore by copying item 1's backup back**"
 require_text mutation-testing/SKILL.md "the suite came back green without it"
-require_text mutation-testing/SKILL.md "against BASELINE's snapshot: \`git status --porcelain\` matches it"
+require_text mutation-testing/SKILL.md "against BASELINE's snapshot: \`git status --porcelain -uall\` matches it"
 
 # --- Re-measuring is required before a count leaves the run, not before the run
 # ends. Acceptance criterion 4. The trigger matters: bound to the run's end, a
@@ -302,6 +302,23 @@ require_text mutation-testing/SKILL.md "its backup is the only copy anywhere"
 # the diff every one of them is invoked on.
 require_text _maintenance/mutation-testing/EVALS.md "**Commit a guardless base first.**"
 require_text _maintenance/mutation-testing/EVALS.md "every scenario passes vacuously"
+
+# --- Without -uall git coalesces a wholly-untracked directory to one `?? dir/`
+# line, so a file deleted inside it leaves the snapshot byte-identical and the
+# collateral check sees nothing. Measured.
+require_text mutation-testing/SKILL.md "\`-uall\` is load-bearing"
+require_text mutation-testing/SKILL.md "coalesces a wholly-untracked directory"
+
+# Ignored files are out of DIFF on purpose, because the restore check cannot see
+# them either; measuring what cannot be verified back is the worse failure.
+require_text mutation-testing/SKILL.md "Ignored files stay out, deliberately and not by accident"
+refute_text mutation-testing/SKILL.md "**and every untracked file**"
+
+# The guardless base strips the pinning tests, and an unpaired guard gets no
+# mutation by design, so a scenario that adds only a guard measures nothing
+# while looking like it passed. Two fixes of this branch colliding.
+require_text _maintenance/mutation-testing/EVALS.md "guard *and* its pinning test, together"
+require_text _maintenance/mutation-testing/EVALS.md "makes every scenario vacuous in a way that looks like a pass"
 
 # --- The README is a separate document that can drift from the skill. Pin the
 # install flag the root README's map table is checked against, and the two rules
