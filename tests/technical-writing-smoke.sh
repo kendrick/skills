@@ -302,10 +302,11 @@ require_text technical-writing/references/review-correspondence.md "The first se
 # references/triage.md:77 and routes it through this profile, and that body
 # opens on "deferred:" rather than one of the four verdicts spelled out. An
 # agent handed both documents could satisfy only one, so the rule names the
-# caller's short form as the verdict it is. The SHA rule had the matching gap
-# pointed the other way: this profile supports a refused verdict and a
-# standalone comment, and neither has a commit, so an unconditional "cite the
-# SHA" sends the agent to HEAD for a locator that answers nothing.
+# caller's short form the scope disposition it is, and says not to read it
+# as confirmation. The SHA rule had the matching gap pointed the other way:
+# this profile supports a refused verdict and a standalone comment, and
+# neither has a commit, so an unconditional "cite the SHA" sends the agent
+# to HEAD for a locator that answers nothing.
 require_text technical-writing/references/review-correspondence.md "states a scope disposition and not a correctness verdict"
 require_text technical-writing/references/review-correspondence.md "have no commit to name, so they cite none"
 require_text technical-writing/references/review-correspondence.md "Where the fix diverged from what the reviewer proposed, say so in the reply rather than leaving it in the diff."

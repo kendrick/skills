@@ -149,7 +149,7 @@ The run also found a real gap. The Title section said to read the repo's recentl
 | Divergence stated | Where the fix differs from what the reviewer proposed, the reply says so rather than leaving it in the diff |
 | Citation survives | Every SHA the correspondence names is written so the sentence beside it still answers the finding after the SHA is struck out |
 | Hard rules | No trailer, no footer, no hard wraps, in either arm |
-| Not a description | Neither arm recaps what the commit did in place of the verdict or the subject |
+| Not a description | Neither arm recaps what the commit did in place of where the reply landed or the subject |
 
 Fails if either arm opens on a summary of the work, describes a divergence as agreement, puts its only answer inside a SHA, or the standalone arm opens with a verdict it has no thread to attach to instead of stating its own subject.
 

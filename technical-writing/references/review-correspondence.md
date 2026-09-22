@@ -4,13 +4,13 @@ SKILL.md dispatches here at Step 1 when the artifact is a reply to a review comm
 
 ## Register
 
-Explanation register, answering rather than summarizing. The reader has the diff open and asked one specific question, so write back to the question instead of about the change; a paragraph recapping what the commit did instead of saying whether the finding held has answered nobody. Voice and tone as everywhere else here: a helpful technical writer who is also in a hurry.
+Explanation register, answering rather than summarizing. The reader has the diff open and asked one specific question, so write back to the question instead of about the change; a paragraph recapping what the commit did instead of saying where the reply landed has answered nobody. Voice and tone as everywhere else here: a helpful technical writer who is also in a hurry.
 
 ## Content
 
-Write for the one thing the reviewer needs from you: whether their claim held, and what you did about it. Everything that serves that belongs in the reply, and everything else is crowding out something that does.
+Write for the one thing the reviewer needs from you: where their finding landed, and what you did about it. Everything that serves that belongs in the reply, and everything else is crowding out something that does.
 
-That rules out the three drafts a reply usually turns into. The acknowledgement says "good catch, fixed" and never states whether the claim was right. The changelog restates what the commit did, which is the diff the reader already has open. The silent divergence fixes something other than what the reviewer proposed and describes it as agreement, leaving the difference for them to find. All three cost the reviewer a second pass, so spend the words instead on the verdict, the divergence, and whatever the finding turned out to expose that it did not name.
+That rules out the three drafts a reply usually turns into. The acknowledgement says "good catch, fixed" and never says where it landed. The changelog restates what the commit did, which is the diff the reader already has open. The silent divergence fixes something other than what the reviewer proposed and describes it as agreement, leaving the difference for them to find. All three cost the reviewer a second pass, so spend the words instead on where it landed, the divergence, and whatever the finding turned out to expose that it did not name.
 
 A reply outlives the round it was written in. It is read from a merged pull request, in a thread collapsed to its first line, by somebody who was not there for the argument—so no "as I said above", and nothing that only parses next to the comment above it.
 
@@ -55,6 +55,6 @@ The citations are where every draft failed the same way, and that part is measur
 
 ## Layer Application
 
-- **STE**—one thought per sentence, condition before what it governs: "Where the fix diverged from what you proposed, the reply says so." The verdict sentence carries the verdict and nothing else.
+- **STE**—one thought per sentence, condition before what it governs: "Where the fix diverged from what you proposed, the reply says so." The first sentence carries where the reply landed and nothing else.
 - **Google developer style**—active voice, naming who does what. "The exclusion is gone", not "the exclusion was removed." Address the reviewer as "you" for what they proposed, and use "I" for what you did; a reply is one person answering another, and the passive hides which of the two did the thing.
 - **Global English**—one name per thing across the finding, the reply, and the commit, so the reviewer's "pathspec exclusion" is not "the filter" in your answer. Keep "only" against the word it changes: "only the definition line" and "the definition line only" are different fixes. Every "this" points at one obvious noun, which matters most where a reply is discussing the finding and the code in the same sentence.
