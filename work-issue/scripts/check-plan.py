@@ -20,14 +20,17 @@ Checks, one stderr line each naming its rule and a location:
       `Files owned` line — checked only when the plan has no `## Waves`
       table, since a Waves table carries ownership itself
   D3  an open marker: `TBD`, `TODO`, `FIXME`, `???`, `decide later`,
-      `to be decided` anywhere, and `open question` only as a label
-      (`Open question: …`, `- **Open question** …`) or in a sentence with
-      no `settl`/`resolv`/`answer` word (case-insensitive, whole-word,
+      `to be decided` anywhere, and `open question` as a label (`Open
+      question: …`, `- **Open question** …`) or in any sentence where it
+      is not the object of a `settl…`/`resolv…`/`answer…` word, with at
+      most one determiner between them (case-insensitive, whole-word,
       ignoring a marker written inside backticks — a plan documenting
       this rule quotes its own trigger words); and any list item that is
-      not a box D4 reports, under a heading naming open questions,
-      uncertainties, decisions, or items, or `unresolved`/`undecided`,
-      unless the item opens with a `~~struck~~` span
+      not a box D4 reports, under a heading containing `open question(s)`,
+      `open uncertainty`/`open uncertainties`, `open decision(s)`,
+      `open item(s)`, `unresolved`, or `undecided` (a heading naming
+      uncertainties without `open` does not count), unless the item opens
+      with a `~~struck~~` span or a ticked `[x]` box
   D4  a `- [ ]` line inside a section whose heading contains `Decision`,
       `Question`, or `Open` (a box elsewhere is a copied criterion and is
       fine)
@@ -68,11 +71,22 @@ OPEN_QUESTION_RE = re.compile(r"\bopen question\b", re.IGNORECASE)
 OPEN_QUESTION_LABEL_RE = re.compile(
     r"^\s*(?:(?:[-*+]|\d+[.)])\s+)?(?:\*\*)?open question(?::|\*\*)", re.IGNORECASE
 )
-RESOLVING_RE = re.compile(r"\b(?:settl|resolv|answer)", re.IGNORECASE)
+# The verb has to take the open question as its object. A resolving word
+# anywhere in the sentence is not enough: "Whether the key is resolved remains
+# an open question." holds `resolv` and still leaves the question open.
+RESOLVED_OBJECT_RE = re.compile(
+    r"\b(?:settl|resolv|answer)\w*\s+"
+    r"(?:(?:a|an|the|this|that|each|every|one|its|our|their|your)\s+)?"
+    r"open question\b",
+    re.IGNORECASE,
+)
 SENTENCE_SPLIT_RE = re.compile(r"[.!?;:](?:\s+|$)")
+# `uncertainties` needs `open` in front. A `## Risks and uncertainties` list
+# holds risks the plan already answers ("we back off"), and failing it
+# refuses a plan with nothing left open.
 OPEN_STATE_HEADING_RE = re.compile(
     r"\b(?:open\s+(?:questions?|uncertaint(?:y|ies)|decisions?|items?)"
-    r"|unresolved|undecided|uncertaint(?:y|ies))\b",
+    r"|unresolved|undecided)\b",
     re.IGNORECASE,
 )
 # Whole words: `OpenAPI changes` is not an open question.
@@ -222,7 +236,8 @@ def check_d3(lines):
     a sentence closing questions, while its "Open uncertainties" list of
     genuinely unresolved items passed clean. The other six leave something
     open in ordinary use; only this one got reproduced misfiring. So it
-    fires as a label or in a sentence with no resolving verb, and the
+    fires as a label, or in a sentence where no resolving verb takes it
+    as its object, and the
     heading walk catches what the phrase list never could: items filed
     under a heading that says they're open."""
     problems = []
@@ -273,7 +288,7 @@ def open_question_fires(scannable):
     if OPEN_QUESTION_LABEL_RE.match(scannable):
         return True
     return any(
-        OPEN_QUESTION_RE.search(sentence) and not RESOLVING_RE.search(sentence)
+        OPEN_QUESTION_RE.search(sentence) and not RESOLVED_OBJECT_RE.search(sentence)
         for sentence in SENTENCE_SPLIT_RE.split(scannable)
     )
 

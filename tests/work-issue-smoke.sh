@@ -637,6 +637,13 @@ if grep -Fq "D3" <<<"$settled_out"; then
   echo "plan-settled.md should carry no D3 line at all, got: $settled_out" >&2
   exit 1
 fi
+# Line 13 sits under `## Risks and uncertainties` and says how the plan handles
+# the risk. A heading needs `open` before `uncertainties` to mark its items
+# open, or every plan's mitigated-risks list is refused.
+if grep -Fq "line 13:" <<<"$settled_out"; then
+  echo "plan-settled.md should not name its answered risk at line 13, got: $settled_out" >&2
+  exit 1
+fi
 
 # The same #113 plan passed clean with a list of genuinely open items under
 # `## Open uncertainties`, since none of them used a marker phrase. Line numbers
@@ -664,6 +671,47 @@ grep -Fq "check-plan: line 13: D3 unresolved item under heading 'Open uncertaint
 # delete settled items rather than record them.
 if grep -Fq "line 14:" <<<"$open_section_out"; then
   echo "plan-open-section.md should not name its struck item at line 14, got: $open_section_out" >&2
+  exit 1
+fi
+# Line 18 is the label form, and its tail carries "resolve". A label names an
+# open question whatever follows it.
+grep -Fq "check-plan: line 18: D3 open marker 'open question'" <<<"$open_section_out" || {
+  echo "plan-open-section.md should fail D3 on the label at line 18, got: $open_section_out" >&2
+  exit 1
+}
+# Line 20 is the bold label, followed by "answer the open question". Only the
+# label test catches it. The verb takes the phrase as its object, so the
+# sentence test lets it through.
+grep -Fq "check-plan: line 20: D3 open marker 'open question'" <<<"$open_section_out" || {
+  echo "plan-open-section.md should fail D3 on the bold label at line 20, got: $open_section_out" >&2
+  exit 1
+}
+# Line 22 reads "Whether the key is resolved remains an open question." The
+# sentence holds `resolv`, but not as a verb taking the question, so the
+# question stays open. A test for any resolving word anywhere lets it pass.
+grep -Fq "check-plan: line 22: D3 open marker 'open question'" <<<"$open_section_out" || {
+  echo "plan-open-section.md should fail D3 on the still-open question at line 22, got: $open_section_out" >&2
+  exit 1
+}
+# Lines 26 and 30 are the D3/D4 handoff. A box under `## Open questions` is
+# D4's alone, and a box under `## Unresolved`, which D4 does not read, is D3's
+# alone.
+grep -Fq "check-plan: line 26: D4 unchecked box under heading 'Open questions'" <<<"$open_section_out" || {
+  echo "plan-open-section.md should fail D4 on the box at line 26, got: $open_section_out" >&2
+  exit 1
+}
+if grep -Fq "line 26: D3" <<<"$open_section_out"; then
+  echo "plan-open-section.md should not report the D4 box at line 26 under D3 too, got: $open_section_out" >&2
+  exit 1
+fi
+grep -Fq "check-plan: line 30: D3 unresolved item under heading 'Unresolved'" <<<"$open_section_out" || {
+  echo "plan-open-section.md should fail D3 on the box at line 30, got: $open_section_out" >&2
+  exit 1
+}
+# The fixture's title avoids the word "open". D4 matches any heading above a
+# box, the H1 included, so an "open-section" title would take line 30 from D3.
+if grep -Fq "line 30: D4" <<<"$open_section_out"; then
+  echo "plan-open-section.md should not report the box at line 30 under D4, got: $open_section_out" >&2
   exit 1
 fi
 
