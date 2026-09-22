@@ -1,6 +1,6 @@
 # technical-writing
 
-A layered prose standard for developer-facing writing: commit messages, code comments, PR descriptions, API reference, and README-style docs.
+A layered prose standard for developer-facing writing: commit messages, code comments, PR descriptions, review correspondence, API reference, and README-style docs.
 
 ## Why This Exists
 
@@ -12,7 +12,7 @@ This skill routes each artifact type to a profile that says which public standar
 
 Four house rules sit above four public standards: [Diátaxis](https://diataxis.fr/start-here/), [Google developer style](https://developers.google.com/style), [ASD-STE100](https://www.techwriter.ai/s1000d/writing-for-s1000d/simplified-technical-english) principles, and [Kohl's Global English](https://books.google.com/books?id=r0AiqqRBPF0C&printsec=frontcover#v=onepage&q&f=false). Every artifact dispatches to a profile that names which of the four apply to it.
 
-- **Dispatch.** The artifact type picks a profile: commit messages, code comments, PR descriptions, and README prose ship today; API reference and the remaining artifact types fall back to the global rules and layers until their profiles are written.
+- **Dispatch.** The artifact type picks a profile: commit messages, code comments, PR descriptions, review correspondence, and README prose ship today; API reference and the remaining artifact types fall back to the global rules and layers until their profiles are written.
 - **Draft.** Write under the dispatched profile, or under the fallback globals when no profile exists yet.
 - **Audit.** Every draft runs through a self-check, then a prose audit, then whatever house rules your setup defines. The audit is mandatory; the tool that performs it is yours to pick.
 
@@ -42,24 +42,26 @@ cp -R skills/technical-writing ~/.claude/skills/technical-writing
 > write a commit message for this diff
 > audit the comments in src/parser.ts against the house style
 > draft a PR description for this branch
+> reply to this review finding
 ```
 
 ## What's Here
 
 ```
 technical-writing/
-├── SKILL.md                    # the skill — four layers, dispatch table, audit loop
-├── README.md                   # this file
+├── SKILL.md                      # the skill — four layers, dispatch table, audit loop
+├── README.md                     # this file
 └── references/
-    ├── commit-messages.md      # register, content, subject-line conventions
-    ├── comments.md             # when to comment, docblock/inline mode mapping, auditing
-    ├── pr-descriptions.md      # reviewer-first content, testing disclosure, squash-merge survival
-    └── readme.md               # per-section mode mapping, register, the existing-voice rule
+    ├── commit-messages.md        # register, content, subject-line conventions
+    ├── comments.md               # when to comment, docblock/inline mode mapping, auditing
+    ├── pr-descriptions.md        # reviewer-first content, testing disclosure, squash-merge survival
+    ├── review-correspondence.md  # answering register, the divergence rule, the SHA that goes stale
+    └── readme.md                 # per-section mode mapping, register, the existing-voice rule
 ```
 
 ## Gotchas
 
-- Anything addressed to a person—email, DM, note—is out of scope here and belongs to whatever voice process your setup defines, which replaces the prose audit rather than layering on top of it. On the author's machines that's `~/.claude/VOICE.md`.
+- Anything addressed to a person—email, DM, note—is out of scope here and belongs to whatever voice process your setup defines, which replaces the prose audit rather than layering on top of it. On the author's machines that's `~/.claude/VOICE.md`. Review correspondence is the exception. A reply is public developer prose hanging off a diff, so it stays here.
 - The unwritten profiles (API reference, issue bodies, how-to guides, release notes) fall back to the global rules and layers by design. That fallback is a real standard, not a placeholder to improvise past.
 - The shipped profiles duplicate the matching sections of the user's `~/.claude/CLAUDE.md` on purpose, copied verbatim rather than paraphrased so the two can't drift apart silently. The trailer and line-wrapping rules are scoped to both commits and PR descriptions, so both of those profiles carry them and the smoke test pins each copy. Thinning CLAUDE.md down to a reference into this skill is the planned resolution, not done yet.
 

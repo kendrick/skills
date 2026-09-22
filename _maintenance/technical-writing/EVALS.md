@@ -8,6 +8,7 @@ This repo has no eval harness and no CI, so these scenarios run manually and del
 - **`_maintenance/databricks-api/tools/refresh.sh`** — the mixed-comment fixture. Eight WHAT-restating banner comments at lines 19, 26, 76, 124, 178, 213, 368, and 421 (`# --- bash version guard ---`, `# --- helpers ---`, and so on—section dividers that repeat what the following code already announces), plus a strong WHY block at lines 78–84 explaining a two-hops/shared-directory-name footgun: `MAINT_DIR` and `REPO_ROOT` share a folder name one level up, so a single `..` would resolve back into the maintenance directory instead of failing, and the script would silently scan itself for domains.
 - **`adversarial-review/scripts/check-territories.py`** — near-pure WHY comments. The precision control: a passing run touches nothing in this file.
 - **This repo's own pr-descriptions change** — scenario 5's fixture is the working tree that adds `references/pr-descriptions.md`, described as its own PR. Self-hosted like scenario 1, so there is no synthetic branch to keep in sync.
+- **The review correspondence on #115, #119 and #121** — scenario 6's fixture. Sixteen replies and one standalone comment, already read once for `references/review-correspondence.md`'s own `## Example`, reused here as the reply arm's baseline (what the PR-description fallback produced) and as the source of the SHAs the citation row grades. Those three PRs are merged and their branches are gone, so scenario 6 itself runs against a live open pull request in this repo; the historical set supplies the reply-arm material but not a thread-free case, so the standalone arm needs a run that actually produces a comment with no thread to reply into.
 
 ## Scenarios
 
@@ -133,6 +134,32 @@ The delta showed up in two places, and both are structural rather than sentence-
 Worth recording against the fallback's reputation: the control arm's draft is a competent PR description, not a failure. Its own process note identifies the limitation correctly, saying the Summary/Changes/Testing shape came from general PR convention rather than anything the fallback prescribed. That is the fallback working as documented — sentence-level mechanics hold up fine without a profile, and what the profile adds is a decision about what the body is *for*.
 
 The run also found a real gap. The Title section said to read the repo's recently merged PRs, and `gh pr list --state merged` returns nothing on this remote, so the treatment arm had to improvise a fallback to the commit log. The profile now covers the no-merged-PRs case directly. The pair is harvested into `references/pr-descriptions.md`'s `## Example`, which was written after both drafts, so the shipped profile reads a little differently from what either arm worked from.
+
+### 6. Review correspondence — two shapes, one profile
+
+**Prompt (reply arm):** "reply to this review finding."
+**Prompt (standalone arm):** "post a standalone comment putting these findings on the record."
+**Repo:** this one. The reply arm needs an open pull request carrying at least one unanswered automated-reviewer finding; the standalone arm needs a set of findings with no single thread to answer into.
+
+| Expect | Pass condition |
+| --- | --- |
+| Profile read | Both arms read `references/review-correspondence.md` before drafting, not from memory and not `references/pr-descriptions.md` |
+| Verdict first (reply arm) | The first sentence says where the reply landed: one of the four named verdicts, or the opening a caller's template fixes |
+| Subject first (standalone arm) | The first sentence states the comment's own subject, since no thread sits above it |
+| Divergence stated | Where the fix differs from what the reviewer proposed, the reply says so rather than leaving it in the diff |
+| Citation survives | Every SHA the correspondence names is written so the sentence beside it still answers the finding after the SHA is struck out |
+| Hard rules | No trailer, no footer, no hard wraps, in either arm |
+| Not a description | Neither arm recaps what the commit did in place of where the reply landed or the subject |
+
+Fails if either arm opens on a summary of the work, describes a divergence as agreement, puts its only answer inside a SHA, or the standalone arm opens with a verdict it has no thread to attach to instead of stating its own subject.
+
+**What the delta measures here.** The control arm is not a suppressed run. It invokes the skill normally against an installed copy that predates this change, so its dispatch table offers review correspondence nothing nearer than the PR-description row — the exact fallback #111 reports, nine times over. The number this scenario produces is the profile's marginal value over that specific wrong-but-adjacent profile, not over a naive baseline.
+
+**What the two-arm split settles.** Register, content, hard rules, and the citation hazard are identical on paper for a reply and a standalone comment; only the opening move differs, which is why the profile ships one file with two shape sections instead of two files. Comparing the two arms against each other, not only against the fallback, is what checks that claim: if the standalone transcript does nothing a reply transcript would not already cover once the "no thread above it" framing is dropped, `## The Standalone Comment` is decoration and folds into `## The Reply`. A real difference — the standalone arm needing to state its own subject, or handling a table of findings the reply arm never faces — keeps the section standing.
+
+Grade the citation row by command rather than by reading: take every SHA the correspondence names and run `git merge-base --is-ancestor <sha> main` after the pull request merges. The measurement that motivated this profile is that all of them fail.
+
+**Not yet run.** Scenario 5's pattern: the profile ships, the run follows, and this section records both arms and the standalone-versus-reply comparison when it does, and settles whether `## The Standalone Comment` earns its own section: no delta between the arms folds it into `## The Reply`.
 
 ## Grading
 
