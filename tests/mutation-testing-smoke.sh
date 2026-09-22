@@ -289,6 +289,20 @@ require_text mutation-testing/SKILL.md "merge-base with the default branch"
 # Deliberately Not Built records the whole cut, not only the directory form.
 require_text _maintenance/mutation-testing/RATIONALE.md "Restoring with \`git checkout\` in any form, by directory or by name"
 
+# --- Untracked files are how the skill can do nothing and report success: a
+# new guard and its test in new files produce an empty `git diff`, Step 1 finds
+# no guards, and the run finishes having tested nothing. ---
+
+require_text mutation-testing/SKILL.md "git ls-files --others --exclude-standard"
+require_text mutation-testing/SKILL.md "Leaving untracked files out is how the skill does nothing at all while reporting success"
+# An untracked path's backup is the only copy anywhere, since the index has none.
+require_text mutation-testing/SKILL.md "its backup is the only copy anywhere"
+
+# The fixture described the repo AFTER the work, so no scenario could produce
+# the diff every one of them is invoked on.
+require_text _maintenance/mutation-testing/EVALS.md "**Commit a guardless base first.**"
+require_text _maintenance/mutation-testing/EVALS.md "every scenario passes vacuously"
+
 # --- The README is a separate document that can drift from the skill. Pin the
 # install flag the root README's map table is checked against, and the two rules
 # a reader would act on without opening SKILL.md. ---
@@ -320,6 +334,13 @@ require_text _maintenance/mutation-testing/RATIONALE.md "**[E]** measured or obs
 require_text _maintenance/mutation-testing/RATIONALE.md "## Deliberately Not Built"
 require_text _maintenance/mutation-testing/RATIONALE.md "## Known Limitations"
 require_text _maintenance/mutation-testing/RATIONALE.md "pinned by at least one \`refute_text\` assertion"
+
+# The README states how many scenarios EVALS carries, and that count has already
+# gone stale once. Check it against the file rather than pinning the number.
+scenario_count="$(grep -c '^### [0-9]' _maintenance/mutation-testing/EVALS.md | tr -d ' ')"
+scenario_words="zero one two three four five six seven eight nine ten"
+scenario_word="$(echo "$scenario_words" | cut -d' ' -f$((scenario_count + 1)))"
+require_text mutation-testing/README.md "the $scenario_word live scenarios"
 
 # --- The evals record no results, and say so. A file that starts recording them
 # becomes a claim that somebody ran these, which is exactly what it cannot be. ---

@@ -81,7 +81,7 @@ There is no `references/` and no `scripts/`, because choosing a mutation is judg
 
 ## Maintainers
 
-The decision ledger and eval suite live in [`_maintenance/mutation-testing/`](../_maintenance/mutation-testing/). Every contested choice has a row in [RATIONALE.md](../_maintenance/mutation-testing/RATIONALE.md), including everything deliberately left out and why each cut would come back. [EVALS.md](../_maintenance/mutation-testing/EVALS.md) carries the fixture repo and the six live scenarios, because whether a mutation is caught cannot be pinned by grep.
+The decision ledger and eval suite live in [`_maintenance/mutation-testing/`](../_maintenance/mutation-testing/). Every contested choice has a row in [RATIONALE.md](../_maintenance/mutation-testing/RATIONALE.md), including everything deliberately left out and why each cut would come back. [EVALS.md](../_maintenance/mutation-testing/EVALS.md) carries the fixture repo and the seven live scenarios, because whether a mutation is caught cannot be pinned by grep.
 
 To verify this skill on its own, from the repository root:
 

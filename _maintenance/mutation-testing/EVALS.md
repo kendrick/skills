@@ -17,7 +17,11 @@ A throwaway git repo, created fresh per scenario run, holding one guard and a sm
 - `tests/test_storage.py` — one test pinning the rejection, plus enough unrelated passing tests that a count like "fails 1, leaves 12 green" is a real measurement rather than an arithmetic accident.
 - `tests/test_report.py` — a test asserting `formatted_count()` matches the batch size, and nothing asserting anything about rows outside it.
 
-Commit it clean, with the suite green, before each scenario.
+**Commit a guardless base first.** The fixture above describes the repo *after* the work; the scenarios need the state before it. So commit a version of `app/storage.py` and `app/report.py` with their guards removed, and the tests that pin those guards absent, and check the suite is green on that base. Each scenario then applies its own guard as uncommitted work, which is the diff the skill is invoked on.
+
+Committing the fixture as described instead — guards and all — leaves no diff adding a guard, so Step 1 finds nothing and every scenario passes vacuously while testing none of the behaviour it names.
+
+Take the base as a fresh clone or a `git worktree` per scenario, so one scenario's mutations cannot reach the next.
 
 ## Scenarios and Pass Conditions
 

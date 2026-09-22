@@ -17,7 +17,13 @@ Where a step names a shell command, treat it as the intent and use your native s
 
 Resolve once per invocation:
 
-- **DIFF** — what "the diff" means for this run, resolved before Step 1 and never re-resolved. Uncommitted work in the tree is the default and the common case, `git diff` plus `git diff --cached`: the skill usually fires on a guard somebody just wrote. Invoked by name against work already on the branch, it is `git diff <merge-base with the default branch>..HEAD`, and where that is ambiguous, ask rather than guess. A run that picks a different base than the one the user meant reviews guards nobody asked about and misses the ones they did.
+- **DIFF** — what "the diff" means for this run, resolved before Step 1 and never re-resolved.
+
+  Uncommitted work in the tree is the default and the common case, since the skill usually fires on a guard somebody just wrote. That is `git diff`, `git diff --cached`, **and every untracked file** — `git ls-files --others --exclude-standard`, read as wholly added. Leaving untracked files out is how the skill does nothing at all while reporting success: a new guard and its test in new files produce an empty `git diff`, Step 1 finds no guards, and the run finishes having tested the thing it was invoked for not at all.
+
+  Invoked by name against work already on the branch, DIFF is `git diff <merge-base with the default branch>..HEAD`, and where the base is ambiguous, ask rather than guess. A run that picks a different base than the one the user meant reviews guards nobody asked about and misses the ones they did.
+
+  An untracked path carries through the rest of the run like any other, with one difference worth knowing at Step 3: its backup is the only copy anywhere, since the index holds no version of it to fall back on, and a restore that loses it loses it for good.
 - **GUARDS** — the guards DIFF adds, from Step 1. Each carries its file and lines, the quantity it watches, and the test that pins it.
 - **SUITE_CMD** — the project's own test command, read off its manifest or config; ask where the project has none. Every count in the report comes from this one command, so a run that switches commands midway is a run whose rows cannot be compared.
 - **BASELINE** — one green run of SUITE_CMD, its summary line saved verbatim, with `git status --porcelain` saved beside it as the snapshot Step 3 restores against. A red baseline stops the run: a failure that was already there is indistinguishable from one a mutation caused, and every count downstream inherits the ambiguity. The tree does not have to be clean, and usually is not — this skill fires on a diff somebody is still working on, so the snapshot records the working tree as it stands rather than demanding a commit first. Step 4 re-takes BASELINE when the suite grows, and only there.
