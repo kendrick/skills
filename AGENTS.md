@@ -17,7 +17,7 @@ Four artifacts. The first two are universal; the last two are the bar a new skil
 
 `_maintenance/<skill>/EVALS.md` joins them where a skill needs live subagents to prove it works, since a smoke test cannot. `PROVENANCE.md` joins them where a skill is derived from an upstream project, as `handoff` and `technical-writing` are.
 
-Four skills predate the bar. `databricks-api`, `eli5`, and `technical-writing` carry no `RATIONALE.md`, and `databricks-api` and `eli5` have no smoke test. `inbox-to-memory` carries a partial one covering `scripts/collapse-vtt.sh` alone, added when a change reached that script; the rest of the skill is unledgered. Hold new work to the full bar, and leave the rest alone until someone is changing it anyway. A partial ledger grows one section at a time, in whichever part of a skill a change touches.
+Four skills predate the bar. `databricks-api` and `eli5` carry no `RATIONALE.md`, and `databricks-api` and `eli5` have no smoke test. The repetition there is load-bearing: `tests/repo-docs-smoke.sh` parses both exception sets out of that sentence, and a pronoun or a summary phrase in place of either list empties a set and stops the suite. `inbox-to-memory` carries a partial ledger covering `scripts/collapse-vtt.sh` alone, and `technical-writing` one covering `references/review-correspondence.md` alone; each arrived when a change reached that part, and the rest of both skills is unledgered. Hold new work to the full bar, and leave the rest alone until someone is changing it anyway. A partial ledger grows one section at a time, in whichever part of a skill a change touches.
 
 ## Invocation
 
@@ -58,7 +58,7 @@ Run every suite a change could touch, not only the one named for the skill. A ve
 Route by artifact, and invoke the skill rather than applying it from memory:
 
 - `SKILL.md`, `AGENTS.md`, anything an agent consumes → the `writing-for-agents` skill. It governs alone; a prose-audit pass on top would sand off the precision it asks for.
-- `README.md`, commit messages, PR descriptions, code comments → the `technical-writing` skill, which dispatches to a per-artifact profile and ends in its own audit.
+- `README.md`, commit messages, PR descriptions, review correspondence, code comments → the `technical-writing` skill, which dispatches to a per-artifact profile and ends in its own audit.
 
 Comment the WHY. A comment that restates well-named code costs a reader attention and buys nothing; a comment naming the constraint that forced this shape earns its line.
 
