@@ -176,7 +176,7 @@ python3 work-issue/scripts/run-state.py review <PR> --since "$(cat RUN_DIR/pushe
 
 **Commands:** let Step 3 and Step 4 run, then read `RUN_DIR/redteam/round-1.json`.
 
-**Pass condition:** the seam's own command is green in the verdict and the claim still comes back `NOT_REPRODUCED`, carrying `"reproduced_at": "caller"`, the caller's path in `caller.path`, what drove it in `caller.command`, its real red output in `caller.output`, and the grep that found it in `caller.search`. A repair round follows with that command and output attached as the evidence. Fails if the claim comes back `REPRODUCED` on the seam command alone, if any verdict in the file omits `reproduced_at`, or if the verdict reaches for a fourth value instead of pairing `NOT_REPRODUCED` with `reproduced_at`. It fails too where `caller.command` calls the seam itself: a reproducer that hand-builds the seam's argument has built the fixture over again, and that run belongs at the seam.
+**Pass condition:** the seam's own command is green in the verdict and the claim still comes back `NOT_REPRODUCED`, carrying `"reproduced_at": "caller"`, the caller's path in `caller.path`, what drove it in `caller.command`, its real red output in `caller.output`, and the grep that found it in `caller.search`. A repair round follows with that command and output attached as the evidence. Fails if the claim comes back `REPRODUCED` on the seam command alone, if any verdict in the file leaves the `reproduced_at` key out, since a key carrying null is present, or if the verdict reaches for a fourth value instead of pairing `NOT_REPRODUCED` with `reproduced_at`. It fails too where `caller.command` calls the seam itself: a reproducer that hand-builds the seam's argument has built the fixture over again, and that run belongs at the seam.
 
 ### 17. A Seam With No Caller Says So and the Run Goes On
 
@@ -184,7 +184,15 @@ python3 work-issue/scripts/run-state.py review <PR> --since "$(cat RUN_DIR/pushe
 
 **Commands:** let Step 4 and Step 5 run, then read `RUN_DIR/redteam/round-1.json` and the verification section of `RUN_DIR/pr-body.md`.
 
-**Pass condition:** the claim is `REPRODUCED` with `"reproduced_at": "seam"`, `caller.path` null, the search grep in `caller.search`, and that search's empty result in `caller.output`. The run goes on to Step 5, and the pull request's verification section marks the claim seam only and gives the absent caller as the reason. Fails if the absent caller downgrades the claim to `UNVERIFIABLE`, triggers a repair round, or stops the run, and fails if the pull-request body reads the same here as it does for a claim reproduced at its caller.
+**Pass condition:** the claim is `REPRODUCED` with `"reproduced_at": "seam"`, `caller.path` null, the search grep in `caller.search`, and what that search returned in `caller.output`—empty, or the hits that name the symbol and run it nowhere. The run goes on to Step 5, and the pull request's verification section marks the claim seam only and gives the absent caller as the reason. Fails if the absent caller downgrades the claim to `UNVERIFIABLE`, triggers a repair round, or stops the run, and fails if the pull-request body reads the same here as it does for a claim reproduced at its caller.
+
+### 18. A Claim Nobody Can Run Names No Reproduction Site
+
+**Setup:** a sandbox issue whose plan gives one task an outcome the worker can build and cannot run: a change to a document, or to a path the repo's verification command never reaches. The worker's final report then carries that claim with a null `command`.
+
+**Commands:** let Step 4 and Step 5 run, then read `RUN_DIR/redteam/round-1.json`, the verification section of `RUN_DIR/pr-body.md`, and its "Not independently verified" section.
+
+**Pass condition:** the claim comes back `UNVERIFIABLE` with `"reproduced_at": null` and a null `caller`. The pull request names the claim under "Not independently verified" and leaves it out of the verification section. Fails if the verdict marks the claim `caller` or `seam`, if the verification section gives it a reproduction site, a command, or an output tail, or if the missing command reaches Step 4 item 4 as a `NOT_REPRODUCED` and dispatches a repair.
 
 ## What These Evals Do Not Cover
 
