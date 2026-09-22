@@ -230,7 +230,7 @@ refute_text mutation-testing/SKILL.md "the new test went from \`??\` to absent"
 # --summary is relative to the commit, so on the dirty tree this skill runs in
 # it reports nothing while the restored mode is wrong.
 require_text mutation-testing/SKILL.md "Compare against the backup rather than against HEAD"
-require_text mutation-testing/SKILL.md "matches its backup in contents and in mode"
+require_text mutation-testing/SKILL.md "matches its backup in contents, in mode, and in link identity"
 
 # The README stated the unqualified slipped rule twice; only one was fixed.
 require_text mutation-testing/README.md "A slipped verdict that names a real gap goes first"
@@ -278,7 +278,7 @@ require_text mutation-testing/SKILL.md "Flattening to basenames collides"
 
 # cp without -p fabricates the backup's mode through the umask, and cp onto an
 # existing file keeps the destination's mode, so mode never comes back.
-require_text mutation-testing/SKILL.md "preserving mode (\`cp -p\`)"
+require_text mutation-testing/SKILL.md "preserving mode and link identity (\`cp -Pp\`)"
 require_text mutation-testing/SKILL.md "keeps the destination's mode"
 
 # Which diff the skill reads was never stated; the README advertises a by-name
@@ -330,6 +330,28 @@ require_text mutation-testing/SKILL.md "A report with nothing in it is indisting
 # Under the guardless base every scenario's tree is dirty by construction, so an
 # empty `git diff` afterwards is the destructive restore's signature.
 require_text _maintenance/mutation-testing/EVALS.md "compared against what it printed before the run, never against empty"
+
+# --- Three from the fourth Codex round, all measured. ---
+
+# cp -p follows a symlink, so the backup holds the target bytes and the restore
+# writes a regular file where the link was. Both other checks clear it: cmp
+# reads through, and two regular files agree on mode. Checked first for that
+# reason.
+require_text mutation-testing/SKILL.md "**Link identity**, for any path that was a symlink"
+# For a linked path the contents check cannot stand in: cmp follows both sides,
+# and a relative link in the backup resolves against the backup directory.
+require_text mutation-testing/SKILL.md "**replaces** the contents comparison rather than joining it"
+require_text mutation-testing/SKILL.md "follows a symlink instead of copying it"
+
+# A pinning test is why the skill fires, never an entry in GUARDS: listed as a
+# guard it gets looked up for a test that pins the test.
+require_text mutation-testing/SKILL.md "is a **trigger, never a guard**"
+refute_text mutation-testing/SKILL.md "a branch that turns input away, or a test that pins one of those"
+
+# go test prints no pass total, so the row asked for a number the runner never
+# emits beside a rule forbidding one assembled by hand.
+require_text mutation-testing/SKILL.md "passed: not reported by <runner>"
+require_text mutation-testing/SKILL.md "reads exactly like a measurement"
 
 # --- The README is a separate document that can drift from the skill. Pin the
 # install flag the root README's map table is checked against, and the two rules

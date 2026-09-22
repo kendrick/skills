@@ -30,7 +30,9 @@ Resolve once per invocation:
 
 ## Step 1 — Name the guards
 
-Read DIFF for what it **adds**, not for which files it touches. A guard is added behavior that refuses, bounds, or asserts: a rejection, a validation, an invariant, a limit, a permission or ownership check, a branch that turns input away, or a test that pins one of those. A formatting change to a file full of guards adds none; a single line added to a controller may add one.
+Read DIFF for what it **adds**, not for which files it touches. A guard is added behavior that refuses, bounds, or asserts: a rejection, a validation, an invariant, a limit, a permission or ownership check, or a branch that turns input away.
+
+A test that pins one of those is a **trigger, never a guard**. It is why the skill fires and it is the thing a guard gets measured against, so it belongs in the guard's row as its pinning test rather than in GUARDS as an entry of its own. Listing it as a guard makes Step 1 look for a test that pins the test, report it as untested, and Step 2 then either mutates the test instead of the code under review or skips it while a spurious untested-guard row sits in the report. A formatting change to a file full of guards adds none; a single line added to a controller may add one.
 
 For each guard, write down three things: where it lives, **the quantity it watches**, and the test that pins it. The quantity is the load-bearing column, and Step 2's adversarial mutation is built entirely out of it. Name what the guard actually reads—the value in the variable it compares—rather than the outcome somebody intended it to protect.
 
@@ -56,13 +58,14 @@ Reach for the plausible version rather than an arbitrary break, because an arbit
 
 Per mutation, in order:
 
-1. Copy each path the mutation touches to a scratch location outside the repository, preserving mode (`cp -p`), at a destination that **mirrors the path's full position in the repo** rather than its basename alone.
+1. Copy each path the mutation touches to a scratch location outside the repository, preserving mode and link identity (`cp -Pp`), at a destination that **mirrors the path's full position in the repo** rather than its basename alone.
 
    Both details are load-bearing, and the backup is the only copy of the user's uncommitted work the run holds.
 
    - A backup left beside the file is untracked, so it lands in the comparison item 5 makes and halts a valid run on its first mutation.
    - Flattening to basenames collides. `app/storage.py` and `lib/storage.py` back up to one file; the second copy destroys the first; the restore then writes one file's contents into the other path; and both of item 5's checks pass, because each path matches the single backup it was restored from and a tracked file's status stays ` M` whatever it now contains. Git holds no copy of what was lost.
    - `cp` without `-p` sets a new file's mode through the umask, so the backup records a mode the source never had and item 5 compares against a fabricated authority. Restoring needs the same care: `cp` onto an existing file keeps the destination's mode, so remove the path first or set the mode explicitly, or the bytes come back and the mode does not.
+   - `cp` without `-P` follows a symlink instead of copying it, so a backup of a linked path holds the target's bytes and the restore writes a regular file where the link was. Both of item 5's checks clear that: `cmp` reads through the link to the same bytes, and the modes agree because both sides are now ordinary files. `-P` keeps the link, and item 5 checks it.
 2. Apply the edit, then prove it landed **against item 1's backup**: `cmp` reports the file and its backup as differing. That comparison is the proof, and it has no alternatives. `git diff -- <path>` cannot answer the question here, because the guard's own uncommitted change already makes that diff non-empty, so it reports success for a mutation that never applied. A grep for the inserted text fails the same way whenever that text already appears in the user's work. An edit that silently failed to apply leaves the suite green, and a green suite reads here as "no test catches this", the exact inverse of what happened.
 3. Run SUITE_CMD. Capture its summary line verbatim, and the names of the failing tests.
 4. **Restore by copying item 1's backup back** to its named path, one path at a time.
@@ -71,12 +74,13 @@ Per mutation, in order:
 
    Never by directory either. `git checkout -- app/storage/` reverted the new test alongside the mutation, and the suite came back green without it. That was caught on the test count rather than by noticing, so treat it as a near miss rather than a save.
 5. Verify the restore twice, because neither check sees what the other does.
-   - **Contents**, against the backups item 1 made: every mutated path matches its backup in both contents and mode: `cmp` for the bytes, and a direct comparison of the two files' modes. Compare against the backup rather than against HEAD — `git diff --summary` reports a mode change relative to the commit, so where the user's own uncommitted work is what carries the mode it prints nothing while the restored file's mode is wrong. Contents alone is not enough either: `cmp` passes on a file whose executable bit moved, and where that file was already modified before the run the status check below passes too, so a mode-only restore failure clears both. `git status --porcelain` reports status codes rather than contents, so a tracked file the user had already modified reads ` M path` before the mutation and ` M path` again after a restore that silently failed. The status comparison passes while the mutation sits live on disk. That file is the normal case here rather than an edge, since the guard under test is itself an uncommitted change.
+   - **Link identity**, for any path that was a symlink: it is still a symlink and still points where it did (`test -L` and `readlink`). For those paths this check **replaces** the contents comparison rather than joining it, because `cmp` cannot do the job either way — on a link that survived, it follows both sides and compares the target's bytes rather than the link; and a relative link in the backup resolves against the backup directory, where the target does not exist, so the comparison errors instead of answering. Neither the contents nor the mode check can see a link replaced by a regular file: `cmp` reads through to the same bytes, and two ordinary files agree on mode.
+   - **Contents**, against the backups item 1 made, for every mutated path that is not a symlink: it matches its backup in both contents and mode: `cmp` for the bytes, and a direct comparison of the two files' modes. Compare against the backup rather than against HEAD — `git diff --summary` reports a mode change relative to the commit, so where the user's own uncommitted work is what carries the mode it prints nothing while the restored file's mode is wrong. Contents alone is not enough either: `cmp` passes on a file whose executable bit moved, and where that file was already modified before the run the status check below passes too, so a mode-only restore failure clears both. `git status --porcelain` reports status codes rather than contents, so a tracked file the user had already modified reads ` M path` before the mutation and ` M path` again after a restore that silently failed. The status comparison passes while the mutation sits live on disk. That file is the normal case here rather than an edge, since the guard under test is itself an uncommitted change.
    - **Collateral**, against BASELINE's snapshot: `git status --porcelain -uall` matches it. This is what catches a restore that reverted something it should not have, which the contents check cannot see because the casualty is a path no mutation touched. `-uall` is load-bearing: without it git coalesces a wholly-untracked directory to a single `?? dir/` line, and a file deleted inside that directory leaves the snapshot byte-identical. It is item 4's near miss exactly. The casualty there is an uncommitted edit to a **tracked** file under the restored path, so its ` M path` line goes absent from the status output. An untracked file is not the shape to look for: `git checkout -- <dir>` restores tracked files from the index and leaves untracked ones where they are.
 
    Either check failing stops the run and names the path.
 
-**Done when:** every mutation was applied with its change proved against its backup, measured, and restored; every mutated path matches its backup in contents and in mode, and post-restore status equals the snapshot, for every one of them; or the run stopped naming the path that differs.
+**Done when:** every mutation was applied with its change proved against its backup, measured, and restored; every mutated path matches its backup in contents, in mode, and in link identity, and post-restore status equals the snapshot, for every one of them; or the run stopped naming the path that differs.
 
 ## Step 4 — Re-measure after the suite grows
 
@@ -97,6 +101,8 @@ Absorbing the new test file into the snapshot is the whole point: it is a delibe
 ## Step 5 — Report
 
 One row per mutation, carrying: the guard, which question it answers, the mutation in one line, the runner's summary line verbatim, the failing tests by name, how many passed, and the reading: `caught` or `slipped` for an adversarial mutation, `fails N, leaves M green` for a plausible one.
+
+Where the runner does not report a passing count, write `passed: not reported by <runner>` and let the reading say `fails N` alone. `go test ./...` prints `ok example.test/count 0.392s` and no total, and that is the common case outside pytest-shaped runners. An absent number is a fact about the runner and reads as one; a number reconstructed by counting test functions is a fabrication that reads exactly like a measurement, which is the one thing this skill exists not to produce.
 
 Quote the runner's own summary line rather than a count assembled by hand. Runners disagree about what they report and about how they phrase it, and the line as printed is what a reader can check.
 
