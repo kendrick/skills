@@ -21,7 +21,7 @@ A reply outlives the round it was written in. It is read from a merged pull requ
 
 ## The Reply
 
-The first sentence says whether the finding held. Four verdicts cover every thread—confirmed and fixed, confirmed and deferred, partly right, refused—so lead with one of them by name, then say what changed.
+The first sentence says whether the finding held. Four verdicts cover every thread—confirmed and fixed, confirmed and deferred, partly right, refused—so lead with one of them by name, then say what changed. A caller may mandate the opening: `work-issue` replies to a queued row with `deferred: <Outside because>`, which is `confirmed and deferred` in the short form that caller fixes, and it satisfies this rule as written. Follow the caller's template where it has one, and this rule where it does not.
 
 Where the fix diverged from what the reviewer proposed, say so in the reply rather than leaving it in the diff. A reviewer who asked for a narrowed pathspec and reads "fixed" will open the next round expecting a narrowed pathspec, and a reply that never mentions the exclusion was deleted outright has spent their attention on finding that out.
 
@@ -41,7 +41,7 @@ Edit one comment in place across rounds rather than posting a second. Two commen
 
 A short SHA is the natural thing to hand a reviewer and the first thing to go stale. A review cycle normally ends in a rebase and the merge normally squashes, so the commit a reply names stops being reachable from the default branch at about the moment the pull request closes.
 
-So cite the SHA, and write the sentence so that losing it costs nothing. "Fixed in `a869637`" is a reply that stops working. "The exclusion is gone rather than narrowed, in `a869637`" is the same reply with the answer still in it.
+So where the reply names a change, cite the SHA and write the sentence so that losing it costs nothing. "Fixed in `a869637`" is a reply that stops working. "The exclusion is gone rather than narrowed, in `a869637`" is the same reply with the answer still in it. A refused reply and a standalone comment that changed no code have no commit to name, so they cite none: reaching for HEAD attaches a SHA that answers nothing, and the reply then carries a locator a reader will try.
 
 The same rule covers a line number, a path a later commit renames, and "see my comment above" in a thread the reviewer reads collapsed. Name the symbol, the function, the test—the things a rebase carries along—and let the locator be a convenience rather than the content.
 

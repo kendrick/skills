@@ -296,6 +296,18 @@ require_text technical-writing/references/readme.md "Where the README already ca
 # of them is a sentence a "tighten this up" pass flattens into the paragraph
 # around it, and the profile is worth nothing without all three.
 require_text technical-writing/references/review-correspondence.md "The first sentence says whether the finding held."
+
+# Two carve-outs a review found by reading the callers rather than this file.
+# work-issue hard-codes the reply body for a queued row at
+# references/triage.md:77 and routes it through this profile, and that body
+# opens on "deferred:" rather than one of the four verdicts spelled out. An
+# agent handed both documents could satisfy only one, so the rule names the
+# caller's short form as the verdict it is. The SHA rule had the matching gap
+# pointed the other way: this profile supports a refused verdict and a
+# standalone comment, and neither has a commit, so an unconditional "cite the
+# SHA" sends the agent to HEAD for a locator that answers nothing.
+require_text technical-writing/references/review-correspondence.md "which is \`confirmed and deferred\` in the short form that caller fixes"
+require_text technical-writing/references/review-correspondence.md "have no commit to name, so they cite none"
 require_text technical-writing/references/review-correspondence.md "Where the fix diverged from what the reviewer proposed, say so in the reply rather than leaving it in the diff."
 require_text technical-writing/references/review-correspondence.md "A short SHA is the natural thing to hand a reviewer and the first thing to go stale."
 
