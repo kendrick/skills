@@ -130,11 +130,16 @@ require_file tests/fixtures/work-issue/review/pr-comment-finding.json
   exit 1
 }
 
-# Frontmatter. Manual invocation is deliberate: a misfire spends a whole
-# fan-out and then pushes a branch and opens a pull request nobody asked for,
-# while a missed trigger costs the user one word.
+# Frontmatter. Model-invocation is deliberate and load-bearing: a skill that
+# runs a wave of issues reaches one lane through this one, and a user-invoked
+# skill is one no sibling can call at all. The misfire guard the flag used to
+# carry now sits at Step 0's confirmation, which is pinned below.
 require_text work-issue/SKILL.md "name: work-issue"
-require_text work-issue/SKILL.md "disable-model-invocation: true"
+# The flag coming back would not read as a bug. A sibling's Skill call
+# would be refused outright, because a stripped description is stripped
+# from siblings too—a wave reaches it once per lane. Refuted on the bare
+# key so `: false` fails here as loudly as `: true`.
+refute_text work-issue/SKILL.md "disable-model-invocation"
 require_text work-issue/SKILL.md "argument-hint: '<issue number or URL> [plan path] [--isolate | --no-isolate] [--deep] [--dry-run]'"
 
 # A description that summarizes the steps becomes the shortcut the model takes

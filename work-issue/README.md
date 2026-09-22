@@ -49,7 +49,7 @@ Needs a git repo and Python 3 for the three bundled scripts, which are stdlib-on
 
 ## Use
 
-It only runs when you ask for it by name—see the Gotchas for why.
+Type its name, or let a wave reach it one lane at a time—see the Gotchas for what it does before it spends anything.
 
 ```
 > /work-issue 42
@@ -79,7 +79,7 @@ work-issue/
 
 ## Gotchas
 
-- **It won't fire on its own.** A misfire spends a whole fan-out and then pushes a branch and opens a pull request nobody asked for, while a missed trigger costs you one word. Type its name.
+- **It can fire on its own now, and it still stops to ask.** A skill running a wave of issues reaches one lane through it, so the description has to stay where an agent can see it. Nothing dispatches until Step 0 puts the shape in front of you, and the half of that grant covering the push and the pull request is answerable on its own.
 - **One confirmation, then it doesn't ask again.** The shape, the isolation, the red-team mode, and the push grant are one question. Everything after yes—dispatching, committing, pushing, opening the pull request, pushing repair commits—happens unattended. Use `--dry-run` to see the question without answering it.
 - **Never the default branch.** Every push names its refspec in full, after checking that the branch isn't the default one. A force push is `--force-with-lease`, and only after the rebase. `gh pr create` always states its base and head. The skill never merges. A human does that, and the run stops one step short of it.
 - **`adversarial-review` fires only when the diff earns it.** It matches the committed diff against the money, authz, and schema rows of `adversarial-review`'s own trigger table, re-derived from that table at run time so the rows stay current, and `--deep` fires it outright. A docs-and-types diff gets the lightweight reproducer and nothing heavier. The trigger needs that sibling installed to derive from, and without it the step stops rather than guessing at a signal list.

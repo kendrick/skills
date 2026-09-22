@@ -1,8 +1,7 @@
 ---
 name: divvy-up
-description: "Run an approved implementation plan as waves of parallel subagents, where the tasks in a wave own disjoint files and each one is routed to the cheapest model that can do it correctly."
+description: "Run an approved implementation plan as waves of parallel subagents whose tasks own disjoint files. Use when a plan is already approved and its tasks should run at once rather than one at a time, or when another skill needs a plan's waves derived, dispatched, and gated. It never writes the plan: to plan, use writing-plans."
 argument-hint: '[plan path] [--max N] [--commit]'
-disable-model-invocation: true
 ---
 
 # divvy-up
@@ -15,7 +14,7 @@ Cost falls for a second reason. Each task runs on the cheapest rung of the ladde
 
 Three skills cover three shapes of the same job. Reach for `agent-guild` when the work needs a written constitution and an independent checker per task. Reach for `divvy-up` when a plan is already approved and its tasks can be carved into disjoint file ownership. Reach for `subagent-driven-development` when they cannot be, and the tasks have to run one at a time.
 
-This skill is user-invoked (`disable-model-invocation: true`) because a misfire during ordinary planning spends a whole fan-out, while a missed trigger costs the user one word.
+This skill is model-invocable because `work-issue` reaches it at its own Step 0, and a skill no sibling can call is one no sibling can compose with. Typing its name still works—a description adds agent discovery without taking the human's away. Step 4's confirmation is what stands between a misfire and a spent fan-out: it stops the run before a single dispatch.
 
 Where a step names a shell command, treat it as the intent and use your native shell or file tools.
 

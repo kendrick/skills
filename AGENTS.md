@@ -21,7 +21,9 @@ Four skills predate the bar. `databricks-api`, `eli5`, and `technical-writing` c
 
 ## Invocation
 
-`disable-model-invocation: true` makes a skill user-invoked, which strips its description from the agent's reach and costs zero context. Choose by the asymmetry: when a misfire is expensive and a miss costs the user one word, take user-invoked. `adversarial-review`, `handoff`, `eli5`, `divvy-up`, `jira-refine`, and `work-issue` are user-invoked for that reason, and each says so in its own body. Everything else carries a trigger-bearing description.
+`disable-model-invocation: true` makes a skill user-invoked, which strips its description from the agent's reach and costs zero context. Choose by the asymmetry: when a misfire is expensive and a miss costs the user one word, take user-invoked. `adversarial-review`, `handoff`, `eli5`, and `jira-refine` are user-invoked for that reason, and each says so in its own body. Everything else carries a trigger-bearing description.
+
+One condition outranks the asymmetry: a skill another skill has to reach is model-invocable or it is unreachable, because a stripped description is stripped from siblings too, not only from the agent. `divvy-up` and `work-issue` are model-invocable for that reason—`work-issue` reaches `divvy-up` at its Step 0, and a wave reaches `work-issue` once per lane. Model-invocation only adds agent discovery and never takes the human's away, so the cost is context load rather than lost control, and the guard against a misfire moves to the skill's own confirmation step.
 
 A description that summarizes the workflow becomes a shortcut the model takes instead of reading the body. Write triggers, and let the steps live in the file.
 

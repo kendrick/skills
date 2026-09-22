@@ -15,7 +15,7 @@ Four sources:
 
 | # | Decision | Why | Tier |
 |---|---|---|---|
-| 1 | User-invoked only (`disable-model-invocation: true`) | A misfire during ordinary planning costs a whole fan-out; a missed trigger costs the user one word. Same call as `adversarial-review` and `handoff`. | [P] |
+| 1 | Model-invocable (no `disable-model-invocation`) | `work-issue` reaches this skill at its own Step 0, and a user-invoked skill strips its description from siblings as well as from the agent, so no other skill can call one. That condition outranks the misfire asymmetry this row first weighed, which was the right call while nothing but a human invoked it. Model-invocation adds agent reach without taking the human's away, so `/divvy-up` still works, and Step 4's confirmation rather than the frontmatter is what stops a misfire before any dispatch. | [P] |
 | 2 | Literal paths, never globs; `paths_overlap` and `owns_entry_problem` vendored byte-identically rather than rewritten | Two globs can overlap without either matching a file that exists yet, and the upstream predicate rejects glob characters outright because "an entry is a literal path, and a pattern here would own nothing." Vendoring across skills has precedent in this repo. | [C] |
 | 3 | Any plan source: a plan-mode file, a `writing-plans` output, any markdown path, or the approved plan held in the conversation | Derivation reads prose either way; a `writing-plans` file with a `Files:` block per task is the best case, not a requirement. | [P] |
 | 4 | A standalone skill rather than a mode inside `subagent-driven-development` | The gap nobody owns is parallel execution of an existing plan without guild ceremony. | [P] |
