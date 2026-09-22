@@ -60,6 +60,8 @@ require_file tests/fixtures/work-issue/plans/issue.md
 require_file tests/fixtures/work-issue/plans/plan-good.md
 require_file tests/fixtures/work-issue/plans/plan-nofiles.md
 require_file tests/fixtures/work-issue/plans/plan-thin.md
+require_file tests/fixtures/work-issue/plans/plan-settled.md
+require_file tests/fixtures/work-issue/plans/plan-open-section.md
 require_file tests/fixtures/work-issue/plans/plan-uncited.md
 require_file tests/fixtures/work-issue/plans/inflight/issue-38/plan.md
 # A sibling under `closed/` is the run the overlap check must skip, so the
@@ -614,6 +616,56 @@ grep -Fq "D4 unchecked box under heading 'Open Questions'" <<<"$thin_out" || {
   echo "plan-thin.md should fail D4 on both boxes, the nested one included, got: $thin_out" >&2
   exit 1
 }
+
+# #129: issue #113's plan was refused at "The four that settle an open
+# question", a sentence closing questions, because `open question` sat in the
+# phrase list with no gate. plan-settled's only candidate is that sentence, so
+# any D3 line at all means the phrase is unconditional again.
+set +e
+settled_out="$(python3 "$check_plan" "$plans/plan-settled.md" --issue 101 2>&1)"
+settled_status=$?
+set -e
+[[ "$settled_status" == "0" ]] || {
+  echo "plan-settled.md should exit 0, got: $settled_status: $settled_out" >&2
+  exit 1
+}
+grep -Fq "OK: plan cites #101, 1 tasks with files, 0 open markers, 0/0 criteria covered" <<<"$settled_out" || {
+  echo "plan-settled.md should print its full OK line, got: $settled_out" >&2
+  exit 1
+}
+if grep -Fq "D3" <<<"$settled_out"; then
+  echo "plan-settled.md should carry no D3 line at all, got: $settled_out" >&2
+  exit 1
+fi
+
+# The same #113 plan passed clean with a list of genuinely open items under
+# `## Open uncertainties`, since none of them used a marker phrase. Line numbers
+# are exact: a heading walk that fires on the wrong line, or a gate that lets the
+# unresolved prose on line 9 through, is as broken as one that stays silent.
+set +e
+open_section_out="$(python3 "$check_plan" "$plans/plan-open-section.md" --issue 101 2>&1)"
+open_section_status=$?
+set -e
+[[ "$open_section_status" == "1" ]] || {
+  echo "plan-open-section.md should exit 1, got: $open_section_status: $open_section_out" >&2
+  exit 1
+}
+grep -Fq "check-plan: line 9: D3 open marker 'open question'" <<<"$open_section_out" || {
+  echo "plan-open-section.md should fail D3 on its unresolved open-question prose at line 9, got: $open_section_out" >&2
+  exit 1
+}
+# Line 13 reads "Unresolved; settled by a live run." A resolving verb in the
+# item's text must not close it; only striking or ticking the item does.
+grep -Fq "check-plan: line 13: D3 unresolved item under heading 'Open uncertainties'" <<<"$open_section_out" || {
+  echo "plan-open-section.md should fail D3 on the unresolved item at line 13, got: $open_section_out" >&2
+  exit 1
+}
+# Line 14 is struck through. A walk that refused it would push authors to
+# delete settled items rather than record them.
+if grep -Fq "line 14:" <<<"$open_section_out"; then
+  echo "plan-open-section.md should not name its struck item at line 14, got: $open_section_out" >&2
+  exit 1
+fi
 
 # A task with nowhere to write its output is a task whose worker picks a file
 # and nobody proved that file is unowned.
