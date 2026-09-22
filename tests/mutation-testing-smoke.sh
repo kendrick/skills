@@ -116,7 +116,7 @@ require_text mutation-testing/SKILL.md "that is a defect in the guard rather tha
 
 # --- The boundary. One mutation, one checkout. ---
 
-require_text mutation-testing/SKILL.md "One mutation, one checkout, in sequence."
+require_text mutation-testing/SKILL.md "One mutation, one working tree, in sequence."
 require_text mutation-testing/SKILL.md "worktree per mutation"
 
 # --- Two preconditions that make every count downstream meaningful. A red
@@ -255,6 +255,16 @@ require_text mutation-testing/SKILL.md "reports success for a mutation that neve
 require_text mutation-testing/SKILL.md "Never with \`git checkout\`"
 require_text mutation-testing/SKILL.md "deletes the very work the run was called to measure"
 require_text mutation-testing/SKILL.md "Never by directory either."
+
+# --- Third time an offered alternative defeated the check beside it: first
+# `git diff --summary` for mode, then a grep for the mutation proof. The backup
+# comparison is the proof and carries no alternatives.
+require_text mutation-testing/SKILL.md "That comparison is the proof, and it has no alternatives."
+refute_text mutation-testing/SKILL.md "or a grep finds the inserted text with its line number"
+
+# `git checkout` is a forbidden command in this document, so "checkout" as a
+# noun for the working copy is a collision an agent should not have to resolve.
+refute_text mutation-testing/SKILL.md "one checkout, in sequence"
 
 # --- The README is a separate document that can drift from the skill. Pin the
 # install flag the root README's map table is checked against, and the two rules

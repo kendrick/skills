@@ -48,7 +48,7 @@ Reach for the plausible version rather than an arbitrary break, because an arbit
 Per mutation, in order:
 
 1. Copy each path the mutation touches to a scratch location outside the repository. A backup left beside the file is untracked, so it lands in the comparison item 5 makes and halts a valid run on its first mutation.
-2. Apply the edit, then prove it landed **against item 1's backup**: `cmp` reports the file and its backup as differing, or a grep finds the inserted text with its line number. Prove it that way rather than with `git diff -- <path>`, which cannot answer the question here—the guard's own uncommitted change already makes that diff non-empty, so it reports success for a mutation that never applied. An edit that silently failed to apply leaves the suite green, and a green suite reads here as "no test catches this", the exact inverse of what happened.
+2. Apply the edit, then prove it landed **against item 1's backup**: `cmp` reports the file and its backup as differing. That comparison is the proof, and it has no alternatives. `git diff -- <path>` cannot answer the question here, because the guard's own uncommitted change already makes that diff non-empty, so it reports success for a mutation that never applied. A grep for the inserted text fails the same way whenever that text already appears in the user's work. An edit that silently failed to apply leaves the suite green, and a green suite reads here as "no test catches this", the exact inverse of what happened.
 3. Run SUITE_CMD. Capture its summary line verbatim, and the names of the failing tests.
 4. **Restore by copying item 1's backup back** to its named path, one path at a time.
 
@@ -97,4 +97,4 @@ Close with the one sentence worth carrying into the pull-request description: th
 
 ## One at a time
 
-One mutation, one checkout, in sequence. Restore is already the fragile step at concurrency one, and two mutations sharing a tree restore against the same snapshot and race over the same paths, which turns a fragile step into a correctness bug that reports a clean run. The only safe fan-out is a worktree per mutation. This skill builds none, and a run that wants one is a run that should wait.
+One mutation, one working tree, in sequence. Restore is already the fragile step at concurrency one, and two mutations sharing a tree restore against the same snapshot and race over the same paths, which turns a fragile step into a correctness bug that reports a clean run. The only safe fan-out is a worktree per mutation. This skill builds none, and a run that wants one is a run that should wait.
