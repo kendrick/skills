@@ -49,6 +49,7 @@ require_file technical-writing/references/commit-messages.md
 require_file technical-writing/references/comments.md
 require_file technical-writing/references/pr-descriptions.md
 require_file technical-writing/references/readme.md
+require_file technical-writing/references/review-correspondence.md
 require_file _maintenance/technical-writing/PROVENANCE.md
 require_file _maintenance/technical-writing/EVALS.md
 require_file _maintenance/technical-writing/upstream/SKILL.md
@@ -189,6 +190,38 @@ refute_text technical-writing/SKILL.md "| PR description | not yet written"
 # And for the README row, when its profile shipped.
 refute_text technical-writing/SKILL.md "| README, docs | not yet written"
 
+# The review-correspondence row, pinned whole like its neighbours. #111 was
+# filed because an agent writing nine pieces of review correspondence in one
+# wave fell back to the PR-description row every time, so this row sits
+# directly beneath that
+# one: the nearest-row search that produced the wrong answer now lands one line
+# above the right one, and the position is part of the fix rather than
+# alphabetical accident.
+require_text technical-writing/SKILL.md "| Review correspondence, a reply or a standalone PR comment | [references/review-correspondence.md](references/review-correspondence.md) | STE, Google, Global English — no Diátaxis |"
+
+# #77 proposed this row as a fifth `not yet written — globals above` fallback,
+# with no profile file. #111 supersedes it, and this refute is what keeps the
+# superseded shape from arriving later as a "simpler" edit that drops the
+# profile link and leaves the row looking answered.
+refute_text technical-writing/SKILL.md "| Review correspondence, a reply or a standalone PR comment | not yet written"
+
+# The layers section enumerates the artifacts Diátaxis skips, and the new row's
+# Layers cell says "no Diátaxis". Left at three, the enumeration contradicts the
+# table one section below it by omission, and a reader who trusts the prose over
+# the table writes a mode-shaped reply. PROVENANCE.md restates this same set and
+# moves with it.
+require_text technical-writing/SKILL.md "commits, PR descriptions, review correspondence, and changesets have no document mode"
+
+# The description is the trigger surface, and it excludes "anything addressed
+# to a person" — which a reply to a reviewer is. #77 named this collision:
+# without the carve-out the frontmatter suppresses the trigger for the exact
+# artifact the new row exists to route, and the file contradicts itself. Both
+# are pinned whole because both are what a "tighten the description" pass drops
+# first, and because the existing pin on the exclusion clause above stays green
+# either way.
+require_text technical-writing/SKILL.md "answering a review finding"
+require_text technical-writing/SKILL.md "Review correspondence is the exception—public developer prose hanging off a diff, and it dispatches here."
+
 # --- Anti-drift pins on the verbatim CLAUDE.md migrations ---------------
 # These passages are copied word-for-word from the user's ~/.claude/CLAUDE.md,
 # so the skill and the config can't drift apart while both are live. Paraphrasing
@@ -226,6 +259,22 @@ require_text technical-writing/references/comments.md "Comment proactively, but 
 require_text technical-writing/references/comments.md "Comments that explain WHAT the code does are worthless when the code is well-named. Comments that explain HOW the code works shouldn't be necessary if the code is written cleanly. The only comment worth writing is the one that explains something the code itself can't."
 require_text technical-writing/references/comments.md "Write comments in the voice and tone of a helpful technical writer who is also in a hurry; commonly-recognized abbreviations and acronyms are acceptable."
 
+# --- review-correspondence's own hard rules ------------------------------
+# This profile carries NO verbatim CLAUDE.md passage, unlike the two above it.
+# Both of CLAUDE.md's PR-scoped sentences name their own scope inside the
+# sentence — "to commit messages or PR descriptions" — and a review reply is
+# neither, so a verbatim third copy would ship a rule that is false of the file
+# it sits in and would turn a two-copy sync into a three-way one whose third
+# copy had to be hand-edited anyway. The rules are restated here in this
+# artifact's scope, with this artifact's reason, and pinned as themselves.
+require_text technical-writing/references/review-correspondence.md "Never sign a reply."
+require_text technical-writing/references/review-correspondence.md "Never hard-wrap the body."
+
+# And the refute that pays for the decision: a well-meaning "sync these up"
+# edit pasting the PR-scoped sentence in would look like an improvement and
+# would silently create the third sync obligation the decision declines.
+refute_text technical-writing/references/review-correspondence.md "to commit messages or PR descriptions"
+
 # --- Example-harvest pins -------------------------------------------------
 # EXPECTED TO FAIL until the harvest step lands. The Example sections come
 # from real eval runs later in the plan; do not stub them just to go green.
@@ -234,6 +283,7 @@ require_text technical-writing/references/commit-messages.md "## Example"
 require_text technical-writing/references/comments.md "## Example"
 require_text technical-writing/references/pr-descriptions.md "## Example"
 require_text technical-writing/references/readme.md "## Example"
+require_text technical-writing/references/review-correspondence.md "## Example"
 
 # The README profile's two load-bearing structures: the per-section mode
 # mapping (the reason the profile exists at all), and the existing-voice rule,
@@ -242,7 +292,19 @@ require_text technical-writing/references/readme.md "## Example"
 require_text technical-writing/references/readme.md "## Mode Mapping"
 require_text technical-writing/references/readme.md "Where the README already carries an author's voice—emoji headers, first person, dry humor—that voice is the register: fix what reads two ways and leave how it sounds alone."
 
-# A placeholder stub must never ship and quietly satisfy the three pins above.
+# The three rules #111's acceptance criteria name, each pinned whole. Every one
+# of them is a sentence a "tighten this up" pass flattens into the paragraph
+# around it, and the profile is worth nothing without all three.
+require_text technical-writing/references/review-correspondence.md "The first sentence says whether the finding held."
+require_text technical-writing/references/review-correspondence.md "Where the fix diverged from what the reviewer proposed, say so in the reply rather than leaving it in the diff."
+require_text technical-writing/references/review-correspondence.md "A short SHA is the natural thing to hand a reviewer and the first thing to go stale."
+
+# Diátaxis does not reach this artifact, so there is nothing to map. The section
+# exists in readme.md and comments.md and is exactly the thing somebody adds to
+# a profile that looks thin.
+refute_text technical-writing/references/review-correspondence.md "## Mode Mapping"
+
+# A placeholder stub must never ship and quietly satisfy the Example pins above.
 # refute_text takes a single file, so this one's a direct recursive grep
 # rather than the helper.
 if grep -rFq -- "pending-harvest" technical-writing/; then
@@ -265,12 +327,15 @@ require_text README.md "--skill technical-writing"
 # --- Size ceiling -----------------------------------------------------
 # The self-imposed byte ceiling was raised from 6.5 KB to 7 KB when the new
 # dispatch rows landed, then to 7.3 KB when the README profile's row and
-# Further Reading bullet landed. Upstream is an 11,522-byte monolith; this
+# Further Reading bullet landed, then to 7.8 KB for the review-correspondence
+# row and the two repairs it forced: the Diátaxis exclusion set gained a fourth
+# artifact, and the description had to carve a review reply out of its own
+# "addressed to a person" exclusion. Upstream is an 11,522-byte monolith; this
 # router stays well under it because the profiles carry what's
 # artifact-specific.
 skill_size="$(wc -c < technical-writing/SKILL.md)"
-(( skill_size <= 7300 )) || {
-  echo "technical-writing/SKILL.md is $skill_size bytes, over the 7300-byte ceiling" >&2
+(( skill_size <= 7800 )) || {
+  echo "technical-writing/SKILL.md is $skill_size bytes, over the 7800-byte ceiling" >&2
   exit 1
 }
 

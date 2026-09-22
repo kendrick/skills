@@ -1,6 +1,6 @@
 ---
 name: technical-writing
-description: "Layered prose standard for developer-facing writing: commit messages, code comments, PR descriptions, API reference, changesets, and other technical docs, including the prose inside a README that already exists. Use when writing or reviewing a commit message, drafting or auditing code comments, describing a PR, or polishing developer documentation. Dispatches each artifact type to a profile that names which layers apply—Diátaxis document modes, Google developer style, STE sentence principles, Global English—and every draft finishes with a prose audit. Not for conversational answers, not for the code itself, and never for anything addressed to a person: emails, DMs, and other messages route to the setup's own voice process, which replaces the prose audit rather than layering on it. Authoring a whole README belongs to readme-coauthorship, and proposals and specs to doc-coauthoring. This skill governs prose style, not document-structure workflows."
+description: "Layered prose standard for developer-facing writing: commit messages, code comments, PR descriptions, API reference, changesets, and other technical docs, including the prose inside a README that already exists. Use when writing or reviewing a commit message, drafting or auditing code comments, describing a PR, answering a review finding, or polishing developer documentation. Dispatches each artifact type to a profile that names which layers apply—Diátaxis document modes, Google developer style, STE sentence principles, Global English—and every draft finishes with a prose audit. Not for conversational answers, not for the code itself, and never for anything addressed to a person: emails, DMs, and other messages route to the setup's own voice process, which replaces the prose audit rather than layering on it. Review correspondence is the exception—public developer prose hanging off a diff, and it dispatches here. Authoring a whole README belongs to readme-coauthorship, and proposals and specs to doc-coauthoring. This skill governs prose style, not document-structure workflows."
 ---
 
 # technical-writing
@@ -16,7 +16,7 @@ Four public standards stacked under four house rules, aimed at prose a tired eng
 
 ## The Four Layers
 
-**Diátaxis** decides what kind of thing a document is: tutorial (learning by doing), how-to (steps to a goal), reference (facts for lookup), explanation (understanding and why). One document, one mode—split and link rather than mix. It governs docs and reaches comments through the mode mapping; commits, PR descriptions, and changesets have no document mode, so it skips them.
+**Diátaxis** decides what kind of thing a document is: tutorial (learning by doing), how-to (steps to a goal), reference (facts for lookup), explanation (understanding and why). One document, one mode—split and link rather than mix. It governs docs and reaches comments through the mode mapping; commits, PR descriptions, review correspondence, and changesets have no document mode, so it skips them.
 
 **Google developer style** decides how sentences address the reader. Talk to them as "you", in the present tense, and say who does what—"the compiler checks", not "is checked". Write instructions as commands, condition first, common case before the exception. Applies everywhere.
 
@@ -31,6 +31,7 @@ Four public standards stacked under four house rules, aimed at prose a tired eng
 | Commit message | [references/commit-messages.md](references/commit-messages.md) | STE, Google, Global English — no Diátaxis |
 | Code comments, writing or auditing | [references/comments.md](references/comments.md) | All four; Diátaxis via the mode mapping |
 | PR description | [references/pr-descriptions.md](references/pr-descriptions.md) | STE, Google, Global English — no Diátaxis |
+| Review correspondence, a reply or a standalone PR comment | [references/review-correspondence.md](references/review-correspondence.md) | STE, Google, Global English — no Diátaxis |
 | Issue body, drafted or filed | not yet written — globals above | STE, Google, Global English |
 | API reference, docblock sets | not yet written — globals above | All four; reference mode, dry |
 | README, docs | [references/readme.md](references/readme.md) | All four; Diátaxis via the mode mapping |
@@ -61,6 +62,7 @@ Register gates the audit. The profile states the artifact's register and the aud
 - [references/commit-messages.md](references/commit-messages.md) — register, content, per-repo subject-line conventions, layers
 - [references/comments.md](references/comments.md) — when a comment earns its place, mode mapping, auditing existing comments
 - [references/pr-descriptions.md](references/pr-descriptions.md) — reviewer-first content, testing disclosure, squash-merge survival
+- [references/review-correspondence.md](references/review-correspondence.md) — answering register, the divergence rule, the SHA that goes stale
 - [references/readme.md](references/readme.md) — per-section mode mapping, register, the existing-voice rule
 - House prose rules, where your setup defines them — read fresh at Step 2, never summarized
 
