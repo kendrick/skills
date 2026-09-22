@@ -185,6 +185,14 @@ require_text file-issue/SKILL.md "both outcomes it asserts survive the pass"
 require_text file-issue/SKILL.md "its question gets asked even at Depth 0 where nothing else is"
 require_text file-issue/SKILL.md "the one question a Depth 0 run can still put is a gate 7 failure at Step 6"
 
+# The README publishes the --fast contract to humans, and it promised "No
+# questions at all" until gate 7 earned an exception. A reader who takes the
+# README at its word and gets interrogated has been misled by the artifact
+# that sets the expectation, so the exception is pinned on both sides of the
+# document boundary. Found by a reviewer reading the README against a SKILL.md
+# fix that had swept everywhere except here.
+require_text file-issue/README.md "The one question that still reaches you is gate 7's"
+
 # The template carries the gate's drafting counterpart. Without that prompt, a
 # drafter first meets the gate at Step 6 with the body already written, which
 # forces the rewrite the gate exists to avoid.
