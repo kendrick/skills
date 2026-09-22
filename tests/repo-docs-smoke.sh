@@ -28,10 +28,12 @@ require_file AGENTS.md
 require_file CLAUDE.md
 require_file README.md
 
-# Six per-skill suites pin their own "--skill <name>" against the root README's
+# Eight per-skill suites pin their own "--skill <name>" against the root README's
 # map table, and none pins the command that flag belongs to, so deleting the
-# whole Install section would leave twelve table rows, six green suites, and a
-# reader with no way to install anything. This is that command, pinned once.
+# whole Install section would leave fourteen table rows, eight green suites, and
+# a reader with no way to install anything. This is that command, pinned once.
+# The counts move whenever a skill lands; they are colour, and the check below
+# is what actually holds.
 require_text README.md "npx skills add kendrick/skills"
 
 # --- The map table is the README's index of the collection, and a skill absent

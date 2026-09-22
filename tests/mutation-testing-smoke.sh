@@ -1,0 +1,451 @@
+#!/usr/bin/env bash
+# Pin mutation-testing's four artifacts and the rules inside them. Every string
+# here is one whose removal leaves every other suite green while the behavior it
+# names quietly stops happening: a trigger that drifts from "what the diff adds"
+# back to "which files changed", a restore rule that loses the failure that
+# taught it, a report row that stops naming the runner's own line.
+#
+# The refutes carry more weight than the requires. Every row in Deliberately Not
+# Built has at least one, and each of those cuts is a reasonable-sounding idea
+# somebody will re-propose. A parallel mutation runner is the obvious
+# optimization; a directory-form restore is the obvious shorthand. The refute is
+# what makes re-adding one a red suite rather than a quiet regression. The
+# mapping runs row-to-assertion and not the reverse: the disable-model-invocation
+# refute below pins the invocation mode and answers to no row.
+set -euo pipefail
+
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$repo_root"
+
+require_file() {
+  [[ -f "$1" ]] || {
+    echo "missing required file: $1" >&2
+    exit 1
+  }
+}
+
+require_text() {
+  local file="$1"
+  local text="$2"
+  grep -Fq -- "$text" "$file" || {
+    echo "missing expected text in $file: $text" >&2
+    exit 1
+  }
+}
+
+# Guards against a migration regressing. The trailing `return 0` matters: under
+# `set -e`, a function ending on a failed grep aborts the script.
+refute_text() {
+  local file="$1"
+  local text="$2"
+  grep -Fq -- "$text" "$file" && {
+    echo "unexpected text in $file: $text" >&2
+    exit 1
+  }
+  return 0
+}
+
+# --- The four artifacts. ---
+
+require_file mutation-testing/SKILL.md
+require_file mutation-testing/README.md
+require_file _maintenance/mutation-testing/RATIONALE.md
+require_file _maintenance/mutation-testing/EVALS.md
+
+[[ "$(find mutation-testing -maxdepth 1 -type f | wc -l | tr -d ' ')" == "2" ]] || {
+  echo "mutation-testing/ must ship only SKILL.md and README.md" >&2
+  exit 1
+}
+
+# --- Invocation. This skill is model-invoked, the opposite call from its
+# user-invoked neighbors, and the whole premise is that nothing else asks for
+# the measurement. A `disable-model-invocation: true` added by pattern-matching
+# on adversarial-review or work-issue would silently end the triggering. ---
+
+require_text mutation-testing/SKILL.md "name: mutation-testing"
+refute_text mutation-testing/SKILL.md "disable-model-invocation"
+require_text mutation-testing/SKILL.md "This skill is model-invoked"
+
+# --- The trigger is stated by what the diff adds, never by kind of file. This
+# is acceptance criterion 1 on the issue, and the failure it prevents is a
+# description that reads "use on test files" and so never fires on the
+# controller line that added the guard. ---
+
+require_text mutation-testing/SKILL.md "Use when a diff adds a rejection, a validation, an invariant, a limit, a permission or ownership check, a branch that refuses input, or a test pinning one of those"
+require_text mutation-testing/SKILL.md "Read DIFF for what it **adds**, not for which files it touches."
+require_text mutation-testing/SKILL.md "A formatting change to a file full of guards adds none"
+
+# --- Two questions, two mutations. Collapsing them back into one rule with a
+# caveat is the edit ledger row 2 exists to prevent: a plausible mutation cannot
+# answer the quantity question, because a guard watching the wrong quantity
+# survives every reasonable edit to the right one. ---
+
+require_text mutation-testing/SKILL.md "asks whether a reasonable refactor would slip past this suite"
+require_text mutation-testing/SKILL.md "asks whether the guard is watching the right quantity at all"
+require_text mutation-testing/SKILL.md "a guard watching the wrong quantity survives every reasonable edit to the right one"
+
+# --- The plausible-refactor rule keeps the measurement that taught it.
+# Acceptance criterion 2: the rule is stated with the failure it prevents, and
+# "21" is that failure. A rule stated without its number reads as taste. ---
+
+require_text mutation-testing/SKILL.md "produced 21 failures"
+require_text mutation-testing/SKILL.md "Reach for the plausible version rather than an arbitrary break"
+
+# --- Restore by name, with the near miss named. Acceptance criterion 3. The
+# green-suite-without-the-test sentence is the load-bearing half: without it the
+# rule is an unexplained preference, and the next author picks the shorter
+# command. ---
+
+require_text mutation-testing/SKILL.md "**Restore** — copy the backup back to its named path"
+require_text mutation-testing/SKILL.md "the suite came back green without it"
+require_text mutation-testing/SKILL.md "against BASELINE's snapshot: \`git status --porcelain -uall\` matches it"
+
+# --- Re-measuring is required before a count leaves the run, not before the run
+# ends. Acceptance criterion 4. The trigger matters: bound to the run's end, a
+# number quoted mid-run into a PR description escapes the check entirely. ---
+
+require_text mutation-testing/SKILL.md "So before any count leaves this run"
+require_text mutation-testing/SKILL.md "moved from 2 failures to 4"
+
+# --- The report names the failing tests and the passing count, per mutation.
+# Acceptance criterion 5. ---
+
+require_text mutation-testing/SKILL.md "the runner's summary line verbatim, the failing tests by name, how many passed"
+require_text mutation-testing/SKILL.md "\`fails N, leaves M green\`"
+require_text mutation-testing/SKILL.md "that is a defect in the guard rather than a measurement of the suite"
+
+# --- The boundary. One mutation, one working tree. ---
+
+require_text mutation-testing/SKILL.md "One mutation, one working tree, in sequence."
+require_text mutation-testing/SKILL.md "worktree per mutation"
+
+# --- Two preconditions that make every count downstream meaningful. A red
+# baseline makes a failure unattributable; an unproved edit makes a green suite
+# read as "no test catches this", which is the inverse of what happened. ---
+
+require_text mutation-testing/SKILL.md "A red baseline stops the run"
+require_text mutation-testing/SKILL.md "An edit that silently failed to apply leaves the suite green"
+
+# --- Cuts. Each maps to a row in Deliberately Not Built. The refutes run
+# against SKILL.md alone, because the ledger names every cut by its own spelling
+# and a refute there would fail on the row that justifies it. ---
+
+# A CLI token is not the mechanism. The first version of this block pinned
+# `--parallel` and `--jobs` alone, and a scratch SKILL.md carrying "Dispatch the
+# mutations concurrently, one git worktree per mutation" passed green. Each row
+# now gets its tooling names AND the ordinary words somebody would write.
+
+# Row: parallel mutations or a worktree fan-out.
+refute_text mutation-testing/SKILL.md "--parallel"
+refute_text mutation-testing/SKILL.md "--jobs"
+refute_text mutation-testing/SKILL.md "concurrently"
+refute_text mutation-testing/SKILL.md "in parallel"
+
+# Row: a mutation-operator engine.
+refute_text mutation-testing/SKILL.md "mutmut"
+refute_text mutation-testing/SKILL.md "Stryker"
+refute_text mutation-testing/SKILL.md "mutation operator"
+
+# Row: a persisted run directory.
+refute_text mutation-testing/SKILL.md "RUN_DIR"
+refute_text mutation-testing/SKILL.md "run directory"
+
+# Row: parsing the runner's output into structured numbers. Previously unpinned.
+refute_text mutation-testing/SKILL.md "structured numbers"
+refute_text mutation-testing/SKILL.md "Parse the runner"
+require_text mutation-testing/SKILL.md "rather than a count assembled by hand"
+
+# Row: mutating anything the diff did not add. Previously unpinned. The positive
+# rule is pinned above at Step 1; this catches the wording that would undo it.
+refute_text mutation-testing/SKILL.md "nearby guard"
+refute_text mutation-testing/SKILL.md "outside the diff"
+
+# Row: a directory-form restore.
+refute_text mutation-testing/SKILL.md "git checkout -- ."
+
+# A refute on one spelling is what let the by-name form through: adding
+# `Restore each named file with git checkout -- "$path"` to Step 3 left the
+# suite green. So count the occurrences instead. SKILL.md mentions git checkout
+# exactly four times and every one is cautionary — the prohibition itself and
+# three examples of what it forbids. Any new mention, in any wording, turns this
+# red and forces somebody to look at why it was added.
+checkout_mentions="$(grep -o 'git checkout' mutation-testing/SKILL.md | wc -l | tr -d ' ')"
+[[ "$checkout_mentions" == "4" ]] || {
+  echo "SKILL.md mentions 'git checkout' $checkout_mentions times, expected 4 (all cautionary); a new one needs review, since restoring with it destroys the user's uncommitted guard" >&2
+  exit 1
+}
+
+# --- Three rules added after round 1 of code-review found them contradicting
+# their own neighbors. Each pin below goes red if the contradiction comes back. ---
+
+# The copy-aside lands outside the repo. Inside it, the backup is untracked, so
+# it trips the status comparison two items later and halts every valid run.
+require_text mutation-testing/SKILL.md "to a scratch location outside the repository"
+
+# Step 4's re-measure re-takes BASELINE, and does it from a restored tree. Both
+# halves matter: without the re-take the re-measure deadlocks against the restore
+# check, and without the ordering the re-take disarms that check for good.
+require_text mutation-testing/SKILL.md "re-take BASELINE and re-run every mutation"
+require_text mutation-testing/SKILL.md "so every mutation is already restored"
+# The past-event reading is the whole of item 1. Read as a check to run at Step 4
+# time it is unsatisfiable, since the grown suite is itself the difference, and a
+# red-team round found exactly that ambiguity in the first wording.
+require_text mutation-testing/SKILL.md "never a check to run now"
+require_text mutation-testing/SKILL.md "BASELINE was re-taken from a fully restored tree"
+
+# An unpinned guard gets no mutation: zero failures there is indistinguishable
+# from the reading this skill gives a real gap.
+require_text mutation-testing/SKILL.md "Two per guard that Step 1 paired with a test"
+require_text mutation-testing/SKILL.md "every guard with a pinning test carries one mutation of each kind"
+
+# --- The dirty-tree divergence, ledger row 15. Both sibling skills refuse a
+# dirty tree; this one snapshots it, because it fires DURING the work on a guard
+# nobody has committed yet, so refusing one would refuse every run the trigger
+# describes. A maintainer pattern-matching on adversarial-review or divvy-up
+# would reintroduce their precondition in their words, so the refutes pin that
+# wording rather than a phrase invented here. ---
+
+require_text mutation-testing/SKILL.md "The tree does not have to be clean, and usually is not"
+refute_text mutation-testing/SKILL.md "commit or stash first"
+refute_text mutation-testing/SKILL.md "dirty tree stops"
+
+# --- Codex found both of these on the pull request, and both are the same
+# shape: a rule stated in one document and contradicted or unimplemented in the
+# one that executes. ---
+
+# The restore check is two comparisons. Status alone cannot see a failed restore
+# on a dirty tree, which is the tree this skill always runs in: an
+# already-modified file reads " M path" before the mutation and after it.
+# cmp passes on a file whose executable bit moved, and so does the status check,
+# so a mode-only restore failure cleared both until this clause landed.
+require_text mutation-testing/SKILL.md "Contents alone is not enough"
+require_text mutation-testing/SKILL.md "reports status codes rather than contents"
+require_text mutation-testing/SKILL.md "verify the restore two ways"
+
+# A slipped verdict is a defect only where behaviour a caller could observe
+# changed. README, RATIONALE and EVALS all promised the report marks an
+# equivalent mutant as unresolved; SKILL.md, the file that executes, did not.
+require_text mutation-testing/SKILL.md "That is an equivalent mutant"
+require_text mutation-testing/SKILL.md "awaiting a human ruling, and it is not reported as a defect"
+refute_text mutation-testing/SKILL.md "A \`slipped\` adversarial verdict is a defect in the guard, not a measurement"
+
+# --- Found by a reproducer after two external passes had cleared this area.
+# git checkout -- <dir> restores tracked files from the index, so an untracked
+# file is never the casualty; the run looks for a tracked file's " M" line to
+# vanish. SKILL.md said "?? to absent" while EVALS.md said the opposite. ---
+
+require_text mutation-testing/SKILL.md "leaves untracked ones where they are"
+refute_text mutation-testing/SKILL.md "the new test went from \`??\` to absent"
+# The claim is about the directory-restore mechanism, not about untracked paths
+# in general — they are in DIFF now and can be lost by other routes.
+
+# The mode comparison runs against the backup, never against HEAD: git diff
+# --summary is relative to the commit, so on the dirty tree this skill runs in
+# it reports nothing while the restored mode is wrong.
+require_text mutation-testing/SKILL.md "Compare against the backup rather than against HEAD"
+require_text mutation-testing/SKILL.md "matches its backup in contents and in mode"
+
+# The README stated the unqualified slipped rule twice; only one was fixed.
+require_text mutation-testing/README.md "A slipped verdict that names a real gap goes first"
+refute_text mutation-testing/README.md "A slipped adversarial verdict goes first"
+
+# Scenario 4 named a directory its own fixture never defines.
+require_text _maintenance/mutation-testing/EVALS.md "uncommitted edit to the tracked \`tests/test_storage.py\`"
+refute_text _maintenance/mutation-testing/EVALS.md "app/storage/impl.py"
+
+# --- Two P0s from the second Codex round, both the dirty tree biting again.
+# Every git-vs-index comparison in this skill is blind to the difference between
+# the user's uncommitted guard and the run's own mutation. ---
+
+# The mutation proof runs against the backup. `git diff -- <path>` is non-empty
+# because of the guard itself, so it reports success for a mutation that never
+# applied, and the unchanged suite then reports a false coverage gap.
+require_text mutation-testing/SKILL.md "prove it landed against the backup"
+require_text mutation-testing/SKILL.md "reports success for a mutation that never applied"
+
+# Restore is a copy-back, never git checkout: on this tree the index holds the
+# state before the guard existed, so checkout deletes the user's work.
+require_text mutation-testing/SKILL.md "Never with \`git checkout\`"
+require_text mutation-testing/SKILL.md "deletes the very work the run was called to measure"
+require_text mutation-testing/SKILL.md "Never by directory either."
+
+# --- Third time an offered alternative defeated the check beside it: first
+# `git diff --summary` for mode, then a grep for the mutation proof. The backup
+# comparison is the proof and carries no alternatives.
+require_text mutation-testing/SKILL.md "That comparison is the proof, and it has no alternatives."
+refute_text mutation-testing/SKILL.md "or a grep finds the inserted text with its line number"
+
+# `git checkout` is a forbidden command in this document, so "checkout" as a
+# noun for the working copy is a collision an agent should not have to resolve.
+refute_text mutation-testing/SKILL.md "one checkout, in sequence"
+
+# --- A reproducer found these after two Codex rounds and two external passes.
+# The backup is the only copy of the user's uncommitted work the run holds, and
+# item 1 had said only "copy to a scratch location". ---
+
+# Flattening to basenames collides: app/storage.py and lib/storage.py share one
+# backup, the restore writes one file's contents into the other path, and BOTH
+# item 5 checks pass while the user's guard is gone.
+require_text mutation-testing/SKILL.md "mirrors the path's full position in the repo"
+require_text mutation-testing/SKILL.md "Flattening to basenames collides"
+
+# cp without -p fabricates the backup's mode through the umask, and cp onto an
+# existing file keeps the destination's mode, so mode never comes back.
+require_text mutation-testing/SKILL.md "preserving mode (\`cp -p\`)"
+require_text mutation-testing/SKILL.md "keeps the destination's mode"
+
+# Which diff the skill reads was never stated; the README advertises a by-name
+# mode where the tree is clean and `git diff` is empty.
+require_text mutation-testing/SKILL.md "what \"the diff\" means for this run, resolved before Step 1"
+require_text mutation-testing/SKILL.md "merge-base with the default branch"
+
+# Deliberately Not Built records the whole cut, not only the directory form.
+require_text _maintenance/mutation-testing/RATIONALE.md "Restoring with \`git checkout\` in any form, by directory or by name"
+
+# --- Untracked files are how the skill can do nothing and report success: a
+# new guard and its test in new files produce an empty `git diff`, Step 1 finds
+# no guards, and the run finishes having tested nothing. ---
+
+require_text mutation-testing/SKILL.md "git ls-files --others --exclude-standard"
+require_text mutation-testing/SKILL.md "Leaving untracked files out is how the skill does nothing at all while reporting success"
+# An untracked path's backup is the only copy anywhere, since the index has none.
+require_text mutation-testing/SKILL.md "its backup is the only copy anywhere"
+
+# The fixture described the repo AFTER the work, so no scenario could produce
+# the diff every one of them is invoked on.
+require_text _maintenance/mutation-testing/EVALS.md "**Commit a guardless base first.**"
+require_text _maintenance/mutation-testing/EVALS.md "every scenario passes vacuously"
+
+# --- Without -uall git coalesces a wholly-untracked directory to one `?? dir/`
+# line, so a file deleted inside it leaves the snapshot byte-identical and the
+# collateral check sees nothing. Measured.
+require_text mutation-testing/SKILL.md "\`-uall\` is load-bearing"
+require_text mutation-testing/SKILL.md "coalesces a wholly-untracked directory"
+
+# Ignored files are out of DIFF on purpose, because the restore check cannot see
+# them either; measuring what cannot be verified back is the worse failure.
+require_text mutation-testing/SKILL.md "Ignored files stay out, deliberately and not by accident"
+refute_text mutation-testing/SKILL.md "**and every untracked file**"
+
+# The guardless base strips the pinning tests, and an unpaired guard gets no
+# mutation by design, so a scenario that adds only a guard measures nothing
+# while looking like it passed. Two fixes of this branch colliding.
+require_text _maintenance/mutation-testing/EVALS.md "guard *and* its pinning test, together"
+require_text _maintenance/mutation-testing/EVALS.md "makes every scenario vacuous in a way that looks like a pass"
+
+# --- Every fix on this branch closed one route to "finished, reported success,
+# measured nothing". The routes are not enumerable, so the stop lives at the one
+# place they all converge: an empty GUARDS. ---
+
+require_text mutation-testing/SKILL.md "**Stop the run where nothing will be mutated.**"
+require_text mutation-testing/SKILL.md "A report with nothing in it is indistinguishable from a report of a run that measured something"
+
+# Under the guardless base every scenario's tree is dirty by construction, so an
+# empty `git diff` afterwards is the destructive restore's signature.
+require_text _maintenance/mutation-testing/EVALS.md "compared against what it printed before the run, never against empty"
+
+# --- Three from the fourth Codex round, all measured. ---
+
+# cp -p follows a symlink, so the backup holds the target bytes and the restore
+# writes a regular file where the link was. Both other checks clear it: cmp
+# reads through, and two regular files agree on mode. Checked first for that
+# reason.
+require_text mutation-testing/SKILL.md "**Refuse** — any path that is not a regular file"
+# For a linked path the contents check cannot stand in: cmp follows both sides,
+# and a relative link in the backup resolves against the backup directory.
+require_text mutation-testing/SKILL.md "stop rather than measure what the run cannot put back"
+require_text mutation-testing/SKILL.md "writing through a link lands on the target"
+
+# A pinning test is why the skill fires, never an entry in GUARDS: listed as a
+# guard it gets looked up for a test that pins the test.
+require_text mutation-testing/SKILL.md "is a **trigger, never a guard of its own**"
+refute_text mutation-testing/SKILL.md "a branch that turns input away, or a test that pins one of those"
+
+# go test prints no pass total, so the row asked for a number the runner never
+# emits beside a rule forbidding one assembled by hand.
+require_text mutation-testing/SKILL.md "passed: not reported by <runner>"
+require_text mutation-testing/SKILL.md "reads exactly like a measurement"
+
+# Restored after the Step 3 rewrite: both pins below lost their exact wording
+# when the items were renamed, and dropping them would have traded a stale pin
+# for no pin.
+require_text mutation-testing/SKILL.md "matches it in both contents and mode"
+require_text mutation-testing/SKILL.md "an untracked file is not the shape to look for"
+
+# The items are named, not numbered, because their numbers shifted twice and
+# every cross-reference went stale without a test noticing.
+require_text mutation-testing/SKILL.md "The steps are named rather than numbered"
+item_refs="$(grep -c 'item [0-9]' mutation-testing/SKILL.md || true)"
+[[ "$item_refs" == "0" ]] || {
+  echo "SKILL.md carries $item_refs numbered item cross-references; Step 3's items are named, and a number here goes stale the next time one moves" >&2
+  exit 1
+}
+
+# The stop covers both ways a run reaches no measurement: no guards at all, and
+# guards none of which will be mutated because none is pinned by a test.
+require_text mutation-testing/SKILL.md "equally a GUARDS whose every entry is a guard with no pinning test"
+
+# The test-only trigger had no route to a measurement: no guard added, GUARDS
+# empty, stop every time the skill fires the way its description advertises.
+require_text mutation-testing/SKILL.md "**the guard it pins goes into GUARDS** even though the diff did not add it"
+
+# go test prints no failing total either, so the reason given had to separate
+# reading the runner's named failures from reconstructing a count.
+require_text mutation-testing/SKILL.md "counting the lines it printed is reading its output rather than reconstructing it"
+
+# The reference table, and the README's inventory of it.
+require_file mutation-testing/references/what-each-check-sees.md
+require_text mutation-testing/SKILL.md "is the table of what every comparison here can and cannot see"
+require_text mutation-testing/SKILL.md "what the proof, contents, mode and collateral checks each see and are blind to"
+require_text mutation-testing/README.md "what-each-check-sees.md"
+require_text mutation-testing/references/what-each-check-sees.md "A new row is a new path kind"
+
+# --- The README is a separate document that can drift from the skill. Pin the
+# install flag the root README's map table is checked against, and the two rules
+# a reader would act on without opening SKILL.md. ---
+
+require_text mutation-testing/README.md "--skill mutation-testing"
+require_text mutation-testing/README.md "copying the backup back"
+# The README must name the destructive command as forbidden, not merely omit it.
+require_text mutation-testing/README.md "never with \`git checkout\`"
+# The README named the bare porcelain command for the collateral check, which
+# certifies a lossy restore inside a wholly-untracked directory.
+require_text mutation-testing/README.md "\`git status --porcelain -uall\` is compared against a snapshot"
+require_text mutation-testing/README.md "The only safe fan-out is a worktree per mutation, and this skill builds none."
+
+# --- The README and the evals carry rules of their own now, and reverting
+# either stayed green until these landed. ---
+
+require_text mutation-testing/README.md "compared against the backup taken outside the repo, in contents and in mode"
+require_text mutation-testing/README.md "An equivalent mutant is reported unresolved, not as a defect."
+require_text mutation-testing/README.md "a \`cmp\` against the backup, a mode comparison, and a \`git status --porcelain -uall\` comparison"
+
+# Scenario 4 could not fail as first written, twice over: a collateral file in a
+# sibling directory is never reached, and an untracked one under the restored
+# path is not either, since git checkout -- <dir> restores tracked files only.
+require_text _maintenance/mutation-testing/EVALS.md "has to be an edit to a **tracked** file"
+require_text _maintenance/mutation-testing/EVALS.md "restores tracked files from the index and leaves untracked ones alone"
+
+# --- The ledger. The tier legend is what makes an [E] row a claim about a
+# measurement rather than a confidence marker, and the refute intro is what ties
+# each cut to the assertion above that pins it. ---
+
+require_text _maintenance/mutation-testing/RATIONALE.md "**[E]** measured or observed in a real run"
+require_text _maintenance/mutation-testing/RATIONALE.md "## Deliberately Not Built"
+require_text _maintenance/mutation-testing/RATIONALE.md "## Known Limitations"
+require_text _maintenance/mutation-testing/RATIONALE.md "pinned by at least one \`refute_text\` assertion"
+
+# The README states how many scenarios EVALS carries, and that count has already
+# gone stale once. Check it against the file rather than pinning the number.
+scenario_count="$(grep -c '^### [0-9]' _maintenance/mutation-testing/EVALS.md | tr -d ' ')"
+scenario_words="zero one two three four five six seven eight nine ten"
+scenario_word="$(echo "$scenario_words" | cut -d' ' -f$((scenario_count + 1)))"
+require_text mutation-testing/README.md "the $scenario_word live scenarios"
+
+# --- The evals record no results, and say so. A file that starts recording them
+# becomes a claim that somebody ran these, which is exactly what it cannot be. ---
+
+require_text _maintenance/mutation-testing/EVALS.md "**Scenarios are unrun until somebody runs them.**"
+require_text _maintenance/mutation-testing/EVALS.md "cannot be pinned by grep"
+
+echo "mutation-testing smoke: OK"

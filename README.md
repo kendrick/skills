@@ -59,6 +59,7 @@ Each skill's own README covers any CLI it expects.
 | [divvy-up](divvy-up/README.md)                     | Runs an approved plan as waves of parallel subagents                | `--skill divvy-up`            |
 | [work-issue](work-issue/README.md)                 | Runs one issue from approved plan to answered review threads        | `--skill work-issue`          |
 | [handoff](handoff/README.md)                       | Carries unfinished work into a fresh session                        | `--skill handoff`             |
+| [mutation-testing](mutation-testing/README.md)     | Breaks a guard a diff adds and reports which tests noticed          | `--skill mutation-testing`    |
 | [databricks-api](databricks-api/)                  | Databricks REST APIs and the Python SDK, eight domains              | `--skill databricks-api`      |
 
 ### Filing and memory
@@ -111,6 +112,10 @@ Runs an implementation plan you've already approved as waves of parallel subagen
 
 Writes a handoff before you end a coding-agent session, either to a file on your machine or to a document panel when you're working on the web. Invoke it again in a fresh session and it restores the task list, then stops for your go-ahead. Raw conversation history would lose the detail needed to finish the work. The [handoff guide](handoff/README.md) covers Claude Code, Codex, and GitHub Copilot CLI invocation.
 
+#### [mutation-testing](mutation-testing/README.md)
+
+Breaks a guard your diff just added and reports which tests noticed. It fires on what the diff **adds**—a rejection, a validation, an invariant, a limit, a permission check—rather than on what kind of file it lands in, and writes two mutations per guard: the plausible refactor, which measures how much of the suite would catch a reasonable edit, and the adversarial route, which asks whether the guard watches the right quantity at all. Restore happens by name and is checked against a snapshot, because a directory-form restore once reverted a new test alongside the mutation and the suite came back green without it.
+
 #### [work-issue](work-issue/README.md)
 
 Picks up where `divvy-up` leaves off: the built diff, the pull request, and everything after that nobody wrote down—rebasing, pushing, reading what an external reviewer said, repairing what's in scope, and answering every thread. State lives on disk, not in the conversation, so a session that ends mid-run resumes by typing the same command again. A human merges; this skill stops one step short.
@@ -123,7 +128,7 @@ A router plus eight domain skills covering the Databricks REST APIs and the Pyth
 
 ## Repository Layout
 
-- [databricks-api/](databricks-api/), [file-issue/](file-issue/), [jira-refine/](jira-refine/), [inbox-to-memory/](inbox-to-memory/), [jd-file/](jd-file/), [jd-audit/](jd-audit/), [readme-coauthorship/](readme-coauthorship/), [handoff/](handoff/), [adversarial-review/](adversarial-review/), [divvy-up/](divvy-up/), [work-issue/](work-issue/), [technical-writing/](technical-writing/), [eli5/](eli5/): the skills themselves, one directory each
+- [databricks-api/](databricks-api/), [file-issue/](file-issue/), [jira-refine/](jira-refine/), [inbox-to-memory/](inbox-to-memory/), [jd-file/](jd-file/), [jd-audit/](jd-audit/), [readme-coauthorship/](readme-coauthorship/), [handoff/](handoff/), [adversarial-review/](adversarial-review/), [divvy-up/](divvy-up/), [work-issue/](work-issue/), [mutation-testing/](mutation-testing/), [technical-writing/](technical-writing/), [eli5/](eli5/): the skills themselves, one directory each
 - **[\_docs/](_docs/)**: research notes behind the skills, like the [readme-coauthorship writeup](_docs/readme-coauthorship-research.md) and the [issue-authorship survey](_docs/file-issue-research.md)
 - **[\_maintenance/](_maintenance/)**: maintainer tooling, one subdirectory per skill that needs it: the refresh workflow that keeps `databricks-api` synced with upstream Databricks docs, the upstream sync behind `handoff`, the check that holds the `jd` pair's prose to the vault register, and the decision ledgers, evals, and provenance records behind the rest
 - **[tests/](tests/)**: smoke scripts that pin the load-bearing decisions in each skill and in the repo's agent docs; each runs standalone from the repo root, like `bash tests/technical-writing-smoke.sh`
