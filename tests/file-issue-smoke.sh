@@ -175,6 +175,16 @@ require_text file-issue/SKILL.md "rather than a rewrite or the test itself"
 # hole, because the half a reword drops is the non-effect half.
 require_text file-issue/SKILL.md "both outcomes it asserts survive the pass"
 
+# Gate 7 is the only gate a draft cannot close by itself: inventing the
+# falsifier is the thing it exists to prevent, so "fix the draft" is not a
+# remedy available to it. That makes Step 3's "Depth 0 asks nothing"
+# load-bearing where it never was for gates 1-6, which can all be satisfied by
+# drafting. Both halves are pinned because dropping either one leaves the
+# document telling an agent at Depth 0 to do two incompatible things, and a
+# review found exactly that gap before these lines existed.
+require_text file-issue/SKILL.md "its question gets asked even at Depth 0 where nothing else is"
+require_text file-issue/SKILL.md "the one question a Depth 0 run can still put is a gate 7 failure at Step 6"
+
 # The template carries the gate's drafting counterpart. Without that prompt, a
 # drafter first meets the gate at Step 6 with the body already written, which
 # forces the rewrite the gate exists to avoid.

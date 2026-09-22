@@ -70,7 +70,7 @@ Depth 2 additionally earns a targeted code probe: locate the component the ask n
 **Out:** the same list, where every slot holds a value, an explicit `n/a — <reason>`, or `unknown — asked, declined`. No blanks.
 **Exit:** the moment the rubric in Step 6 becomes satisfiable. Not when a question budget runs out.
 
-Depth 0 asks nothing. Draft straight from ASK.
+Depth 0 asks nothing here. Draft straight from ASK; the one question a Depth 0 run can still put is a gate 7 failure at Step 6, which no draft can close on its own.
 
 Depth 1 asks at most five questions, and only against slots the ask left empty. Treat five as a ceiling, not a target. Depth 2 keeps going past the rubric into edge cases, failure modes, non-goals, and how you would know this was done wrong.
 
@@ -127,7 +127,7 @@ Defaults: non-goals when scope is ambiguous; Ko-structured title; labels matchin
 
 Say which items are convention rather than evidence as you surface them, so a user overriding one knows what they are overriding. [references/evidence-map.md](references/evidence-map.md) carries the traceability.
 
-A failing gate means fix the draft, or ask the single question that closes it. Never quietly downgrade a gate to a warning.
+A failing gate means fix the draft, or ask the single question that closes it. Never quietly downgrade a gate to a warning. Gate 7 is the only one a draft cannot close by itself, because inventing the falsifier is the thing it exists to prevent, so its question gets asked even at Depth 0 where nothing else is.
 
 Where the repo's label taxonomy has a ready-for-agent-style label, apply it only after gate 6 passes. The label should mean something.
 
