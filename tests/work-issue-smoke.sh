@@ -212,6 +212,221 @@ require_text work-issue/references/worker-prompt.md "what you left and why"
 # the step still reads as intact, with nothing in the output to say otherwise.
 require_text work-issue/SKILL.md "rows 1 (money), 2 (authz), and 4 (schema) of \`adversarial-review/references/trigger-table.md\`"
 
+# --- Step 4's caller rule. The worker and the reproducer both build their
+# fixtures by hand, so both hand the seam an input shaped by the same
+# assumptions, and the production caller shares none of them. Issue #109
+# records a seam that shipped with five mutations and a five-case probe behind
+# it and its boundary never examined. Four documents state the rule. Drop it
+# from one of them and the run stops following it with nothing in the output
+# to say so, so each of the four gets a pin below. ---
+
+# The rule itself, in Step 4 item 2. A sentence that names callers without
+# telling the reproducer to drive one satisfies a grep while leaving the
+# caller undriven, so the pin carries the verb. The ledger's "Moving the
+# caller rule into `adversarial-review`" row names this pin as its hold. That
+# skill fires on trigger rows 1, 2, and 4 only, and this rule has to run on
+# every claim.
+require_text work-issue/SKILL.md "Where a claim concerns a seam some production caller reaches at HEAD, its last reproduction drives that caller rather than the seam."
+
+# Step 4's Done-when. Drop the caller-versus-seam clause and the step
+# completes on a verdict that never says where it ran, so nobody reading the
+# pull request can see the weaker case: the seam held against an input the
+# reproducer built itself. The clause binds every verdict, which is what item
+# 2 and EVALS Scenario 16 both require. A `NOT_REPRODUCED` verdict is the one
+# whose repair depends on knowing where it failed.
+require_text work-issue/SKILL.md "every verdict whose command ran says whether it was reproduced at the caller or at the seam, and a seam-only one carries the caller search that decided it, while a verdict where no command ran carries \`reproduced_at\` null"
+
+# Step 4 item 4's repair evidence. On a caller-level failure the verdict's
+# top-level `command` and `output` hold the seam run, which is green. A
+# dispatch built from them hands the repair worker a passing command and no
+# sign of the failure it has to fix. The `otherwise` is load-bearing: a claim
+# the change-exists grep refuted carries `reproduced_at` null, and a branch
+# written as `caller` versus `seam` leaves that dispatch no evidence to send.
+require_text work-issue/SKILL.md "\`NOT_REPRODUCED\` sends a repair dispatch carrying the run that failed—\`caller.command\` and \`caller.output\` where \`reproduced_at\` is \`caller\`, and the top-level \`command\` and \`output\` otherwise"
+
+# Step 5 item 5 is where the caller-versus-seam split reaches a reader. A
+# label with no evidence under it reads the same for either, so the body
+# carries each claim's own run: `caller.command` for a caller claim, the seam
+# command plus the reason it stopped there for a seam one. The seam cases are
+# enumerated in references/redteam.md and pointed at from here, so the list of
+# them stays a one-place edit.
+require_text work-issue/SKILL.md "a \`caller\` claim carries \`caller.command\` and the tail of \`caller.output\`, and a \`seam\` claim carries the seam's own command with the case from [references/redteam.md](references/redteam.md) that sent it there"
+
+# Step 5's Done-when. Item 5 can be skipped without failing the step unless
+# the step's completion criterion names it, and nothing after Step 5 writes
+# the body again, so the omission ships.
+require_text work-issue/SKILL.md "marks every claim its verification section names \`caller\` or \`seam\` with that claim's own command and output tail beneath it, leaves each \`UNVERIFIABLE\` claim to"
+
+# The subsection heading. Step 4 item 2 sends the orchestrator to
+# references/redteam.md before it dispatches, and this heading is where the
+# rule the reproducer follows begins.
+require_text work-issue/references/redteam.md "### Drive the nearest production caller"
+
+# The search itself, pinned whole. A pathspec exclusion drops a whole file, so
+# excluding the claim's path takes the seam's definition and every caller
+# sitting beside it, and the reproducer then reads a called seam as a seam
+# nothing calls. Row 87 holds the scratch repo where `normalize` and
+# `production_handler` share one `app.py` and that search exits 1 with no
+# output. Pinning the argument list whole catches a fourth exclusion added
+# back in any spelling.
+require_text work-issue/references/redteam.md "git -C TREE grep -n -w <symbol> HEAD -- . ':!*test*' ':!*spec*' ':!*fixture*'"
+
+# The reason, which is what a later editor needs before deciding the claim's
+# own file is noise. Without that sentence the inclusion reads like an
+# oversight and the exclusion comes straight back.
+require_text work-issue/references/redteam.md "The claim's own file stays in range. A seam and the production caller above it share a file often enough that excluding the claim path drops both"
+
+# The ordering, which is issue #109's first non-goal: the caller reproduction
+# is added to the seam reproduction, never swapped for it. A caller-only run
+# loses the comparison that separates a seam wrong everywhere from a seam
+# wrong only at its caller. The ledger's "Replacing the seam reproduction with
+# the caller reproduction" row names this pin as its hold.
+require_text work-issue/references/redteam.md "The seam reproduction stays and the caller reproduction comes last: run the claim's command at the seam first, then find the change's production callers at HEAD and drive the nearest one."
+
+# Where the input goes in decides whether the caller run buys anything. A
+# reproducer that hands the seam an argument it built itself has rebuilt the
+# worker's fixture, however many hops it took to get there, and the boundary
+# stays unexamined.
+require_text work-issue/references/redteam.md "Whatever the reproducer supplies goes in at the caller's boundary, and the caller constructs what reaches the seam."
+
+# No production caller among the hits is an answer, not a stop and not an
+# `UNVERIFIABLE`. Step 4 item 5 spends `UNVERIFIABLE` on claims nobody could
+# check at all, and this claim was checked. The search is the evidence for it,
+# so the step has to record it rather than leave a reader to infer it from a
+# missing field. Row 86 keeps the pathspec wide, so the usual answer is hits
+# that name the symbol and run it nowhere; a bullet promising an empty
+# `caller.output` leaves that case with no shape to write.
+require_text work-issue/references/redteam.md "**No production caller among the hits.** \`caller.path\` is null, \`caller.search\` carries the grep and \`caller.output\` what it returned—nothing, or the hits that named the symbol and ran it nowhere—and \`reproduced_at\` is \`seam\`."
+
+# The two fields every verdict entry carries beside `verdict`, pinned on the
+# example the reproducer copies its shape from. `caller` is pinned whole: a
+# file that keeps the key and drops `search` loses the one field that lets a
+# reader audit a seam-only verdict.
+require_text work-issue/references/redteam.md "\"reproduced_at\": \"caller\","
+require_text work-issue/references/redteam.md "\"caller\": {\"search\": \"\", \"path\": \"\", \"command\": \"\", \"output\": \"\"}"
+
+# The third route to `reproduced_at: seam`, beside the absent caller and the
+# undrivable one. A reproducer that reaches the seam with an argument it built
+# itself has rebuilt the worker's fixture however many hops it took, and the
+# verdict has to say so. Step 5 item 5 sends the pull-request body to this
+# list for the reason a claim stopped at the seam, so a route missing here is
+# a seam claim the body cannot explain.
+require_text work-issue/references/redteam.md "- **The seam's argument built by hand.** A run that hands the seam an argument the reproducer constructed has built the same fixture again"
+
+# The prompt block is the only part of redteam.md the dispatched reproducer
+# ever sees. A caller rule written into the prose above it and left out of the
+# prompt reads correct to whoever reviews the file and never reaches the
+# agent, which makes the subsection documentation of a step nothing performs.
+# So every grep below is scoped to the block instead of to the file. The block
+# is unwrapped first, because it is hard-wrapped and every sentence in it
+# spans lines. Its bounds are the fence itself: the first inner `sed` drops
+# everything through the opening ```, the second drops everything from the
+# closing ``` onward. Ending the range at the next `### ` heading instead
+# would be a bound the file can revoke—demote `### Verdict JSON` to `##
+# Verdict JSON` and the range runs to end of file, so a prose copy of the rule
+# pasted anywhere below satisfies every grep while the prompt itself has lost
+# it. A fence has no level to demote.
+prompt_block="$(sed -n '/^### The prompt$/,$p' work-issue/references/redteam.md | sed '1,/^```$/d' | sed '/^```$/,$d' | tr '\n' ' ' | tr -s ' ')"
+
+grep -Fq -- "Drive the nearest one, and let the caller build the seam's input out of whatever you supply at its boundary" <<<"$prompt_block" || {
+  echo "work-issue/references/redteam.md: the prompt block no longer tells the reproducer to drive the nearest production caller" >&2
+  exit 1
+}
+
+grep -Fq -- "Where a command ran, report \`reproduced_at\` as \`caller\` or \`seam\`, and a \`caller\` object carrying that search" <<<"$prompt_block" || {
+  echo "work-issue/references/redteam.md: the prompt block no longer asks the reproducer for reproduced_at and the caller object" >&2
+  exit 1
+}
+
+# The third route to `reproduced_at: seam`, scoped to the block because the
+# block is the only part of this file the dispatched reproducer reads. The
+# prose above already tells it not to hand-build the seam's argument; without
+# this sentence the block never says that a run which did it anyway records
+# `seam`, so the reproducer reports `caller` and the weaker verdict goes
+# invisible. The prose-level pin on the same route sits further up.
+grep -Fq -- "Where you reached the seam with an argument you built yourself, say so" <<<"$prompt_block" || {
+  echo "work-issue/references/redteam.md: the prompt block no longer sends a hand-built seam argument to reproduced_at: seam" >&2
+  exit 1
+}
+
+# The caller search excludes tests and nothing else, so on a documentation
+# repo it returns ledgers and agent docs that name the symbol without running
+# it. The reproducer is the one holding that hit list, so the warning has
+# to be in the prompt and not only in the prose a reviewer reads.
+grep -Fq -- "The search is wide and returns prose that only names the symbol, so pick a hit that runs it." <<<"$prompt_block" || {
+  echo "work-issue/references/redteam.md: the prompt block no longer warns that the caller search returns prose" >&2
+  exit 1
+}
+
+# The search's argument list inside the prompt, which is the only copy the
+# dispatched reproducer runs. The prose copy above can be right while the
+# prompt still carries a claim-path exclusion, and the rule is then
+# documentation of a search nobody performs.
+grep -Fq -- "git -C TREE grep -n -w <symbol> HEAD -- . ':!*test*' ':!*spec*' ':!*fixture*'" <<<"$prompt_block" || {
+  echo "work-issue/references/redteam.md: the prompt block's caller search no longer matches the documented exclusions" >&2
+  exit 1
+}
+
+grep -Fq -- "The claim's own file stays in range, because a caller often sits in the same file as the seam it calls." <<<"$prompt_block" || {
+  echo "work-issue/references/redteam.md: the prompt block no longer says the claim's own file stays in the caller search" >&2
+  exit 1
+}
+
+# Neither `caller` nor `seam` is true of a claim nothing ran for, and two
+# claims land there: one that arrived with no command, and one the
+# change-exists grep refuted before its command ran. Left unsaid here, the
+# reproducer fills the field from the two values it was given, and Step 5
+# publishes a reproduction site for a claim nobody reproduced.
+grep -Fq -- "\`reproduced_at\` is null wherever no command ran, and two claims reach that" <<<"$prompt_block" || {
+  echo "work-issue/references/redteam.md: the prompt block no longer tells the reproducer to leave reproduced_at null wherever no command ran" >&2
+  exit 1
+}
+
+# --- `reproduced_at` on a claim nothing ran for. Two claims land there. The
+# report contract sends a claim with no command to `UNVERIFIABLE`, which Step 4
+# item 5 routes to the pull request's "Not independently verified" section, and
+# an empty change-exists grep refutes a claim before its command runs, which is
+# a `NOT_REPRODUCED` bound for repair. Neither `caller` nor `seam` is true of
+# either, so the field carries null and the verification section never marks
+# them. Seven sites state that rule and all seven are pinned: the two
+# Done-whens above, the prompt-block grep above, and the four below. A site
+# that drops it leaves Step 5 inventing a reproduction site and an output tail
+# for work nobody checked. ---
+
+# Step 4 item 2, where the reproducer's contract is written.
+require_text work-issue/SKILL.md "Every verdict carries \`reproduced_at\` beside its \`verdict\`: \`caller\` or \`seam\` where a command ran, and \`null\` wherever none did—an \`UNVERIFIABLE\` claim, which arrived with no command, and a claim the change-exists grep refuted before its command ran."
+
+# Step 5 item 5, which builds the pull-request body. The label and the section
+# have to move together: a claim marked neither `caller` nor `seam` with
+# nothing saying where it went is a claim the body silently drops.
+require_text work-issue/SKILL.md "an \`UNVERIFIABLE\` claim ran nothing, carries \`reproduced_at\` null, and belongs to the next section"
+
+# The gloss under the verdict JSON, which is what the reproducer reads when it
+# is deciding what to write into the field.
+require_text work-issue/references/redteam.md "and \`null\` wherever no command ran. Two claims reach null: one that arrived with no command, which is \`UNVERIFIABLE\`, and one the change-exists grep refuted before its command ran"
+
+# The README's summary of `reproduced_at` has to carry all three of its
+# values. A copy naming only caller and seam describes a field that cannot
+# say what happened to a claim nobody could run, which is the case Step 4
+# item 5 routes to its own pull-request section.
+require_text work-issue/README.md "and names neither where no command ran at all"
+
+# The README's red-team paragraph is where a human learns what the phase does.
+# A copy that stops at the seam describes a weaker check than the one Step 4
+# runs, and no other assertion in this file covers that sentence.
+require_text work-issue/README.md "the reproducer searches HEAD for the change's production callers and drives the nearest one, since the caller builds the seam's input by a route no hand-made fixture takes"
+
+# The ledger row behind the `REPRODUCED_AT_CALLER` refute in the cut-features
+# loop below. AGENTS.md asks every refute to correspond to a Deliberately Not
+# Built row, so pinning the cut name keeps that refute traceable to the
+# decision that made it instead of leaving a bare string nobody can account
+# for.
+require_text _maintenance/work-issue/RATIONALE.md "A fourth verdict value such as \`REPRODUCED_AT_CALLER\`"
+
+# The ledger row behind the `:!<claim` refute in the same loop, held to the
+# same AGENTS.md rule: a refute is traceable to the decision that made the cut.
+require_text _maintenance/work-issue/RATIONALE.md "Excluding the claim's path from the caller search"
+
 # Step 6's three review states, copied off the table a poll scores against.
 # `findings` outranks `cleared` for a reason: a reviewer can leave an approving
 # reaction and a blocking thread in one pass. A dropped row here is a state the
@@ -265,6 +480,28 @@ for doc in "${work_issue_docs[@]}"; do
   # rebase from somebody else's push. The trailing space is what keeps
   # `--force-with-lease` out of this refute's reach.
   refute_text "$doc" "push --force "
+
+  # A fourth verdict value. Step 4's routing, references/resume.md's
+  # `redteam_last_failed` grep, and run-state.py's row 10 all split on the
+  # same three values, and that grep's alternation is unanchored:
+  # REPRODUCED_AT_CALLER scores as nothing to it, and
+  # NOT_REPRODUCED_AT_CALLER scores as a plain failure. `reproduced_at`
+  # carries the distinction past all three readers instead. The substring
+  # catches both spellings. RATIONALE.md stays outside work_issue_docs for
+  # this refute's sake. The ledger row documenting the cut spells the value
+  # out, so a refute reaching the ledger would fail on the row that records
+  # the decision.
+  refute_text "$doc" "REPRODUCED_AT_CALLER"
+
+  # Excluding the claim's own path from the caller search. It was meant to skip
+  # the symbol's definition line and a pathspec exclusion drops the whole file,
+  # so a caller sharing a file with the seam it calls went with the definition
+  # and the reproducer recorded a called seam as a seam nothing calls. The
+  # prefix stops short of the closing quote so a reworded placeholder is
+  # caught too.
+  # RATIONALE.md stays outside work_issue_docs, which is what lets the row
+  # documenting the cut spell the exclusion out.
+  refute_text "$doc" ":!<claim"
 
   # Attribution trailers and generation footers. Every commit message, pull
   # request body, and thread reply this skill authors goes out without one.
