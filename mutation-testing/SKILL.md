@@ -48,16 +48,20 @@ Reach for the plausible version rather than an arbitrary break, because an arbit
 Per mutation, in order:
 
 1. Copy each path the mutation touches to a scratch location outside the repository. A backup left beside the file is untracked, so it lands in the comparison item 5 makes and halts a valid run on its first mutation.
-2. Apply the edit, then prove it landed: `git diff -- <path>` is non-empty, or a grep finds the inserted text with its line number. An edit that silently failed to apply leaves the suite green, and a green suite reads here as "no test catches this"—the exact inverse of what happened.
+2. Apply the edit, then prove it landed **against item 1's backup**: `cmp` reports the file and its backup as differing, or a grep finds the inserted text with its line number. Prove it that way rather than with `git diff -- <path>`, which cannot answer the question here—the guard's own uncommitted change already makes that diff non-empty, so it reports success for a mutation that never applied. An edit that silently failed to apply leaves the suite green, and a green suite reads here as "no test catches this", the exact inverse of what happened.
 3. Run SUITE_CMD. Capture its summary line verbatim, and the names of the failing tests.
-4. **Restore by name**, one path at a time, never by directory. `git checkout -- app/storage/` reverted the new test alongside the mutation, and the suite came back green without it. That was caught on the test count rather than by noticing, so treat it as a near miss rather than a save.
+4. **Restore by copying item 1's backup back** to its named path, one path at a time.
+
+   Never with `git checkout`. That restores from the index, which on the tree this skill runs on is the state *before* the guard existed, so it deletes the very work the run was called to measure: `git checkout -- guard.py` against an unstaged new guard replaces it with the committed version, and the user's edit is gone. The backup is the only copy of that work the run holds.
+
+   Never by directory either. `git checkout -- app/storage/` reverted the new test alongside the mutation, and the suite came back green without it. That was caught on the test count rather than by noticing, so treat it as a near miss rather than a save.
 5. Verify the restore twice, because neither check sees what the other does.
    - **Contents**, against the backups item 1 made: every mutated path matches its backup in both contents and mode: `cmp` for the bytes, and a direct comparison of the two files' modes. Compare against the backup rather than against HEAD — `git diff --summary` reports a mode change relative to the commit, so where the user's own uncommitted work is what carries the mode it prints nothing while the restored file's mode is wrong. Contents alone is not enough either: `cmp` passes on a file whose executable bit moved, and where that file was already modified before the run the status check below passes too, so a mode-only restore failure clears both. `git status --porcelain` reports status codes rather than contents, so a tracked file the user had already modified reads ` M path` before the mutation and ` M path` again after a restore that silently failed. The status comparison passes while the mutation sits live on disk. That file is the normal case here rather than an edge, since the guard under test is itself an uncommitted change.
    - **Collateral**, against BASELINE's snapshot: `git status --porcelain` matches it. This is what catches a restore that reverted something it should not have, which the contents check cannot see because the casualty is a path no mutation touched. It is item 4's near miss exactly. The casualty there is an uncommitted edit to a **tracked** file under the restored path, so its ` M path` line goes absent from the status output. An untracked file is not the shape to look for: `git checkout -- <dir>` restores tracked files from the index and leaves untracked ones where they are.
 
    Either check failing stops the run and names the path.
 
-**Done when:** every mutation was applied with its change proved on disk, measured, and restored; every mutated path matches its backup in contents and in mode, and post-restore status equals the snapshot, for every one of them; or the run stopped naming the path that differs.
+**Done when:** every mutation was applied with its change proved against its backup, measured, and restored; every mutated path matches its backup in contents and in mode, and post-restore status equals the snapshot, for every one of them; or the run stopped naming the path that differs.
 
 ## Step 4 — Re-measure after the suite grows
 

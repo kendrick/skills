@@ -96,7 +96,7 @@ require_text mutation-testing/SKILL.md "Reach for the plausible version rather t
 # rule is an unexplained preference, and the next author picks the shorter
 # command. ---
 
-require_text mutation-testing/SKILL.md "**Restore by name**, one path at a time, never by directory."
+require_text mutation-testing/SKILL.md "**Restore by copying item 1's backup back**"
 require_text mutation-testing/SKILL.md "the suite came back green without it"
 require_text mutation-testing/SKILL.md "against BASELINE's snapshot: \`git status --porcelain\` matches it"
 
@@ -240,12 +240,30 @@ refute_text mutation-testing/README.md "A slipped adversarial verdict goes first
 require_text _maintenance/mutation-testing/EVALS.md "uncommitted edit to the tracked \`tests/test_storage.py\`"
 refute_text _maintenance/mutation-testing/EVALS.md "app/storage/impl.py"
 
+# --- Two P0s from the second Codex round, both the dirty tree biting again.
+# Every git-vs-index comparison in this skill is blind to the difference between
+# the user's uncommitted guard and the run's own mutation. ---
+
+# The mutation proof runs against the backup. `git diff -- <path>` is non-empty
+# because of the guard itself, so it reports success for a mutation that never
+# applied, and the unchanged suite then reports a false coverage gap.
+require_text mutation-testing/SKILL.md "prove it landed **against item 1's backup**"
+require_text mutation-testing/SKILL.md "reports success for a mutation that never applied"
+
+# Restore is a copy-back, never git checkout: on this tree the index holds the
+# state before the guard existed, so checkout deletes the user's work.
+require_text mutation-testing/SKILL.md "Never with \`git checkout\`"
+require_text mutation-testing/SKILL.md "deletes the very work the run was called to measure"
+require_text mutation-testing/SKILL.md "Never by directory either."
+
 # --- The README is a separate document that can drift from the skill. Pin the
 # install flag the root README's map table is checked against, and the two rules
 # a reader would act on without opening SKILL.md. ---
 
 require_text mutation-testing/README.md "--skill mutation-testing"
-require_text mutation-testing/README.md "Restore happens **by name**, one path at a time."
+require_text mutation-testing/README.md "copying the backup back"
+# The README must name the destructive command as forbidden, not merely omit it.
+require_text mutation-testing/README.md "never with \`git checkout\`"
 require_text mutation-testing/README.md "The only safe fan-out is a worktree per mutation, and this skill builds none."
 
 # --- The README and the evals carry rules of their own now, and reverting
