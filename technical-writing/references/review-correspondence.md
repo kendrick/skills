@@ -16,12 +16,12 @@ A reply outlives the round it was written in. It is read from a merged pull requ
 
 ## Hard Rules
 
-- Never sign a reply. No `Co-Authored-By` trailer, no "Generated with" line, no robot-emoji footer, whatever the harness inserts by default. The thread already shows who posted it, and a footer under a two-paragraph answer is the largest thing on the page.
+- Never sign a reply or a standalone comment. No `Co-Authored-By` trailer, no "Generated with" line, no robot-emoji footer, whatever the harness inserts by default. The page already shows who posted it, and a footer under a two-paragraph answer is the largest thing on it.
 - Never hard-wrap the body. GitHub renders a single newline inside a comment as a line break, so a body wrapped at 74 columns arrives on the page broken at 74 columns and breaks again on a phone.
 
 ## The Reply
 
-The first sentence says whether the finding held. Four verdicts cover every thread—confirmed and fixed, confirmed and deferred, partly right, refused—so lead with one of them by name, then say what changed. A caller may mandate the opening: `work-issue` replies to a queued row with `deferred: <Outside because>`, which is `confirmed and deferred` in the short form that caller fixes, and it satisfies this rule as written. Follow the caller's template where it has one, and this rule where it does not.
+The first sentence says where the reply landed. Four verdicts cover a thread the change answered—confirmed and fixed, confirmed and deferred, partly right, refused—so lead with one of them by name, then say what changed. A queued row is the case those four do not reach. `work-issue` replies to one with `deferred: <Outside because>`, which states a scope disposition and not a correctness verdict, because queueing turns on scope alone and an out-of-scope finding may be right, wrong, or never checked. Follow the caller's template where it fixes the opening, and never read `deferred` as confirmation; where the finding's correctness is known too, the reply says that in its own clause.
 
 Where the fix diverged from what the reviewer proposed, say so in the reply rather than leaving it in the diff. A reviewer who asked for a narrowed pathspec and reads "fixed" will open the next round expecting a narrowed pathspec, and a reply that never mentions the exclusion was deleted outright has spent their attention on finding that out.
 

@@ -144,7 +144,7 @@ The run also found a real gap. The Title section said to read the repo's recentl
 | Expect | Pass condition |
 | --- | --- |
 | Profile read | Both arms read `references/review-correspondence.md` before drafting, not from memory and not `references/pr-descriptions.md` |
-| Verdict first (reply arm) | The first sentence says whether the finding held, in one of the four named verdicts |
+| Verdict first (reply arm) | The first sentence says where the reply landed: one of the four named verdicts, or the scope disposition where a caller's template fixes the opening |
 | Subject first (standalone arm) | The first sentence states the comment's own subject, since no thread sits above it |
 | Divergence stated | Where the fix differs from what the reviewer proposed, the reply says so rather than leaving it in the diff |
 | Citation survives | Every SHA the correspondence names is written so the sentence beside it still answers the finding after the SHA is struck out |

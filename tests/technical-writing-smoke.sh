@@ -267,7 +267,7 @@ require_text technical-writing/references/comments.md "Write comments in the voi
 # it sits in and would turn a two-copy sync into a three-way one whose third
 # copy had to be hand-edited anyway. The rules are restated here in this
 # artifact's scope, with this artifact's reason, and pinned as themselves.
-require_text technical-writing/references/review-correspondence.md "Never sign a reply."
+require_text technical-writing/references/review-correspondence.md "Never sign a reply or a standalone comment."
 require_text technical-writing/references/review-correspondence.md "Never hard-wrap the body."
 
 # And the refute that pays for the decision: a well-meaning "sync these up"
@@ -295,7 +295,7 @@ require_text technical-writing/references/readme.md "Where the README already ca
 # The three rules #111's acceptance criteria name, each pinned whole. Every one
 # of them is a sentence a "tighten this up" pass flattens into the paragraph
 # around it, and the profile is worth nothing without all three.
-require_text technical-writing/references/review-correspondence.md "The first sentence says whether the finding held."
+require_text technical-writing/references/review-correspondence.md "The first sentence says where the reply landed."
 
 # Two carve-outs a review found by reading the callers rather than this file.
 # work-issue hard-codes the reply body for a queued row at
@@ -306,7 +306,7 @@ require_text technical-writing/references/review-correspondence.md "The first se
 # pointed the other way: this profile supports a refused verdict and a
 # standalone comment, and neither has a commit, so an unconditional "cite the
 # SHA" sends the agent to HEAD for a locator that answers nothing.
-require_text technical-writing/references/review-correspondence.md "which is \`confirmed and deferred\` in the short form that caller fixes"
+require_text technical-writing/references/review-correspondence.md "states a scope disposition and not a correctness verdict"
 require_text technical-writing/references/review-correspondence.md "have no commit to name, so they cite none"
 require_text technical-writing/references/review-correspondence.md "Where the fix diverged from what the reviewer proposed, say so in the reply rather than leaving it in the diff."
 require_text technical-writing/references/review-correspondence.md "A short SHA is the natural thing to hand a reviewer and the first thing to go stale."
