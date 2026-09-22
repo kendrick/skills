@@ -8,7 +8,7 @@ Plenty of tooling will check that you filled in the template. Almost none of it 
 
 The research points at one place in particular. Developers rank steps-to-reproduce first by a wide margin, and errors in those steps are the single most severe problem they report. Reporters know this and supply them anyway less than half the time, because reproduction steps are also the hardest thing to write. That gap is the one worth closing.
 
-So the gates here are content gates. Can a stranger run the reproduction on a clean checkout? Can the acceptance criteria fail? Does the scope have an edge? If a coding agent picks this up, does it know how to verify its own work? Each gate traces to a measured finding, and the ones that are convention rather than evidence say so out loud. The full survey is in [file-issue-research.md](../_docs/file-issue-research.md); the mapping from each gate to its claim is in [evidence-map.md](references/evidence-map.md).
+So the gates here are content gates. Can a stranger run the reproduction on a clean checkout? Can the acceptance criteria fail? If the issue rules that a value counts as something, does it name what would prove that rule wrong? Does the scope have an edge? If a coding agent picks this up, does it know how to verify its own work? Each gate traces to a claim, and the ones that are convention rather than measurement say so out loud. The full survey is in [file-issue-research.md](../_docs/file-issue-research.md); the mapping from each gate to its claim is in [evidence-map.md](references/evidence-map.md).
 
 ## How It Works
 
