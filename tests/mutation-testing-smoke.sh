@@ -163,6 +163,18 @@ refute_text mutation-testing/SKILL.md "outside the diff"
 # Row: a directory-form restore.
 refute_text mutation-testing/SKILL.md "git checkout -- ."
 
+# A refute on one spelling is what let the by-name form through: adding
+# `Restore each named file with git checkout -- "$path"` to Step 3 left the
+# suite green. So count the occurrences instead. SKILL.md mentions git checkout
+# exactly four times and every one is cautionary — the prohibition itself and
+# three examples of what it forbids. Any new mention, in any wording, turns this
+# red and forces somebody to look at why it was added.
+checkout_mentions="$(grep -o 'git checkout' mutation-testing/SKILL.md | wc -l | tr -d ' ')"
+[[ "$checkout_mentions" == "4" ]] || {
+  echo "SKILL.md mentions 'git checkout' $checkout_mentions times, expected 4 (all cautionary); a new one needs review, since restoring with it destroys the user's uncommitted guard" >&2
+  exit 1
+}
+
 # --- Three rules added after round 1 of code-review found them contradicting
 # their own neighbors. Each pin below goes red if the contradiction comes back. ---
 
@@ -364,6 +376,9 @@ require_text mutation-testing/README.md "--skill mutation-testing"
 require_text mutation-testing/README.md "copying the backup back"
 # The README must name the destructive command as forbidden, not merely omit it.
 require_text mutation-testing/README.md "never with \`git checkout\`"
+# The README named the bare porcelain command for the collateral check, which
+# certifies a lossy restore inside a wholly-untracked directory.
+require_text mutation-testing/README.md "\`git status --porcelain -uall\` is compared against a snapshot"
 require_text mutation-testing/README.md "The only safe fan-out is a worktree per mutation, and this skill builds none."
 
 # --- The README and the evals carry rules of their own now, and reverting
