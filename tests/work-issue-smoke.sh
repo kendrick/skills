@@ -231,8 +231,29 @@ require_text work-issue/SKILL.md "Where a claim concerns a seam some production 
 # Step 4's Done-when. Drop the caller-versus-seam clause and the step
 # completes on a verdict that never says where it ran, so nobody reading the
 # pull request can see the weaker case: the seam held against an input the
-# reproducer built itself.
-require_text work-issue/SKILL.md "every \`REPRODUCED\` claim says whether it was reproduced at the caller or at the seam, and a seam-only one carries the caller search that decided it"
+# reproducer built itself. The clause binds every verdict, which is what item
+# 2 and EVALS Scenario 16 both require. A `NOT_REPRODUCED` verdict is the one
+# whose repair depends on knowing where it failed.
+require_text work-issue/SKILL.md "every verdict says whether it was reproduced at the caller or at the seam, and a seam-only one carries the caller search that decided it"
+
+# Step 4 item 4's repair evidence. On a caller-level failure the verdict's
+# top-level `command` and `output` hold the seam run, which is green. A
+# dispatch built from them hands the repair worker a passing command and no
+# sign of the failure it has to fix.
+require_text work-issue/SKILL.md "\`NOT_REPRODUCED\` sends a repair dispatch carrying the run that failed—\`caller.command\` and \`caller.output\` where \`reproduced_at\` is \`caller\`, the top-level \`command\` and \`output\` where it is \`seam\`"
+
+# Step 5 item 5 is where the caller-versus-seam split reaches a reader. A
+# label with no evidence under it reads the same for either, so the body
+# carries each claim's own run: `caller.command` for a caller claim, the seam
+# command plus the reason it stopped there for a seam one. The seam cases are
+# enumerated in references/redteam.md and pointed at from here, so the list of
+# them stays a one-place edit.
+require_text work-issue/SKILL.md "a \`caller\` claim carries \`caller.command\` and the tail of \`caller.output\`, and a \`seam\` claim carries the seam's own command with the case from [references/redteam.md](references/redteam.md) that sent it there"
+
+# Step 5's Done-when. Item 5 can be skipped without failing the step unless
+# the step's completion criterion names it, and nothing after Step 5 writes
+# the body again, so the omission ships.
+require_text work-issue/SKILL.md "marks every claim \`caller\` or \`seam\` with that claim's own command and output tail beneath it"
 
 # The subsection heading. Step 4 item 2 sends the orchestrator to
 # references/redteam.md before it dispatches, and this heading is where the
@@ -266,16 +287,28 @@ require_text work-issue/references/redteam.md "**No production caller at HEAD.**
 require_text work-issue/references/redteam.md "\"reproduced_at\": \"caller\","
 require_text work-issue/references/redteam.md "\"caller\": {\"search\": \"\", \"path\": \"\", \"command\": \"\", \"output\": \"\"}"
 
+# The third route to `reproduced_at: seam`, beside the absent caller and the
+# undrivable one. A reproducer that reaches the seam with an argument it built
+# itself has rebuilt the worker's fixture however many hops it took, and the
+# verdict has to say so. Step 5 item 5 sends the pull-request body to this
+# list for the reason a claim stopped at the seam, so a route missing here is
+# a seam claim the body cannot explain.
+require_text work-issue/references/redteam.md "- **The seam's argument built by hand.** A run that hands the seam an argument the reproducer constructed has built the same fixture again"
+
 # The prompt block is the only part of redteam.md the dispatched reproducer
 # ever sees. A caller rule written into the prose above it and left out of the
 # prompt reads correct to whoever reviews the file and never reaches the
 # agent, which makes the subsection documentation of a step nothing performs.
-# So both greps below are scoped to the block instead of to the file. The
-# block is unwrapped first, because it is hard-wrapped and every sentence in
-# it spans lines. Its range ends at the next `### ` heading rather than at
-# Verdict JSON by name, so renaming that heading cannot widen the range far
-# enough for a prose copy of the rule to satisfy the grep.
-prompt_block="$(sed -n '/^### The prompt$/,$p' work-issue/references/redteam.md | sed '1d' | sed '/^### /,$d' | tr '\n' ' ' | tr -s ' ')"
+# So every grep below is scoped to the block instead of to the file. The block
+# is unwrapped first, because it is hard-wrapped and every sentence in it
+# spans lines. Its bounds are the fence itself: the first inner `sed` drops
+# everything through the opening ```, the second drops everything from the
+# closing ``` onward. Ending the range at the next `### ` heading instead
+# would be a bound the file can revoke—demote `### Verdict JSON` to `##
+# Verdict JSON` and the range runs to end of file, so a prose copy of the rule
+# pasted anywhere below satisfies every grep while the prompt itself has lost
+# it. A fence has no level to demote.
+prompt_block="$(sed -n '/^### The prompt$/,$p' work-issue/references/redteam.md | sed '1,/^```$/d' | sed '/^```$/,$d' | tr '\n' ' ' | tr -s ' ')"
 
 grep -Fq -- "Drive the nearest one, and let the caller build the seam's input out of whatever you supply at its boundary" <<<"$prompt_block" || {
   echo "work-issue/references/redteam.md: the prompt block no longer tells the reproducer to drive the nearest production caller" >&2
@@ -284,6 +317,15 @@ grep -Fq -- "Drive the nearest one, and let the caller build the seam's input ou
 
 grep -Fq -- "Report \`reproduced_at\` as \`caller\` or \`seam\`, and a \`caller\` object carrying that search" <<<"$prompt_block" || {
   echo "work-issue/references/redteam.md: the prompt block no longer asks the reproducer for reproduced_at and the caller object" >&2
+  exit 1
+}
+
+# The caller search excludes tests and nothing else, so on a documentation
+# repo it returns ledgers and agent docs that name the symbol without running
+# it. The reproducer is the one holding that hit list, so the warning has
+# to be in the prompt and not only in the prose a reviewer reads.
+grep -Fq -- "The search is wide and returns prose that only names the symbol, so pick a hit that runs it." <<<"$prompt_block" || {
+  echo "work-issue/references/redteam.md: the prompt block no longer warns that the caller search returns prose" >&2
   exit 1
 }
 
