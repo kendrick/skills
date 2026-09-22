@@ -36,7 +36,9 @@ For each guard, write down three things: where it lives, **the quantity it watch
 
 A guard with no test is reported as such, in the report, before any mutation runs. There is nothing to measure there, and the absence is the finding.
 
-**Done when:** every guard the diff adds is listed with its quantity and its pinning test, and every guard with no test is named in the report ahead of the first mutation.
+**An empty GUARDS stops the run.** Say what DIFF resolved to, how many files it covered, and that no guard was found in them — then stop, rather than continuing into a report with no rows. A report with nothing in it is indistinguishable from a report of a run that measured something and found the suite adequate, and that is the one outcome this skill must never produce by accident. Nearly every defect found in this skill has been a different route to it: a diff that omitted untracked files, a fixture whose guards were already committed, a merge-base that resolved to the wrong place. The routes are not enumerable, so the stop lives here, where they all arrive.
+
+**Done when:** every guard DIFF adds is listed with its quantity and its pinning test, and every guard with no test is named in the report ahead of the first mutation; or GUARDS was empty and the run stopped saying so and naming what DIFF resolved to.
 
 ## Step 2 — Write the mutations
 

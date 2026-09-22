@@ -55,17 +55,19 @@ Take the base as a fresh clone or a `git worktree` per scenario, so one scenario
 
 ### 3. Restore Leaves the Tree Identical
 
-**Setup:** the fixture repo, with a scenario-1 or scenario-2 run in progress.
+**Setup:** the guardless base with scenario 1's or scenario 2's uncommitted work applied, and that run in progress.
 
 **Commands:**
 
 ```
-git status --porcelain -uall     # before the run
-git status --porcelain -uall     # after the report
-git diff
+git status --porcelain -uall > /tmp/before-status.txt
+git diff > /tmp/before-diff.txt
+# ... run the skill ...
+git status --porcelain -uall | diff /tmp/before-status.txt -
+git diff | diff /tmp/before-diff.txt -
 ```
 
-**Pass condition:** the two status outputs are identical, every mutated path matches the backup taken outside the repo in contents and in mode, and the skill restored each path by copying its backup back. On the clean run `git diff` is also empty. On the dirty run it is not, and must not be: the user's uncommitted guard is still there, which is the whole point — a run that leaves `git diff` empty on the dirty fixture has deleted the work it was measuring. Run the scenario a second time with the fixture already dirty — an uncommitted edit to `app/storage.py` standing in for the guard under review — and confirm the contents check is what catches a failed restore there, since status reads ` M app/storage.py` either way and cannot. Fails on any leftover mutation, any missing file, and on a restore performed with `git checkout` in any form, by directory or by name, even where the tree happens to come back clean. The directory form is the one that produced the near miss; the by-name form is the one that deletes the user's uncommitted guard, so a run that restored with `git checkout -- app/storage.py` fails this scenario outright.
+**Pass condition:** both comparisons are empty — status and `git diff` each match what they printed before the run — every mutated path matches the backup taken outside the repo in contents and in mode, and the skill restored each path by copying its backup back. `git diff` is compared against what it printed before the run, never against empty. Under the guardless base every scenario's tree is dirty by construction — the guard and its test are the uncommitted work the skill was invoked on — so an empty `git diff` afterwards is the signature of the destructive restore, not of a clean one: it means the work being measured is gone. Run it a second time with a further uncommitted edit that is not part of the guard — an unrelated change to `app/report.py`, say, standing in for work the user had in flight — and confirm both that the edit survives untouched and that the contents check is what would catch a failed restore of it, since status reads ` M app/report.py` either way and cannot. Fails on any leftover mutation, any missing file, and on a restore performed with `git checkout` in any form, by directory or by name, even where the tree happens to come back clean. The directory form is the one that produced the near miss; the by-name form is the one that deletes the user's uncommitted guard, so a run that restored with `git checkout -- app/storage.py` fails this scenario outright.
 
 ### 4. A Directory Restore Is Caught by the Snapshot Check
 

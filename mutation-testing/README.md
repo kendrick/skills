@@ -75,6 +75,7 @@ There is no `references/` and no `scripts/`, because choosing a mutation is judg
 - **A red suite stops it before it starts.** Fix the baseline first, or every number it hands you is ambiguous.
 - **The measurement is of your suite, not your guard.** "Fails 1, leaves 62 green" says one test noticed. Whether one is enough is your call, and the report is deliberately silent on it.
 - **An equivalent mutant is reported unresolved, not as a defect.** A mutation that changes nothing a caller could observe could not have been caught by any test, so the guard may be sound. Those rows say they are waiting on a human ruling, and making it is yours. Where the run cannot tell an equivalent mutant from a real gap, the row says that too.
+- **It sees your brand-new files.** A guard and its test in files you have not added yet are still in scope, which matters because that is how a guard usually arrives. Their backups are the only copies anywhere, though, since git holds no version to fall back on.
 - **Ignored files restore unverified.** `git status --porcelain` says nothing about anything in `.gitignore`, so a mutation that writes into an ignored build directory sits outside the snapshot check.
 - **A slow suite bounds the run.** Two mutations per guard, re-run at the end, against a ten-minute suite is a long afternoon. Fewer guards per run beats fewer mutations per guard.
 - **It stays inside what the diff added.** It will not wander into surrounding code to find something else worth mutating.

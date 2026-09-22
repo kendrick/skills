@@ -320,6 +320,17 @@ refute_text mutation-testing/SKILL.md "**and every untracked file**"
 require_text _maintenance/mutation-testing/EVALS.md "guard *and* its pinning test, together"
 require_text _maintenance/mutation-testing/EVALS.md "makes every scenario vacuous in a way that looks like a pass"
 
+# --- Every fix on this branch closed one route to "finished, reported success,
+# measured nothing". The routes are not enumerable, so the stop lives at the one
+# place they all converge: an empty GUARDS. ---
+
+require_text mutation-testing/SKILL.md "**An empty GUARDS stops the run.**"
+require_text mutation-testing/SKILL.md "A report with nothing in it is indistinguishable from a report of a run that measured something"
+
+# Under the guardless base every scenario's tree is dirty by construction, so an
+# empty `git diff` afterwards is the destructive restore's signature.
+require_text _maintenance/mutation-testing/EVALS.md "compared against what it printed before the run, never against empty"
+
 # --- The README is a separate document that can drift from the skill. Pin the
 # install flag the root README's map table is checked against, and the two rules
 # a reader would act on without opening SKILL.md. ---
