@@ -307,6 +307,7 @@ require_text technical-writing/references/review-correspondence.md "The first se
 # this profile supports a refused verdict and a standalone comment, and
 # neither has a commit, so an unconditional "cite the SHA" sends the agent
 # to HEAD for a locator that answers nothing.
+require_text technical-writing/references/review-correspondence.md "A caller that fixes the opening outranks that"
 require_text technical-writing/references/review-correspondence.md "states a scope disposition and not a correctness verdict"
 require_text technical-writing/references/review-correspondence.md "have no commit to name, so they cite none"
 require_text technical-writing/references/review-correspondence.md "Where the fix diverged from what the reviewer proposed, say so in the reply rather than leaving it in the diff."
