@@ -47,7 +47,7 @@ The same rule covers a line number, a path a later commit renames, and "see my c
 
 ## Example
 
-From the pass that produced this profile, over the correspondence issue #111 names: the replies answering an automated reviewer on #115, #119 and #121, and the comment that put a deferred-findings queue on the record. Every one was drafted under the PR-description profile, because the table's nearest row was that one.
+From the pass that produced this profile, over every reply answering an automated reviewer on #115, #119 and #121, and the comment that put a deferred-findings queue on the record. That corpus is a superset of the nine pieces #111 names. Every one was drafted under the PR-description profile, because the table's nearest row was that one.
 
 The drafts were good, and that is the finding. All sixteen replies lead with the verdict rather than a recap, so the habit this profile's first rule writes down was already there—held by the author, not by the table, and unavailable to the next run. Two moves recur and neither is anything a PR description would ask for. One reply opens a paragraph "One place I did not follow you" and then names the half of the reviewer's proposal it declined and why declining it was deliberate. Another opens "Two things your report did not cover that followed from it" and hands back a mode-bit failure the finding had not reached.
 

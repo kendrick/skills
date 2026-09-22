@@ -339,4 +339,26 @@ skill_size="$(wc -c < technical-writing/SKILL.md)"
   exit 1
 }
 
+# The frontmatter description has its own ceiling, separate from the file's.
+# Claude Code caps it at 1024 characters and a skill over the cap does not
+# load, which no content pin can see: this change grew the description to 1094
+# and all sixteen suites stayed green, because the three checks above read what
+# the description says and never how long it is. A skill that fails to load is
+# the one defect where a green suite is actively misleading.
+description_len="$(python3 - <<'PYEOF'
+import io, re
+t = io.open("technical-writing/SKILL.md", encoding="utf-8").read()
+m = re.search(r'^description:\s*(.*?)(?=\n[a-z-]+:|\n---)', t, re.S | re.M)
+print(len(m.group(1).strip()) if m else -1)
+PYEOF
+)"
+(( description_len > 0 )) || {
+  echo "could not read technical-writing/SKILL.md's description" >&2
+  exit 1
+}
+(( description_len <= 1024 )) || {
+  echo "technical-writing/SKILL.md description is $description_len characters, over the 1024-character cap; a skill over it does not load" >&2
+  exit 1
+}
+
 echo "all pins passed"

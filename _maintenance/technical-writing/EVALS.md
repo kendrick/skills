@@ -153,15 +153,13 @@ The run also found a real gap. The Title section said to read the repo's recentl
 
 Fails if either arm opens on a summary of the work, describes a divergence as agreement, puts its only answer inside a SHA, or the standalone arm opens with a verdict it has no thread to attach to instead of stating its own subject.
 
-**Unrun.** No `Run of` paragraph above means what it means elsewhere in this file: nobody has run this yet. Running it settles whether `## The Standalone Comment` earns its own section — no delta between the two arms folds it into `## The Reply` and drops the profile by about five lines.
-
 **What the delta measures here.** The control arm is not a suppressed run. It invokes the skill normally against an installed copy that predates this change, so its dispatch table offers review correspondence nothing nearer than the PR-description row — the exact fallback #111 reports, nine times over. The number this scenario produces is the profile's marginal value over that specific wrong-but-adjacent profile, not over a naive baseline.
 
 **What the two-arm split settles.** Register, content, hard rules, and the citation hazard are identical on paper for a reply and a standalone comment; only the opening move differs, which is why the profile ships one file with two shape sections instead of two files. Comparing the two arms against each other, not only against the fallback, is what checks that claim: if the standalone transcript does nothing a reply transcript would not already cover once the "no thread above it" framing is dropped, `## The Standalone Comment` is decoration and folds into `## The Reply`. A real difference — the standalone arm needing to state its own subject, or handling a table of findings the reply arm never faces — keeps the section standing.
 
 Grade the citation row by command rather than by reading: take every SHA the correspondence names and run `git merge-base --is-ancestor <sha> main` after the pull request merges. The measurement that motivated this profile is that all of them fail.
 
-**Not yet run.** Scenario 5's pattern: the profile ships, the run follows, and this section records both arms and the standalone-versus-reply comparison when it does.
+**Not yet run.** Scenario 5's pattern: the profile ships, the run follows, and this section records both arms and the standalone-versus-reply comparison when it does, and settles whether `## The Standalone Comment` earns its own section: no delta between the arms folds it into `## The Reply`.
 
 ## Grading
 
