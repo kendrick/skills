@@ -1,8 +1,7 @@
 ---
 name: work-issue
-description: "Advance one GitHub issue from its approved plan to a pull request whose review threads are answered, resuming from wherever a previous invocation left it. Use ONLY when the user explicitly invokes work-issue. It never plans an issue and never merges one: to plan, use writing-plans; to run a plan that has no issue, use divvy-up."
+description: "Advance one GitHub issue from its approved plan to a pull request whose review threads are answered, resuming from wherever a previous invocation left it. Use when one issue has an approved plan and should be built, published, and its review threads answered, or when an orchestrating skill runs one issue as a lane. It never plans an issue and never merges one: to plan, use writing-plans; to run a plan that has no issue, use divvy-up."
 argument-hint: '<issue number or URL> [plan path] [--isolate | --no-isolate] [--deep] [--dry-run]'
-disable-model-invocation: true
 ---
 
 # work-issue
@@ -18,7 +17,7 @@ Two rules hold across every step below.
 - **Prove the mutation, then read the result.** Every edit is proved before anything reads a result that depends on it: after writing, show the changed bytes (`git diff -- <path>` non-empty, or a grep for the inserted text with its line number), and only then run the command whose outcome depends on the edit. The session this skill came out of lost five separate edits this way — BSD `sed` refusing a `0,/re/` address, a regex that missed the real symbol, a `perl` guard that matched nothing — and every one of them produced a passing suite, because the suite ran against a file nothing had changed.
 - **Never the default branch.** Every push names its refspec in full — `git push origin issue-<N>:refs/heads/issue-<N>` — after checking that BRANCH is not DEFAULT, so what leaves this machine is the issue's branch and never the default branch. `--force-with-lease=issue-<N>` only, and only after the Step 5 rebase. `gh pr create` always carries `--base <DEFAULT> --head <BRANCH>`. The Step 0 grant covers this issue's branch and nothing else. A human merges the pull request at the end; this skill stops one step short of that.
 
-This skill is user-invoked (`disable-model-invocation: true`) because a misfire spends a whole fan-out and then pushes a branch and opens a pull request nobody asked for, while a missed trigger costs the user one word.
+This skill is model-invocable because a skill that runs a wave of issues reaches one lane through it, and a skill no sibling can call is one no sibling can compose with. Typing its name still works—a description adds agent discovery without taking the human's away. Step 0's confirmation is what stands between a misfire and a branch nobody asked for: it stops the run before anything is dispatched, and the half of its grant covering push and pull request is answerable separately from the half covering the build.
 
 Where a step names a shell command, treat it as the intent and use your native shell or file tools.
 

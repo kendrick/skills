@@ -50,7 +50,7 @@ Needs a git repo and Python 3 for the bundled script, which is stdlib-only.
 
 ## Use
 
-It only runs when you ask for it by name—see the Gotchas for why.
+Type its name, or let `work-issue` reach it—see the Gotchas for what it does before it spends anything.
 
 ```
 > /divvy-up
@@ -74,7 +74,7 @@ divvy-up/
 
 ## Gotchas
 
-- **It won't fire on its own.** A misfire during ordinary planning spends a whole fan-out on somebody who was still thinking, while a missed trigger costs you one word. Type its name.
+- **It can fire on its own now, and it still stops to ask.** `work-issue` reaches it once per run, so the description has to stay where an agent can see it. Nothing dispatches until Step 4 puts the wave shape in front of you and waits.
 - **A plan still being shaped stops it.** Waves computed over a moving plan expire the moment it moves, so it prints the table and waits for you to settle the plan first.
 - **It defers to `agent-guild`.** In a repo that already has `.agent-guild/`, it emits its table, names `/agent-guild:job`, and dispatches nothing. The guild re-derives its own tasks from a spec, so the ownership and model columns become prose for the guild to read rather than instructions anything will execute.
 - **Ownership is per file, never per region.** Two tasks that need different parts of one file have to split the file or land in different waves. `paths_overlap` proves disjointness at the file level, and two agents racing inside one file is a merge problem no path-level check can see coming.

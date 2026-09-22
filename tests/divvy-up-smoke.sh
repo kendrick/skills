@@ -51,11 +51,16 @@ require_file tests/fixtures/divvy-up/waves-model.md
   exit 1
 }
 
-# Frontmatter. Manual invocation is deliberate: a misfire during ordinary
-# planning spends a whole fan-out, while a missed trigger costs the user one
-# word.
+# Frontmatter. Model-invocation is deliberate and load-bearing: `work-issue`
+# reaches this skill at its own Step 0, and a user-invoked skill is one no
+# sibling can call at all. The misfire guard the flag used to carry now sits
+# at Step 4's confirmation, which is pinned below.
 require_text divvy-up/SKILL.md "name: divvy-up"
-require_text divvy-up/SKILL.md "disable-model-invocation: true"
+# The flag coming back would not read as a bug. A sibling's Skill call
+# would be refused outright, because a stripped description is stripped
+# from siblings too—work-issue reaches it at its own Step 0. Refuted on the bare
+# key so `: false` fails here as loudly as `: true`.
+refute_text divvy-up/SKILL.md "disable-model-invocation"
 require_text divvy-up/SKILL.md "argument-hint: '[plan path] [--max N] [--commit]'"
 
 # A description that summarizes the workflow becomes a shortcut the model takes
