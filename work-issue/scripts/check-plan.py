@@ -29,10 +29,11 @@ Checks, one stderr line each naming its rule and a location:
       not a box D4 reports, under a non-task heading containing `open
       question(s)`, `open uncertainty`/`open uncertainties`, `open
       decision(s)`, or `open item(s)`, or opening with `unresolved` or
-      `undecided` (optionally after `3.`), backtick spans ignored (a
-      heading naming uncertainties without `open` does not count),
-      unless the item opens with a `~~struck~~` span or a ticked `[x]`
-      box, or is nested deeper than one that does
+      `undecided` (optionally after `3.`, with or without `**`/`_`
+      emphasis), backtick spans ignored (a heading naming uncertainties
+      without `open` does not count), unless the item opens with a
+      `~~struck~~` span or a ticked `[x]` box, or is nested at or past the
+      content column of one that does
   D4  a `- [ ]` line inside a section whose heading contains `Decision`,
       `Question`, or `Open` (a box elsewhere is a copied criterion and is
       fine)
@@ -92,9 +93,11 @@ OPEN_STATE_HEADING_RE = re.compile(
 )
 # A bare `unresolved` or `undecided` is a state label only when it opens the
 # heading. Anywhere else it names a topic, and `### T1 Count unresolved
-# threads` failed every item in its own task.
+# threads` failed every item in its own task. Emphasis around the word doesn't
+# change that. A test anchored on the first character passed every item under
+# `## **Unresolved**`.
 OPEN_STATE_LEAD_RE = re.compile(
-    r"^\s*(?:\d+[.)]\s+)?(?:unresolved|undecided)\b", re.IGNORECASE
+    r"^\s*(?:\d+[.)]\s+)?[*_]*(?:unresolved|undecided)[*_]*(?!\w)", re.IGNORECASE
 )
 # Whole words: `OpenAPI changes` is not an open question.
 D4_HEADING_RE = re.compile(r"\b(?:decision|question|open)s?\b", re.IGNORECASE)
@@ -249,11 +252,11 @@ def check_d3(lines):
     under a heading that says they're open."""
     problems = []
     ancestors = []  # (level, text, open state), the same walk D4 does
-    # Indent of the struck or ticked item whose nested items are closed with
-    # it, or None. A sub-bullet recording the answer belongs to the closed
-    # item, and failing it as an open item of its own pushes authors to
-    # delete the answer.
-    closed_indent = None
+    # (marker indent, content column) of the struck or ticked item whose
+    # nested items are closed with it, or None. A sub-bullet recording the
+    # answer belongs to the closed item, and failing it as an open item of its
+    # own pushes authors to delete the answer.
+    closed = None
     for lineno, line in enumerate(lines, start=1):
         level = heading_level(line)
         if level is not None:
@@ -261,7 +264,7 @@ def check_d3(lines):
             while ancestors and ancestors[-1][0] >= level:
                 ancestors.pop()
             ancestors.append((level, text, is_open_state_heading(line, text)))
-            closed_indent = None
+            closed = None
         scannable = BACKTICK_SPAN_RE.sub("", line)
         for shown, pattern in OPEN_MARKERS:
             if re.search(pattern, scannable, re.IGNORECASE):
@@ -276,18 +279,21 @@ def check_d3(lines):
             # A paragraph back at the closed item's indent or shallower has
             # left its list. Blank lines don't, since a loose list puts them
             # between an item and its sub-items.
-            if line.strip() and closed_indent is not None and indent <= closed_indent:
-                closed_indent = None
+            if line.strip() and closed is not None and indent <= closed[0]:
+                closed = None
             continue
-        if closed_indent is not None:
-            if indent > closed_indent:
+        # CommonMark nests an item only at its parent's content column: 2
+        # past `- `, 4 past `10. `. Anything shallower is a new item that
+        # renders as open, and exempting it passed a live sibling.
+        if closed is not None:
+            if indent >= closed[1]:
                 continue
-            closed_indent = None
+            closed = None
         body = item.group(1)
         # A struck or ticked item is closed. "settled" in the text is not:
         # #129's unresolved fixture reads "Unresolved; settled by a live run."
         if STRUCK_RE.match(body) or CHECKED_BOX_RE.match(body):
-            closed_indent = indent
+            closed = (indent, item.start(1))
             continue
         open_heading = next(
             (t for _, t, open_state in reversed(ancestors) if open_state), None
@@ -307,11 +313,17 @@ def check_d3(lines):
 def is_open_state_heading(line, text):
     """A task heading names work to do, so its title never marks its items
     open. Backtick spans are a name being quoted, the same exemption
-    the marker scan gives them."""
+    the marker scan gives them.
+
+    The lead test swaps each span for a placeholder word instead of
+    deleting it. Deleting the span would leave `unresolved` first in
+    `` `gh api` unresolved thread counts ``, and the heading would read as
+    a state label."""
     if any(p.match(line) for p in TASK_HEADING_RES):
         return False
-    text = BACKTICK_SPAN_RE.sub("", text)
-    return bool(OPEN_STATE_HEADING_RE.search(text) or OPEN_STATE_LEAD_RE.match(text))
+    if OPEN_STATE_LEAD_RE.match(BACKTICK_SPAN_RE.sub("name", text)):
+        return True
+    return bool(OPEN_STATE_HEADING_RE.search(BACKTICK_SPAN_RE.sub("", text)))
 
 
 def open_question_fires(scannable):

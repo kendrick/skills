@@ -60,3 +60,29 @@ Nothing below this paragraph is settled.
 
 - Files: work-issue/scripts/check-plan.py
 - Read each list item under the heading.
+
+## **Unresolved**
+
+- Which cache backend the runner uses.
+
+## _Undecided_
+
+- Whether retries need a cap.
+
+## 3. **Unresolved**
+
+- Whether the lock is per branch.
+
+## Open decisions
+
+- ~~Whether the lock file needs a version.~~ No.
+ - Whether the runner shares its cache.
+
+10. ~~Whether retries back off.~~ They do.
+  - Whether the backoff has a ceiling.
+
+- [x] Whether the runner caches per branch.
+
+## Still open items
+
+  - Whether the cache survives a reboot.

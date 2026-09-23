@@ -669,6 +669,21 @@ if grep -Fq "line 30:" <<<"$settled_out"; then
   echo "plan-settled.md should not name its doubly settled sentence at line 30, got: $settled_out" >&2
   exit 1
 fi
+# Line 34's heading opens with a quoted command name, then `unresolved` as a
+# topic word (F-r2-authz-02). Deleting the backtick span before the lead test
+# put `unresolved` at the front and failed the item, so the lead test swaps the
+# span for a placeholder word that keeps the name in first position.
+if grep -Fq "line 34:" <<<"$settled_out"; then
+  echo "plan-settled.md should not name the item under a quoted-name topic heading at line 34, got: $settled_out" >&2
+  exit 1
+fi
+# Line 39 answers a struck `10.` item, nested at that item's content column,
+# four spaces in. It is the passing case for a marker wider than `- `. A
+# content column counted past the start of the item's text fails it.
+if grep -Fq "line 39:" <<<"$settled_out"; then
+  echo "plan-settled.md should not name the answer nested under a struck ordered item at line 39, got: $settled_out" >&2
+  exit 1
+fi
 
 # The same #113 plan passed clean with a list of genuinely open items under
 # `## Open uncertainties`, since none of them used a marker phrase. Line numbers
@@ -776,6 +791,35 @@ for open_line in 50 51 57; do
     exit 1
   }
 done
+# Lines 66, 70, and 74 sit under state headings wrapped in emphasis
+# (F-r2-authz-01). The lead test was anchored at the heading's first character,
+# so `**` or `_` in front of the label hid it and all three items passed.
+for open_pair in "66|**Unresolved**" "70|_Undecided_" "74|3. **Unresolved**"; do
+  open_line="${open_pair%%|*}"
+  open_heading="${open_pair#*|}"
+  grep -Fq "check-plan: line $open_line: D3 unresolved item under heading '$open_heading'" <<<"$open_section_out" || {
+    echo "plan-open-section.md should fail D3 on the item under '$open_heading' at line $open_line, got: $open_section_out" >&2
+    exit 1
+  }
+done
+# Lines 79 and 82 sit past a struck item's marker but short of its content
+# column: one column in after `- `, two after `10. ` (F-r2-authz-03).
+# CommonMark renders each as a new open item, not an answer nested under the
+# struck one, so an exemption for anything deeper than the marker let both pass.
+for open_line in 79 82; do
+  grep -Fq "check-plan: line $open_line: D3 unresolved item under heading 'Open decisions'" <<<"$open_section_out" || {
+    echo "plan-open-section.md should fail D3 on the sibling of a struck item at line $open_line, got: $open_section_out" >&2
+    exit 1
+  }
+done
+# Line 88 is indented under a new heading, right after the ticked item at line
+# 84 closed the section above (F-r2-state-01). It is deep enough to pass as
+# that item's answer, so only the heading's reset of the closed-item state
+# catches it, and no other line in either fixture needs that reset.
+grep -Fq "check-plan: line 88: D3 unresolved item under heading 'Still open items'" <<<"$open_section_out" || {
+  echo "plan-open-section.md should fail D3 on the item under a new heading at line 88, got: $open_section_out" >&2
+  exit 1
+}
 
 # A task with nowhere to write its output is a task whose worker picks a file
 # and nobody proved that file is unowned.

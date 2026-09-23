@@ -28,3 +28,12 @@ The four that settle an open question: whether A, B, C or D.
   - No, the rebase test settled it.
 
 This settles the open question of retries and answers the open question of caching.
+
+## `gh api` unresolved thread counts
+
+- Use the GraphQL endpoint for the count.
+
+## Open decisions
+
+10. ~~Whether retries back off.~~ They do.
+    - With a ceiling of one minute.
