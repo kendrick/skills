@@ -72,7 +72,7 @@ There is no `scripts/`, because choosing a mutation is judgment, the suite is yo
 
 ## Gotchas
 
-- **It fires on its own.** The premise of the whole thing is that nothing else asks for this measurement, so a missed trigger costs a guard its only check while a misfire costs one mutation run and a restore. Its user-invoked neighbors sit under the opposite asymmetry, so they wait to be named.
+- **It fires on its own.** The premise of the whole thing is that nothing else asks for this measurement, so a missed trigger costs a guard its only check while a misfire costs one mutation run and a restore. The opposite asymmetry makes `handoff`, `eli5`, and `jira-refine` user-invoked, so they wait to be named.
 - **One mutation, one working tree, in sequence.** Restore is already the fragile step at concurrency one, and two mutations sharing a tree restore against the same snapshot and race over the same paths. The only safe fan-out is a worktree per mutation, and this skill builds none.
 - **A red suite stops it before it starts.** Fix the baseline first, or every number it hands you is ambiguous.
 - **The measurement is of your suite, not your guard.** "Fails 1, leaves 62 green" says one test noticed. Whether one is enough is your call, and the report is deliberately silent on it.

@@ -57,10 +57,10 @@ require_file _maintenance/mutation-testing/EVALS.md
   exit 1
 }
 
-# --- Invocation. This skill is model-invoked, the opposite call from its
-# user-invoked neighbors, and the whole premise is that nothing else asks for
-# the measurement. A `disable-model-invocation: true` added by pattern-matching
-# on adversarial-review or work-issue would silently end the triggering. ---
+# --- Invocation. This skill is model-invoked because nothing else asks for
+# the measurement, so a missed trigger means it never runs. A
+# `disable-model-invocation: true` added by pattern-matching on a user-invoked
+# sibling like handoff or jira-refine would silently end the triggering. ---
 
 require_text mutation-testing/SKILL.md "name: mutation-testing"
 refute_text mutation-testing/SKILL.md "disable-model-invocation"

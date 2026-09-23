@@ -16,7 +16,7 @@ Five sources:
 
 | # | Decision | Why | Tier |
 |---|---|---|---|
-| 1 | User-invoked only (`disable-model-invocation: true`) | A misfire lands in a client's Jira; a miss costs the user one word. Same asymmetry as `adversarial-review`, `handoff`, and `divvy-up`. | [P] |
+| 1 | User-invoked only (`disable-model-invocation: true`) | A misfire lands in a client's Jira; a miss costs the user one word. Same asymmetry as `handoff` and `eli5`. | [P] |
 | 2 | Two modes joined only by a file on disk | Stage mode and apply mode share no state but the staging file, so an editor edit between them counts for as much as either script does, and nothing reaches Jira without a file a human has actually opened. | [P] |
 | 3 | Per-entry `status:` as the approval gate | Refinement produces several tickets per session at once; a single file-level approval would push a gap alongside a ticket the human hasn't looked at yet. | [P] |
 | 4 | Segmentation and the staging skeleton live in a script; filling each entry's content stays prose | A script can reliably find turns and boundaries; deciding what counts as a stated acceptance criterion is judgment, and this repo keeps judgment in prose rather than encoding it. | [C] |
