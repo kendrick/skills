@@ -644,6 +644,31 @@ if grep -Fq "line 13:" <<<"$settled_out"; then
   echo "plan-settled.md should not name its answered risk at line 13, got: $settled_out" >&2
   exit 1
 fi
+# Line 17 sits under `## Counting unresolved threads`, a topic that happens to
+# contain the word. `unresolved` marks a section open only when it opens the
+# heading. Line 21's heading holds `open questions` inside backticks, which is
+# a name being quoted, so the heading test skips backtick spans.
+for settled_line in 17 21; do
+  if grep -Fq "line $settled_line:" <<<"$settled_out"; then
+    echo "plan-settled.md should not name its topic-heading item at line $settled_line, got: $settled_out" >&2
+    exit 1
+  fi
+done
+# Lines 26 and 28 record answers under a ticked and a struck item. Closing an
+# item closes whatever is nested under it, or the answer fails the gate.
+for settled_line in 26 28; do
+  if grep -Fq "line $settled_line:" <<<"$settled_out"; then
+    echo "plan-settled.md should not name the answer nested under a closed item at line $settled_line, got: $settled_out" >&2
+    exit 1
+  fi
+done
+# Line 30 settles one open question and answers another. Each occurrence has
+# its own resolving verb, so a rule that fires on any second occurrence fails
+# here.
+if grep -Fq "line 30:" <<<"$settled_out"; then
+  echo "plan-settled.md should not name its doubly settled sentence at line 30, got: $settled_out" >&2
+  exit 1
+fi
 
 # The same #113 plan passed clean with a list of genuinely open items under
 # `## Open uncertainties`, since none of them used a marker phrase. Line numbers
@@ -673,8 +698,10 @@ if grep -Fq "line 14:" <<<"$open_section_out"; then
   echo "plan-open-section.md should not name its struck item at line 14, got: $open_section_out" >&2
   exit 1
 fi
-# Line 18 is the label form, and its tail carries "resolve". A label names an
-# open question whatever follows it.
+# Line 18 is the ruled label form, and its tail carries "resolve". It fires on
+# two paths: the label test, and the sentence test, because the colon splits
+# off a bare "Open question" fragment. Line 20 is the pin only the label test
+# satisfies.
 grep -Fq "check-plan: line 18: D3 open marker 'open question'" <<<"$open_section_out" || {
   echo "plan-open-section.md should fail D3 on the label at line 18, got: $open_section_out" >&2
   exit 1
@@ -714,6 +741,41 @@ if grep -Fq "line 30: D4" <<<"$open_section_out"; then
   echo "plan-open-section.md should not report the box at line 30 under D4, got: $open_section_out" >&2
   exit 1
 fi
+# Lines 36, 37, 41, and 42 sit under task headings about unresolved threads,
+# the second with the word in backticks. A task heading names work to do, so
+# its title never marks its items open, and a plan about run-state.py's thread
+# count stays passable.
+# Those four pass on the leading-word rule too. Lines 61 and 62, under a task
+# about parsing open questions, are the pin only the task exemption holds.
+for open_line in 36 37 41 42 61 62; do
+  if grep -Fq "line $open_line:" <<<"$open_section_out"; then
+    echo "plan-open-section.md should not name the task item at line $open_line, got: $open_section_out" >&2
+    exit 1
+  fi
+done
+# Line 44 settles one open question and leaves another. The gate decides per
+# occurrence: a resolved one in the same sentence must not clear the live one.
+grep -Fq "check-plan: line 44: D3 open marker 'open question'" <<<"$open_section_out" || {
+  echo "plan-open-section.md should fail D3 on the live second question at line 44, got: $open_section_out" >&2
+  exit 1
+}
+# Under `## Open items`, the answer at line 49 is nested under a ticked item
+# and line 53 under a struck one, so both are closed. Line 50 is a sibling at
+# the ticked item's indent, which ends the exemption, and line 51 is nested
+# under that open sibling. Line 57 is indented, but the unindented paragraph at
+# line 55 ended the list the struck item closed.
+for open_line in 49 53; do
+  if grep -Fq "line $open_line:" <<<"$open_section_out"; then
+    echo "plan-open-section.md should not name the answer nested under a closed item at line $open_line, got: $open_section_out" >&2
+    exit 1
+  fi
+done
+for open_line in 50 51 57; do
+  grep -Fq "check-plan: line $open_line: D3 unresolved item under heading 'Open items'" <<<"$open_section_out" || {
+    echo "plan-open-section.md should fail D3 on the open item at line $open_line, got: $open_section_out" >&2
+    exit 1
+  }
+done
 
 # A task with nowhere to write its output is a task whose worker picks a file
 # and nobody proved that file is unowned.
