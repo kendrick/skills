@@ -1419,4 +1419,7 @@ grep -Fq "OK: plan cites #101, 3 tasks with files, 0 open markers, 4/4 criteria 
 # repo-docs-smoke.sh, so this does not re-pin it twelve times.
 require_text README.md "--skill work-issue"
 
+# A waived review escalates rather than fixes (row 96); its blockers reach the
+# human who merges only through the PR body.
+require_text work-issue/SKILL.md "carry every finding its \`escalation.md\` names into the pull-request body's \"Left out\" section with its repro command"
 echo "work-issue smoke: OK"

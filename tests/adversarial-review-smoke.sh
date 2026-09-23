@@ -122,6 +122,15 @@ require_text adversarial-review/SKILL.md "and the fan-out was confirmed, or answ
 # The README told users a work-issue yes always answers the question, which
 # stopped being true once the carry got a depth bound.
 require_text adversarial-review/README.md "as long as the review comes out no deeper than the depth that confirmation forecast"
+# A wrapper yes covers the fan-out's cost, not a scope the user never saw
+# (row 36). Without the escalation route, a settled decision missing from the
+# out-of-scope list comes back as a blocker and gets "fixed" unattended.
+require_text adversarial-review/SKILL.md "That run is **waived**: the yes covered the fan-out's cost, and the user never saw the territories or the list the finders read."
+require_text adversarial-review/SKILL.md "In a **waived** run (Step 2), REPRODUCED + blocking routes to escalation instead"
+require_text adversarial-review/SKILL.md "record \`ESCALATED\` with the reason \`waived: scope not confirmed\`, and write no test and no fix."
+require_text adversarial-review/README.md "reports its blocking findings to you rather than fixing them"
+# The "only chance" claim is what made the waiver contradict itself (row 36).
+refute_text adversarial-review/SKILL.md "the only chance to add what the conversation left off the list"
 
 # The depth governor keeps a naive invocation from costing a full fan-out.
 require_text adversarial-review/SKILL.md "Depth 1: 3 territories"
