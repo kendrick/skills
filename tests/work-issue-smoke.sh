@@ -262,6 +262,11 @@ require_text work-issue/references/redteam.md "Pass \`--deep\` on to it where th
 # mode.txt line travels in the invocation, or the review asks (row 94).
 require_text work-issue/SKILL.md "hand the review that file's line, verbatim, in the same invocation, as the wrapping skill's confirmation its Step 2 checks the derived depth against"
 require_text work-issue/references/redteam.md "hand the review that file's line, verbatim, in the same invocation, as the wrapping skill's confirmation its Step 2 checks the derived depth against"
+# adversarial-review reads the handed-over line as quoted text, which only
+# works if the sender marks where it starts; an unquoted --deep line would
+# run into the flags beside it.
+require_text work-issue/SKILL.md "Put the line last, after the fixed point and any flags, wrapped in double quotes"
+require_text work-issue/references/redteam.md "Put the line last, after the fixed point and any flags, wrapped in double quotes"
 
 # Step 4 tests mode.txt before it carries the yes. Resume rows 10 and 11 jump
 # straight to Step 4, and a resumed session never saw the confirmation, so the
