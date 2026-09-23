@@ -110,6 +110,11 @@ require_text adversarial-review/SKILL.md "a confirmation that showed a lower dep
 # (row 35). A resumed work-issue run has no conversation to read it from.
 require_text adversarial-review/SKILL.md "Read that depth from the wrapper confirmation line handed over at invocation"
 require_text adversarial-review/SKILL.md "- **Wrapper confirmation** — the confirmation line a wrapping skill hands over in the arguments"
+# work-issue hands over its mode line verbatim, and a --deep run's line names
+# --deep. Read as a flag, that token would pin Depth 2 on a resumed run whose
+# own flags no longer carry it, overriding the pass-through work-issue row 95
+# keys on the run's own flag.
+require_text adversarial-review/SKILL.md "treat the line itself as quoted text, including any \`--deep\` it names"
 # This skill prints the depth line itself, because only Step 2 knows the
 # derived depth. Without it the waived run leaves no correction point in the log.
 require_text adversarial-review/SKILL.md "this skill still prints the depth line and the out-of-scope list itself, marked as answered"

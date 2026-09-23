@@ -18,7 +18,7 @@ Resolve once per invocation:
 
 - **FIXED_POINT** — the ref or SHA the diff is measured against, from the arguments. When it is absent, ask. Guessing produces a review of the wrong code that looks exactly like a review of the right code.
 - **Flags**: `--fast` pins Depth 0, `--deep` pins Depth 2, `--max-rounds N` overrides the default of 3, `--report-only` runs the full review and emits the report without writing tests, filing issues, or filing questions.
-- **Wrapper confirmation** — the confirmation line a wrapping skill hands over in the arguments, beside the fixed point, carrying the depth it showed the user. Step 2 reads it. A human invocation has none.
+- **Wrapper confirmation** — the confirmation line a wrapping skill hands over in the arguments, beside the fixed point, carrying the depth it showed the user. Step 2 reads it. Read flags from the arguments around it, and treat the line itself as quoted text, including any `--deep` it names. A human invocation has none.
 - **RUN_DIR** — `.adversarial-review/runs/<UTC-stamp>-<merge-base-short-sha>/`, created in Step 1.
 
 ## Step 1 — Preflight
