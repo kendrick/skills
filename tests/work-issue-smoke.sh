@@ -252,6 +252,16 @@ require_text work-issue/README.md "Only \`adversarial-review\` can ask again"
 # forecast grep missed reaches the review's Step 2 question with no yes
 # covering it (row 93).
 require_text work-issue/SKILL.md "or \`reproduce claims, then adversarial-review (--deep; depth 2 forecast)\` when \`--deep\` is set, since that flag fires the trigger on its own."
+# Step 0 forecasts depth 2 for a `--deep` run, and the review pins Depth 2 only
+# from its own `--deep`. Step 4 passes the flag on so the forecast is the depth
+# that runs (row 95). Both copies of the invocation carry it.
+require_text work-issue/SKILL.md "Pass \`--deep\` on to it where this run carries \`--deep\`, so the review pins the Depth 2 that Step 0 forecast for a \`--deep\` run."
+require_text work-issue/references/redteam.md "Pass \`--deep\` on to it where this run carries \`--deep\`, so the review pins the Depth 2 that Step 0 forecast for a \`--deep\` run."
+# The review's Step 2 checks its derived depth against a confirmation the
+# wrapper hands it. A resumed run has no conversation holding the yes, so the
+# mode.txt line travels in the invocation, or the review asks (row 94).
+require_text work-issue/SKILL.md "hand the review that file's line, verbatim, in the same invocation, as the wrapping skill's confirmation its Step 2 checks the derived depth against"
+require_text work-issue/references/redteam.md "hand the review that file's line, verbatim, in the same invocation, as the wrapping skill's confirmation its Step 2 checks the derived depth against"
 
 # Step 4 tests mode.txt before it carries the yes. Resume rows 10 and 11 jump
 # straight to Step 4, and a resumed session never saw the confirmation, so the

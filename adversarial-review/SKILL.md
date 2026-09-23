@@ -1,7 +1,7 @@
 ---
 name: adversarial-review
 description: "Adversarial review of a git diff, where a finding has to be reproduced before it can block, by something that did not author it and by a route the code does not take. Use when a diff's findings must be proven before they block a merge, when the user asks to red-team a branch, or when another skill needs a diff reviewed to that bar. For a general single-pass review use code-review, for a repo-wide vulnerability scan use security-review, and for stress-testing a plan use grilling."
-argument-hint: '[fixed point, e.g. main or a SHA | --fast | --deep | --max-rounds N | --report-only]'
+argument-hint: '[fixed point, e.g. main or a SHA | --fast | --deep | --max-rounds N | --report-only | wrapper confirmation line]'
 ---
 
 # adversarial-review
@@ -18,6 +18,7 @@ Resolve once per invocation:
 
 - **FIXED_POINT** — the ref or SHA the diff is measured against, from the arguments. When it is absent, ask. Guessing produces a review of the wrong code that looks exactly like a review of the right code.
 - **Flags**: `--fast` pins Depth 0, `--deep` pins Depth 2, `--max-rounds N` overrides the default of 3, `--report-only` runs the full review and emits the report without writing tests, filing issues, or filing questions.
+- **Wrapper confirmation** — the confirmation line a wrapping skill hands over in the arguments, beside the fixed point, carrying the depth it showed the user. Step 2 reads it. A human invocation has none.
 - **RUN_DIR** — `.adversarial-review/runs/<UTC-stamp>-<merge-base-short-sha>/`, created in Step 1.
 
 ## Step 1 — Preflight
@@ -58,7 +59,7 @@ adversarial-review/scripts/check-territories.py validate RUN_DIR/scope.json
 
 A non-zero exit is a hard stop, not a warning. Overlapping territories remove the property the whole design rests on: verification replaces cross-reviewer agreement precisely because no two finders were looking at the same code.
 
-Ask once, in one question, before any subagent spends a token: print the depth line—`Depth 1: 3 territories (money, authz, general), opus verifier.`—with the out-of-scope list as collected, and ask whether to fan out. That question is the user's correction point, and the only chance to add what the conversation left off the list. An answer that changes the depth, a territory, or the list goes into `scope.json`, and `validate` runs again before Step 3. A wrapping skill's confirmation answers that question on the user's behalf only where it put this review to the user at a depth at or above the one this step derived. A yes to a cheaper forecast is no yes to a costlier run, so a confirmation that showed a lower depth, or no depth, answers nothing, and the question is asked. Where the confirmation does answer it, this skill still prints the depth line and the out-of-scope list itself, marked as answered—`Depth 1: 3 territories (money, authz, general), opus verifier. Answered by work-issue's confirmation (depth 1 forecast).`—and continues without waiting, so the run log keeps the correction point the question would have been.
+Ask once, in one question, before any subagent spends a token: print the depth line—`Depth 1: 3 territories (money, authz, general), opus verifier.`—with the out-of-scope list as collected, and ask whether to fan out. That question is the user's correction point, and the only chance to add what the conversation left off the list. An answer that changes the depth, a territory, or the list goes into `scope.json`, and `validate` runs again before Step 3. A wrapping skill's confirmation answers that question on the user's behalf only where it put this review to the user at a depth at or above the one this step derived. Read that depth from the wrapper confirmation line handed over at invocation—`work-issue` hands over its Step 0 red-team mode line, such as `reproduce claims, then adversarial-review (money; depth 1 forecast)`—and from that line alone, since a resumed wrapper run has no conversation holding the yes. An invocation that handed over no line showed no depth. A yes to a cheaper forecast is no yes to a costlier run, so a confirmation that showed a lower depth, or no depth, answers nothing, and the question is asked. Where the confirmation does answer it, this skill still prints the depth line and the out-of-scope list itself, marked as answered—`Depth 1: 3 territories (money, authz, general), opus verifier. Answered by work-issue's confirmation (depth 1 forecast).`—and continues without waiting, so the run log keeps the correction point the question would have been.
 
 **Done when:** `validate` exits 0, the derivation records name a matched row and an owning territory for every changed file, and the fan-out was confirmed, or answered by a wrapping skill's confirmation that showed this review at this depth or deeper, with the depth line printed and marked as answered.
 

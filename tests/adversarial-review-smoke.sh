@@ -106,6 +106,10 @@ require_text adversarial-review/SKILL.md "Ask once, in one question, before any 
 # bound, a yes to a Depth 1 forecast fans out a Depth 2 run nobody agreed to.
 require_text adversarial-review/SKILL.md "A wrapping skill's confirmation answers that question on the user's behalf only where it put this review to the user at a depth at or above the one this step derived."
 require_text adversarial-review/SKILL.md "a confirmation that showed a lower depth, or no depth, answers nothing, and the question is asked."
+# The waiver reads its depth from a line the wrapper hands over at invocation
+# (row 35). A resumed work-issue run has no conversation to read it from.
+require_text adversarial-review/SKILL.md "Read that depth from the wrapper confirmation line handed over at invocation"
+require_text adversarial-review/SKILL.md "- **Wrapper confirmation** — the confirmation line a wrapping skill hands over in the arguments"
 # This skill prints the depth line itself, because only Step 2 knows the
 # derived depth. Without it the waived run leaves no correction point in the log.
 require_text adversarial-review/SKILL.md "this skill still prints the depth line and the out-of-scope list itself, marked as answered"
