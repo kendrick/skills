@@ -219,6 +219,29 @@ require_text work-issue/references/worker-prompt.md "what you left and why"
 # the step still reads as intact, with nothing in the output to say otherwise.
 require_text work-issue/SKILL.md "rows 1 (money), 2 (authz), and 4 (schema) of \`adversarial-review/references/trigger-table.md\`"
 
+# Step 0's yes answers `adversarial-review`'s own Step 2 question (row 93).
+# Without that, an unattended run stops mid-run on a prompt nobody is there to
+# answer. Both ends of the handoff are pinned: Step 0 item 7 says its yes
+# covers the question, and Step 4 item 7 says the review fans out on it.
+# references/redteam.md carries its own copy of the Step 4 sentence, and it is
+# the copy an agent reads while running the trigger, so it is pinned too.
+require_text work-issue/SKILL.md "Where the mode names \`adversarial-review\`, a yes to this confirmation also answers \`adversarial-review\`'s Step 2 question for this run."
+require_text work-issue/SKILL.md "Where Step 0's red-team mode named \`adversarial-review\`, the Step 0 yes carries into its Step 2 as that question's answer"
+require_text work-issue/references/redteam.md "Where Step 0's red-team mode named \`adversarial-review\`, the Step 0 yes carries into its Step 2 as that question's answer"
+
+# Step 4 reaches `adversarial-review` by invoking it. Reading its SKILL.md and
+# running the steps inline goes around the host's invocation gate and forks
+# the review from the installed skill (row 93). #124 rules out any wording
+# that treats a refusal as something to route past, and "by other means" is
+# the likeliest wording of that route.
+refute_text work-issue/SKILL.md "by other means"
+refute_text work-issue/references/redteam.md "by other means"
+
+# The absent-sibling branch. With no route past a refusal, a missing sibling
+# has one outcome: the step that needs it stops and names it. Without this
+# sentence, nothing tells a run what to do when a sibling is absent.
+require_text work-issue/SKILL.md "Where one is not installed, the step that needs it stops and says which."
+
 # --- Step 4's caller rule. The worker and the reproducer both build their
 # fixtures by hand, so both hand the seam an input shaped by the same
 # assumptions, and the production caller shares none of them. Issue #109

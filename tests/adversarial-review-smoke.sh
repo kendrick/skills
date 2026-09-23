@@ -57,11 +57,19 @@ require_file tests/fixtures/adversarial-review/scope-backtick.json
   exit 1
 }
 
-# Frontmatter. Manual invocation is a deliberate choice: three ambient skills
-# contend for review vocabulary, and a misfire here costs a long fan-out.
+# Frontmatter. Model-invocation is load-bearing: `work-issue` invokes this
+# skill at its Step 4, and a user-invoked skill has its description stripped
+# from siblings as well as from the agent, so the Skill tool refuses that call
+# (#124, RATIONALE row 34). The misfire guard the flag used to carry now sits
+# at Step 2's question, pinned below.
 require_text adversarial-review/SKILL.md "name: adversarial-review"
-require_text adversarial-review/SKILL.md "disable-model-invocation: true"
-require_text adversarial-review/SKILL.md "Use ONLY when the user explicitly invokes adversarial-review."
+# The flag coming back would surface as a refused call in the middle of an
+# unattended run, which nobody would read as a bug. Refuted on the bare key so
+# `: false` fails here as loudly as `: true`.
+refute_text adversarial-review/SKILL.md "disable-model-invocation"
+# A description telling the agent to wait for the user is one a sibling's call
+# can never satisfy, so the agent would refuse that call in prose.
+refute_text adversarial-review/SKILL.md "Use ONLY when the user explicitly invokes adversarial-review."
 require_text adversarial-review/SKILL.md "use code-review"
 require_text adversarial-review/SKILL.md "use security-review"
 require_text adversarial-review/SKILL.md "use grilling"
@@ -87,6 +95,15 @@ refute_text adversarial-review/SKILL.md ".git/info/exclude"
 require_text adversarial-review/SKILL.md "check-territories.py validate"
 require_text adversarial-review/SKILL.md "A non-zero exit is a hard stop, not a warning."
 require_text adversarial-review/SKILL.md "Disjoint ownership, layered lenses"
+
+# Step 2's question is the whole misfire guard now that an agent can reach the
+# skill, so it has to come before the fan-out spends anything. The waiver
+# lets `work-issue`'s Step 0 yes answer it, so an unattended run does not stall
+# on a second prompt nobody is there to answer. The Done-when has to accept
+# that answer too, or the step can never complete under a wrapper.
+require_text adversarial-review/SKILL.md "Ask once, in one question, before any subagent spends a token"
+require_text adversarial-review/SKILL.md "A wrapping skill that has already put this review to the user in its own confirmation answers that question on the user's behalf, and says so in the depth line it prints."
+require_text adversarial-review/SKILL.md "and the fan-out was confirmed, or answered by a wrapping skill's confirmation."
 
 # The depth governor keeps a naive invocation from costing a full fan-out.
 require_text adversarial-review/SKILL.md "Depth 1: 3 territories"
@@ -136,9 +153,9 @@ require_text adversarial-review/SKILL.md "recomputes the implementation proves t
 require_text adversarial-review/SKILL.md "lands UNVERIFIABLE naming the method"
 
 # The frontmatter description is the one line a person reads to learn what the
-# gate is, and this skill is user-invoked, so nothing else advertises it. It
-# shipped naming authorship independence alone, which row 27 quotes as the
-# defect. "and by" keeps this pin off the body's own phrasing at line 10.
+# gate is, and the one a sibling skill reads before invoking it. It shipped
+# naming authorship independence alone, which row 27 quotes as the defect.
+# "and by" keeps this pin off the body's own phrasing in its opening paragraph.
 require_text adversarial-review/SKILL.md "and by a route the code does not take"
 refute_text adversarial-review/SKILL.md "did not author it before it can block"
 
