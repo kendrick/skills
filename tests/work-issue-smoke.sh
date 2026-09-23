@@ -1419,7 +1419,9 @@ grep -Fq "OK: plan cites #101, 3 tasks with files, 0 open markers, 4/4 criteria 
 # repo-docs-smoke.sh, so this does not re-pin it twelve times.
 require_text README.md "--skill work-issue"
 
-# A waived review escalates rather than fixes (row 96); its blockers reach the
-# human who merges only through the PR body.
-require_text work-issue/SKILL.md "carry every finding its \`escalation.md\` names into the pull-request body's \"Left out\" section with its repro command"
+# A waived review escalates rather than fixes (row 96); its findings reach the
+# human who merges only through the PR body. The copy lands before ar-state.txt
+# because row 11 reads that file as the review finished (row 97).
+require_text work-issue/SKILL.md "Copy its \`escalation.md\`, where one exists, to \`RUN_DIR/redteam/escalation.md\` before writing \`ar-state.txt\`"
+require_text work-issue/SKILL.md "\"Left out\", which carries every finding \`RUN_DIR/redteam/escalation.md\` names, with its repro command"
 echo "work-issue smoke: OK"

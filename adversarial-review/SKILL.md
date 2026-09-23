@@ -63,7 +63,7 @@ Ask once, in one question, before any subagent spends a token: print the depth l
 
 A wrapping skill's confirmation answers that question on the user's behalf only where it put this review to the user at a depth at or above the one this step derived. Read that depth from the wrapper confirmation line handed over at invocation—`work-issue` hands over its Step 0 red-team mode line, such as `reproduce claims, then adversarial-review (money; depth 1 forecast)`—and from that line alone, since a resumed wrapper run has no conversation holding the yes. An invocation that handed over no line showed no depth. A yes to a cheaper forecast is no yes to a costlier run, so a confirmation that showed a lower depth, or no depth, answers nothing, and the question is asked. Where the confirmation does answer it, this skill still prints the depth line and the out-of-scope list itself, marked as answered—`Depth 1: 3 territories (money, authz, general), opus verifier. Answered by work-issue's confirmation (depth 1 forecast).`—and continues without waiting.
 
-That run is **waived**: the yes covered the fan-out's cost, given before the user saw the territories or the list the finders read. A settled decision missing from the list can come back as a reproduced blocker, so a waived run escalates its blockers at Step 6 instead of fixing them.
+That run is **waived**: the yes covered the fan-out's cost, given before the user saw the territories or the list the finders read. A settled decision missing from the list can come back as a reproduced blocker, so a waived run takes Step 6 as a report: it escalates what reproduced and files nothing.
 
 **Done when:** `validate` exits 0, the derivation records name a matched row and an owning territory for every changed file, and the fan-out was confirmed, or answered by a wrapping skill's confirmation that showed this review at this depth or deeper, with the depth line printed and marked as answered.
 
@@ -117,7 +117,7 @@ The failing test comes first because that is what makes the finding survive its 
 
 For an open question, use `inbox-to-memory`'s own detection rule: a directory holding `_memory/` or `entries/`, with a queue at `_inbox/` at that level or under `notes/`. Write a dated markdown file there carrying the claim, the quoted evidence, and why verification could not settle it. Where no opted-in scope exists, keep the question in the report and record the reason instead—inventing a queue somewhere is worse than reporting.
 
-In a **waived** run (Step 2), REPRODUCED + blocking routes to escalation instead: name the finding in `RUN_DIR/escalation.md` with its repro command, record `ESCALATED` with the reason `waived: scope not confirmed`, and write no test and no fix. The finding may be a settled decision the list left out, and only the user can tell which.
+In a **waived** run (Step 2), REPRODUCED + blocking routes to escalation instead, and so does REPRODUCED + advisory: name the finding in `RUN_DIR/escalation.md` with its repro command, record `ESCALATED` with the reason `waived: scope not confirmed`, and write no test, no fix, and no issue. An UNVERIFIABLE finding stays in the report, recorded `QUESTION_FILED` with that reason and no artifact. A waived run writes nothing outside its run directory. Any finding may be a settled decision the list left out, only the user can tell which, and `file-issue` would stop the unattended run to ask.
 
 `--report-only` skips every action in this table and reports what would have happened.
 
