@@ -44,7 +44,7 @@ Needs a git repo and a test suite you can run from one command. No Python, and n
 
 ## Use
 
-It fires on its own, which is the one place it differs from `adversarial-review` and `work-issue`; see the Gotchas for why. You will usually meet it as an interruption:
+It fires on its own, because nothing else asks for this measurement. The Gotchas explain why, and name the siblings that wait for you to type their names. You will usually meet it as an interruption:
 
 ```
 > add the tenant check to the list endpoint

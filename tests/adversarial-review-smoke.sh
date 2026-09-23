@@ -102,8 +102,17 @@ require_text adversarial-review/SKILL.md "Disjoint ownership, layered lenses"
 # on a second prompt nobody is there to answer. The Done-when has to accept
 # that answer too, or the step can never complete under a wrapper.
 require_text adversarial-review/SKILL.md "Ask once, in one question, before any subagent spends a token"
-require_text adversarial-review/SKILL.md "A wrapping skill that has already put this review to the user in its own confirmation answers that question on the user's behalf, and says so in the depth line it prints."
-require_text adversarial-review/SKILL.md "and the fan-out was confirmed, or answered by a wrapping skill's confirmation."
+# The waiver holds only up to the depth the wrapper showed (row 35). Without the
+# bound, a yes to a Depth 1 forecast fans out a Depth 2 run nobody agreed to.
+require_text adversarial-review/SKILL.md "A wrapping skill's confirmation answers that question on the user's behalf only where it put this review to the user at a depth at or above the one this step derived."
+require_text adversarial-review/SKILL.md "a confirmation that showed a lower depth, or no depth, answers nothing, and the question is asked."
+# This skill prints the depth line itself, because only Step 2 knows the
+# derived depth. Without it the waived run leaves no correction point in the log.
+require_text adversarial-review/SKILL.md "this skill still prints the depth line and the out-of-scope list itself, marked as answered"
+require_text adversarial-review/SKILL.md "and the fan-out was confirmed, or answered by a wrapping skill's confirmation that showed this review at this depth or deeper, with the depth line printed and marked as answered."
+# The README told users a work-issue yes always answers the question, which
+# stopped being true once the carry got a depth bound.
+require_text adversarial-review/README.md "as long as the review comes out no deeper than the depth that confirmation forecast"
 
 # The depth governor keeps a naive invocation from costing a full fan-out.
 require_text adversarial-review/SKILL.md "Depth 1: 3 territories"

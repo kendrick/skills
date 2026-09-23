@@ -65,6 +65,10 @@ require_file _maintenance/mutation-testing/EVALS.md
 require_text mutation-testing/SKILL.md "name: mutation-testing"
 refute_text mutation-testing/SKILL.md "disable-model-invocation"
 require_text mutation-testing/SKILL.md "This skill is model-invoked"
+# The README's Use section once called firing on its own the one place this
+# skill differs from adversarial-review and work-issue, and both are
+# model-invocable now. The reason pinned here stays true as siblings change.
+require_text mutation-testing/README.md "It fires on its own, because nothing else asks for this measurement."
 
 # --- The trigger is stated by what the diff adds, never by kind of file. This
 # is acceptance criterion 1 on the issue, and the failure it prevents is a

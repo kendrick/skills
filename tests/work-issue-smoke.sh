@@ -225,7 +225,7 @@ require_text work-issue/SKILL.md "rows 1 (money), 2 (authz), and 4 (schema) of \
 # covers the question, and Step 4 item 7 says the review fans out on it.
 # references/redteam.md carries its own copy of the Step 4 sentence, and it is
 # the copy an agent reads while running the trigger, so it is pinned too.
-require_text work-issue/SKILL.md "Where the mode names \`adversarial-review\`, a yes to this confirmation also answers \`adversarial-review\`'s Step 2 question for this run."
+require_text work-issue/SKILL.md "Where the mode names \`adversarial-review\`, a yes to this confirmation also answers \`adversarial-review\`'s Step 2 question for this run, at any depth up to the forecast one."
 require_text work-issue/SKILL.md "Where \`RUN_DIR/redteam/mode.txt\` names \`adversarial-review\`, the Step 0 yes carries into its Step 2 as that question's answer"
 require_text work-issue/references/redteam.md "Where \`RUN_DIR/redteam/mode.txt\` names \`adversarial-review\`, the Step 0 yes carries into its Step 2 as that question's answer"
 # The carry is only as good as its off switches. Without the missing-file
@@ -233,12 +233,25 @@ require_text work-issue/references/redteam.md "Where \`RUN_DIR/redteam/mode.txt\
 # not carry.
 require_text work-issue/SKILL.md "A missing file answers nothing, and the review asks its own question."
 require_text work-issue/references/redteam.md "A missing file answers nothing, and the review asks its own question."
+# The carry stops at the forecast depth (row 95). A yes to a forecast is not
+# consent to a costlier real run, so a deeper derived depth has to reach the
+# review's own question. Both copies of the Step 4 sentence carry the bound.
+require_text work-issue/SKILL.md "but only while the depth \`adversarial-review\` derives at its Step 2 is at or below the depth forecast in \`mode.txt\`."
+require_text work-issue/references/redteam.md "but only while the depth \`adversarial-review\` derives at its Step 2 is at or below the depth forecast in \`mode.txt\`."
+require_text work-issue/SKILL.md "A deeper derived depth answers nothing"
+require_text work-issue/references/redteam.md "A deeper derived depth answers nothing"
+# The bound needs a depth to compare against, so Step 0 has to forecast one.
+require_text work-issue/SKILL.md "Take \`<n>\` from the Depth table in \`adversarial-review\`'s Step 2, applied to the plan's owned paths."
+# The README promised a run that never asks again, and the forecast gap means
+# one can. Pinned so the exception stays where a user decides to walk away.
+require_text work-issue/README.md "After yes, the run is unattended unless the real diff trips an \`adversarial-review\` the confirmation didn't forecast, or forecast at a lower depth."
+require_text work-issue/README.md "Only \`adversarial-review\` can ask again"
 
 # `--deep` fires the trigger without a grep hit, so Step 0 item 7 names the
 # review for a `--deep` run as well. Without this clause, a `--deep` run whose
 # forecast grep missed reaches the review's Step 2 question with no yes
 # covering it (row 93).
-require_text work-issue/SKILL.md "or \`reproduce claims, then adversarial-review (--deep)\` when \`--deep\` is set, since that flag fires the trigger on its own."
+require_text work-issue/SKILL.md "or \`reproduce claims, then adversarial-review (--deep; depth 2 forecast)\` when \`--deep\` is set, since that flag fires the trigger on its own."
 
 # Step 4 tests mode.txt before it carries the yes. Resume rows 10 and 11 jump
 # straight to Step 4, and a resumed session never saw the confirmation, so the
