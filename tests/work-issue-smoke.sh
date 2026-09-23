@@ -228,6 +228,11 @@ require_text work-issue/SKILL.md "rows 1 (money), 2 (authz), and 4 (schema) of \
 require_text work-issue/SKILL.md "Where the mode names \`adversarial-review\`, a yes to this confirmation also answers \`adversarial-review\`'s Step 2 question for this run."
 require_text work-issue/SKILL.md "Where \`RUN_DIR/redteam/mode.txt\` names \`adversarial-review\`, the Step 0 yes carries into its Step 2 as that question's answer"
 require_text work-issue/references/redteam.md "Where \`RUN_DIR/redteam/mode.txt\` names \`adversarial-review\`, the Step 0 yes carries into its Step 2 as that question's answer"
+# The carry is only as good as its off switches. Without the missing-file
+# sentence, a run that never wrote mode.txt has nothing telling it the yes did
+# not carry.
+require_text work-issue/SKILL.md "A missing file answers nothing, and the review asks its own question."
+require_text work-issue/references/redteam.md "A missing file answers nothing, and the review asks its own question."
 
 # `--deep` fires the trigger without a grep hit, so Step 0 item 7 names the
 # review for a `--deep` run as well. Without this clause, a `--deep` run whose
@@ -239,6 +244,10 @@ require_text work-issue/SKILL.md "or \`reproduce claims, then adversarial-review
 # straight to Step 4, and a resumed session never saw the confirmation, so the
 # file is the only record of what the user agreed to (row 94).
 require_text work-issue/SKILL.md "Once the user answers yes, write the red-team mode line this message carried to \`RUN_DIR/redteam/mode.txt\`"
+# A row-5 resume re-asks the confirmation, and a stale mode.txt from the first
+# yes would otherwise carry a mode the latest confirmation never showed.
+require_text work-issue/SKILL.md "to \`RUN_DIR/redteam/mode.txt\`, replacing any earlier copy"
+require_text work-issue/references/resume.md "The yes to the re-asked confirmation rewrites \`redteam/mode.txt\`"
 
 # Step 4 reaches `adversarial-review` by invoking it. Reading its SKILL.md and
 # running the steps inline goes around the host's invocation gate and forks
