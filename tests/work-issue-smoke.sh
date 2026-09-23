@@ -1422,6 +1422,9 @@ require_text README.md "--skill work-issue"
 # A waived review escalates rather than fixes (row 96); its findings reach the
 # human who merges only through the PR body. The copy lands before ar-state.txt
 # because row 11 reads that file as the review finished (row 97).
-require_text work-issue/SKILL.md "Copy its \`escalation.md\`, where one exists, to \`RUN_DIR/redteam/escalation.md\` before writing \`ar-state.txt\`"
+require_text work-issue/SKILL.md "Write the report it printed to \`RUN_DIR/redteam/ar-report.md\`, and copy its \`escalation.md\`, where one exists, to \`RUN_DIR/redteam/escalation.md\`, both before writing \`ar-state.txt\`"
+# UNVERIFIED: 0 in ar-state.txt says nothing about UNVERIFIABLE findings or
+# UNREVIEWED territories, which live only in the printed report (row 98).
+require_text work-issue/SKILL.md "\"Not independently verified\", which also carries every UNVERIFIABLE finding and UNREVIEWED territory \`RUN_DIR/redteam/ar-report.md\` names"
 require_text work-issue/SKILL.md "\"Left out\", which carries every finding \`RUN_DIR/redteam/escalation.md\` names, with its repro command"
 echo "work-issue smoke: OK"
