@@ -60,6 +60,8 @@ require_file tests/fixtures/work-issue/plans/issue.md
 require_file tests/fixtures/work-issue/plans/plan-good.md
 require_file tests/fixtures/work-issue/plans/plan-nofiles.md
 require_file tests/fixtures/work-issue/plans/plan-thin.md
+require_file tests/fixtures/work-issue/plans/plan-settled.md
+require_file tests/fixtures/work-issue/plans/plan-open-section.md
 require_file tests/fixtures/work-issue/plans/plan-uncited.md
 require_file tests/fixtures/work-issue/plans/inflight/issue-38/plan.md
 # A sibling under `closed/` is the run the overlap check must skip, so the
@@ -612,6 +614,208 @@ grep -Fq "D4 unchecked box under heading 'Open Questions'" <<<"$thin_out" || {
 # allows and a column-1 heading pattern read as prose, losing both boxes.
 [[ "$(grep -c "D4 unchecked box under heading 'Open Questions'" <<<"$thin_out")" == "2" ]] || {
   echo "plan-thin.md should fail D4 on both boxes, the nested one included, got: $thin_out" >&2
+  exit 1
+}
+
+# #129: issue #113's plan was refused at "The four that settle an open
+# question", a sentence closing questions, because `open question` sat in the
+# phrase list with no gate. plan-settled's only candidate is that sentence, so
+# any D3 line at all means the phrase is unconditional again.
+set +e
+settled_out="$(python3 "$check_plan" "$plans/plan-settled.md" --issue 101 2>&1)"
+settled_status=$?
+set -e
+[[ "$settled_status" == "0" ]] || {
+  echo "plan-settled.md should exit 0, got: $settled_status: $settled_out" >&2
+  exit 1
+}
+grep -Fq "OK: plan cites #101, 1 tasks with files, 0 open markers, 0/0 criteria covered" <<<"$settled_out" || {
+  echo "plan-settled.md should print its full OK line, got: $settled_out" >&2
+  exit 1
+}
+if grep -Fq "D3" <<<"$settled_out"; then
+  echo "plan-settled.md should carry no D3 line at all, got: $settled_out" >&2
+  exit 1
+fi
+# Line 13 sits under `## Risks and uncertainties` and says how the plan handles
+# the risk. A heading needs `open` before `uncertainties` to mark its items
+# open, or every plan's mitigated-risks list is refused.
+if grep -Fq "line 13:" <<<"$settled_out"; then
+  echo "plan-settled.md should not name its answered risk at line 13, got: $settled_out" >&2
+  exit 1
+fi
+# Line 17 sits under `## Counting unresolved threads`, a topic that happens to
+# contain the word. `unresolved` marks a section open only when it opens the
+# heading. Line 21's heading holds `open questions` inside backticks, which is
+# a name being quoted, so the heading test skips backtick spans.
+for settled_line in 17 21; do
+  if grep -Fq "line $settled_line:" <<<"$settled_out"; then
+    echo "plan-settled.md should not name its topic-heading item at line $settled_line, got: $settled_out" >&2
+    exit 1
+  fi
+done
+# Lines 26 and 28 record answers under a ticked and a struck item. Closing an
+# item closes whatever is nested under it, or the answer fails the gate.
+for settled_line in 26 28; do
+  if grep -Fq "line $settled_line:" <<<"$settled_out"; then
+    echo "plan-settled.md should not name the answer nested under a closed item at line $settled_line, got: $settled_out" >&2
+    exit 1
+  fi
+done
+# Line 30 settles one open question and answers another. Each occurrence has
+# its own resolving verb, so a rule that fires on any second occurrence fails
+# here.
+if grep -Fq "line 30:" <<<"$settled_out"; then
+  echo "plan-settled.md should not name its doubly settled sentence at line 30, got: $settled_out" >&2
+  exit 1
+fi
+# Line 34's heading opens with a quoted command name, then `unresolved` as a
+# topic word (F-r2-authz-02). Deleting the backtick span before the lead test
+# put `unresolved` at the front and failed the item, so the lead test swaps the
+# span for a placeholder word that keeps the name in first position.
+if grep -Fq "line 34:" <<<"$settled_out"; then
+  echo "plan-settled.md should not name the item under a quoted-name topic heading at line 34, got: $settled_out" >&2
+  exit 1
+fi
+# Line 39 answers a struck `10.` item, nested at that item's content column,
+# four spaces in. It is the passing case for a marker wider than `- `. A
+# content column counted past the start of the item's text fails it.
+if grep -Fq "line 39:" <<<"$settled_out"; then
+  echo "plan-settled.md should not name the answer nested under a struck ordered item at line 39, got: $settled_out" >&2
+  exit 1
+fi
+
+# The same #113 plan passed clean with a list of genuinely open items under
+# `## Open uncertainties`, since none of them used a marker phrase. Line numbers
+# are exact: a heading walk that fires on the wrong line, or a gate that lets the
+# unresolved prose on line 9 through, is as broken as one that stays silent.
+set +e
+open_section_out="$(python3 "$check_plan" "$plans/plan-open-section.md" --issue 101 2>&1)"
+open_section_status=$?
+set -e
+[[ "$open_section_status" == "1" ]] || {
+  echo "plan-open-section.md should exit 1, got: $open_section_status: $open_section_out" >&2
+  exit 1
+}
+grep -Fq "check-plan: line 9: D3 open marker 'open question'" <<<"$open_section_out" || {
+  echo "plan-open-section.md should fail D3 on its unresolved open-question prose at line 9, got: $open_section_out" >&2
+  exit 1
+}
+# Line 13 reads "Unresolved; settled by a live run." A resolving verb in the
+# item's text must not close it; only striking or ticking the item does.
+grep -Fq "check-plan: line 13: D3 unresolved item under heading 'Open uncertainties'" <<<"$open_section_out" || {
+  echo "plan-open-section.md should fail D3 on the unresolved item at line 13, got: $open_section_out" >&2
+  exit 1
+}
+# Line 14 is struck through. A walk that refused it would push authors to
+# delete settled items rather than record them.
+if grep -Fq "line 14:" <<<"$open_section_out"; then
+  echo "plan-open-section.md should not name its struck item at line 14, got: $open_section_out" >&2
+  exit 1
+fi
+# Line 18 is the colon label, and its tail carries "resolve". The phrase opens
+# its sentence, so no resolving verb takes it as its object and the line fails.
+grep -Fq "check-plan: line 18: D3 open marker 'open question'" <<<"$open_section_out" || {
+  echo "plan-open-section.md should fail D3 on the label at line 18, got: $open_section_out" >&2
+  exit 1
+}
+# Line 20 is the bold label, followed by "answer the open question". The verb
+# clears the second occurrence only. The leading one has no verb in front of it,
+# so the line still fails.
+grep -Fq "check-plan: line 20: D3 open marker 'open question'" <<<"$open_section_out" || {
+  echo "plan-open-section.md should fail D3 on the bold label at line 20, got: $open_section_out" >&2
+  exit 1
+}
+# Line 22 reads "Whether the key is resolved remains an open question." The
+# sentence holds `resolv`, but not as a verb taking the question, so the
+# question stays open. A test for any resolving word anywhere lets it pass.
+grep -Fq "check-plan: line 22: D3 open marker 'open question'" <<<"$open_section_out" || {
+  echo "plan-open-section.md should fail D3 on the still-open question at line 22, got: $open_section_out" >&2
+  exit 1
+}
+# Lines 26 and 30 are the D3/D4 handoff. A box under `## Open questions` is
+# D4's alone, and a box under `## Unresolved`, which D4 does not read, is D3's
+# alone.
+grep -Fq "check-plan: line 26: D4 unchecked box under heading 'Open questions'" <<<"$open_section_out" || {
+  echo "plan-open-section.md should fail D4 on the box at line 26, got: $open_section_out" >&2
+  exit 1
+}
+if grep -Fq "line 26: D3" <<<"$open_section_out"; then
+  echo "plan-open-section.md should not report the D4 box at line 26 under D3 too, got: $open_section_out" >&2
+  exit 1
+fi
+grep -Fq "check-plan: line 30: D3 unresolved item under heading 'Unresolved'" <<<"$open_section_out" || {
+  echo "plan-open-section.md should fail D3 on the box at line 30, got: $open_section_out" >&2
+  exit 1
+}
+# The fixture's title avoids the word "open". D4 matches any heading above a
+# box, the H1 included, so an "open-section" title would take line 30 from D3.
+if grep -Fq "line 30: D4" <<<"$open_section_out"; then
+  echo "plan-open-section.md should not report the box at line 30 under D4, got: $open_section_out" >&2
+  exit 1
+fi
+# Lines 36, 37, 41, and 42 sit under task headings about unresolved threads,
+# the second with the word in backticks. A task heading names work to do, so
+# its title never marks its items open, and a plan about run-state.py's thread
+# count stays passable.
+# Those four pass on the leading-word rule too. Lines 61 and 62, under a task
+# about parsing open questions, are the pin only the task exemption holds.
+for open_line in 36 37 41 42 61 62; do
+  if grep -Fq "line $open_line:" <<<"$open_section_out"; then
+    echo "plan-open-section.md should not name the task item at line $open_line, got: $open_section_out" >&2
+    exit 1
+  fi
+done
+# Line 44 settles one open question and leaves another. The gate decides per
+# occurrence: a resolved one in the same sentence must not clear the live one.
+grep -Fq "check-plan: line 44: D3 open marker 'open question'" <<<"$open_section_out" || {
+  echo "plan-open-section.md should fail D3 on the live second question at line 44, got: $open_section_out" >&2
+  exit 1
+}
+# Under `## Open items`, the answer at line 49 is nested under a ticked item
+# and line 53 under a struck one, so both are closed. Line 50 is a sibling at
+# the ticked item's indent, which ends the exemption, and line 51 is nested
+# under that open sibling. Line 57 is indented, but the unindented paragraph at
+# line 55 ended the list the struck item closed.
+for open_line in 49 53; do
+  if grep -Fq "line $open_line:" <<<"$open_section_out"; then
+    echo "plan-open-section.md should not name the answer nested under a closed item at line $open_line, got: $open_section_out" >&2
+    exit 1
+  fi
+done
+for open_line in 50 51 57; do
+  grep -Fq "check-plan: line $open_line: D3 unresolved item under heading 'Open items'" <<<"$open_section_out" || {
+    echo "plan-open-section.md should fail D3 on the open item at line $open_line, got: $open_section_out" >&2
+    exit 1
+  }
+done
+# Lines 66, 70, and 74 sit under state headings wrapped in emphasis
+# (F-r2-authz-01). The lead test was anchored at the heading's first character,
+# so `**` or `_` in front of the label hid it and all three items passed.
+for open_pair in "66|**Unresolved**" "70|_Undecided_" "74|3. **Unresolved**"; do
+  open_line="${open_pair%%|*}"
+  open_heading="${open_pair#*|}"
+  grep -Fq "check-plan: line $open_line: D3 unresolved item under heading '$open_heading'" <<<"$open_section_out" || {
+    echo "plan-open-section.md should fail D3 on the item under '$open_heading' at line $open_line, got: $open_section_out" >&2
+    exit 1
+  }
+done
+# Lines 79 and 82 sit past a struck item's marker but short of its content
+# column: one column in after `- `, two after `10. ` (F-r2-authz-03).
+# CommonMark renders each as a new open item, not an answer nested under the
+# struck one, so an exemption for anything deeper than the marker let both pass.
+for open_line in 79 82; do
+  grep -Fq "check-plan: line $open_line: D3 unresolved item under heading 'Open decisions'" <<<"$open_section_out" || {
+    echo "plan-open-section.md should fail D3 on the sibling of a struck item at line $open_line, got: $open_section_out" >&2
+    exit 1
+  }
+done
+# Line 88 is indented under a new heading, right after the ticked item at line
+# 84 closed the section above (F-r2-state-01). It is deep enough to pass as
+# that item's answer, so only the heading's reset of the closed-item state
+# catches it, and no other line in either fixture needs that reset.
+grep -Fq "check-plan: line 88: D3 unresolved item under heading 'Still open items'" <<<"$open_section_out" || {
+  echo "plan-open-section.md should fail D3 on the item under a new heading at line 88, got: $open_section_out" >&2
   exit 1
 }
 

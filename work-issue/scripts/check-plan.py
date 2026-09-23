@@ -20,9 +20,22 @@ Checks, one stderr line each naming its rule and a location:
       `Files owned` line — checked only when the plan has no `## Waves`
       table, since a Waves table carries ownership itself
   D3  an open marker: `TBD`, `TODO`, `FIXME`, `???`, `decide later`,
-      `to be decided`, `open question` (case-insensitive, whole-word,
+      `to be decided` anywhere, and `open question` wherever an occurrence
+      is not the object of its own `settl…`/`resolv…`/`answer…` word, with
+      at most one determiner between them, which covers a label (`Open
+      question: …`, `- **Open question** …`) because no resolving word
+      comes before the phrase there to take it as its object
+      (case-insensitive, whole-word,
       ignoring a marker written inside backticks — a plan documenting
-      this rule quotes its own trigger words)
+      this rule quotes its own trigger words); and any list item that is
+      not a box D4 reports, under a non-task heading containing `open
+      question(s)`, `open uncertainty`/`open uncertainties`, `open
+      decision(s)`, or `open item(s)`, or opening with `unresolved` or
+      `undecided` (optionally after `3.`, with or without `**`/`_`
+      emphasis), backtick spans ignored (a heading naming uncertainties
+      without `open` does not count), unless the item opens with a
+      `~~struck~~` span or a ticked `[x]` box, or is nested at or past the
+      content column of one that does
   D4  a `- [ ]` line inside a section whose heading contains `Decision`,
       `Question`, or `Open` (a box elsewhere is a copied criterion and is
       fine)
@@ -56,8 +69,40 @@ OPEN_MARKERS = (
     ("???", r"(?<!\?)\?{3}(?!\?)"),
     ("decide later", r"\bdecide later\b"),
     ("to be decided", r"\bto be decided\b"),
-    ("open question", r"\bopen question\b"),
 )
+# `open question` names the category, so prose that closes questions uses it
+# too. It gets its own gate in check_d3 rather than a slot above.
+OPEN_QUESTION_RE = re.compile(r"\bopen question\b", re.IGNORECASE)
+# The verb has to take the open question as its object. A resolving word
+# anywhere in the sentence is not enough: "Whether the key is resolved remains
+# an open question." holds `resolv` and still leaves the question open.
+RESOLVED_OBJECT_RE = re.compile(
+    r"\b(?:settl|resolv|answer)\w*\s+"
+    r"(?:(?:a|an|the|this|that|each|every|one|its|our|their|your)\s+)?"
+    r"open question\b",
+    re.IGNORECASE,
+)
+SENTENCE_SPLIT_RE = re.compile(r"[.!?;:](?:\s+|$)")
+# `uncertainties` needs `open` in front. A `## Risks and uncertainties` list
+# holds risks the plan already answers ("we back off"), and failing it
+# refuses a plan with nothing left open.
+OPEN_STATE_HEADING_RE = re.compile(
+    r"\bopen\s+(?:questions?|uncertaint(?:y|ies)|decisions?|items?)\b",
+    re.IGNORECASE,
+)
+# A bare `unresolved` or `undecided` is a state label only when it opens the
+# heading. Anywhere else it names a topic, and `### T1 Count unresolved
+# threads` failed every item in its own task. Emphasis around the word doesn't
+# change that. A test anchored on the first character passed every item under
+# `## **Unresolved**`.
+OPEN_STATE_LEAD_RE = re.compile(
+    r"^\s*(?:\d+[.)]\s+)?[*_]*(?:unresolved|undecided)[*_]*(?!\w)", re.IGNORECASE
+)
+# Whole words: `OpenAPI changes` is not an open question.
+D4_HEADING_RE = re.compile(r"\b(?:decision|question|open)s?\b", re.IGNORECASE)
+LIST_ITEM_RE = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+(.*)$")
+CHECKED_BOX_RE = re.compile(r"^\[[xX]\]")
+STRUCK_RE = re.compile(r"^(?:\[[ xX]\]\s*)?~~.+?~~")
 
 TASK_HEADING_RES = (
     re.compile(r"^ {0,3}##\s+Task\b"),
@@ -193,14 +238,112 @@ def check_d3(lines):
     trigger words, not a live TBD left in the plan — this contract's own
     Scripts section does exactly that (`` `TBD`, `TODO`, ... ``), and a
     scan that can't tell the two apart would refuse the plan that
-    documents the rule."""
+    documents the rule.
+
+    `open question` is gated where the other six are not (#129). Issue
+    #113's plan was refused at "The four that settle an open question",
+    a sentence closing questions, while its "Open uncertainties" list of
+    genuinely unresolved items passed clean. The other six leave something
+    open in ordinary use; only this one got reproduced misfiring. So it
+    fires in a sentence where no resolving verb takes it as its object.
+    That includes a label, since nothing in front of a label's phrase is
+    a resolving word. The
+    heading walk catches what the phrase list never could: items filed
+    under a heading that says they're open."""
     problems = []
+    ancestors = []  # (level, text, open state), the same walk D4 does
+    # (marker indent, content column) of the struck or ticked item whose
+    # nested items are closed with it, or None. A sub-bullet recording the
+    # answer belongs to the closed item, and failing it as an open item of its
+    # own pushes authors to delete the answer.
+    closed = None
     for lineno, line in enumerate(lines, start=1):
+        level = heading_level(line)
+        if level is not None:
+            text = HEADING_RE.match(line).group(2)
+            while ancestors and ancestors[-1][0] >= level:
+                ancestors.pop()
+            ancestors.append((level, text, is_open_state_heading(line, text)))
+            closed = None
         scannable = BACKTICK_SPAN_RE.sub("", line)
         for shown, pattern in OPEN_MARKERS:
             if re.search(pattern, scannable, re.IGNORECASE):
                 problems.append(f"check-plan: line {lineno}: D3 open marker {shown!r}")
+        if open_question_fires(scannable):
+            problems.append(f"check-plan: line {lineno}: D3 open marker 'open question'")
+        if level is not None:
+            continue
+        indent = len(line) - len(line.lstrip())
+        item = LIST_ITEM_RE.match(line)
+        if not item:
+            # A paragraph back at the closed item's indent or shallower has
+            # left its list. Blank lines don't, since a loose list puts them
+            # between an item and its sub-items.
+            if line.strip() and closed is not None and indent <= closed[0]:
+                closed = None
+            continue
+        # CommonMark nests an item only at its parent's content column: 2
+        # past `- `, 4 past `10. `. Anything shallower is a new item that
+        # renders as open, and exempting it passed a live sibling.
+        if closed is not None:
+            if indent >= closed[1]:
+                continue
+            closed = None
+        body = item.group(1)
+        # A struck or ticked item is closed. "settled" in the text is not:
+        # #129's unresolved fixture reads "Unresolved; settled by a live run."
+        if STRUCK_RE.match(body) or CHECKED_BOX_RE.match(body):
+            closed = (indent, item.start(1))
+            continue
+        open_heading = next(
+            (t for _, t, open_state in reversed(ancestors) if open_state), None
+        )
+        if open_heading is None:
+            continue
+        # An unchecked box D4 already reports stays D4's, so no line reports
+        # twice. One D4 misses (under `## Unresolved`) is still ours.
+        if CHECKBOX_RE.match(line) and any(D4_HEADING_RE.search(t) for _, t, _ in ancestors):
+            continue
+        problems.append(
+            f"check-plan: line {lineno}: D3 unresolved item under heading {open_heading!r}"
+        )
     return problems
+
+
+def is_open_state_heading(line, text):
+    """A task heading names work to do, so its title never marks its items
+    open. Backtick spans are a name being quoted, the same exemption
+    the marker scan gives them.
+
+    The lead test swaps each span for a placeholder word instead of
+    deleting it. Deleting the span would leave `unresolved` first in
+    `` `gh api` unresolved thread counts ``, and the heading would read as
+    a state label."""
+    if any(p.match(line) for p in TASK_HEADING_RES):
+        return False
+    if OPEN_STATE_LEAD_RE.match(BACKTICK_SPAN_RE.sub("name", text)):
+        return True
+    return bool(OPEN_STATE_HEADING_RE.search(BACKTICK_SPAN_RE.sub("", text)))
+
+
+def open_question_fires(scannable):
+    """The sentence test also covers a label. In `Open question: …` and
+    `- **Open question** …`, no resolving word comes before the phrase to
+    take it as its object, so `RESOLVED_OBJECT_RE` can't remove it. A
+    resolving verb in the tail clears only an occurrence that follows it.
+    `_Open question_` never fires, because `_` is a word character and
+    `OPEN_QUESTION_RE` finds no word boundary before `Open`.
+
+    Each occurrence needs its own resolving verb. Removing the resolved
+    spans before the search keeps "This settles the open question of
+    retries, but the open question of caching remains." from passing on
+    the strength of its first half."""
+    if not OPEN_QUESTION_RE.search(scannable):
+        return False
+    return any(
+        OPEN_QUESTION_RE.search(RESOLVED_OBJECT_RE.sub("", sentence))
+        for sentence in SENTENCE_SPLIT_RE.split(scannable)
+    )
 
 
 def check_d4(lines):
@@ -222,8 +365,7 @@ def check_d4(lines):
         if not CHECKBOX_RE.match(line):
             continue
         for _, text in reversed(ancestors):
-            # Whole words: `OpenAPI changes` is not an open question.
-            if re.search(r"\b(?:decision|question|open)s?\b", text, re.IGNORECASE):
+            if D4_HEADING_RE.search(text):
                 problems.append(
                     f"check-plan: line {lineno}: D4 unchecked box under heading {text!r}"
                 )
