@@ -27,7 +27,7 @@ Then the gate. Fresh verifiers get the claim, the quoted code, and the proposed 
 - **Not reproduced** — closed in the ledger, counter-evidence recorded.
 - **Unverifiable** — filed as an open question for `inbox-to-memory`.
 
-How much this costs scales with what you're reviewing. A docs-and-types diff gets two territories and cheap models; an auth-plus-money diff gets the full fan-out. The depth is announced in one line before any subagent spends a token, so you can correct it.
+How much this costs scales with what you're reviewing. A docs-and-types diff gets two territories and cheap models; an auth-plus-money diff gets the full fan-out. The depth reaches you as a one-line question before any subagent spends a token, so you can correct it.
 
 ## Install
 
@@ -46,7 +46,7 @@ Needs a git repo and Python 3 for the two bundled scripts. Both are stdlib-only.
 
 ## Use
 
-It only runs when you ask for it by name—see the Gotchas for why.
+Run it by name with a fixed point:
 
 ```
 > /adversarial-review main
@@ -54,6 +54,8 @@ It only runs when you ask for it by name—see the Gotchas for why.
 > /adversarial-review origin/main --fast
 > /adversarial-review abc1234 --max-rounds 1 --report-only
 ```
+
+`work-issue` also runs it at its red-team step, when the diff trips that step's trigger.
 
 ## What's Here
 
@@ -72,7 +74,7 @@ adversarial-review/
 
 ## Gotchas
 
-- **It won't fire on its own.** `code-review`, `security-review`, and `grilling` all answer to similar phrasing, and a misfire here spends a long expensive fan-out on someone who wanted a quick read. Type its name.
+- **It asks before it fans out.** `code-review`, `security-review`, and `grilling` answer to similar phrasing, and a misfire here spends a long, expensive fan-out on someone who wanted a quick read. So the depth line arrives as a question, and no subagent starts until you answer it. When `work-issue` runs the review, your yes to `work-issue`'s own confirmation answers that question.
 - **It asks for a fixed point instead of guessing one.** Guessing produces a thorough review of the wrong code, which looks exactly like a thorough review of the right code.
 - **A dirty working tree stops it.** Verification evidence only means something against the code the diff describes. You can override, and the override gets recorded in the report.
 - **Territories are literal paths, never globs, and never decorated.** The overlap predicate is vendored from agent-guild, where a pattern entry is rejected outright because it silently owns nothing—which once put two agents on the same file. A backtick or a markdown link around a path fails the same way: it matches nothing, and it reads as a different string from the bare path another territory claims, so two territories that should collide look disjoint instead.
