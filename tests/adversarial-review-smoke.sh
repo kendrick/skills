@@ -125,7 +125,7 @@ require_text adversarial-review/README.md "as long as the review comes out no de
 # A wrapper yes covers the fan-out's cost, not a scope the user never saw
 # (row 36). Without the escalation route, a settled decision missing from the
 # out-of-scope list comes back as a blocker and gets "fixed" unattended.
-require_text adversarial-review/SKILL.md "That run is **waived**: the yes covered the fan-out's cost, and the user never saw the territories or the list the finders read."
+require_text adversarial-review/SKILL.md "That run is **waived**: the yes covered the fan-out's cost, given before the user saw the territories or the list the finders read."
 require_text adversarial-review/SKILL.md "In a **waived** run (Step 2), REPRODUCED + blocking routes to escalation instead"
 require_text adversarial-review/SKILL.md "record \`ESCALATED\` with the reason \`waived: scope not confirmed\`, and write no test and no fix."
 require_text adversarial-review/README.md "reports its blocking findings to you rather than fixing them"
