@@ -226,8 +226,19 @@ require_text work-issue/SKILL.md "rows 1 (money), 2 (authz), and 4 (schema) of \
 # references/redteam.md carries its own copy of the Step 4 sentence, and it is
 # the copy an agent reads while running the trigger, so it is pinned too.
 require_text work-issue/SKILL.md "Where the mode names \`adversarial-review\`, a yes to this confirmation also answers \`adversarial-review\`'s Step 2 question for this run."
-require_text work-issue/SKILL.md "Where Step 0's red-team mode named \`adversarial-review\`, the Step 0 yes carries into its Step 2 as that question's answer"
-require_text work-issue/references/redteam.md "Where Step 0's red-team mode named \`adversarial-review\`, the Step 0 yes carries into its Step 2 as that question's answer"
+require_text work-issue/SKILL.md "Where \`RUN_DIR/redteam/mode.txt\` names \`adversarial-review\`, the Step 0 yes carries into its Step 2 as that question's answer"
+require_text work-issue/references/redteam.md "Where \`RUN_DIR/redteam/mode.txt\` names \`adversarial-review\`, the Step 0 yes carries into its Step 2 as that question's answer"
+
+# `--deep` fires the trigger without a grep hit, so Step 0 item 7 names the
+# review for a `--deep` run as well. Without this clause, a `--deep` run whose
+# forecast grep missed reaches the review's Step 2 question with no yes
+# covering it (row 93).
+require_text work-issue/SKILL.md "or \`reproduce claims, then adversarial-review (--deep)\` when \`--deep\` is set, since that flag fires the trigger on its own."
+
+# Step 4 tests mode.txt before it carries the yes. Resume rows 10 and 11 jump
+# straight to Step 4, and a resumed session never saw the confirmation, so the
+# file is the only record of what the user agreed to (row 94).
+require_text work-issue/SKILL.md "Once the user answers yes, write the red-team mode line this message carried to \`RUN_DIR/redteam/mode.txt\`"
 
 # Step 4 reaches `adversarial-review` by invoking it. Reading its SKILL.md and
 # running the steps inline goes around the host's invocation gate and forks
