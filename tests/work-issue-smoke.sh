@@ -713,17 +713,15 @@ if grep -Fq "line 14:" <<<"$open_section_out"; then
   echo "plan-open-section.md should not name its struck item at line 14, got: $open_section_out" >&2
   exit 1
 fi
-# Line 18 is the ruled label form, and its tail carries "resolve". It fires on
-# two paths: the label test, and the sentence test, because the colon splits
-# off a bare "Open question" fragment. Line 20 is the pin only the label test
-# satisfies.
+# Line 18 is the colon label, and its tail carries "resolve". The phrase opens
+# its sentence, so no resolving verb takes it as its object and the line fails.
 grep -Fq "check-plan: line 18: D3 open marker 'open question'" <<<"$open_section_out" || {
   echo "plan-open-section.md should fail D3 on the label at line 18, got: $open_section_out" >&2
   exit 1
 }
-# Line 20 is the bold label, followed by "answer the open question". Only the
-# label test catches it. The verb takes the phrase as its object, so the
-# sentence test lets it through.
+# Line 20 is the bold label, followed by "answer the open question". The verb
+# clears the second occurrence only. The leading one has no verb in front of it,
+# so the line still fails.
 grep -Fq "check-plan: line 20: D3 open marker 'open question'" <<<"$open_section_out" || {
   echo "plan-open-section.md should fail D3 on the bold label at line 20, got: $open_section_out" >&2
   exit 1

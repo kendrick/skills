@@ -20,10 +20,12 @@ Checks, one stderr line each naming its rule and a location:
       `Files owned` line — checked only when the plan has no `## Waves`
       table, since a Waves table carries ownership itself
   D3  an open marker: `TBD`, `TODO`, `FIXME`, `???`, `decide later`,
-      `to be decided` anywhere, and `open question` as a label (`Open
-      question: …`, `- **Open question** …`) or wherever an occurrence is
-      not the object of its own `settl…`/`resolv…`/`answer…` word, with
-      at most one determiner between them (case-insensitive, whole-word,
+      `to be decided` anywhere, and `open question` wherever an occurrence
+      is not the object of its own `settl…`/`resolv…`/`answer…` word, with
+      at most one determiner between them, which covers a label (`Open
+      question: …`, `- **Open question** …`) because no resolving word
+      comes before the phrase there to take it as its object
+      (case-insensitive, whole-word,
       ignoring a marker written inside backticks — a plan documenting
       this rule quotes its own trigger words); and any list item that is
       not a box D4 reports, under a non-task heading containing `open
@@ -71,9 +73,6 @@ OPEN_MARKERS = (
 # `open question` names the category, so prose that closes questions uses it
 # too. It gets its own gate in check_d3 rather than a slot above.
 OPEN_QUESTION_RE = re.compile(r"\bopen question\b", re.IGNORECASE)
-OPEN_QUESTION_LABEL_RE = re.compile(
-    r"^\s*(?:(?:[-*+]|\d+[.)])\s+)?(?:\*\*)?open question(?::|\*\*)", re.IGNORECASE
-)
 # The verb has to take the open question as its object. A resolving word
 # anywhere in the sentence is not enough: "Whether the key is resolved remains
 # an open question." holds `resolv` and still leaves the question open.
@@ -246,8 +245,9 @@ def check_d3(lines):
     a sentence closing questions, while its "Open uncertainties" list of
     genuinely unresolved items passed clean. The other six leave something
     open in ordinary use; only this one got reproduced misfiring. So it
-    fires as a label, or in a sentence where no resolving verb takes it
-    as its object, and the
+    fires in a sentence where no resolving verb takes it as its object.
+    That includes a label, since nothing in front of a label's phrase is
+    a resolving word. The
     heading walk catches what the phrase list never could: items filed
     under a heading that says they're open."""
     problems = []
@@ -327,11 +327,12 @@ def is_open_state_heading(line, text):
 
 
 def open_question_fires(scannable):
-    """The label test is the only path for the bold form: in `**Open
-    question** who gets to answer the open question of retries?` the verb
-    takes the phrase as its object, so the sentence test passes it. The
-    colon form `Open question: how do we resolve conflicts?` fires on both
-    paths, because the colon also splits off a bare `Open question`.
+    """The sentence test also covers a label. In `Open question: …` and
+    `- **Open question** …`, no resolving word comes before the phrase to
+    take it as its object, so `RESOLVED_OBJECT_RE` can't remove it. A
+    resolving verb in the tail clears only an occurrence that follows it.
+    `_Open question_` never fires, because `_` is a word character and
+    `OPEN_QUESTION_RE` finds no word boundary before `Open`.
 
     Each occurrence needs its own resolving verb. Removing the resolved
     spans before the search keeps "This settles the open question of
@@ -339,8 +340,6 @@ def open_question_fires(scannable):
     the strength of its first half."""
     if not OPEN_QUESTION_RE.search(scannable):
         return False
-    if OPEN_QUESTION_LABEL_RE.match(scannable):
-        return True
     return any(
         OPEN_QUESTION_RE.search(RESOLVED_OBJECT_RE.sub("", sentence))
         for sentence in SENTENCE_SPLIT_RE.split(scannable)
