@@ -5,7 +5,7 @@ One procedure, run with zero or more branches, that builds a scratch tree, merge
 - **Baseline**, Step 4, with no branches, before any lane is dispatched.
 - **Contract change**, Step 5, over every lane branch with commits, when a returned lane's `files_changed` has a path under CONTRACT_PATHS or its `contract_changed` names any path.
 - **Before publish**, Step 6, over the full merge set in `order.md` order, once every unheld lane has returned, and again from Step 7 when `origin/DEFAULT` has moved past the newest green run's `base:`.
-- **HEAD moved**, Step 8, re-run once more before the final report, if the HEAD of any lane in the merge set differs from the SHA the newest recorded run merged for it. A held or failed lane is outside the merge set, so no run records its SHA and its HEAD is never compared.
+- **HEAD moved**, Step 8, re-run once more before the final report, if the HEAD of any lane in the merge set differs from the SHA the newest recorded run merged for it. A lane outside the merge set is never compared: a held lane has no branch, and a failed or stopped lane's SHA, which a Step 5 contract-change run may have recorded, describes a branch nobody in this wave merges.
 
 ## Why a linked worktree, never `cp -R` or `git archive`
 

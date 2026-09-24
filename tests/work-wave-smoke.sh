@@ -231,7 +231,7 @@ require_text "$skill" "| 3 | \`lanes.md\` and \`harvest.md\`; no \`footprint/che
 # Codex finding 3 of the third review on PR #141: Step 6 records SHAs for the
 # merge set alone, so a probe comparing every lane's HEAD looped back to Step 6
 # forever once a lane was held or failed.
-require_text "$skill" "| 8 | every gate record; no \`merge-test/<k>.md\` with k > 0 whose SHAs equal the current HEADs of the lanes in the merge set | Step 6 |"
+require_text "$skill" "| 8 | every gate record; no \`merge-test/<k>.md\` with k > 0 whose recorded branches are exactly the merge set, each at its current HEAD | Step 6 |"
 require_text "$skill" "Where the HEAD of any lane in the merge set differs from its SHA in the newest \`merge-test/<k>.md\`"
 refute_text "$skill" "every lane's current HEAD"
 require_text "$ledger" "**The Resume table is prose the orchestrator walks by hand.**"

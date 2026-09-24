@@ -198,10 +198,10 @@ The world outranks WAVE_DIR, and WAVE_DIR outranks memory. Each lane's state is 
 | 5 | `order.md`; no `merge-test/0.md` | Step 3, the confirmation again, then Step 4 |
 | 6 | `merge-test/0.md`; some saved build report has no `gate/issue-<N>.md`, or some gate record recorded a stop | Step 5 for the ungated reports only, then probe again; a recorded stop stops the wave again, naming the lane and its pull-request URL or the re-check's stderr lines, until the user rules on it |
 | 7 | `merge-test/0.md`; some unheld lane has no `reports/issue-N-build.json` | Step 4 for those lanes only, in one message; a lane whose RUN_DIR exists is resumed by its own `work-issue`, and its build report is whatever it returns |
-| 8 | every gate record; no `merge-test/<k>.md` with k > 0 whose SHAs equal the current HEADs of the lanes in the merge set | Step 6 |
-| 9 | a green merge test at the merge set's current HEADs; some lane in the merge set has no `reports/issue-N-publish.json` | Step 7 for those lanes only, when the fetched `origin/DEFAULT` equals that merge test's `base:`; where it differs, Step 6, then Step 7 |
+| 8 | every gate record; no `merge-test/<k>.md` with k > 0 whose recorded branches are exactly the merge set, each at its current HEAD | Step 6 |
+| 9 | a green merge test over exactly the merge set at its current HEADs; some lane in the merge set has no `reports/issue-N-publish.json` | Step 7 for those lanes only, when the fetched `origin/DEFAULT` equals that merge test's `base:`; where it differs, Step 6, then Step 7 |
 | 10 | every publish report; the HEAD of some lane in the merge set moved since the newest merge test | Step 8's re-test, then the report |
-| 11 | every publish report; merge test green at the merge set's current HEADs | Step 8's report |
+| 11 | every publish report; a merge test green over exactly the merge set at its current HEADs | Step 8's report |
 
 A lane's `work-issue` may itself be mid-run on a herdr agent or a stranded worktree; those are its rows 2 and 3, and re-dispatching it is how they get read.
 
