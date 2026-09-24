@@ -179,6 +179,10 @@ require_text "$skill" "each branch already merged in this run whose own diff aga
 # builds from its cached copy, and the script skips its lane-named run dir, so
 # proving it on PLAN[N] let an edited source plan hide the copy's overlap.
 require_text "$skill" "A lane already started (Step 0 item 4) is proved on its \`RUN_DIR/plan.md\`, the copy its own \`work-issue\` builds from, never on PLAN[N]"
+# A tableless copy passed straight to the script reads as a bare path list and
+# passes a real overlap, so the instruction to pass the derived file instead is
+# the half of this rule that does the work.
+require_text "$skill" "Where it has none yet, derive \`footprint/issue-<N>.md\` from the copy's \`Files:\` lines and pass that file instead, never the tableless copy"
 
 # The withheld grant is honored, not enforced, and this route row is the one
 # check that sees a lane that published early.
@@ -302,6 +306,8 @@ refute_text "$skill" "git archive"
 
 # Row 6: an N-way conflict names no branch it hit, and no human merges that way.
 refute_text "$skill" "octopus"
+refute_text "$skill" "branch before"
+refute_text "$merge_test" "branch before"
 
 # Row 8: SKILL.md names the retry in order to refuse it, so the pin is the
 # refusing sentence rather than a refute.

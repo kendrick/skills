@@ -54,7 +54,7 @@ Resolve once per invocation:
 
 For each lane, read PLAN[N] and write `WAVE_DIR/footprint/issue-<N>.md`: one bare repo-relative path per line, an exact file or a directory prefix ending in `/`, taken from every `Files:`, `**Files:**`, `owns:`, or `Files owned` line and from a `## Waves` table where the plan already carries one. Bare, with no backticks and no links, because the script refuses decoration rather than stripping it, and the reason it gives has to quote a string that is in the file.
 
-A lane already started (Step 0 item 4) is proved on its `RUN_DIR/plan.md`, the copy its own `work-issue` builds from, never on PLAN[N]: pass that path as the lane's `--lane issue-N=` argument, and where the copy has no `## Waves` table yet, derive `footprint/issue-<N>.md` from the copy's `Files:` lines. The lane's resume builds from the copy, so a source plan edited since then describes work nobody will do.
+A lane already started (Step 0 item 4) is proved on its `RUN_DIR/plan.md`, the copy its own `work-issue` builds from, never on PLAN[N]. Where the copy carries a `## Waves` table, pass `RUN_DIR/plan.md` itself as the lane's `--lane issue-N=` argument. Where it has none yet, derive `footprint/issue-<N>.md` from the copy's `Files:` lines and pass that file instead, never the tableless copy: the script reads a plan with no table as a bare path list, so its prose lines become paths and a real overlap passes. The lane's resume builds from the copy, so a source plan edited since then describes work nobody will do.
 
 Then:
 
