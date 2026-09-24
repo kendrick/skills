@@ -176,12 +176,33 @@ require_text "$skill" "\`WAVE_DIR/facts/wave.md\`, the one facts file the orches
 # between the two skips the pr check, the re-check, and the merge test.
 require_text "$skill" "\`reports/issue-<N>-<phase>.json\`, \`gate/issue-<N>.md\`, \`baseline.txt\`"
 require_text "$skill" "5. **Gate record.** Last, after items 1 through 4, write \`WAVE_DIR/gate/issue-<N>.md\`"
-require_text "$skill" "| 7 | every unheld lane has a build report; some build report has no \`gate/issue-<N>.md\`, or some gate record took the \`pr\` non-null stop | Step 5 for the ungated reports only; a recorded \`pr\` stop stops the wave again, naming the lane and its pull-request URL, until the user rules on it |"
+# The gate row sits ahead of the re-dispatch row. With the re-dispatch row
+# first, a crash that leaves one lane's report ungated while another lane is
+# still building sends the wave to Step 4. Step 5 fires as a report returns,
+# the saved one never returns again, and it reaches Step 6 ungated.
+require_text "$skill" "| 6 | \`merge-test/0.md\`; some saved build report has no \`gate/issue-<N>.md\`, or some gate record recorded a stop | Step 5 for the ungated reports only, then probe again; a recorded stop stops the wave again, naming the lane and its pull-request URL or the re-check's stderr lines, until the user rules on it |"
+require_text "$skill" "| 7 | \`merge-test/0.md\`; some unheld lane has no \`reports/issue-N-build.json\` | Step 4 for those lanes only, in one message;"
+require_text "$skill" "Enter when every unheld lane has returned, every build report in the merge set has its \`gate/issue-<N>.md\`, and no gate record is a recorded stop; otherwise go back to Step 5."
+
+# A probe that asks only whether a gate record exists sends a record of a
+# failed re-check straight to Step 6. The route row and the recorded-stop
+# definition make what the record says count.
+require_text "$skill" "| the footprint re-check (item 2) exited non-zero | Stop the wave with the script's stderr lines quoted, the way Step 1 stops on a non-zero exit. Nothing proceeds to Step 6. |"
+require_text "$skill" "A gate record whose route is the \`pr\` non-null stop or the failed re-check stop is a recorded stop, and the resume probe stops the wave again on it."
+
+# Resume row 4 reads any check.txt as a passed proof, so a failing Step 1
+# must never write one.
+require_text "$skill" "Save the output to \`WAVE_DIR/footprint/check.txt\` on exit 0 only. A non-zero exit's output goes to \`WAVE_DIR/footprint/check-failed.txt\`"
 
 # Codex finding 3 on PR #141: each lane rebases before it publishes, so a
 # merge test over a stale base tested a tree nobody will merge.
 require_text "$skill" "Check the base before any dispatch: \`git -C ROOT fetch origin DEFAULT\`, then compare \`git -C ROOT rev-parse origin/DEFAULT\` with the \`base:\` line of the newest green \`merge-test/<k>.md\`."
 require_text "$skill" "Step 7 for those lanes only, when the fetched \`origin/DEFAULT\` equals that merge test's \`base:\`; where it differs, Step 6, then Step 7"
+# The re-run proves the combined tree, and the published SHAs are rebased
+# ones no merge test recorded. Claiming more would hide the gap the ledger's
+# Known Limitations carries.
+require_text "$skill" "A merge onto the current tip tests the combined tree the lanes' clean rebases produce, not the SHAs they will publish"
+require_text "$ledger" "**The published SHAs are rebased SHAs that no merge test recorded.**"
 
 # A report path the orchestrator cannot open costs a round trip, which is one
 # of #113's four measured losses.

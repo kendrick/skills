@@ -170,7 +170,7 @@ Run `gh pr list` at each stop the wave makes.
 
 Pass the issue numbers in reverse order, to prove WAVE_ID is derived rather than typed.
 
-**Pass condition:** the run finds `wave-<N1>-<N2>/`, lands on resume row 6, and dispatches only the lane with no build report. That lane's `work-issue` resumes itself. Fails if a second WAVE_DIR appears, if the returned lane is dispatched again, or if the run restarts at Step 0.
+**Pass condition:** the run finds `wave-<N1>-<N2>/`, lands on resume row 7, and dispatches only the lane with no build report. That lane's `work-issue` resumes itself. Fails if a second WAVE_DIR appears, if the returned lane is dispatched again, or if the run restarts at Step 0.
 
 ### 14. The Final Report Orders the Merges and Merges Nothing
 
@@ -186,7 +186,11 @@ Pass the issue numbers in reverse order, to prove WAVE_ID is derived rather than
 
 **Commands:** re-invoke the wave with the same issues, then read `WAVE_DIR/gate/` and `WAVE_DIR/merge-test/`.
 
-**Pass condition:** the resume probe lands on row 7 and runs Step 5 for the ungated report only. The footprint re-check runs for it, the contract-change merge test runs and its line reaches `facts/wave.md`, and `gate/issue-<N>.md` then records the route, the re-check, and the merge-test result. Only after that does the run reach Step 6. Fails if the probe lands on row 8, if a report that already had a gate record is gated again, or if any merge test before publish runs while a report has no gate record.
+**Pass condition:** the resume probe lands on row 6 and runs Step 5 for the ungated report only. The footprint re-check runs for it, the contract-change merge test runs and its line reaches `facts/wave.md`, and `gate/issue-<N>.md` then records the route, the re-check, and the merge-test result. Only after that does the run reach Step 6. Fails if the probe lands on row 7 or row 8, if a report that already had a gate record is gated again, or if any merge test before publish runs while a report has no gate record.
+
+**Second case, a crash that leaves the lanes mixed:** the same two lanes, interrupted after Step 4 saves lane A's build report and before Step 5 writes `gate/issue-<A>.md`, while lane B is still building. Re-invoke the wave with the same issues.
+
+**Pass condition:** the resume probe lands on row 6 before row 7. Step 5 gates A's report, and `gate/issue-<A>.md` exists before B is dispatched again. The probe then lands on row 7 and dispatches B alone. B's report goes through Step 5 when it returns, and only then does the run reach Step 6. Fails if B is re-dispatched while A's report has no gate record, or if Step 6 runs while either report has none.
 
 ### 16. DEFAULT Moving After the Merge Test Holds Publication
 
