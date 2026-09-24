@@ -1,0 +1,197 @@
+---
+name: work-wave
+description: "Run N GitHub issues at once, one work-issue run per issue in its own worktree, with the footprints proved disjoint, the cross-lane coupling question answered and recorded, the merge order fixed, and the branches merged together and verified before any lane opens a pull request. Use ONLY when the user explicitly invokes work-wave. It never plans an issue, never merges one, and never advances a single issue: for one issue, use work-issue."
+argument-hint: '<issue> <issue> [<issue>...] [--plan N=PATH ...] [--lane-model opus|fable] [--dry-run]'
+disable-model-invocation: true
+---
+
+# work-wave
+
+`work-issue` advances one issue and refuses a concurrent sibling at its gate, which is right for what it owns. Three issues, three worktrees, three agents, and one orchestrator holding the parts true across all of them is a shape it does not cover, and run by hand that orchestration loses the same four things every time: a coupling between two lanes that no diff shows, the merge test run last instead of first, a fact one lane learned and another paid to relearn, and a file handed back at a path the orchestrator could not read.
+
+Width across lanes is safe under two conditions. No two lanes write the same path, and that gets **proved by a script before anything is dispatched**, the way `divvy-up` proves a wave. And no lane's change alters what another lane builds against, which no script can prove: two diffs in `core/` and `app/storage/` are disjoint and can still be about one thing. Disjoint paths prove two lanes cannot lose each other's writes. They do not prove the two lanes are independent, and this skill asks the second question on its own, records the answer per pair, and turns it into a merge order before a lane exists.
+
+Cost is N `work-issue` runs plus a merge test, and the runs are the cost of the issues, not of this skill. What this skill spends beyond that is one worktree for the merge test and the orchestrator's own reading of N plans, and both are spent so that a coupling costs a merge-order row here instead of a rebase conflict, a reverted pull request, and a re-run later. Every judgment—footprints, coupling, order, what a lane's report means—stays on the session model; the lanes are dispatched at `opus`, because a lane is itself an orchestrator running gates.
+
+Four skills cover four shapes of the same job. Reach for `agent-guild` when the work needs a written constitution and an independent checker per task. Reach for `divvy-up` when a plan is already approved and its tasks can be carved into disjoint file ownership in one tree. Reach for `work-issue` when one issue has one approved plan and should go all the way to an answered pull request. Reach for `work-wave` when two or more issues each have one, and they should go at the same time.
+
+This skill is user-invoked (`disable-model-invocation: true`) because a misfire during ordinary planning spends a whole fan-out, while a missed trigger costs the user one word.
+
+Where a step names a shell command, treat it as the intent and use your native shell or file tools.
+
+Resolve once per invocation:
+
+- **ISSUES** — every issue number in the arguments: bare integers, `#N`, or issue URLs. Fewer than two stops the run with "one issue is `work-issue N`". There is no "issues from the conversation" mode, for the reason `work-issue` gives: a number inferred from context runs this entire wave against the wrong tickets.
+- **REPO** — `gh repo view --json nameWithOwner --jq .nameWithOwner`
+- **DEFAULT** — `gh repo view --json defaultBranchRef --jq .defaultBranchRef.name`. Never assumed to be `main`.
+- **ROOT** — `git rev-parse --show-toplevel` of the invoking directory
+- **COMMON** — `git rev-parse --git-common-dir`, made absolute
+- **PROJECT** — ROOT's final path segment, lowercased to `a-z0-9-`
+- **WAVE_ID** — ISSUES sorted ascending and joined by `-`: `113-114-115`. Derived from the inputs so the same set of issues lands on the same directory every time it is typed.
+- **WAVE_DIR** — `<COMMON>/work-wave/wave-<WAVE_ID>/`. Subpaths: `lanes.md`, `footprint/issue-<N>.md`, `coupling.md`, `order.md`, `facts/issue-<N>.md`, `facts/wave.md`, `merge-test/<k>.md`, `reports/issue-<N>-<phase>.json`, `baseline.txt`. A finished wave moves to `<COMMON>/work-wave/closed/wave-<WAVE_ID>/`. Under the common dir for `work-issue`'s reasons: one location every lane's worktree can see, invisible to `git status`, and it outlives `git worktree remove`. It holds outputs, and nothing in it says which step the wave believes it reached.
+- **HANDBACK** — WAVE_DIR, spelled absolute. It is the one path every lane is told to write to and to name in its report, and every location a lane reports—its `worktree` and its `run_dir`—is absolute or is refused, while `files_changed` stays repo-relative by the brief's contract: subagent shells reset their working directory between calls, so a worktree-relative path in a report addresses whatever tree the reader happens to be in.
+- **PLAN[N]** — per issue, first hit wins: the `--plan N=PATH` argument; `<ROOT>/docs/plans/*issue-<N>*.md` or `<ROOT>/docs/plans/*-<N>-*.md`, newest by name; a path linked from the issue under a `Plan` heading. These are `work-issue`'s routes 1 through 3. Its route 4—the plan held in the conversation—is unreachable from a fresh subagent, so a plan that resolves only there is a missing plan here. Each hit is made absolute, and that absolute path is what the lane's argument line carries, as `work-issue`'s route 1.
+- **LANE[N]** — the lane's derived names, all `work-issue`'s: BRANCH `issue-<N>`, WORKTREE `<ROOT>/../<PROJECT>-issue-<N>/`, RUN_DIR `<COMMON>/work-issue/issue-<N>/`.
+- **LANE_MODEL** — `opus`, or `fable` from `--lane-model fable`. Never lower: a lane runs `divvy-up`'s gate, `code-review`, and a red-team on whatever model it was dispatched at, and that model is the judgment `divvy-up` keeps on the session model for a reason.
+- **MERGE_TREE** — `<ROOT>/../<PROJECT>-wave-<WAVE_ID>-merge/`. Exists only while a merge test runs.
+- **VERIFY_CMD**, **INSTALL_CMD** — harvested off disk the way `work-issue` harvests: manifest scripts first (`package.json`, `Makefile`, `pyproject.toml`, `Cargo.toml`); then runnable scripts under `tests/` or `scripts/`; then what `.github/workflows/` runs; then `absent`.
+- **CONTRACT_PATHS** — the union, across every lane's plan, of paths `divvy-up` Step 1 would make wave-0 tasks: types, interfaces, schemas, migrations. A lane whose build report changed one of these triggers a merge test at Step 5.
+- **FLAGS** — `--dry-run` runs Steps 0 through 3, renders the confirmation, and dispatches nothing, creates no worktree, and pushes nothing.
+
+`gh auth status` is a Step 0 preflight. Unauthenticated stops the run: the issues cannot be read, and route 3 of PLAN cannot be followed.
+
+## Step 0 — Gate
+
+1. Run the resume probe (see [Resume](#resume)) before anything is written under WAVE_DIR. Any row past a fresh wave jumps there; the rest of this step is for a fresh one.
+2. Resolve PLAN[N] for every issue. Any issue whose three routes all miss refuses the whole wave, naming every such issue at once: "Plan them first: `writing-plans`, then `work-wave <ISSUES> --plan N=PATH`." One refusal listing three missing plans beats three runs each finding one, and a wave that starts with two lanes of three is a different wave from the one the user asked for.
+3. `gh issue view N --json title,url,body` for each, and write `WAVE_DIR/lanes.md` with one row per lane: `| Lane | Title | Plan | Worktree | Run dir |`, every path absolute.
+4. In-flight `work-issue` runs. Any `<COMMON>/work-issue/issue-N/` for an N in ISSUES that is not under `closed/` is a lane already started. It stays in the wave: Step 3's collision check exempts its worktree, and Step 4's dispatch reaches it through `work-issue N`, whose own resume probe places it. Any `issue-M/` for an M not in ISSUES is a sibling this wave does not own, and Step 1 hands it to the script with `--runs` so its footprint is proved against every lane's.
+5. Harvest VERIFY_CMD and INSTALL_CMD, and derive CONTRACT_PATHS by reading every plan for the contract shapes.
+
+**Done when:** every issue in ISSUES has an absolute PLAN[N] on disk, `lanes.md` names every lane with absolute paths, `gh` is authenticated, and VERIFY_CMD is resolved or `absent`—or the run stopped at the refusal naming every issue without a plan, or at fewer than two issues.
+
+## Step 1 — Footprint
+
+For each lane, read PLAN[N] and write `WAVE_DIR/footprint/issue-<N>.md`: one bare repo-relative path per line, an exact file or a directory prefix ending in `/`, taken from every `Files:`, `**Files:**`, `owns:`, or `Files owned` line and from a `## Waves` table where the plan already carries one. Bare, with no backticks and no links, because the script refuses decoration rather than stripping it, and the reason it gives has to quote a string that is in the file.
+
+Then:
+
+```
+work-wave/scripts/check-footprints.py --lane issue-113=WAVE_DIR/footprint/issue-113.md --lane issue-114=WAVE_DIR/footprint/issue-114.md … --runs <COMMON>/work-issue
+```
+
+A non-zero exit is a hard stop, not a warning. Two lanes owning one path is two worktrees rewriting one file, and the rebase conflict that produces lands at a lane's Step 5 after the user has walked away. Its `pair:` lines on a pass are Step 2's worklist: exactly one per pair of lanes, so the coupling record has a row for every pair and cannot skip one.
+
+Every lane's own `work-issue` will run `check-inflight.py` again at its Step 0 item 6, and that is kept, not relied on. N lanes dispatched in one message write their `## Waves` tables within seconds of each other, and that script skips a sibling whose table is not there yet, so each lane's check can pass against siblings that have not written theirs. This step is the one check that holds every footprint at once, and Step 5 re-runs it over what the lanes actually derived.
+
+**Done when:** `check-footprints.py` exited 0 over every lane's footprint file and every in-flight sibling run, and its output, `pair:` lines included, is saved to `WAVE_DIR/footprint/check.txt`.
+
+## Step 2 — Couple and order
+
+Take each `pair:` line and ask the question the footprint proof cannot answer: would one lane's change alter what the other builds against? Read both plans against each other for the three shapes `divvy-up` names—both change behavior some third module reads, one fix may make the other unnecessary, both touch a runtime agreement that is neither a type nor a schema—and for the fourth that only appears across lanes: one lane's plan consumes, by name or by path, something the other lane's plan changes. A schema one lane relaxes and another lane's comparison depends on is that fourth shape, and its two diffs are disjoint.
+
+`divvy-up` resolves a coupling inside one tree, by placing a task in a later wave or by merging two tasks into one. Neither exists here. Every lane bases on `origin/DEFAULT` and cannot build on a sibling's branch, and two issues cannot be merged into one task. What a wave can do is order the merges, keep a lane out, or refuse. Write one row per pair into `WAVE_DIR/coupling.md`:
+
+```
+| Pair | Answer | Evidence | Resolution |
+```
+
+`Answer` is one of `independent`, `directional A→B`, `mutual`, or `unclear`. `Evidence` quotes the plan lines that decided it, or says what was read and found nothing. `Resolution` follows from the answer:
+
+| Answer | Resolution |
+|---|---|
+| independent | `none` |
+| directional A→B, and B merely observes or tests what A changes | `order: B after A`. The merge test at Step 6 is what proves B still passes with A's change in front of it. |
+| directional A→B, and B's tasks would write against the thing A changes | `hold: B until A merges`. B built against the old contract merges after A as a tree the merge test then reports red, which spends a lane to learn what both plans already said. B leaves this wave and is named in the final report as the next one. |
+| mutual, or either may make the other moot | `refuse`. Two lanes each carrying half of one change are one issue planned twice; say which two, and stop. Serializing them does not fix it, because each lane's plan is still half. |
+| unclear | `ask`: a question for Step 3, written down here rather than settled by a guess three lanes will build on. |
+
+Then `WAVE_DIR/order.md`, the merge order:
+
+```
+| Order | Lane | After | Why |
+```
+
+Topological over every `order:` row, ties broken by issue number ascending, so two runs on one set of plans produce one order. `After` names the lanes this one merges behind, or `—`. `Why` quotes the coupling row or says `no coupling; number order`. A held lane appears with `Order` `held` and its `After` naming the lane it waits on. The order is also the sequence the merge test merges in, and the sequence the final report hands the human.
+
+**Done when:** `coupling.md` has one row per `pair:` line, each with an answer, evidence, and a resolution from the table; `order.md` places every lane that stays, names every held lane and what it waits on; and every `unclear` pair is a written question—or the run stopped at a `refuse`.
+
+## Step 3 — Confirm
+
+Put every `ask` row to the user before anything else, and settle each one into `order`, `hold`, or `none` on its coupling row.
+
+Then the collision check. For every lane that is not held, test whether its WORKTREE path from LANE[N] already exists, as a directory or as an entry in `git worktree list --porcelain`. Any hit refuses the wave here, naming every such path at once. A tree already sitting at a lane's own `<PROJECT>-issue-N` path lands that lane on `work-issue`'s isolation `ask` row, which an unattended lane cannot answer, and the table states no precedence between that row and `--isolate`'s pin. So the check runs whatever `--isolate` turns out to do. A lane already started (Step 0 item 4) is exempt when its WORKTREE is registered in `git worktree list --porcelain` on its own `issue-N` branch: `work-issue` made that tree, and its resume probe reads it rather than the isolation table.
+
+Then one confirmation, in one message:
+
+```
+Wave 113-114-115: 3 lanes on opus, worktrees at `../skills-issue-113/`, `../skills-issue-114/`, `../skills-issue-115/`. Footprints disjoint (7 paths, checked 1 in-flight run). Coupling: 113→115 directional, so 115 merges after 113; 114 independent. Merge order: 113, 114, 115. Held: none. Merge test: baseline now, on any contract change, before any pull request, and before the final report. On yes: each lane runs `work-issue N <plan> --isolate` unattended through its red-team, then, once the merge test is green, pushes `issue-N` and opens a pull request against `main`. Never `main`. Go?
+```
+
+The shape line is the user's correction point, so the merge order and the held lanes are in it rather than in a file they would have to open. This confirmation answers each lane's `work-issue` Step 0 confirmation on the user's behalf, in two halves: the execute-and-commit half now, and the push-and-pull-request half only when Step 7 re-dispatches the lane after a green merge test. The lane brief says so, and `work-issue` does not ask again. `--dry-run` renders this message and stops.
+
+**Done when:** every `ask` row is settled, no unheld lane's WORKTREE path exists outside the already-started exemption, and the user answered yes to the wave as shaped—or the run stopped at a collision naming every existing path, a no, or a dry-run, with nothing dispatched and no worktree made.
+
+## Step 4 — Baseline and dispatch
+
+Run the merge test once with no branches, per [references/merge-test.md](references/merge-test.md): `git worktree add --detach MERGE_TREE origin/DEFAULT`, INSTALL_CMD, VERIFY_CMD with its tail saved to `WAVE_DIR/baseline.txt` and the run recorded as `WAVE_DIR/merge-test/0.md`, then `git worktree remove --force MERGE_TREE`. Before any lane spends anything, this proves the mechanism—the install, the suite, the removal—and records what green looks like on DEFAULT, so a red merge later can be pinned on a lane rather than on the tree the wave inherited.
+
+Then read [references/lane-brief.md](references/lane-brief.md) and instantiate it once per lane that is not held, with `{{PHASE}}` `build` and `{{GRANT}}` the build half. Dispatch every lane in a SINGLE message so they run concurrently—one dispatch per message is the serialization the wave exists to remove. Name LANE_MODEL on every dispatch. Each lane is a general-purpose subagent told to invoke `work-issue` by name with `<N> <PLAN[N]> --isolate`, and nothing about its worktree, its branch, or its run directory is made here: `work-issue`'s Step 1 makes them, and `--isolate` is what keeps its isolation table from asking a question an unattended lane cannot answer.
+
+Every git write on a lane's branch belongs to that lane's `work-issue`, and every git write on MERGE_TREE belongs to you. This skill itself never commits, never pushes, and never touches `issue-N` or DEFAULT.
+
+Save every returned report verbatim to `WAVE_DIR/reports/issue-<N>-build.json`. A report that does not parse as the contract in the brief is re-prompted once with the contract restated; still unparseable, the lane is `failed`.
+
+**Done when:** `merge-test/0.md` and `baseline.txt` exist and MERGE_TREE does not; every unheld lane was dispatched in one message at LANE_MODEL with the build grant; and every report is on disk verbatim.
+
+## Step 5 — Gate a lane
+
+As each build report returns:
+
+1. **Facts.** The lane's `facts` array and its `WAVE_DIR/facts/issue-<N>.md` are the same list; where they differ, the file is the one the lane wrote as it went and wins. Nothing else to do: every other lane reads the directory, and the next dispatch inlines all of it.
+2. **Footprint, again.** Re-run `check-footprints.py` with every returned lane's `RUN_DIR/plan.md` in place of its footprint file, the unreturned lanes still on their footprint files, and `--runs` as before. The lane's `## Waves` table is the footprint it actually wrote, and a lane whose derivation drifted onto a sibling's path is found here rather than at the merge.
+3. **Contract change.** Any path in the lane's `files_changed` under CONTRACT_PATHS, or any path a wave-0 task of its `## Waves` table owns, triggers a merge test now over every lane branch that has commits, returned or not: `git -C ROOT rev-parse --verify issue-M` for each. A schema relaxed in one lane is exactly the change the others should meet before they finish building against the old one, and the result goes into `WAVE_DIR/facts/wave.md`, the one facts file the orchestrator owns, as a line: `- [wave] merge test k: <green|red at issue-A × issue-B: paths>`. Every lane reads the whole `facts/` directory before each dispatch, so the line reaches every still-running lane.
+4. **Route.**
+
+| Report | Route |
+|---|---|
+| `pr` non-null on a `build` report | The lane published before the merge test, against its withheld grant. Stop the wave with the lane and its pull-request URL named; whether that pull request stays open is the user's call. This is the one check that sees a lane that did not honor the build grant. |
+| `done` | The lane waits at Step 6. |
+| `stopped` | The lane's question is held for the user with the wave's next message. The lane is out of the merge set until `work-issue N` resumes it with the answer, and every lane ordered after it in `order.md` is moved to `held`. |
+| `failed`, or `refused` at its own gate | The lane is out of the merge set; lanes ordered after it are moved to `held`; every other lane proceeds. No revert, because its writes are on its own branch in its own worktree and clobbered nothing; no rung-up retry, because `work-issue` has already applied `divvy-up`'s retry inside the lane and LANE_MODEL is already the rung a retry would reach. Its report is quoted in the final report, and `work-issue N` resumes it once a human has read that. |
+| `worktree` or `run_dir` not absolute, or `head` not a SHA | Re-prompt once for the absolute form and the SHA. A relative path in a report is the round trip this skill exists to remove. |
+
+**Done when:** for every returned lane, its facts are on disk, the footprint re-check exited 0, a contract change ran the merge test and its result is a line in `facts/wave.md`, no build report carries a `pr`, and the lane is `done` or is out of the merge set with its dependents held and the reason recorded.
+
+## Step 6 — Merge test before publish
+
+Every unheld lane has returned. Run the merge test per [references/merge-test.md](references/merge-test.md) over the merge set in `order.md`'s order, one `git merge --no-ff --no-edit issue-N` at a time, then INSTALL_CMD and VERIFY_CMD, recorded as `WAVE_DIR/merge-test/<k>.md` with the SHA of every branch merged.
+
+A conflict names the pair: the branch that failed to merge and the branch before it whose paths it hit. `git merge --abort`, record the paths, and stop the wave at this step with the pair. A conflict after a passing footprint proof means a lane wrote outside the footprint it declared, and the lane's own `divvy-up` gate should have caught it; either way, resolving it is a judgment call no unattended run makes.
+
+Red with a green baseline is the cross-lane coupling that every ownership proof passed. Read the failing output against `coupling.md`: a pair recorded `independent` that is not gets its row corrected, and the lane whose change broke the other is the one held. Stop with the evidence; nothing publishes. A red suite is not routed back to a lane for repair here, because the repair belongs to whichever issue the coupling makes it belong to, and that is the question the user answers.
+
+Green, and `git -C MERGE_TREE diff --stat HEAD` empty—the suite mutated nothing, checked this way rather than by `git status` because a status read of a copied tree once reported clean over a staged index—proceeds. Remove MERGE_TREE.
+
+**Done when:** `merge-test/<k>.md` records every merged SHA, the merge result, and VERIFY_CMD's real tail; the result is green and the post-verify diff was empty; MERGE_TREE is gone—or the run stopped on a conflict or a red suite with the pair named and nothing published.
+
+## Step 7 — Publish
+
+Read [references/lane-brief.md](references/lane-brief.md) again and instantiate it once per lane in the merge set, with `{{PHASE}}` `publish`, `{{GRANT}}` the full grant, and `{{FACTS}}` the directory's current contents. Dispatch every one in a SINGLE message at LANE_MODEL. Each lane invokes `work-issue <N> <PLAN[N]> --isolate` again; `work-issue`'s resume probe reads the red-team clean and no pull request and places the lane at its Step 5, and from there the lane rebases, pushes `issue-N`, opens its pull request, and runs its triage and repair as its own skill says, without asking.
+
+Save every report verbatim to `WAVE_DIR/reports/issue-<N>-publish.json`. Route by the same table as Step 5; a lane that stopped at `work-issue`'s ten-minute poll with `triage/waiting` is `done` for this wave's purposes, since resolving stays the reviewer's act and `work-issue N` continues it.
+
+**Done when:** every lane in the merge set was dispatched with the full grant in one message and its publish report is on disk verbatim; each is `done`, waiting on its reviewer, or out of the merge set with the reason recorded.
+
+## Step 8 — Report
+
+Where any lane's HEAD differs from the SHA in the newest `merge-test/<k>.md`—a repair round moved it—run the merge test once more, in order, before anything is reported. The order the human merges in has to have been tested at the SHAs they will merge.
+
+Then the final report: the merge order as a numbered list of pull-request URLs with each lane's `After`; the held lanes and what each waits on; the failed or stopped lanes with their reports quoted; the path of the newest merge test and its result line; the coupling table; the fact count and the path of `facts/`; and the closing line, "a human merges, in this order", or "waiting on the reviewers" where every lane is answered but none has cleared. Then move WAVE_DIR to `closed/` only when every lane's own RUN_DIR has moved to its `closed/`: before that the wave is still resumable, and a wave directory under `closed/` is what the resume probe reads as finished.
+
+**Done when:** the merge test is green at every lane's current HEAD and the report names the order, the held and failed lanes, the merge-test path, the coupling table, and the facts path, and ends on the line the state earns.
+
+## Resume
+
+The world outranks WAVE_DIR, and WAVE_DIR outranks memory. Each lane's state is `work-issue`'s to read, through its own resume probe, and this skill never guesses at a lane's phase: it asks by re-dispatching `work-issue N`, which resumes itself. WAVE_DIR says only what this skill has already produced. First match wins:
+
+| # | Probe | Resume at |
+|---|---|---|
+| 1 | `<COMMON>/work-wave/closed/wave-<WAVE_ID>/` exists and no lane RUN_DIR is open | done; say so |
+| 2 | no WAVE_DIR | Step 0 |
+| 3 | WAVE_DIR; no `footprint/check.txt` | Step 1 |
+| 4 | `check.txt`; `coupling.md` or `order.md` missing, or a coupling row still `ask` | Step 2 |
+| 5 | `order.md`; no `merge-test/0.md` | Step 3, the confirmation again, then Step 4 |
+| 6 | `merge-test/0.md`; some unheld lane has no `reports/issue-N-build.json` | Step 4 for those lanes only, in one message; a lane whose RUN_DIR exists is resumed by its own `work-issue`, and its build report is whatever it returns |
+| 7 | every build report; no `merge-test/<k>.md` with k > 0 whose SHAs equal every lane's current HEAD | Step 6 |
+| 8 | a green merge test at current HEADs; some lane in the merge set has no `reports/issue-N-publish.json` | Step 7 for those lanes only |
+| 9 | every publish report; some lane HEAD moved since the newest merge test | Step 8's re-test, then the report |
+| 10 | every publish report; merge test green at current HEADs | Step 8's report |
+
+A lane's `work-issue` may itself be mid-run on a herdr agent or a stranded worktree; those are its rows 2 and 3, and re-dispatching it is how they get read.
+
+## Further Reading
+
+- [references/lane-brief.md](references/lane-brief.md) — read at Steps 4 and 7 to instantiate each lane's dispatch and the report contract it returns
+- [references/merge-test.md](references/merge-test.md) — read at Steps 4, 5, 6, and 8 to build the scratch tree, merge in order, verify, and remove it
+- [scripts/check-footprints.py](scripts/check-footprints.py) — run at Step 1 to prove the lanes' footprints disjoint and list the pairs, and at Step 5 to prove it again over what the lanes derived: `work-wave/scripts/check-footprints.py --lane issue-N=PATH --lane issue-M=PATH [...] [--runs DIR]`
