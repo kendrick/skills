@@ -45,7 +45,7 @@ Resolve once per invocation:
 1. Run the resume probe (see [Resume](#resume)) before anything is written under WAVE_DIR. Any row past a fresh wave jumps there; the rest of this step is for a fresh one.
 2. Resolve PLAN[N] for every issue. Any issue whose three routes all miss refuses the whole wave, naming every such issue at once: "Plan them first: `writing-plans`, then `work-wave <ISSUES> --plan N=PATH`." One refusal listing three missing plans beats three runs each finding one, and a wave that starts with two lanes of three is a different wave from the one the user asked for.
 3. `gh issue view N --json title,url,body` for each, and write `WAVE_DIR/lanes.md` with one row per lane: `| Lane | Title | Plan | Worktree | Run dir |`, every path absolute.
-4. In-flight `work-issue` runs. Any `<COMMON>/work-issue/issue-N/` for an N in ISSUES that is not under `closed/` is a lane already started. It stays in the wave: Step 3's collision check exempts its worktree, and Step 4's dispatch reaches it through `work-issue N`, whose own resume probe places it. Any `issue-M/` for an M not in ISSUES is a sibling this wave does not own, and Step 1 hands it to the script with `--runs` so its footprint is proved against every lane's.
+4. In-flight `work-issue` runs. Any `<COMMON>/work-issue/issue-N/` for an N in ISSUES that is not under `closed/` is a lane already started. It stays in the wave: Step 1 proves its footprint on its `RUN_DIR/plan.md`, Step 3's collision check exempts its worktree, and Step 4's dispatch reaches it through `work-issue N`, whose own resume probe places it. Any `issue-M/` for an M not in ISSUES is a sibling this wave does not own, and Step 1 hands it to the script with `--runs` so its footprint is proved against every lane's.
 5. Harvest VERIFY_CMD and INSTALL_CMD, and derive CONTRACT_PATHS by reading every plan for the contract shapes.
 
 **Done when:** every issue in ISSUES has an absolute PLAN[N] on disk, `lanes.md` names every lane with absolute paths, `gh` is authenticated, and VERIFY_CMD is resolved or `absent`—or the run stopped at the refusal naming every issue without a plan, or at fewer than two issues.
@@ -53,6 +53,8 @@ Resolve once per invocation:
 ## Step 1 — Footprint
 
 For each lane, read PLAN[N] and write `WAVE_DIR/footprint/issue-<N>.md`: one bare repo-relative path per line, an exact file or a directory prefix ending in `/`, taken from every `Files:`, `**Files:**`, `owns:`, or `Files owned` line and from a `## Waves` table where the plan already carries one. Bare, with no backticks and no links, because the script refuses decoration rather than stripping it, and the reason it gives has to quote a string that is in the file.
+
+A lane already started (Step 0 item 4) is proved on its `RUN_DIR/plan.md`, the copy its own `work-issue` builds from, never on PLAN[N]: pass that path as the lane's `--lane issue-N=` argument, and where the copy has no `## Waves` table yet, derive `footprint/issue-<N>.md` from the copy's `Files:` lines. The lane's resume builds from the copy, so a source plan edited since then describes work nobody will do.
 
 Then:
 
@@ -68,7 +70,7 @@ Every lane's own `work-issue` will run `check-inflight.py` again at its Step 0 i
 
 So where that script skips, this one fails closed. An in-flight sibling with no parseable `## Waves` table prints an `unchecked:` line and exits 1, because its footprint is unknown and an unknown footprint can overlap any lane. A tableless in-flight sibling stops the wave until it writes its table, or until the user moves its run directory to `<COMMON>/work-issue/closed/` because the run is dead. Name the sibling and both ways forward; which one applies is the user's call.
 
-**Done when:** `check-footprints.py` exited 0 over every lane's footprint file and every in-flight sibling run, each sibling's table read and compared, and its output, `pair:` lines included, is saved to `WAVE_DIR/footprint/check.txt`—or the run stopped at an overlap, or at an `unchecked:` sibling named with both ways forward, with the output in `footprint/check-failed.txt` and no `check.txt` written.
+**Done when:** `check-footprints.py` exited 0 over every lane's footprint, each already-started lane's taken from its `RUN_DIR/plan.md` copy, and every in-flight sibling run, each sibling's table read and compared, and its output, `pair:` lines included, is saved to `WAVE_DIR/footprint/check.txt`—or the run stopped at an overlap, or at an `unchecked:` sibling named with both ways forward, with the output in `footprint/check-failed.txt` and no `check.txt` written.
 
 ## Step 2 — Couple and order
 
@@ -156,13 +158,13 @@ As each build report returns:
 
 Enter when every unheld lane has returned, every build report in the merge set has its `gate/issue-<N>.md`, and no gate record is a recorded stop; otherwise go back to Step 5. Run the merge test per [references/merge-test.md](references/merge-test.md) over the merge set in `order.md`'s order, one `git merge --no-ff --no-edit issue-N` at a time, then INSTALL_CMD and VERIFY_CMD, recorded as `WAVE_DIR/merge-test/<k>.md` with the `base:` it merged onto and the SHA of every branch merged.
 
-A conflict names the pair: the branch that failed to merge and the branch before it whose paths it hit. `git merge --abort`, record the paths, and stop the wave at this step with the pair. A conflict after a passing footprint proof means a lane wrote outside the footprint it declared, and the lane's own `divvy-up` gate should have caught it; either way, resolving it is a judgment call no unattended run makes.
+A conflict names the branch that failed to merge and every branch it conflicts with: each branch already merged in this run whose own diff against the `base:` touches a conflicted path, or DEFAULT where none does. The branch merged just before it may have touched none of those paths. Record the `conflict:` line merge-test.md step 3 gives, `git merge --abort`, and stop the wave at this step with those branches named. A conflict after a passing footprint proof means a lane wrote outside the footprint it declared, and the lane's own `divvy-up` gate should have caught it; either way, resolving it is a judgment call no unattended run makes.
 
 Red with a green baseline is the cross-lane coupling that every ownership proof passed. Read the failing output against `coupling.md`: a pair recorded `independent` that is not gets its row corrected, and the lane whose change broke the other is the one held. Stop with the evidence; nothing publishes. A red suite is not routed back to a lane for repair here, because the repair belongs to whichever issue the coupling makes it belong to, and that is the question the user answers.
 
-Green, and `git -C MERGE_TREE diff --stat HEAD` empty—the suite mutated nothing, checked this way rather than by `git status` because a status read of a copied tree once reported clean over a staged index—proceeds. Remove MERGE_TREE.
+Green, with `git -C MERGE_TREE diff --stat HEAD` and `git -C MERGE_TREE ls-files --others --exclude-standard` both empty, proceeds. The first catches a tracked file the suite changed, the second an untracked file it wrote, which `diff` never shows; either non-empty is `dirty after verify:` and red, the untracked paths listed. Neither is `git status`: the status read that once reported clean over a staged index ran in a copied tree whose index was shared, and `ls-files --others` reads MERGE_TREE's own index. Remove MERGE_TREE.
 
-**Done when:** `merge-test/<k>.md` records its `base:`, every merged SHA, the merge result, and VERIFY_CMD's real tail; the result is green and the post-verify diff was empty; MERGE_TREE is gone—or the run stopped on a conflict or a red suite with the pair named and nothing published.
+**Done when:** `merge-test/<k>.md` records its `base:`, every merged SHA, the merge result, and VERIFY_CMD's real tail; the result is green and both post-verify checks were empty; MERGE_TREE is gone—or the run stopped on a conflict naming the branches it is with, or on a red suite with the pair named, and nothing published.
 
 ## Step 7 — Publish
 

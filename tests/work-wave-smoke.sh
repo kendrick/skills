@@ -72,6 +72,9 @@ require_file "$fixtures/runs-tableless/issue-8/plan.md"
 # The closed run overlaps lane-a on purpose. Without it on disk, the check that
 # closed/ is ignored passes because there is nothing to ignore.
 require_file "$fixtures/runs/closed/issue-9/plan.md"
+# The footprint Step 1 derives from runs-tableless/issue-8/plan.md's `Files:`
+# line when issue-8 is an already-started lane whose copy has no table yet.
+require_file "$fixtures/copy-issue-8.md"
 
 [[ "$(find work-wave -maxdepth 1 -type f | wc -l | tr -d ' ')" == "2" ]] || {
   echo "work-wave/ must ship only SKILL.md and README.md at top level" >&2
@@ -160,8 +163,22 @@ require_text "$skill" "Merge test: baseline now, on any contract change, before 
 require_text "$skill" "git worktree add --detach MERGE_TREE origin/DEFAULT"
 
 # git status once read a copied tree as clean over a staged index. diff --stat
-# HEAD compares against the commit, which the index cannot hide.
-require_text "$skill" "Green, and \`git -C MERGE_TREE diff --stat HEAD\` empty"
+# HEAD compares against the commit, which the index can't hide, but it never
+# lists an untracked file, so a suite that writes a non-ignored file read as
+# clean until ls-files joined it (Codex finding 2 of the second review on PR
+# #141).
+require_text "$skill" "Green, with \`git -C MERGE_TREE diff --stat HEAD\` and \`git -C MERGE_TREE ls-files --others --exclude-standard\` both empty, proceeds."
+require_text "$skill" "either non-empty is \`dirty after verify:\` and red, the untracked paths listed"
+
+# Codex finding 3 of the second review on PR #141: with three lanes, a branch
+# can conflict with any branch already merged, and blaming the one merged just
+# before it corrects the wrong coupling row.
+require_text "$skill" "each branch already merged in this run whose own diff against the \`base:\` touches a conflicted path, or DEFAULT where none does."
+
+# Codex finding 1 of the second review on PR #141: a started lane's resume
+# builds from its cached copy, and the script skips its lane-named run dir, so
+# proving it on PLAN[N] let an edited source plan hide the copy's overlap.
+require_text "$skill" "A lane already started (Step 0 item 4) is proved on its \`RUN_DIR/plan.md\`, the copy its own \`work-issue\` builds from, never on PLAN[N]"
 
 # The withheld grant is honored, not enforced, and this route row is the one
 # check that sees a lane that published early.
@@ -257,8 +274,11 @@ require_text "$merge_test" "- **HEAD moved**, Step 8, re-run once more before th
 require_text "$merge_test" "git -C ROOT worktree add --detach MERGE_TREE origin/DEFAULT"
 require_text "$merge_test" "Record \`base: origin/<DEFAULT> <sha>\` from \`git -C MERGE_TREE rev-parse HEAD\`."
 require_text "$merge_test" "6. **Record the run.** Write \`WAVE_DIR/merge-test/<k>.md\`: the \`base:\` line"
-require_text "$merge_test" "Sequential, never octopus, so a conflict names one pair"
-require_text "$merge_test" "\`git -C MERGE_TREE diff --stat HEAD\`. Non-empty is \`dirty after verify:\` and red. Checked this way, never with \`git status\`"
+require_text "$merge_test" "Sequential, never octopus, so a conflict names the one branch that failed to merge and the branches it hit"
+require_text "$merge_test" "for each branch issue-M already merged into MERGE_TREE in this run, its own paths from \`git -C ROOT diff --name-only <base>...issue-M\`"
+require_text "$merge_test" "Record \`conflict: issue-N with <issue-M, ...> — <paths>\`, listing every issue-M whose paths include a conflicted one, or \`conflict: issue-N with DEFAULT — <paths>\` where none does."
+require_text "$merge_test" "\`git -C MERGE_TREE diff --stat HEAD\` and \`git -C MERGE_TREE ls-files --others --exclude-standard\`. Either non-empty is \`dirty after verify:\` and red, with the untracked paths listed."
+require_text "$merge_test" "Checked this way, never with \`git status\`"
 require_text "$merge_test" "\`git worktree remove --force MERGE_TREE\`, on every route out"
 
 # Every commit message, pull request body, and dispatch these documents shape
@@ -280,7 +300,7 @@ done
 refute_text "$skill" "cp -R"
 refute_text "$skill" "git archive"
 
-# Row 6: an N-way conflict names no pair, and no human merges that way.
+# Row 6: an N-way conflict names no branch it hit, and no human merges that way.
 refute_text "$skill" "octopus"
 
 # Row 8: SKILL.md names the retry in order to refuse it, so the pin is the
@@ -504,6 +524,24 @@ refute_text "$script" "skipped:"
 footprints --lane issue-1="$fixtures/lane-a.md" --lane issue-7="$fixtures/runs/issue-7/plan.md" --runs "$fixtures/runs"
 expect_status 0 "a lane whose own run sits under --runs"
 expect_line "$out" "OK: 2 lanes disjoint (checked 0 in-flight runs)" "a lane whose own run sits under --runs"
+
+# Ledger row 34, Codex finding 1 of the second review on PR #141. issue-7 is
+# already started, so it is proved on its cached copy, which owns src/b.py
+# beside lane-b. Proved on a source plan edited since (lane-a), it passed.
+footprints --lane issue-7="$fixtures/runs/issue-7/plan.md" --lane issue-2="$fixtures/lane-b.md" --runs "$fixtures/runs"
+expect_status 1 "an already-started lane proved on its cached copy"
+expect_line "$err" "check-footprints: overlap: src/b.py — issue-2 owns src/b.py, issue-7 task t7 owns src/b.py" "an already-started lane proved on its cached copy"
+
+# The same lane before its copy has a table: Step 1 derives the footprint from
+# the copy's Files: line. Its tableless run dir is the lane itself, so it must
+# not also print unchecked:, which would stop the wave on a run already proved.
+footprints --lane issue-1="$fixtures/lane-a.md" --lane issue-8="$fixtures/copy-issue-8.md" --runs "$fixtures/runs-tableless"
+expect_status 1 "an already-started lane whose copy has no table"
+expect_line "$err" "check-footprints: overlap: src/a.py — issue-1 owns src/a.py, issue-8 owns src/a.py" "an already-started lane whose copy has no table"
+if grep -Fq "unchecked:" <<<"$err"; then
+  echo "a lane's own tableless run dir must not print unchecked:, got: $err" >&2
+  exit 1
+fi
 
 footprints --lane issue-1="$fixtures/lane-a.md"
 expect_status 3 "one lane"

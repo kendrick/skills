@@ -23,8 +23,10 @@ different paths.
 --runs names work-issue's run directory. Every subdirectory in it, except
 `closed/` and any directory named after a lane, is an in-flight run whose
 plan.md table is compared against every lane. The script skips the lane-named
-directories because at the post-build re-check they hold the very plans
-passed as --lane, and a lane always overlaps itself.
+directories because each holds the plan its lane's --lane path comes from:
+every returned lane's at the post-build re-check, and an already-started
+lane's before dispatch, since its resume builds from that copy and not from
+the source plan. Compared as a run, a lane always overlaps itself.
 
 Output on a pass: one `footprint: issue-N <k> paths` line per lane, then one
 `pair: issue-N issue-M` line for each pair of lanes, which is C(N,2) lines,

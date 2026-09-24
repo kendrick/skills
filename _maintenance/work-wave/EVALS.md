@@ -62,7 +62,7 @@ Then drop issue N2 and pair N1 with a disjoint issue, so the only overlap left i
 
 Then remove both, start `work-issue <N1>` to its Step 2 so it owns a worktree on `issue-<N1>`, and invoke the wave again.
 
-**Pass condition:** the first invocation refuses at Step 3 naming both existing paths in one message, and `git worktree list --porcelain` is unchanged afterwards. The direct `work-issue` dry run shows its isolation choice in the confirmation. Record whether it takes a worktree or asks, and move the result into `RATIONALE.md`'s Known Limitations, since that settles what `--isolate` does against the ask row. On the third invocation, N1's worktree passes as already started and the confirmation carries all three lanes. Fails if the wave dispatches anything or makes a worktree, if the refusal names only one path, or if N1's own registered tree refuses the wave.
+**Pass condition:** the first invocation refuses at Step 3 naming both existing paths in one message, and `git worktree list --porcelain` is unchanged afterwards. The direct `work-issue` dry run shows its isolation choice in the confirmation. Record whether it takes a worktree or asks, and move the result into `RATIONALE.md`'s Known Limitations, since that settles what `--isolate` does against the ask row. On the third invocation, N1's worktree passes as already started, Step 1 proves N1 on its `RUN_DIR/plan.md` rather than PLAN1, passing the copy as its `--lane issue-<N1>=` path, or a footprint derived from the copy's `Files:` lines if the copy has no table yet, and the confirmation carries all three lanes. Fails if the wave dispatches anything or makes a worktree, if the refusal names only one path, or if N1's own registered tree refuses the wave.
 
 ### 5. `--dry-run` Touches Nothing
 
@@ -90,20 +90,26 @@ python3 work-issue/scripts/run-state.py phase --probe tests/fixtures/work-issue/
 
 ### 7. The Merge Tree Is Its Own Repository and Is Gone Afterwards
 
-**Setup:** a sandbox repo with a clean ROOT. Follow `work-wave/references/merge-test.md` by hand with no branches, as the Step 4 baseline does. Inside MERGE_TREE, before step 7 of the procedure, run `git add` on a scratch file on purpose, the #109 escape.
+**Setup:** a sandbox repo with a clean ROOT. Follow `work-wave/references/merge-test.md` by hand with no branches, as the Step 4 baseline does. Inside MERGE_TREE, before step 7 of the procedure, run `git add` on a scratch file on purpose, the #109 escape, and create a second file that no `.gitignore` rule covers, the way a suite that writes an output file would.
 
 **Commands:**
 
 ```
 git -C ROOT worktree add --detach MERGE_TREE origin/<DEFAULT>
 git -C MERGE_TREE add scratch.txt
+touch MERGE_TREE/generated.out
 git -C ROOT diff --cached --stat
 git -C MERGE_TREE diff --stat HEAD
+git -C MERGE_TREE ls-files --others --exclude-standard
 git worktree remove --force MERGE_TREE
 git -C ROOT worktree list --porcelain
 ```
 
-**Pass condition:** ROOT's `diff --cached` is empty while MERGE_TREE's `diff --stat HEAD` shows the staged file, which the procedure reads as `dirty after verify:` and red. After removal, `worktree list` has no MERGE_TREE entry and the directory is gone. Fails if the staged file shows in ROOT's index, if the dirty check reads clean, or if MERGE_TREE survives any route out, a conflict and a red suite included.
+**Pass condition:** ROOT's `diff --cached` is empty while MERGE_TREE's `diff --stat HEAD` shows the staged file and its `ls-files --others --exclude-standard` prints `generated.out`, and the procedure reads each as `dirty after verify:` and red. After removal, `worktree list` has no MERGE_TREE entry and the directory is gone. Fails if the staged file shows in ROOT's index, if either half of the dirty check reads clean, or if MERGE_TREE survives any route out, a conflict and a red suite included.
+
+**Second case, a conflict three branches deep:** make three branches off `origin/<DEFAULT>`. `issue-1` changes file `x`, `issue-2` changes only file `y`, and `issue-3` changes `x` again. Run the procedure by hand with all three in that order.
+
+**Pass condition:** merging `issue-3` conflicts, and the recorded line is `conflict: issue-3 with issue-1 — x`. `issue-2`, the branch merged just before, is not named. MERGE_TREE is gone afterwards. Fails if the line names `issue-2`, names `DEFAULT`, or omits `issue-1`.
 
 ### 8. A Red DEFAULT Is Named Before a Lane Pays for It
 
