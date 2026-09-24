@@ -219,6 +219,77 @@ require_text work-issue/references/worker-prompt.md "what you left and why"
 # the step still reads as intact, with nothing in the output to say otherwise.
 require_text work-issue/SKILL.md "rows 1 (money), 2 (authz), and 4 (schema) of \`adversarial-review/references/trigger-table.md\`"
 
+# Step 0's yes answers `adversarial-review`'s own Step 2 question (row 93).
+# Without that, an unattended run stops mid-run on a prompt nobody is there to
+# answer. Both ends of the handoff are pinned: Step 0 item 7 says its yes
+# covers the question, and Step 4 item 7 says the review fans out on it.
+# references/redteam.md carries its own copy of the Step 4 sentence, and it is
+# the copy an agent reads while running the trigger, so it is pinned too.
+require_text work-issue/SKILL.md "Where the mode names \`adversarial-review\`, a yes to this confirmation also answers \`adversarial-review\`'s Step 2 question for this run, at any depth up to the forecast one."
+require_text work-issue/SKILL.md "Where \`RUN_DIR/redteam/mode.txt\` names \`adversarial-review\`, the Step 0 yes carries into its Step 2 as that question's answer"
+require_text work-issue/references/redteam.md "Where \`RUN_DIR/redteam/mode.txt\` names \`adversarial-review\`, the Step 0 yes carries into its Step 2 as that question's answer"
+# The carry is only as good as its off switches. Without the missing-file
+# sentence, a run that never wrote mode.txt has nothing telling it the yes did
+# not carry.
+require_text work-issue/SKILL.md "A missing file answers nothing, and the review asks its own question."
+require_text work-issue/references/redteam.md "A missing file answers nothing, and the review asks its own question."
+# The carry stops at the forecast depth (row 95). A yes to a forecast is not
+# consent to a costlier real run, so a deeper derived depth has to reach the
+# review's own question. Both copies of the Step 4 sentence carry the bound.
+require_text work-issue/SKILL.md "but only while the depth \`adversarial-review\` derives at its Step 2 is at or below the depth forecast in \`mode.txt\`."
+require_text work-issue/references/redteam.md "but only while the depth \`adversarial-review\` derives at its Step 2 is at or below the depth forecast in \`mode.txt\`."
+require_text work-issue/SKILL.md "A deeper derived depth answers nothing"
+require_text work-issue/references/redteam.md "A deeper derived depth answers nothing"
+# The bound needs a depth to compare against, so Step 0 has to forecast one.
+require_text work-issue/SKILL.md "Take \`<n>\` from the Depth table in \`adversarial-review\`'s Step 2, applied to the plan's owned paths."
+# The README promised a run that never asks again, and the forecast gap means
+# one can. Pinned so the exception stays where a user decides to walk away.
+require_text work-issue/README.md "After yes, the run is unattended unless the real diff trips an \`adversarial-review\` the confirmation didn't forecast, or forecast at a lower depth."
+require_text work-issue/README.md "Only \`adversarial-review\` can ask again"
+
+# `--deep` fires the trigger without a grep hit, so Step 0 item 7 names the
+# review for a `--deep` run as well. Without this clause, a `--deep` run whose
+# forecast grep missed reaches the review's Step 2 question with no yes
+# covering it (row 93).
+require_text work-issue/SKILL.md "or \`reproduce claims, then adversarial-review (--deep; depth 2 forecast)\` when \`--deep\` is set, since that flag fires the trigger on its own."
+# Step 0 forecasts depth 2 for a `--deep` run, and the review pins Depth 2 only
+# from its own `--deep`. Step 4 passes the flag on so the forecast is the depth
+# that runs (row 95). Both copies of the invocation carry it.
+require_text work-issue/SKILL.md "Pass \`--deep\` on to it where this run carries \`--deep\`, so the review pins the Depth 2 that Step 0 forecast for a \`--deep\` run."
+require_text work-issue/references/redteam.md "Pass \`--deep\` on to it where this run carries \`--deep\`, so the review pins the Depth 2 that Step 0 forecast for a \`--deep\` run."
+# The review's Step 2 checks its derived depth against a confirmation the
+# wrapper hands it. A resumed run has no conversation holding the yes, so the
+# mode.txt line travels in the invocation, or the review asks (row 94).
+require_text work-issue/SKILL.md "hand the review that file's line, verbatim, in the same invocation, as the wrapping skill's confirmation its Step 2 checks the derived depth against"
+require_text work-issue/references/redteam.md "hand the review that file's line, verbatim, in the same invocation, as the wrapping skill's confirmation its Step 2 checks the derived depth against"
+# adversarial-review reads the handed-over line as quoted text, which only
+# works if the sender marks where it starts; an unquoted --deep line would
+# run into the flags beside it.
+require_text work-issue/SKILL.md "Put the line last, after the fixed point and any flags, wrapped in double quotes"
+require_text work-issue/references/redteam.md "Put the line last, after the fixed point and any flags, wrapped in double quotes"
+
+# Step 4 tests mode.txt before it carries the yes. Resume rows 10 and 11 jump
+# straight to Step 4, and a resumed session never saw the confirmation, so the
+# file is the only record of what the user agreed to (row 94).
+require_text work-issue/SKILL.md "Once the user answers yes, write the red-team mode line this message carried to \`RUN_DIR/redteam/mode.txt\`"
+# A row-5 resume re-asks the confirmation, and a stale mode.txt from the first
+# yes would otherwise carry a mode the latest confirmation never showed.
+require_text work-issue/SKILL.md "to \`RUN_DIR/redteam/mode.txt\`, replacing any earlier copy"
+require_text work-issue/references/resume.md "The yes to the re-asked confirmation rewrites \`redteam/mode.txt\`"
+
+# Step 4 reaches `adversarial-review` by invoking it. Reading its SKILL.md and
+# running the steps inline goes around the host's invocation gate and forks
+# the review from the installed skill (row 93). #124 rules out any wording
+# that treats a refusal as something to route past, and "by other means" is
+# the likeliest wording of that route.
+refute_text work-issue/SKILL.md "by other means"
+refute_text work-issue/references/redteam.md "by other means"
+
+# The absent-sibling branch. With no route past a refusal, a missing sibling
+# has one outcome: the step that needs it stops and names it. Without this
+# sentence, nothing tells a run what to do when a sibling is absent.
+require_text work-issue/SKILL.md "Where one is not installed, the step that needs it stops and says which."
+
 # --- Step 4's caller rule. The worker and the reproducer both build their
 # fixtures by hand, so both hand the seam an input shaped by the same
 # assumptions, and the production caller shares none of them. Issue #109

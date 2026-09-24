@@ -57,11 +57,19 @@ require_file tests/fixtures/adversarial-review/scope-backtick.json
   exit 1
 }
 
-# Frontmatter. Manual invocation is a deliberate choice: three ambient skills
-# contend for review vocabulary, and a misfire here costs a long fan-out.
+# Frontmatter. Model-invocation is load-bearing: `work-issue` invokes this
+# skill at its Step 4, and a user-invoked skill has its description stripped
+# from siblings as well as from the agent, so the Skill tool refuses that call
+# (#124, RATIONALE row 34). The misfire guard the flag used to carry now sits
+# at Step 2's question, pinned below.
 require_text adversarial-review/SKILL.md "name: adversarial-review"
-require_text adversarial-review/SKILL.md "disable-model-invocation: true"
-require_text adversarial-review/SKILL.md "Use ONLY when the user explicitly invokes adversarial-review."
+# The flag coming back would surface as a refused call in the middle of an
+# unattended run, which nobody would read as a bug. Refuted on the bare key so
+# `: false` fails here as loudly as `: true`.
+refute_text adversarial-review/SKILL.md "disable-model-invocation"
+# A description telling the agent to wait for the user is one a sibling's call
+# can never satisfy, so the agent would refuse that call in prose.
+refute_text adversarial-review/SKILL.md "Use ONLY when the user explicitly invokes adversarial-review."
 require_text adversarial-review/SKILL.md "use code-review"
 require_text adversarial-review/SKILL.md "use security-review"
 require_text adversarial-review/SKILL.md "use grilling"
@@ -87,6 +95,45 @@ refute_text adversarial-review/SKILL.md ".git/info/exclude"
 require_text adversarial-review/SKILL.md "check-territories.py validate"
 require_text adversarial-review/SKILL.md "A non-zero exit is a hard stop, not a warning."
 require_text adversarial-review/SKILL.md "Disjoint ownership, layered lenses"
+
+# Step 2's question is the whole misfire guard now that an agent can reach the
+# skill, so it has to come before the fan-out spends anything. The waiver
+# lets `work-issue`'s Step 0 yes answer it, so an unattended run does not stall
+# on a second prompt nobody is there to answer. The Done-when has to accept
+# that answer too, or the step can never complete under a wrapper.
+require_text adversarial-review/SKILL.md "Ask once, in one question, before any subagent spends a token"
+# The waiver holds only up to the depth the wrapper showed (row 35). Without the
+# bound, a yes to a Depth 1 forecast fans out a Depth 2 run nobody agreed to.
+require_text adversarial-review/SKILL.md "A wrapping skill's confirmation answers that question on the user's behalf only where it put this review to the user at a depth at or above the one this step derived."
+require_text adversarial-review/SKILL.md "a confirmation that showed a lower depth, or no depth, answers nothing, and the question is asked."
+# The waiver reads its depth from a line the wrapper hands over at invocation
+# (row 35). A resumed work-issue run has no conversation to read it from.
+require_text adversarial-review/SKILL.md "Read that depth from the wrapper confirmation line handed over at invocation"
+require_text adversarial-review/SKILL.md "- **Wrapper confirmation** — the confirmation line a wrapping skill hands over in the arguments"
+# work-issue hands over its mode line verbatim, and a --deep run's line names
+# --deep. Read as a flag, that token would pin Depth 2 on a resumed run whose
+# own flags no longer carry it, overriding the pass-through work-issue row 95
+# keys on the run's own flag.
+require_text adversarial-review/SKILL.md "treat the line itself as quoted text, including any \`--deep\` it names"
+# This skill prints the depth line itself, because only Step 2 knows the
+# derived depth. Without it the waived run leaves no correction point in the log.
+require_text adversarial-review/SKILL.md "this skill still prints the depth line and the out-of-scope list itself, marked as answered"
+require_text adversarial-review/SKILL.md "and the fan-out was confirmed, or answered by a wrapping skill's confirmation that showed this review at this depth or deeper, with the depth line printed and marked as answered."
+# The README told users a work-issue yes always answers the question, which
+# stopped being true once the carry got a depth bound.
+require_text adversarial-review/README.md "as long as the review comes out no deeper than the depth that confirmation forecast"
+# A wrapper yes covers the fan-out's cost, not a scope the user never saw
+# (row 36). Without the escalation route, a settled decision missing from the
+# out-of-scope list comes back as a blocker and gets "fixed" unattended.
+require_text adversarial-review/SKILL.md "That run is **waived**: the yes covered the fan-out's cost, given before the user saw the territories or the list the finders read."
+require_text adversarial-review/SKILL.md "In a **waived** run (Step 2), REPRODUCED + blocking routes to escalation instead"
+require_text adversarial-review/SKILL.md "record \`ESCALATED\` with the reason \`waived: scope not confirmed\`, and write no test, no fix, and no issue."
+require_text adversarial-review/README.md "reports its findings to you rather than fixing them or filing issues"
+# file-issue waits for a confirmation nobody is there to give, and an inbox
+# write persists a finding the user never scoped (row 37).
+require_text adversarial-review/SKILL.md "An UNVERIFIABLE finding stays in the report, recorded \`QUESTION_FILED\` with that reason and no artifact. A waived run writes nothing outside its run directory."
+# The "only chance" claim is what made the waiver contradict itself (row 36).
+refute_text adversarial-review/SKILL.md "the only chance to add what the conversation left off the list"
 
 # The depth governor keeps a naive invocation from costing a full fan-out.
 require_text adversarial-review/SKILL.md "Depth 1: 3 territories"
@@ -136,9 +183,9 @@ require_text adversarial-review/SKILL.md "recomputes the implementation proves t
 require_text adversarial-review/SKILL.md "lands UNVERIFIABLE naming the method"
 
 # The frontmatter description is the one line a person reads to learn what the
-# gate is, and this skill is user-invoked, so nothing else advertises it. It
-# shipped naming authorship independence alone, which row 27 quotes as the
-# defect. "and by" keeps this pin off the body's own phrasing at line 10.
+# gate is, and the one a sibling skill reads before invoking it. It shipped
+# naming authorship independence alone, which row 27 quotes as the defect.
+# "and by" keeps this pin off the body's own phrasing in its opening paragraph.
 require_text adversarial-review/SKILL.md "and by a route the code does not take"
 refute_text adversarial-review/SKILL.md "did not author it before it can block"
 

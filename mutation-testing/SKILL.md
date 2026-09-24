@@ -9,7 +9,7 @@ A guard nobody has watched fail is not a guard. A diff tells you the rejection i
 
 Every guard gets two mutations, because there are two questions and one mutation cannot answer both. The **plausible** mutation asks whether a reasonable refactor would slip past this suite, and its output is a measurement. The **adversarial** mutation asks whether the guard is watching the right quantity at all, and its output is a verdict.
 
-This skill is model-invoked, the opposite call from `adversarial-review` and `work-issue`. The premise of the work is that nothing else in the toolkit asks for this measurement, so a missed trigger costs a guard its only check, while a misfire costs one mutation run and a restore.
+This skill is model-invoked. The premise of the work is that nothing else in the toolkit asks for this measurement, so a missed trigger costs a guard its only check, while a misfire costs one mutation run and a restore.
 
 A **mutation** here is a deliberate edit to working code, made to be reverted. `work-issue` uses the word for an edit that may have silently failed to apply; both senses want the change proved on disk before anything reads a result that depends on it.
 

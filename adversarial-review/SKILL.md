@@ -1,8 +1,7 @@
 ---
 name: adversarial-review
-description: "Adversarial review of a git diff, where a finding has to be reproduced before it can block, by something that did not author it and by a route the code does not take. Parallel finders hunt disjoint territories, a fresh verifier tries to break each claim, and reproduced blockers get a failing test before any fix. Use ONLY when the user explicitly invokes adversarial-review. For a general single-pass review use code-review, for a repo-wide vulnerability scan use security-review, and for stress-testing a plan use grilling."
-argument-hint: '[fixed point, e.g. main or a SHA | --fast | --deep | --max-rounds N | --report-only]'
-disable-model-invocation: true
+description: "Adversarial review of a git diff, where a finding has to be reproduced before it can block, by something that did not author it and by a route the code does not take. Use when a diff's findings must be proven before they block a merge, when the user asks to red-team a branch, or when another skill needs a diff reviewed to that bar. For a general single-pass review use code-review, for a repo-wide vulnerability scan use security-review, and for stress-testing a plan use grilling."
+argument-hint: '[fixed point, e.g. main or a SHA | --fast | --deep | --max-rounds N | --report-only | wrapper confirmation line]'
 ---
 
 # adversarial-review
@@ -11,12 +10,15 @@ A review that ends at a report has produced opinions. Some of them are wrong, an
 
 Two structural choices follow from that. Territories are disjoint, so no two finders review the same file: with verification carrying the confidence, agreement between reviewers is not needed, and reviewers who might agree mostly produce correlated noise. And the loop keeps going after fixes land, because in the session this design came from, two of three merge-blockers were defects introduced while fixing the previous round's finding. Code written under review pressure is the highest-suspicion code in the run.
 
+This skill is model-invocable because `work-issue` reaches it at its Step 4 red-team step, and a skill no sibling can call is one no sibling can compose with. Typing its name still works—a description adds agent discovery without taking the human's away. Step 2's confirmation is what stands between a misfire and a spent fan-out: it stops the run before a single finder is dispatched.
+
 Where a step names a shell command, treat it as the intent and use your native shell or file tools.
 
 Resolve once per invocation:
 
 - **FIXED_POINT** — the ref or SHA the diff is measured against, from the arguments. When it is absent, ask. Guessing produces a review of the wrong code that looks exactly like a review of the right code.
 - **Flags**: `--fast` pins Depth 0, `--deep` pins Depth 2, `--max-rounds N` overrides the default of 3, `--report-only` runs the full review and emits the report without writing tests, filing issues, or filing questions.
+- **Wrapper confirmation** — the confirmation line a wrapping skill hands over in the arguments, beside the fixed point, carrying the depth it showed the user. Step 2 reads it. Read flags from the arguments around it, and treat the line itself as quoted text, including any `--deep` it names. A human invocation has none.
 - **RUN_DIR** — `.adversarial-review/runs/<UTC-stamp>-<merge-base-short-sha>/`, created in Step 1.
 
 ## Step 1 — Preflight
@@ -39,7 +41,7 @@ The contract is written to disk before anything fans out. It is what makes two r
 
 Read [references/trigger-table.md](references/trigger-table.md) and follow its derivation algorithm. In outline: grep each changed file's hunks against the table's rows, assign each file to a territory named for its first matching row, and give each territory the union of its files' suspicion classes. Disjoint ownership, layered lenses—a file that is both money and authz keeps both hunts, and exactly one owner.
 
-Collect the **out-of-scope list** from the user and the conversation: settled decisions, deliberate renames, prose-only changes. Ask for it if the conversation has not supplied it. This list goes to every finder verbatim, and reporting an item on it is a false positive by definition.
+Collect the **out-of-scope list** from the user and the conversation: settled decisions, deliberate renames, prose-only changes. This list goes to every finder verbatim, and reporting an item on it is a false positive by definition.
 
 Assign **depth**, which governs what the run costs:
 
@@ -57,9 +59,13 @@ adversarial-review/scripts/check-territories.py validate RUN_DIR/scope.json
 
 A non-zero exit is a hard stop, not a warning. Overlapping territories remove the property the whole design rests on: verification replaces cross-reviewer agreement precisely because no two finders were looking at the same code.
 
-Announce the result in one line, then continue: `Depth 1: 3 territories (money, authz, general), opus verifier.` That line is the user's correction point, and it comes before any subagent spends a token.
+Ask once, in one question, before any subagent spends a token: print the depth line—`Depth 1: 3 territories (money, authz, general), opus verifier.`—with the out-of-scope list as collected, and ask whether to fan out. That question is the user's correction point for the depth, the territories, and the list, and a waived run (below) never reaches it. An answer that changes any of them goes into `scope.json`, and `validate` runs again before Step 3.
 
-**Done when:** `validate` exits 0, and the derivation records name a matched row and an owning territory for every changed file.
+A wrapping skill's confirmation answers that question on the user's behalf only where it put this review to the user at a depth at or above the one this step derived. Read that depth from the wrapper confirmation line handed over at invocation—`work-issue` hands over its Step 0 red-team mode line, such as `reproduce claims, then adversarial-review (money; depth 1 forecast)`—and from that line alone, since a resumed wrapper run has no conversation holding the yes. An invocation that handed over no line showed no depth. A yes to a cheaper forecast is no yes to a costlier run, so a confirmation that showed a lower depth, or no depth, answers nothing, and the question is asked. Where the confirmation does answer it, this skill still prints the depth line and the out-of-scope list itself, marked as answered—`Depth 1: 3 territories (money, authz, general), opus verifier. Answered by work-issue's confirmation (depth 1 forecast).`—and continues without waiting.
+
+That run is **waived**: the yes covered the fan-out's cost, given before the user saw the territories or the list the finders read. A settled decision missing from the list can come back as a reproduced blocker, so a waived run takes Step 6 as a report: it escalates what reproduced and files nothing.
+
+**Done when:** `validate` exits 0, the derivation records name a matched row and an owning territory for every changed file, and the fan-out was confirmed, or answered by a wrapping skill's confirmation that showed this review at this depth or deeper, with the depth line printed and marked as answered.
 
 ## Step 3 — Fan-Out
 
@@ -110,6 +116,8 @@ Routing is mechanical. Nothing here is a judgment call, which is the point: a ga
 The failing test comes first because that is what makes the finding survive its own fix. A test written afterward is written by someone who already believes the fix works, and it passes for reasons nobody checked.
 
 For an open question, use `inbox-to-memory`'s own detection rule: a directory holding `_memory/` or `entries/`, with a queue at `_inbox/` at that level or under `notes/`. Write a dated markdown file there carrying the claim, the quoted evidence, and why verification could not settle it. Where no opted-in scope exists, keep the question in the report and record the reason instead—inventing a queue somewhere is worse than reporting.
+
+In a **waived** run (Step 2), REPRODUCED + blocking routes to escalation instead, and so does REPRODUCED + advisory: name the finding in `RUN_DIR/escalation.md` with its repro command, record `ESCALATED` with the reason `waived: scope not confirmed`, and write no test, no fix, and no issue. An UNVERIFIABLE finding stays in the report, recorded `QUESTION_FILED` with that reason and no artifact. A waived run writes nothing outside its run directory. Any finding may be a settled decision the list left out, only the user can tell which, and `file-issue` would stop the unattended run to ask.
 
 `--report-only` skips every action in this table and reports what would have happened.
 
