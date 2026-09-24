@@ -69,6 +69,8 @@ require_file "$fixtures/plan-waves.md"
 require_file "$fixtures/plan-badwaves.md"
 require_file "$fixtures/runs/issue-7/plan.md"
 require_file "$fixtures/runs-tableless/issue-8/plan.md"
+# Its table owns `src/a.py` in backticks, which lane-a owns bare.
+require_file "$fixtures/runs-malformed/issue-6/plan.md"
 # The closed run overlaps lane-a on purpose. Without it on disk, the check that
 # closed/ is ignored passes because there is nothing to ignore.
 require_file "$fixtures/runs/closed/issue-9/plan.md"
@@ -130,6 +132,10 @@ require_text "$skill" "that script skips a sibling whose table is not there yet"
 # Codex finding 1 on PR #141: skipping a tableless sibling here recreated the
 # very race this step exists to close.
 require_text "$skill" "A tableless in-flight sibling stops the wave until it writes its table, or until the user moves its run directory to \`<COMMON>/work-issue/closed/\` because the run is dead."
+# Codex finding 1 of the third review on PR #141: dropping a sibling's
+# malformed entry and counting the run as checked passed a backticked twin of
+# a lane's path.
+require_text "$skill" "An in-flight sibling with no parseable \`## Waves\` table, or whose table carries an entry the script rejects as malformed, prints an \`unchecked:\` line and exits 1"
 
 # Step 2 exists because disjoint paths do not make two lanes independent.
 require_text "$skill" "Disjoint paths prove two lanes cannot lose each other's writes. They do not prove the two lanes are independent"
@@ -214,6 +220,21 @@ require_text "$skill" "A gate record whose route is the \`pr\` non-null stop or 
 # Resume row 4 reads any check.txt as a passed proof, so a failing Step 1
 # must never write one.
 require_text "$skill" "Save the output to \`WAVE_DIR/footprint/check.txt\` on exit 0 only. A non-zero exit's output goes to \`WAVE_DIR/footprint/check-failed.txt\`"
+
+# Codex finding 2 of the third review on PR #141: Step 0 item 3 creates
+# WAVE_DIR, so a probe that asked only for WAVE_DIR resumed an interrupted
+# Step 0 at Step 1 with no siblings found and no commands harvested.
+require_text "$skill" "6. Last, after items 1 through 5, write \`WAVE_DIR/harvest.md\`"
+require_text "$skill" "| 2 | no WAVE_DIR, or WAVE_DIR with \`lanes.md\` or \`harvest.md\` missing | Step 0 |"
+require_text "$skill" "| 3 | \`lanes.md\` and \`harvest.md\`; no \`footprint/check.txt\` | Step 1 |"
+
+# Codex finding 3 of the third review on PR #141: Step 6 records SHAs for the
+# merge set alone, so a probe comparing every lane's HEAD looped back to Step 6
+# forever once a lane was held or failed.
+require_text "$skill" "| 8 | every gate record; no \`merge-test/<k>.md\` with k > 0 whose SHAs equal the current HEADs of the lanes in the merge set | Step 6 |"
+require_text "$skill" "Where the HEAD of any lane in the merge set differs from its SHA in the newest \`merge-test/<k>.md\`"
+refute_text "$skill" "every lane's current HEAD"
+require_text "$ledger" "**The Resume table is prose the orchestrator walks by hand.**"
 
 # Codex finding 3 on PR #141: each lane rebases before it publishes, so a
 # merge test over a stale base tested a tree nobody will merge.
@@ -523,6 +544,15 @@ expect_line "$err" "check-footprints: unchecked: issue-8 has no ## Waves table; 
 # The skip lived in this script, so its refute runs here rather than against
 # SKILL.md with the other cuts.
 refute_text "$script" "skipped:"
+
+# Ledger row 36, Codex finding 1 of the third review on PR #141. issue-6's
+# table owns `src/a.py` in backticks beside lane-a's bare src/a.py. Dropping
+# the bad entry exited 0 and counted the run as checked, so the whole run is
+# unchecked instead.
+footprints --lane issue-1="$fixtures/lane-a.md" --lane issue-2="$fixtures/lane-b.md" --runs "$fixtures/runs-malformed"
+expect_status 1 "an in-flight run with a malformed entry"
+expect_line "$err" "check-footprints: unchecked: issue-6 has a malformed entry: '\`src/a.py\`': backtick; write the path bare, without markdown decoration; its footprint cannot be proved" "an in-flight run with a malformed entry"
+refute_text "$script" "owns_entry_problem(entry) is None"
 
 # Ledger row 27: at the Step 5 re-check a lane's own RUN_DIR sits under --runs
 # while its plan.md is passed as --lane, and without the exclusion a lane

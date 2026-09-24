@@ -28,7 +28,7 @@ Resolve once per invocation:
 - **COMMON** — `git rev-parse --git-common-dir`, made absolute
 - **PROJECT** — ROOT's final path segment, lowercased to `a-z0-9-`
 - **WAVE_ID** — ISSUES sorted ascending and joined by `-`: `113-114-115`. Derived from the inputs so the same set of issues lands on the same directory every time it is typed.
-- **WAVE_DIR** — `<COMMON>/work-wave/wave-<WAVE_ID>/`. Subpaths: `lanes.md`, `footprint/issue-<N>.md`, `coupling.md`, `order.md`, `facts/issue-<N>.md`, `facts/wave.md`, `merge-test/<k>.md`, `reports/issue-<N>-<phase>.json`, `gate/issue-<N>.md`, `baseline.txt`. A finished wave moves to `<COMMON>/work-wave/closed/wave-<WAVE_ID>/`. Under the common dir for `work-issue`'s reasons: one location every lane's worktree can see, invisible to `git status`, and it outlives `git worktree remove`. It holds outputs, and nothing in it says which step the wave believes it reached.
+- **WAVE_DIR** — `<COMMON>/work-wave/wave-<WAVE_ID>/`. Subpaths: `lanes.md`, `harvest.md`, `footprint/issue-<N>.md`, `coupling.md`, `order.md`, `facts/issue-<N>.md`, `facts/wave.md`, `merge-test/<k>.md`, `reports/issue-<N>-<phase>.json`, `gate/issue-<N>.md`, `baseline.txt`. A finished wave moves to `<COMMON>/work-wave/closed/wave-<WAVE_ID>/`. Under the common dir for `work-issue`'s reasons: one location every lane's worktree can see, invisible to `git status`, and it outlives `git worktree remove`. It holds outputs, and nothing in it says which step the wave believes it reached.
 - **HANDBACK** — WAVE_DIR, spelled absolute. It is the one path every lane is told to write to and to name in its report, and every location a lane reports—its `worktree` and its `run_dir`—is absolute or is refused, while `files_changed` stays repo-relative by the brief's contract: subagent shells reset their working directory between calls, so a worktree-relative path in a report addresses whatever tree the reader happens to be in.
 - **PLAN[N]** — per issue, first hit wins: the `--plan N=PATH` argument; `<ROOT>/docs/plans/*issue-<N>*.md` or `<ROOT>/docs/plans/*-<N>-*.md`, newest by name; a path linked from the issue under a `Plan` heading. These are `work-issue`'s routes 1 through 3. Its route 4—the plan held in the conversation—is unreachable from a fresh subagent, so a plan that resolves only there is a missing plan here. Each hit is made absolute, and that absolute path is what the lane's argument line carries, as `work-issue`'s route 1.
 - **LANE[N]** — the lane's derived names, all `work-issue`'s: BRANCH `issue-<N>`, WORKTREE `<ROOT>/../<PROJECT>-issue-<N>/`, RUN_DIR `<COMMON>/work-issue/issue-<N>/`.
@@ -42,13 +42,14 @@ Resolve once per invocation:
 
 ## Step 0 — Gate
 
-1. Run the resume probe (see [Resume](#resume)) before anything is written under WAVE_DIR. Any row past a fresh wave jumps there; the rest of this step is for a fresh one.
+1. Run the resume probe (see [Resume](#resume)) before anything is written under WAVE_DIR. Row 2 matches a fresh wave and a wave interrupted inside this step alike, and both run the rest of this step from item 2; any later row jumps there.
 2. Resolve PLAN[N] for every issue. Any issue whose three routes all miss refuses the whole wave, naming every such issue at once: "Plan them first: `writing-plans`, then `work-wave <ISSUES> --plan N=PATH`." One refusal listing three missing plans beats three runs each finding one, and a wave that starts with two lanes of three is a different wave from the one the user asked for.
 3. `gh issue view N --json title,url,body` for each, and write `WAVE_DIR/lanes.md` with one row per lane: `| Lane | Title | Plan | Worktree | Run dir |`, every path absolute.
 4. In-flight `work-issue` runs. Any `<COMMON>/work-issue/issue-N/` for an N in ISSUES that is not under `closed/` is a lane already started. It stays in the wave: Step 1 proves its footprint on its `RUN_DIR/plan.md`, Step 3's collision check exempts its worktree, and Step 4's dispatch reaches it through `work-issue N`, whose own resume probe places it. Any `issue-M/` for an M not in ISSUES is a sibling this wave does not own, and Step 1 hands it to the script with `--runs` so its footprint is proved against every lane's.
 5. Harvest VERIFY_CMD and INSTALL_CMD, and derive CONTRACT_PATHS by reading every plan for the contract shapes.
+6. Last, after items 1 through 5, write `WAVE_DIR/harvest.md`: the already-started lanes and the in-flight siblings item 4 found, VERIFY_CMD, INSTALL_CMD, and CONTRACT_PATHS. It is the resume probe's only evidence that this step finished. `lanes.md` exists from item 3 on, so a run interrupted during items 4 or 5 leaves a WAVE_DIR with no `harvest.md`, and resume row 2 sends it back through this step rather than on to Step 1 without its siblings found or its commands harvested.
 
-**Done when:** every issue in ISSUES has an absolute PLAN[N] on disk, `lanes.md` names every lane with absolute paths, `gh` is authenticated, and VERIFY_CMD is resolved or `absent`—or the run stopped at the refusal naming every issue without a plan, or at fewer than two issues.
+**Done when:** every issue in ISSUES has an absolute PLAN[N] on disk, `lanes.md` names every lane with absolute paths, `gh` is authenticated, VERIFY_CMD is resolved or `absent`, and `harvest.md`, written last, records item 4's runs, VERIFY_CMD, INSTALL_CMD, and CONTRACT_PATHS—or the run stopped at the refusal naming every issue without a plan, or at fewer than two issues.
 
 ## Step 1 — Footprint
 
@@ -68,7 +69,7 @@ Save the output to `WAVE_DIR/footprint/check.txt` on exit 0 only. A non-zero exi
 
 Every lane's own `work-issue` will run `check-inflight.py` again at its Step 0 item 6, and that is kept, not relied on. N lanes dispatched in one message write their `## Waves` tables within seconds of each other, and that script skips a sibling whose table is not there yet, so each lane's check can pass against siblings that have not written theirs. This step is the one check that holds every footprint at once, and Step 5 re-runs it over what the lanes actually derived.
 
-So where that script skips, this one fails closed. An in-flight sibling with no parseable `## Waves` table prints an `unchecked:` line and exits 1, because its footprint is unknown and an unknown footprint can overlap any lane. A tableless in-flight sibling stops the wave until it writes its table, or until the user moves its run directory to `<COMMON>/work-issue/closed/` because the run is dead. Name the sibling and both ways forward; which one applies is the user's call.
+So where that script skips, this one fails closed. An in-flight sibling with no parseable `## Waves` table, or whose table carries an entry the script rejects as malformed, prints an `unchecked:` line and exits 1, because its footprint is unknown and an unknown footprint can overlap any lane. A malformed entry voids the whole run's proof, since a backticked `` `src/a.py` `` reads as no overlap with a lane's bare `src/a.py`. A tableless in-flight sibling stops the wave until it writes its table, or until the user moves its run directory to `<COMMON>/work-issue/closed/` because the run is dead. A sibling with a malformed entry stops it until the run's plan spells that entry bare, or until the user moves a dead run to `closed/` the same way. Name the sibling and both ways forward; which one applies is the user's call.
 
 **Done when:** `check-footprints.py` exited 0 over every lane's footprint, each already-started lane's taken from its `RUN_DIR/plan.md` copy, and every in-flight sibling run, each sibling's table read and compared, and its output, `pair:` lines included, is saved to `WAVE_DIR/footprint/check.txt`—or the run stopped at an overlap, or at an `unchecked:` sibling named with both ways forward, with the output in `footprint/check-failed.txt` and no `check.txt` written.
 
@@ -178,11 +179,11 @@ Save every report verbatim to `WAVE_DIR/reports/issue-<N>-publish.json`. Route b
 
 ## Step 8 — Report
 
-Where any lane's HEAD differs from the SHA in the newest `merge-test/<k>.md`—a repair round moved it—run the merge test once more, in order, before anything is reported. The order the human merges in has to have been tested at the SHAs they will merge.
+Where the HEAD of any lane in the merge set differs from its SHA in the newest `merge-test/<k>.md`—a repair round moved it—run the merge test once more, in order, before anything is reported. The order the human merges in has to have been tested at the SHAs they will merge.
 
 Then the final report: the merge order as a numbered list of pull-request URLs with each lane's `After`; the held lanes and what each waits on; the failed or stopped lanes with their reports quoted; the path of the newest merge test and its result line; the coupling table; the fact count and the path of `facts/`; and the closing line, "a human merges, in this order", or "waiting on the reviewers" where every lane is answered but none has cleared. Then move WAVE_DIR to `closed/` only when every lane's own RUN_DIR has moved to its `closed/`: before that the wave is still resumable, and a wave directory under `closed/` is what the resume probe reads as finished.
 
-**Done when:** the merge test is green at every lane's current HEAD and the report names the order, the held and failed lanes, the merge-test path, the coupling table, and the facts path, and ends on the line the state earns.
+**Done when:** the merge test is green at the current HEAD of every lane in the merge set and the report names the order, the held and failed lanes, the merge-test path, the coupling table, and the facts path, and ends on the line the state earns.
 
 ## Resume
 
@@ -191,16 +192,16 @@ The world outranks WAVE_DIR, and WAVE_DIR outranks memory. Each lane's state is 
 | # | Probe | Resume at |
 |---|---|---|
 | 1 | `<COMMON>/work-wave/closed/wave-<WAVE_ID>/` exists and no lane RUN_DIR is open | done; say so |
-| 2 | no WAVE_DIR | Step 0 |
-| 3 | WAVE_DIR; no `footprint/check.txt` | Step 1 |
+| 2 | no WAVE_DIR, or WAVE_DIR with `lanes.md` or `harvest.md` missing | Step 0 |
+| 3 | `lanes.md` and `harvest.md`; no `footprint/check.txt` | Step 1 |
 | 4 | `check.txt`; `coupling.md` or `order.md` missing, or a coupling row still `ask` | Step 2 |
 | 5 | `order.md`; no `merge-test/0.md` | Step 3, the confirmation again, then Step 4 |
 | 6 | `merge-test/0.md`; some saved build report has no `gate/issue-<N>.md`, or some gate record recorded a stop | Step 5 for the ungated reports only, then probe again; a recorded stop stops the wave again, naming the lane and its pull-request URL or the re-check's stderr lines, until the user rules on it |
 | 7 | `merge-test/0.md`; some unheld lane has no `reports/issue-N-build.json` | Step 4 for those lanes only, in one message; a lane whose RUN_DIR exists is resumed by its own `work-issue`, and its build report is whatever it returns |
-| 8 | every gate record; no `merge-test/<k>.md` with k > 0 whose SHAs equal every lane's current HEAD | Step 6 |
-| 9 | a green merge test at current HEADs; some lane in the merge set has no `reports/issue-N-publish.json` | Step 7 for those lanes only, when the fetched `origin/DEFAULT` equals that merge test's `base:`; where it differs, Step 6, then Step 7 |
-| 10 | every publish report; some lane HEAD moved since the newest merge test | Step 8's re-test, then the report |
-| 11 | every publish report; merge test green at current HEADs | Step 8's report |
+| 8 | every gate record; no `merge-test/<k>.md` with k > 0 whose SHAs equal the current HEADs of the lanes in the merge set | Step 6 |
+| 9 | a green merge test at the merge set's current HEADs; some lane in the merge set has no `reports/issue-N-publish.json` | Step 7 for those lanes only, when the fetched `origin/DEFAULT` equals that merge test's `base:`; where it differs, Step 6, then Step 7 |
+| 10 | every publish report; the HEAD of some lane in the merge set moved since the newest merge test | Step 8's re-test, then the report |
+| 11 | every publish report; merge test green at the merge set's current HEADs | Step 8's report |
 
 A lane's `work-issue` may itself be mid-run on a herdr agent or a stranded worktree; those are its rows 2 and 3, and re-dispatching it is how they get read.
 

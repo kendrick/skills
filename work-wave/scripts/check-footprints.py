@@ -44,6 +44,12 @@ proof passed. A missing table is what the lanes' own gates skip over, so
 skipping it here reopened the race this script exists to close. The caller
 waits for a run still writing its table and moves a dead one to closed/.
 
+An in-flight run whose table has an entry owns_entry_problem rejects fails
+the same way, with `unchecked: issue-M has a malformed entry: <entry>:
+<problem>; its footprint cannot be proved`, and none of its entries are
+compared. Dropping only the bad entry let `` `src/a.py` `` pass beside a
+lane owning `src/a.py` (Codex finding 1 of the third review on PR #141).
+
 Exit codes: 0 pass; 1 semantic failure, with one line per problem on stderr:
 `overlap:`, `malformed:`, `empty:`, or `unchecked:`; 3 usage or unreadable
 input, which covers fewer than two lanes, a lane named twice, a malformed
@@ -407,6 +413,7 @@ def lane_entries(lane, path):
 
 def inflight_entries(runs_dir, lanes):
     """(checked, claims, unchecked) over the in-flight runs under runs_dir.
+    `unchecked` holds whole `unchecked:` problem lines, ready for stderr.
 
     A missing runs_dir is 0 runs and not an error. work-issue creates the
     directory on its first run, so it is absent in a repo that has never had
@@ -419,10 +426,14 @@ def inflight_entries(runs_dir, lanes):
     finding 1, PR #141).
     It isn't counted in `checked` either, since nothing of it was compared.
 
-    A sibling's malformed entries are dropped silently rather than failed.
-    That plan passed its own `check-waves validate`, and its spelling isn't
-    this wave's to fix. The drop also keeps a meaningless shape out of
-    paths_overlap, where it would answer 'no overlap' for the wrong reason."""
+    A run whose table carries any entry owns_entry_problem rejects lands
+    there too, and none of its entries are compared. The first version
+    dropped just the bad entries and counted the run as checked, and Codex
+    finding 1 of the third review on PR #141 showed the cost: a sibling
+    owning `` `src/a.py` `` beside a lane owning bare `src/a.py` exited 0.
+    A backticked path never matches its bare twin, so a dropped entry is an
+    unproved one. A failed or abandoned run is where a misspelled entry is
+    likeliest to stay unfixed."""
     if not os.path.isdir(runs_dir):
         return 0, [], []
     checked, claims, unchecked = 0, [], []
@@ -431,24 +442,38 @@ def inflight_entries(runs_dir, lanes):
             continue
         if not os.path.isdir(os.path.join(runs_dir, name)):
             continue
+        no_table = (
+            f"unchecked: {name} has no ## Waves table; wait for it to write "
+            "one, or move its run dir to closed/ if the run is dead"
+        )
         try:
             with open(os.path.join(runs_dir, name, "plan.md"), encoding="utf-8") as f:
                 text = f.read()
         except (OSError, UnicodeDecodeError):
-            unchecked.append(name)
+            unchecked.append(no_table)
             continue
         rows, problems = read_rows(text)
         if problems:
-            unchecked.append(name)
+            unchecked.append(no_table)
             continue
-        checked += 1
-        claims.extend(
+        run_claims = [
             Claim(f"in-flight {name} task {row.task}", entry)
             for row in rows
             if row.task
             for entry in row.entries
-            if owns_entry_problem(entry) is None
-        )
+        ]
+        malformed = [
+            f"unchecked: {name} has a malformed entry: {claim.entry!r}: "
+            f"{reason}; its footprint cannot be proved"
+            for claim in run_claims
+            for reason in [owns_entry_problem(claim.entry)]
+            if reason is not None
+        ]
+        if malformed:
+            unchecked.extend(malformed)
+            continue
+        checked += 1
+        claims.extend(run_claims)
     return checked, claims, unchecked
 
 
@@ -532,11 +557,7 @@ def main(argv=None):
     checked, sibling_claims, unchecked = (
         inflight_entries(args.runs, lanes) if args.runs else (0, [], [])
     )
-    for name in unchecked:
-        problems.append(
-            f"unchecked: {name} has no ## Waves table; wait for it to write "
-            "one, or move its run dir to closed/ if the run is dead"
-        )
+    problems.extend(unchecked)
     for lane in names:
         for x in comparable[lane]:
             for y in sibling_claims:
