@@ -2,11 +2,11 @@
 
 Read at Steps 4 and 7 to instantiate each lane's dispatch, and at Steps 5 and 7 to read what a lane hands back.
 
-A lane is not a `divvy-up` worker. A worker writes files into a shared tree and leaves every git write to the orchestrator; a lane is a whole `work-issue` run, and it takes a worktree, commits, and, once granted, pushes and opens a pull request. So this brief says almost nothing about how to do the issue — `work-issue` already says that. What it carries is what the wave knows and the lane cannot: who else is running, which coupling rows name this lane, what the wave has learned so far, where to hand results back, and which half of `work-issue`'s own confirmation the wave has already answered on the lane's behalf.
+A lane is not a `divvy-up` worker. A worker writes files into a shared tree and leaves every git write to the orchestrator; a lane is a whole `work-issue` run, and it takes a worktree, commits, and, once granted, pushes and opens a pull request. So this brief says almost nothing about how to do the issue, because `work-issue` already says that. What it carries is what the wave knows and the lane cannot: who else is running, which coupling rows name this lane, what the wave has learned so far, where to hand results back, and which half of `work-issue`'s own confirmation the wave has already answered on the lane's behalf.
 
 ## The brief
 
-Instantiate this once per lane, substituting the thirteen placeholders below. Everything else, fence included, goes across verbatim — this is the whole prompt a lane receives, so a paraphrase here is a paraphrase the lane never sees corrected.
+Instantiate this once per lane, substituting the thirteen placeholders below. Everything else, fence included, goes across verbatim. This is the whole prompt a lane receives, so a paraphrase here is a paraphrase the lane never sees corrected.
 
 ```
 You are one lane in a wave of parallel work-issue runs. {{SIBLINGS}}
@@ -142,7 +142,7 @@ The lane's final message is the fenced block inside the brief above, reproduced 
 }
 ```
 
-`status` is one of four: `done` (work-issue reached the Done-when of the last step this phase's grant allows), `stopped` (work-issue stopped for want of an answer, or a worker did — the question is in `question`), `failed` (a gate failed twice, a merge test inside work-issue went red, or a report would not parse — what failed is in `question`), or `refused` (work-issue's Step 0 refused the plan or the cross-run check — its stderr is in `question`).
+`status` is one of four: `done` (work-issue reached the Done-when of the last step this phase's grant allows), `stopped` (work-issue stopped for want of an answer, or a worker did; the question is in `question`), `failed` (a gate failed twice, a merge test inside work-issue went red, or a report would not parse; what failed is in `question`), or `refused` (work-issue's Step 0 refused the plan or the cross-run check; its stderr is in `question`).
 
 Each field answers a step that reads it:
 
@@ -150,8 +150,8 @@ Each field answers a step that reads it:
 - `status` — Step 5's route table.
 - `head` — checked against the newest merge test's SHAs at Step 8 to decide whether a repair round moved a lane past its last-tested commit.
 - `worktree`, `run_dir` — absolute paths the orchestrator reads directly and hands to a resumed `work-issue`.
-- `files_changed` — re-run through `check-footprints.py` at Step 5, in place of the lane's pre-dispatch footprint file, to prove the lane's derived table stayed disjoint.
-- `contract_changed` — decides whether Step 5 runs a merge test now, ahead of every other lane finishing.
+- `files_changed` — read at Step 5 item 3: any path in it under CONTRACT_PATHS triggers the contract-change merge test. The footprint re-check at Step 5 item 2 reads the lane's `RUN_DIR/plan.md` table, never this field.
+- `contract_changed` — read at Step 5 item 3 beside `files_changed`: any path in it triggers the same merge test, because the lane knows which paths its wave-0 tasks owned and CONTRACT_PATHS is only the orchestrator's pre-dispatch reading of the plans.
 - `facts` — checked against `{{WAVE_DIR}}/facts/issue-{{N}}.md`; where the two differ, the file the lane wrote as it went is the one that wins.
 - `pr` — null on a build report, which is the withheld grant's own evidence that it held; the pull-request URL once a publish report opens one.
 - `detail` — quoted verbatim in the wave's final report for any lane that stops, fails, or is refused.

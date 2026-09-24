@@ -140,7 +140,7 @@ gh pr list --state all
 
 Run `gh pr list` at each stop the wave makes.
 
-**Pass condition:** either branch passes. Step 2 recorded `order` or `hold` for the pair with `Evidence` naming the validator. Or Step 2 recorded `none`, A's build report carried the validator in `contract_changed`, the Step 5 merge test went red over both branches, its line reached `facts/wave.md`, and `gh pr list --state all` was empty at that moment. Fails if either lane opens a pull request before a merge test covers both branches, or if the wave reaches Step 7 with the coupling unrecorded and the merge test never run over both.
+**Pass condition:** either branch passes. Step 2 recorded `order` or `hold` for the pair with `Evidence` naming the validator. Or Step 2 recorded `none`, A's build report named the validator in `files_changed` under CONTRACT_PATHS or in `contract_changed`, the Step 5 merge test went red over both branches, its line reached `facts/wave.md` naming A as the lane that broke C, the pair's `coupling.md` row was corrected from `independent`, and `gh pr list --state all` was empty at that moment. Fails if either lane opens a pull request before a merge test covers both branches, or if the wave reaches Step 7 with the coupling unrecorded and the merge test never run over both.
 
 ### 11. A Failed Lane Is Held With Its Dependents While the Rest Publish
 

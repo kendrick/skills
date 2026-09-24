@@ -1,9 +1,9 @@
 # The merge test
 
-One procedure, run with zero or more branches, that builds a scratch tree, merges into it in merge order, verifies, and removes it — on every route out, including a conflict or a red suite. `SKILL.md` reads this file at four trigger points:
+One procedure, run with zero or more branches, that builds a scratch tree, merges into it in merge order, verifies, and removes it on every route out, a conflict or a red suite included. `SKILL.md` reads this file at four trigger points:
 
 - **Baseline**, Step 4, with no branches, before any lane is dispatched.
-- **Contract change**, Step 5, over every lane branch with commits, when a returned lane's `files_changed` touches CONTRACT_PATHS.
+- **Contract change**, Step 5, over every lane branch with commits, when a returned lane's `files_changed` has a path under CONTRACT_PATHS or its `contract_changed` names any path.
 - **Before publish**, Step 6, over the full merge set in `order.md` order, once every unheld lane has returned.
 - **HEAD moved**, Step 8, re-run once more before the final report, if any lane's HEAD differs from the SHA the newest recorded run merged.
 
@@ -25,7 +25,7 @@ Both alternatives are trapped by #109's reproducer, filed on PR #121's deferred-
 4. **Verify.** INSTALL_CMD, then VERIFY_CMD, saving the tail of its output.
 5. **Check for a dirty tree.** `git -C MERGE_TREE diff --stat HEAD`. Non-empty is `dirty after verify:` and red. Checked this way, never with `git status`: a status read of a copied tree once reported clean over an index that had already been staged into, the same #109 hazard step 1 exists to keep out of MERGE_TREE itself.
 6. **Record the run.** Write `WAVE_DIR/merge-test/<k>.md`: every merged SHA in order, any conflict or dirty-tree line, and VERIFY_CMD's saved tail.
-7. **Tear down.** `git worktree remove --force MERGE_TREE`, on every route out — a clean pass, a conflict, or a red suite alike.
+7. **Tear down.** `git worktree remove --force MERGE_TREE`, on every route out: a clean pass, a conflict, or a red suite alike.
 
 ## Reading the result
 

@@ -35,7 +35,7 @@ Resolve once per invocation:
 - **LANE_MODEL** — `opus`, or `fable` from `--lane-model fable`. Never lower: a lane runs `divvy-up`'s gate, `code-review`, and a red-team on whatever model it was dispatched at, and that model is the judgment `divvy-up` keeps on the session model for a reason.
 - **MERGE_TREE** — `<ROOT>/../<PROJECT>-wave-<WAVE_ID>-merge/`. Exists only while a merge test runs.
 - **VERIFY_CMD**, **INSTALL_CMD** — harvested off disk the way `work-issue` harvests: manifest scripts first (`package.json`, `Makefile`, `pyproject.toml`, `Cargo.toml`); then runnable scripts under `tests/` or `scripts/`; then what `.github/workflows/` runs; then `absent`.
-- **CONTRACT_PATHS** — the union, across every lane's plan, of paths `divvy-up` Step 1 would make wave-0 tasks: types, interfaces, schemas, migrations. A lane whose build report changed one of these triggers a merge test at Step 5.
+- **CONTRACT_PATHS** — the union, across every lane's plan, of paths `divvy-up` Step 1 would make wave-0 tasks: types, interfaces, schemas, migrations. A lane whose build report names one of these, in `files_changed` or in `contract_changed`, triggers a merge test at Step 5.
 - **FLAGS** — `--dry-run` runs Steps 0 through 3, renders the confirmation, and dispatches nothing, creates no worktree, and pushes nothing.
 
 `gh auth status` is a Step 0 preflight. Unauthenticated stops the run: the issues cannot be read, and route 3 of PLAN cannot be followed.
@@ -130,7 +130,9 @@ As each build report returns:
 
 1. **Facts.** The lane's `facts` array and its `WAVE_DIR/facts/issue-<N>.md` are the same list; where they differ, the file is the one the lane wrote as it went and wins. Nothing else to do: every other lane reads the directory, and the next dispatch inlines all of it.
 2. **Footprint, again.** Re-run `check-footprints.py` with every returned lane's `RUN_DIR/plan.md` in place of its footprint file, the unreturned lanes still on their footprint files, and `--runs` as before. The lane's `## Waves` table is the footprint it actually wrote, and a lane whose derivation drifted onto a sibling's path is found here rather than at the merge.
-3. **Contract change.** Any path in the lane's `files_changed` under CONTRACT_PATHS, or any path a wave-0 task of its `## Waves` table owns, triggers a merge test now over every lane branch that has commits, returned or not: `git -C ROOT rev-parse --verify issue-M` for each. A schema relaxed in one lane is exactly the change the others should meet before they finish building against the old one, and the result goes into `WAVE_DIR/facts/wave.md`, the one facts file the orchestrator owns, as a line: `- [wave] merge test k: <green|red at issue-A × issue-B: paths>`. Every lane reads the whole `facts/` directory before each dispatch, so the line reaches every still-running lane.
+3. **Contract change.** Any path in the lane's `files_changed` under CONTRACT_PATHS, or any path in its `contract_changed` (the wave-0-owned subset the lane reports), triggers a merge test now over every lane branch that has commits, returned or not: `git -C ROOT rev-parse --verify issue-M` for each. A schema relaxed in one lane is the change the others should meet while they still build, and they meet it early only when this lane returns ahead of them. The result goes into `WAVE_DIR/facts/wave.md`, the one facts file the orchestrator owns, as a line: `- [wave] merge test k: <green|red at issue-A × issue-B: paths>`. Every lane reads the whole `facts/` directory before each dispatch, so the line reaches every still-running lane.
+
+   A red result is read against `coupling.md` the way Step 6 reads one: a pair recorded `independent` that is not gets its row corrected. Name the lane whose change broke the other in that `facts/wave.md` line, so its dependents still building meet the break at their next dispatch. The wave carries on to Step 6, and a red that persists there stops the wave with the pair named. Nothing publishes on a red.
 4. **Route.**
 
 | Report | Route |
@@ -141,7 +143,7 @@ As each build report returns:
 | `failed`, or `refused` at its own gate | The lane is out of the merge set; lanes ordered after it are moved to `held`; every other lane proceeds. No revert, because its writes are on its own branch in its own worktree and clobbered nothing; no rung-up retry, because `work-issue` has already applied `divvy-up`'s retry inside the lane and LANE_MODEL is already the rung a retry would reach. Its report is quoted in the final report, and `work-issue N` resumes it once a human has read that. |
 | `worktree` or `run_dir` not absolute, or `head` not a SHA | Re-prompt once for the absolute form and the SHA. A relative path in a report is the round trip this skill exists to remove. |
 
-**Done when:** for every returned lane, its facts are on disk, the footprint re-check exited 0, a contract change ran the merge test and its result is a line in `facts/wave.md`, no build report carries a `pr`, and the lane is `done` or is out of the merge set with its dependents held and the reason recorded.
+**Done when:** for every returned lane, its facts are on disk, the footprint re-check exited 0, a contract change ran the merge test and its result is a line in `facts/wave.md`, a red one naming the lane that broke the other with the pair's `coupling.md` row corrected where it said `independent`, no build report carries a `pr`, and the lane is `done` or is out of the merge set with its dependents held and the reason recorded.
 
 ## Step 6 — Merge test before publish
 

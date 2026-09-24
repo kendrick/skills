@@ -224,7 +224,9 @@ require_text "$merge_test" "\`git -C MERGE_TREE diff --stat HEAD\`. Non-empty is
 require_text "$merge_test" "\`git worktree remove --force MERGE_TREE\`, on every route out"
 
 # Every commit message, pull request body, and dispatch these documents shape
-# goes out without an attribution trailer or a generated-by footer.
+# goes out without an attribution trailer or a generated-by footer. The
+# ledger's Deliberately Not Built table carries the row, and says why this
+# refute alone reaches past SKILL.md.
 for doc in "$skill" "$brief" "$merge_test"; do
   refute_text "$doc" "Co-Authored-By"
   refute_text "$doc" "Generated with"
@@ -436,6 +438,13 @@ expect_line "$err" "check-footprints: skipped: issue-8 has no ## Waves table" "a
 expect_line "$out" "OK: 2 lanes disjoint (checked 1 in-flight run)" "a tableless run and a closed run"
 if grep -Fq "issue-9" <<<"$out$err"; then
   echo "a run under closed/ must be ignored silently, got: $out $err" >&2
+  exit 1
+fi
+# The closed run sits one level down, so a script that stops excluding closed/
+# never reaches issue-9. It reads closed/ itself as a tableless run and says
+# so on stderr, and the issue-9 check above can't see that.
+if grep -Fq "closed" <<<"$err"; then
+  echo "closed/ must be skipped without a stderr line, got: $err" >&2
   exit 1
 fi
 

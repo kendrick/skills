@@ -29,7 +29,7 @@ A description that summarizes the workflow becomes a shortcut the model takes in
 
 ## Vendoring
 
-Shared code is copied byte-identically with a provenance comment naming the source, the date, and the rule that upstream is authoritative: fix the bug there, then re-copy. `scaffold_digest.py` lives in three skills this way, and `paths_overlap` runs in `adversarial-review`, `divvy-up`, and `work-issue`.
+Shared code is copied byte-identically with a provenance comment naming the source, the date, and the rule that upstream is authoritative: fix the bug there, then re-copy. `scaffold_digest.py` lives in three skills this way, and `paths_overlap` runs in `adversarial-review`, `divvy-up`, `work-issue`, and `work-wave`.
 
 Copy the docstrings with the code. They record the incidents that set each rule, and a reader who trims them re-introduces the bug they describe.
 
