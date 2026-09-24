@@ -60,6 +60,7 @@ Each skill's own README covers any CLI it expects.
 | [work-issue](work-issue/README.md)                 | Runs one issue from approved plan to answered review threads        | `--skill work-issue`          |
 | [handoff](handoff/README.md)                       | Carries unfinished work into a fresh session                        | `--skill handoff`             |
 | [mutation-testing](mutation-testing/README.md)     | Breaks a guard a diff adds and reports which tests noticed          | `--skill mutation-testing`    |
+| [work-wave](work-wave/README.md)                   | Runs N issues at once, one work-issue lane each, merge-tested first | `--skill work-wave`           |
 | [databricks-api](databricks-api/)                  | Databricks REST APIs and the Python SDK, eight domains              | `--skill databricks-api`      |
 
 ### Filing and memory
@@ -120,6 +121,10 @@ Breaks a guard your diff just added and reports which tests noticed. It fires on
 
 Picks up where `divvy-up` leaves off: the built diff, the pull request, and everything after that nobody wrote down—rebasing, pushing, reading what an external reviewer said, repairing what's in scope, and answering every thread. State lives on disk, not in the conversation, so a session that ends mid-run resumes by typing the same command again. A human merges; this skill stops one step short.
 
+#### [work-wave](work-wave/README.md)
+
+Runs several issues at once, each as its own `work-issue` lane in its own worktree, and owns only what is true across them. One mechanism makes the fan-out safe: a script proves every lane's footprint disjoint from every other's before anything is dispatched, and the orchestrator then answers the question the script cannot—whether one lane's change alters what another builds against—and derives the merge order from the answers. The lanes are merge-tested together in a detached worktree before any of them opens a pull request, and facts one lane learns reach the others' workers mid-run. A human merges, in the order the report gives.
+
 ### Platform APIs
 
 #### [databricks-api](databricks-api/)
@@ -128,7 +133,7 @@ A router plus eight domain skills covering the Databricks REST APIs and the Pyth
 
 ## Repository Layout
 
-- [databricks-api/](databricks-api/), [file-issue/](file-issue/), [jira-refine/](jira-refine/), [inbox-to-memory/](inbox-to-memory/), [jd-file/](jd-file/), [jd-audit/](jd-audit/), [readme-coauthorship/](readme-coauthorship/), [handoff/](handoff/), [adversarial-review/](adversarial-review/), [divvy-up/](divvy-up/), [work-issue/](work-issue/), [mutation-testing/](mutation-testing/), [technical-writing/](technical-writing/), [eli5/](eli5/): the skills themselves, one directory each
+- [databricks-api/](databricks-api/), [file-issue/](file-issue/), [jira-refine/](jira-refine/), [inbox-to-memory/](inbox-to-memory/), [jd-file/](jd-file/), [jd-audit/](jd-audit/), [readme-coauthorship/](readme-coauthorship/), [handoff/](handoff/), [adversarial-review/](adversarial-review/), [divvy-up/](divvy-up/), [work-issue/](work-issue/), [mutation-testing/](mutation-testing/), [work-wave/](work-wave/), [technical-writing/](technical-writing/), [eli5/](eli5/): the skills themselves, one directory each
 - **[\_docs/](_docs/)**: research notes behind the skills, like the [readme-coauthorship writeup](_docs/readme-coauthorship-research.md) and the [issue-authorship survey](_docs/file-issue-research.md)
 - **[\_maintenance/](_maintenance/)**: maintainer tooling, one subdirectory per skill that needs it: the refresh workflow that keeps `databricks-api` synced with upstream Databricks docs, the upstream sync behind `handoff`, the check that holds the `jd` pair's prose to the vault register, and the decision ledgers, evals, and provenance records behind the rest
 - **[tests/](tests/)**: smoke scripts that pin the load-bearing decisions in each skill and in the repo's agent docs; each runs standalone from the repo root, like `bash tests/technical-writing-smoke.sh`

@@ -21,7 +21,7 @@ Four skills predate the bar. `databricks-api` and `eli5` carry no `RATIONALE.md`
 
 ## Invocation
 
-`disable-model-invocation: true` makes a skill user-invoked, which strips its description from the agent's reach and costs zero context. Choose by the asymmetry: when a misfire is expensive and a miss costs the user one word, take user-invoked. `handoff`, `eli5`, and `jira-refine` are user-invoked for that reason, and each says so in its own body. Everything else carries a trigger-bearing description.
+`disable-model-invocation: true` makes a skill user-invoked, which strips its description from the agent's reach and costs zero context. Choose by the asymmetry: when a misfire is expensive and a miss costs the user one word, take user-invoked. `handoff`, `eli5`, `jira-refine`, and `work-wave` are user-invoked for that reason, and each says so in its own body. Everything else carries a trigger-bearing description.
 
 One condition outranks the asymmetry: a skill another skill has to reach is model-invocable or it is unreachable, because a stripped description is stripped from siblings too, not only from the agent. `divvy-up`, `work-issue`, and `adversarial-review` are model-invocable for that reason—`work-issue` reaches `divvy-up` at its Step 0 and `adversarial-review` at its Step 4, and a wave reaches `work-issue` once per lane. Model-invocation only adds agent discovery and never takes the human's away, so the cost is context load rather than lost control, and the guard against a misfire moves to the skill's own confirmation step.
 
@@ -29,7 +29,7 @@ A description that summarizes the workflow becomes a shortcut the model takes in
 
 ## Vendoring
 
-Shared code is copied byte-identically with a provenance comment naming the source, the date, and the rule that upstream is authoritative: fix the bug there, then re-copy. `scaffold_digest.py` lives in three skills this way, and `paths_overlap` runs in `adversarial-review`, `divvy-up`, and `work-issue`.
+Shared code is copied byte-identically with a provenance comment naming the source, the date, and the rule that upstream is authoritative: fix the bug there, then re-copy. `scaffold_digest.py` lives in three skills this way, and `paths_overlap` runs in `adversarial-review`, `divvy-up`, `work-issue`, and `work-wave`.
 
 Copy the docstrings with the code. They record the incidents that set each rule, and a reader who trims them re-introduces the bug they describe.
 
