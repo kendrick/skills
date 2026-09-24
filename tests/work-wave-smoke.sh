@@ -68,7 +68,7 @@ require_file "$fixtures/empty.md"
 require_file "$fixtures/plan-waves.md"
 require_file "$fixtures/plan-badwaves.md"
 require_file "$fixtures/runs/issue-7/plan.md"
-require_file "$fixtures/runs/issue-8/plan.md"
+require_file "$fixtures/runs-tableless/issue-8/plan.md"
 # The closed run overlaps lane-a on purpose. Without it on disk, the check that
 # closed/ is ignored passes because there is nothing to ignore.
 require_file "$fixtures/runs/closed/issue-9/plan.md"
@@ -124,6 +124,9 @@ require_text "$skill" "A non-zero exit is a hard stop, not a warning."
 # proof is the one that counts. Losing the reason invites someone to delete
 # the script as redundant.
 require_text "$skill" "that script skips a sibling whose table is not there yet"
+# Codex finding 1 on PR #141: skipping a tableless sibling here recreated the
+# very race this step exists to close.
+require_text "$skill" "A tableless in-flight sibling stops the wave until it writes its table, or until the user moves its run directory to \`<COMMON>/work-issue/closed/\` because the run is dead."
 
 # Step 2 exists because disjoint paths do not make two lanes independent.
 require_text "$skill" "Disjoint paths prove two lanes cannot lose each other's writes. They do not prove the two lanes are independent"
@@ -167,6 +170,18 @@ require_text "$skill" "| \`pr\` non-null on a \`build\` report | The lane publis
 # The orchestrator writes its merge-test line into its own facts file. Writing
 # into a lane's file breaks the single-writer rule the facts log rests on.
 require_text "$skill" "\`WAVE_DIR/facts/wave.md\`, the one facts file the orchestrator owns"
+
+# Codex finding 2 on PR #141: a build report on disk proves the lane returned,
+# not that Step 5 gated it. Without the record and its resume row, a crash
+# between the two skips the pr check, the re-check, and the merge test.
+require_text "$skill" "\`reports/issue-<N>-<phase>.json\`, \`gate/issue-<N>.md\`, \`baseline.txt\`"
+require_text "$skill" "5. **Gate record.** Last, after items 1 through 4, write \`WAVE_DIR/gate/issue-<N>.md\`"
+require_text "$skill" "| 7 | every unheld lane has a build report; some build report has no \`gate/issue-<N>.md\`, or some gate record took the \`pr\` non-null stop | Step 5 for the ungated reports only; a recorded \`pr\` stop stops the wave again, naming the lane and its pull-request URL, until the user rules on it |"
+
+# Codex finding 3 on PR #141: each lane rebases before it publishes, so a
+# merge test over a stale base tested a tree nobody will merge.
+require_text "$skill" "Check the base before any dispatch: \`git -C ROOT fetch origin DEFAULT\`, then compare \`git -C ROOT rev-parse origin/DEFAULT\` with the \`base:\` line of the newest green \`merge-test/<k>.md\`."
+require_text "$skill" "Step 7 for those lanes only, when the fetched \`origin/DEFAULT\` equals that merge test's \`base:\`; where it differs, Step 6, then Step 7"
 
 # A report path the orchestrator cannot open costs a round trip, which is one
 # of #113's four measured losses.
@@ -219,6 +234,8 @@ require_text "$merge_test" "- **Contract change**, Step 5, over every lane branc
 require_text "$merge_test" "- **Before publish**, Step 6, over the full merge set in \`order.md\` order"
 require_text "$merge_test" "- **HEAD moved**, Step 8, re-run once more before the final report"
 require_text "$merge_test" "git -C ROOT worktree add --detach MERGE_TREE origin/DEFAULT"
+require_text "$merge_test" "Record \`base: origin/<DEFAULT> <sha>\` from \`git -C MERGE_TREE rev-parse HEAD\`."
+require_text "$merge_test" "6. **Record the run.** Write \`WAVE_DIR/merge-test/<k>.md\`: the \`base:\` line"
 require_text "$merge_test" "Sequential, never octopus, so a conflict names one pair"
 require_text "$merge_test" "\`git -C MERGE_TREE diff --stat HEAD\`. Non-empty is \`dirty after verify:\` and red. Checked this way, never with \`git status\`"
 require_text "$merge_test" "\`git worktree remove --force MERGE_TREE\`, on every route out"
@@ -429,13 +446,15 @@ footprints --lane issue-1="$fixtures/lane-a.md" --lane issue-2="$fixtures/lane-b
 expect_status 1 "a lane overlapping an in-flight run"
 expect_line "$err" "check-footprints: overlap: src/b.py — issue-2 owns src/b.py, in-flight issue-7 task t7 owns src/b.py" "a lane overlapping an in-flight run"
 
-# One tabled run that overlaps nothing, one tableless run, and a closed run
-# that overlaps lane-a. The tableless run is skipped and not counted as
-# checked (ledger row 22), and the closed run is ignored without a word.
+# One tabled run that overlaps nothing, and a closed run that overlaps lane-a.
+# The closed run is ignored without a word, so stderr stays empty.
 footprints --lane issue-1="$fixtures/lane-a.md" --lane issue-3="$fixtures/plan-waves.md" --runs "$fixtures/runs"
-expect_status 0 "a tableless run and a closed run"
-expect_line "$err" "check-footprints: skipped: issue-8 has no ## Waves table" "a tableless run"
-expect_line "$out" "OK: 2 lanes disjoint (checked 1 in-flight run)" "a tableless run and a closed run"
+expect_status 0 "a tabled run and a closed run"
+expect_line "$out" "OK: 2 lanes disjoint (checked 1 in-flight run)" "a tabled run and a closed run"
+[[ -z "$err" ]] || {
+  echo "a tabled run and a closed run should print nothing on stderr, got: $err" >&2
+  exit 1
+}
 if grep -Fq "issue-9" <<<"$out$err"; then
   echo "a run under closed/ must be ignored silently, got: $out $err" >&2
   exit 1
@@ -447,6 +466,16 @@ if grep -Fq "closed" <<<"$err"; then
   echo "closed/ must be skipped without a stderr line, got: $err" >&2
   exit 1
 fi
+
+# Ledger row 22, Codex finding 1 on PR #141. issue-8's plan says only
+# `Files: src/a.py`, which lane-a owns. Skipping it passed that overlap, so a
+# tableless run fails the proof even though every compared path is disjoint.
+footprints --lane issue-1="$fixtures/lane-a.md" --lane issue-3="$fixtures/plan-waves.md" --runs "$fixtures/runs-tableless"
+expect_status 1 "a tableless in-flight run"
+expect_line "$err" "check-footprints: unchecked: issue-8 has no ## Waves table; wait for it to write one, or move its run dir to closed/ if the run is dead" "a tableless in-flight run"
+# The skip lived in this script, so its refute runs here rather than against
+# SKILL.md with the other cuts.
+refute_text "$script" "skipped:"
 
 # Ledger row 27: at the Step 5 re-check a lane's own RUN_DIR sits under --runs
 # while its plan.md is passed as --lane, and without the exclusion a lane

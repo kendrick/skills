@@ -33,9 +33,9 @@ Four scenarios settle a question the design left to a live run. Scenario 4 tests
 python3 work-wave/scripts/check-footprints.py --lane issue-<N1>=WAVE_DIR/footprint/issue-<N1>.md --lane issue-<N2>=WAVE_DIR/footprint/issue-<N2>.md --runs <COMMON>/work-issue
 ```
 
-Then drop issue N2 and pair N1 with a disjoint issue, so the only overlap left is the in-flight run.
+Then drop issue N2 and pair N1 with a disjoint issue, so the only overlap left is the in-flight run. Last, move that run's `## Waves` table out of its `plan.md`, leaving only a `Files:` line, and invoke again.
 
-**Pass condition:** the script exits 1 with `check-footprints: overlap: src/lib` and both owners on stderr, the run stops at Step 1, and nothing is dispatched. On the second run the stderr names `in-flight issue-<N3>` and the run stops the same way. Fails if the run reaches Step 2, if either shape of the path passes as disjoint, or if the in-flight run is skipped while its table parses.
+**Pass condition:** the script exits 1 with `check-footprints: overlap: src/lib` and both owners on stderr, the run stops at Step 1, and nothing is dispatched. On the second run the stderr names `in-flight issue-<N3>` and the run stops the same way. On the third, the script exits 1 with `check-footprints: unchecked: issue-<N3> has no ## Waves table` and the run stops at Step 1, naming both ways forward. Fails if the run reaches Step 2, if either shape of the path passes as disjoint, if the in-flight run is skipped while its table parses, or if the tableless run passes as disjoint.
 
 ### 3. A Mutual Coupling Refuses the Pair
 
@@ -156,7 +156,7 @@ Run `gh pr list` at each stop the wave makes.
 
 **Commands:** re-invoke the wave with the same issues.
 
-**Pass condition:** the resume probe lands on row 9, a new `merge-test/<k>.md` records the moved SHA beside the other lane's, and only then does the final report print. Fails if the report prints on the old merge test, or if the re-test merges in any order but `order.md`'s.
+**Pass condition:** the resume probe lands on row 10, a new `merge-test/<k>.md` records the moved SHA beside the other lane's, and only then does the final report print. Fails if the report prints on the old merge test, or if the re-test merges in any order but `order.md`'s.
 
 ### 13. Re-Invoking on the Same Set Resumes
 
@@ -179,6 +179,22 @@ Pass the issue numbers in reverse order, to prove WAVE_ID is derived rather than
 **Commands:** run the wave to its report, then `gh pr list --state all`.
 
 **Pass condition:** the report lists the pull-request URLs in `order.md`'s order with each lane's `After`, names the newest merge test and its result line, carries the coupling table and the facts path, and ends on "a human merges, in this order", or "waiting on the reviewers" where every lane is answered and none has cleared. Every pull request is still open. Fails if any pull request is merged, if the order differs from `order.md`, or if WAVE_DIR moves to `closed/` while a lane's RUN_DIR is still open.
+
+### 15. A Build Report Saved but Never Gated Goes Back Through Step 5
+
+**Setup:** a wave of two lanes where lane A's build report names a path under CONTRACT_PATHS. Interrupt the orchestrator after Step 4 saves the last build report and before Step 5 writes that lane's `gate/issue-<N>.md`.
+
+**Commands:** re-invoke the wave with the same issues, then read `WAVE_DIR/gate/` and `WAVE_DIR/merge-test/`.
+
+**Pass condition:** the resume probe lands on row 7 and runs Step 5 for the ungated report only. The footprint re-check runs for it, the contract-change merge test runs and its line reaches `facts/wave.md`, and `gate/issue-<N>.md` then records the route, the re-check, and the merge-test result. Only after that does the run reach Step 6. Fails if the probe lands on row 8, if a report that already had a gate record is gated again, or if any merge test before publish runs while a report has no gate record.
+
+### 16. DEFAULT Moving After the Merge Test Holds Publication
+
+**Setup:** a wave of two lanes that reached a green Step 6. Before Step 7 dispatches, push one unrelated commit to the sandbox's default branch.
+
+**Commands:** let the wave continue, then read the newest two `merge-test/<k>.md` files and run `gh pr list --state all`.
+
+**Pass condition:** Step 7 fetches, finds `origin/<DEFAULT>` differing from the green run's `base:` line, and runs Step 6 again before any lane is dispatched. The new `merge-test/<k>.md` records the new tip as its `base:`, and `gh pr list --state all` is empty until it goes green. Fails if a lane is dispatched with the full grant while the newest green `base:` differs from `origin/<DEFAULT>`, or if a merge-test record has no `base:` line.
 
 ## What These Evals Do Not Cover
 

@@ -28,7 +28,7 @@ Resolve once per invocation:
 - **COMMON** — `git rev-parse --git-common-dir`, made absolute
 - **PROJECT** — ROOT's final path segment, lowercased to `a-z0-9-`
 - **WAVE_ID** — ISSUES sorted ascending and joined by `-`: `113-114-115`. Derived from the inputs so the same set of issues lands on the same directory every time it is typed.
-- **WAVE_DIR** — `<COMMON>/work-wave/wave-<WAVE_ID>/`. Subpaths: `lanes.md`, `footprint/issue-<N>.md`, `coupling.md`, `order.md`, `facts/issue-<N>.md`, `facts/wave.md`, `merge-test/<k>.md`, `reports/issue-<N>-<phase>.json`, `baseline.txt`. A finished wave moves to `<COMMON>/work-wave/closed/wave-<WAVE_ID>/`. Under the common dir for `work-issue`'s reasons: one location every lane's worktree can see, invisible to `git status`, and it outlives `git worktree remove`. It holds outputs, and nothing in it says which step the wave believes it reached.
+- **WAVE_DIR** — `<COMMON>/work-wave/wave-<WAVE_ID>/`. Subpaths: `lanes.md`, `footprint/issue-<N>.md`, `coupling.md`, `order.md`, `facts/issue-<N>.md`, `facts/wave.md`, `merge-test/<k>.md`, `reports/issue-<N>-<phase>.json`, `gate/issue-<N>.md`, `baseline.txt`. A finished wave moves to `<COMMON>/work-wave/closed/wave-<WAVE_ID>/`. Under the common dir for `work-issue`'s reasons: one location every lane's worktree can see, invisible to `git status`, and it outlives `git worktree remove`. It holds outputs, and nothing in it says which step the wave believes it reached.
 - **HANDBACK** — WAVE_DIR, spelled absolute. It is the one path every lane is told to write to and to name in its report, and every location a lane reports—its `worktree` and its `run_dir`—is absolute or is refused, while `files_changed` stays repo-relative by the brief's contract: subagent shells reset their working directory between calls, so a worktree-relative path in a report addresses whatever tree the reader happens to be in.
 - **PLAN[N]** — per issue, first hit wins: the `--plan N=PATH` argument; `<ROOT>/docs/plans/*issue-<N>*.md` or `<ROOT>/docs/plans/*-<N>-*.md`, newest by name; a path linked from the issue under a `Plan` heading. These are `work-issue`'s routes 1 through 3. Its route 4—the plan held in the conversation—is unreachable from a fresh subagent, so a plan that resolves only there is a missing plan here. Each hit is made absolute, and that absolute path is what the lane's argument line carries, as `work-issue`'s route 1.
 - **LANE[N]** — the lane's derived names, all `work-issue`'s: BRANCH `issue-<N>`, WORKTREE `<ROOT>/../<PROJECT>-issue-<N>/`, RUN_DIR `<COMMON>/work-issue/issue-<N>/`.
@@ -64,7 +64,9 @@ A non-zero exit is a hard stop, not a warning. Two lanes owning one path is two 
 
 Every lane's own `work-issue` will run `check-inflight.py` again at its Step 0 item 6, and that is kept, not relied on. N lanes dispatched in one message write their `## Waves` tables within seconds of each other, and that script skips a sibling whose table is not there yet, so each lane's check can pass against siblings that have not written theirs. This step is the one check that holds every footprint at once, and Step 5 re-runs it over what the lanes actually derived.
 
-**Done when:** `check-footprints.py` exited 0 over every lane's footprint file and every in-flight sibling run, and its output, `pair:` lines included, is saved to `WAVE_DIR/footprint/check.txt`.
+So where that script skips, this one fails closed. An in-flight sibling with no parseable `## Waves` table prints an `unchecked:` line and exits 1, because its footprint is unknown and an unknown footprint can overlap any lane. A tableless in-flight sibling stops the wave until it writes its table, or until the user moves its run directory to `<COMMON>/work-issue/closed/` because the run is dead. Name the sibling and both ways forward; which one applies is the user's call.
+
+**Done when:** `check-footprints.py` exited 0 over every lane's footprint file and every in-flight sibling run, each sibling's table read and compared, and its output, `pair:` lines included, is saved to `WAVE_DIR/footprint/check.txt`—or the run stopped at an overlap, or at an `unchecked:` sibling named with both ways forward.
 
 ## Step 2 — Couple and order
 
@@ -143,11 +145,13 @@ As each build report returns:
 | `failed`, or `refused` at its own gate | The lane is out of the merge set; lanes ordered after it are moved to `held`; every other lane proceeds. No revert, because its writes are on its own branch in its own worktree and clobbered nothing; no rung-up retry, because `work-issue` has already applied `divvy-up`'s retry inside the lane and LANE_MODEL is already the rung a retry would reach. Its report is quoted in the final report, and `work-issue N` resumes it once a human has read that. |
 | `worktree` or `run_dir` not absolute, or `head` not a SHA | Re-prompt once for the absolute form and the SHA. A relative path in a report is the round trip this skill exists to remove. |
 
-**Done when:** for every returned lane, its facts are on disk, the footprint re-check exited 0, a contract change ran the merge test and its result is a line in `facts/wave.md`, a red one naming the lane that broke the other with the pair's `coupling.md` row corrected where it said `independent`, no build report carries a `pr`, and the lane is `done` or is out of the merge set with its dependents held and the reason recorded.
+5. **Gate record.** Last, after items 1 through 4, write `WAVE_DIR/gate/issue-<N>.md`: the route item 4 took (`done`, `stopped`, `failed` or `refused`, or the `pr` non-null stop), the footprint re-check's exit and output, and the contract-change merge test's `merge-test/<k>.md` path and result line, or `none` where nothing triggered one. It is the resume probe's only evidence that this step finished for a report: a build report saved at Step 4 with no gate record beside it returned just before an interruption, and goes back through this step rather than past it.
+
+**Done when:** for every returned lane, its facts are on disk, the footprint re-check exited 0, a contract change ran the merge test and its result is a line in `facts/wave.md`, a red one naming the lane that broke the other with the pair's `coupling.md` row corrected where it said `independent`, no build report carries a `pr`, the lane is `done` or is out of the merge set with its dependents held and the reason recorded, and its `gate/issue-<N>.md` records the route, the re-check, and the merge-test result, written after all of them.
 
 ## Step 6 — Merge test before publish
 
-Every unheld lane has returned. Run the merge test per [references/merge-test.md](references/merge-test.md) over the merge set in `order.md`'s order, one `git merge --no-ff --no-edit issue-N` at a time, then INSTALL_CMD and VERIFY_CMD, recorded as `WAVE_DIR/merge-test/<k>.md` with the SHA of every branch merged.
+Every unheld lane has returned. Run the merge test per [references/merge-test.md](references/merge-test.md) over the merge set in `order.md`'s order, one `git merge --no-ff --no-edit issue-N` at a time, then INSTALL_CMD and VERIFY_CMD, recorded as `WAVE_DIR/merge-test/<k>.md` with the `base:` it merged onto and the SHA of every branch merged.
 
 A conflict names the pair: the branch that failed to merge and the branch before it whose paths it hit. `git merge --abort`, record the paths, and stop the wave at this step with the pair. A conflict after a passing footprint proof means a lane wrote outside the footprint it declared, and the lane's own `divvy-up` gate should have caught it; either way, resolving it is a judgment call no unattended run makes.
 
@@ -155,15 +159,17 @@ Red with a green baseline is the cross-lane coupling that every ownership proof 
 
 Green, and `git -C MERGE_TREE diff --stat HEAD` empty—the suite mutated nothing, checked this way rather than by `git status` because a status read of a copied tree once reported clean over a staged index—proceeds. Remove MERGE_TREE.
 
-**Done when:** `merge-test/<k>.md` records every merged SHA, the merge result, and VERIFY_CMD's real tail; the result is green and the post-verify diff was empty; MERGE_TREE is gone—or the run stopped on a conflict or a red suite with the pair named and nothing published.
+**Done when:** `merge-test/<k>.md` records its `base:`, every merged SHA, the merge result, and VERIFY_CMD's real tail; the result is green and the post-verify diff was empty; MERGE_TREE is gone—or the run stopped on a conflict or a red suite with the pair named and nothing published.
 
 ## Step 7 — Publish
+
+Check the base before any dispatch: `git -C ROOT fetch origin DEFAULT`, then compare `git -C ROOT rev-parse origin/DEFAULT` with the `base:` line of the newest green `merge-test/<k>.md`. Where they differ, DEFAULT moved after the merge test, and each lane's rebase at `work-issue`'s Step 5 would publish a combined tree no merge test saw. Run Step 6 again first: it merges onto the new tip, so it tests the tree those rebases will produce. Dispatch only on its green, with the base checked again.
 
 Read [references/lane-brief.md](references/lane-brief.md) again and instantiate it once per lane in the merge set, with `{{PHASE}}` `publish`, `{{GRANT}}` the full grant, and `{{FACTS}}` the directory's current contents. Dispatch every one in a SINGLE message at LANE_MODEL. Each lane invokes `work-issue <N> <PLAN[N]> --isolate` again; `work-issue`'s resume probe reads the red-team clean and no pull request and places the lane at its Step 5, and from there the lane rebases, pushes `issue-N`, opens its pull request, and runs its triage and repair as its own skill says, without asking.
 
 Save every report verbatim to `WAVE_DIR/reports/issue-<N>-publish.json`. Route by the same table as Step 5; a lane that stopped at `work-issue`'s ten-minute poll with `triage/waiting` is `done` for this wave's purposes, since resolving stays the reviewer's act and `work-issue N` continues it.
 
-**Done when:** every lane in the merge set was dispatched with the full grant in one message and its publish report is on disk verbatim; each is `done`, waiting on its reviewer, or out of the merge set with the reason recorded.
+**Done when:** the fetched `origin/DEFAULT` equalled the `base:` of the newest green merge test at the moment of dispatch; every lane in the merge set was dispatched with the full grant in one message and its publish report is on disk verbatim; each is `done`, waiting on its reviewer, or out of the merge set with the reason recorded.
 
 ## Step 8 — Report
 
@@ -185,10 +191,11 @@ The world outranks WAVE_DIR, and WAVE_DIR outranks memory. Each lane's state is 
 | 4 | `check.txt`; `coupling.md` or `order.md` missing, or a coupling row still `ask` | Step 2 |
 | 5 | `order.md`; no `merge-test/0.md` | Step 3, the confirmation again, then Step 4 |
 | 6 | `merge-test/0.md`; some unheld lane has no `reports/issue-N-build.json` | Step 4 for those lanes only, in one message; a lane whose RUN_DIR exists is resumed by its own `work-issue`, and its build report is whatever it returns |
-| 7 | every build report; no `merge-test/<k>.md` with k > 0 whose SHAs equal every lane's current HEAD | Step 6 |
-| 8 | a green merge test at current HEADs; some lane in the merge set has no `reports/issue-N-publish.json` | Step 7 for those lanes only |
-| 9 | every publish report; some lane HEAD moved since the newest merge test | Step 8's re-test, then the report |
-| 10 | every publish report; merge test green at current HEADs | Step 8's report |
+| 7 | every unheld lane has a build report; some build report has no `gate/issue-<N>.md`, or some gate record took the `pr` non-null stop | Step 5 for the ungated reports only; a recorded `pr` stop stops the wave again, naming the lane and its pull-request URL, until the user rules on it |
+| 8 | every gate record; no `merge-test/<k>.md` with k > 0 whose SHAs equal every lane's current HEAD | Step 6 |
+| 9 | a green merge test at current HEADs; some lane in the merge set has no `reports/issue-N-publish.json` | Step 7 for those lanes only, when the fetched `origin/DEFAULT` equals that merge test's `base:`; where it differs, Step 6, then Step 7 |
+| 10 | every publish report; some lane HEAD moved since the newest merge test | Step 8's re-test, then the report |
+| 11 | every publish report; merge test green at current HEADs | Step 8's report |
 
 A lane's `work-issue` may itself be mid-run on a herdr agent or a stranded worktree; those are its rows 2 and 3, and re-dispatching it is how they get read.
 

@@ -31,15 +31,22 @@ Output on a pass: one `footprint: issue-N <k> paths` line per lane, then one
 then `OK: <n> lanes disjoint (checked <r> in-flight runs)`. Lanes print in
 ascending issue order whatever order the flags came in, so two runs over one
 wave print the same lines. <r> counts only the runs whose tables were
-compared. A run without a parseable table is reported on stderr as `skipped:
-issue-M has no ## Waves table`, and it isn't counted, because a run this
-script could not read has not been checked.
+compared, so a lane-named directory never adds to it.
+
+An in-flight run without a readable, parseable table fails the proof. It
+prints `unchecked: issue-M has no ## Waves table` on stderr, and the exit is
+1 even when every footprint compared is disjoint. Skipping such a run once
+let an overlap through: Codex finding 1 on PR #141 put a lane owning
+src/a.py beside a tableless run whose plan said `Files: src/a.py`, and the
+proof passed. A missing table is what the lanes' own gates skip over, so
+skipping it here reopened the race this script exists to close. The caller
+waits for a run still writing its table and moves a dead one to closed/.
 
 Exit codes: 0 pass; 1 semantic failure, with one line per problem on stderr:
-`overlap:`, `malformed:`, or `empty:`; 3 usage or unreadable input, which
-covers fewer than two lanes, a lane named twice, a malformed --lane, an
-unreadable PATH, and a lane plan whose `## Waves` table won't parse. Argparse
-supplies 2 for a mistyped flag.
+`overlap:`, `malformed:`, `empty:`, or `unchecked:`; 3 usage or unreadable
+input, which covers fewer than two lanes, a lane named twice, a malformed
+--lane, an unreadable PATH, and a lane plan whose `## Waves` table won't
+parse. Argparse supplies 2 for a mistyped flag.
 
 Stdlib only, so the skill stays copy-in portable.
 """
@@ -397,11 +404,18 @@ def lane_entries(lane, path):
 
 
 def inflight_entries(runs_dir, lanes):
-    """(checked, claims, skipped) over the in-flight runs under runs_dir.
+    """(checked, claims, unchecked) over the in-flight runs under runs_dir.
 
     A missing runs_dir is 0 runs and not an error. work-issue creates the
     directory on its first run, so it is absent in a repo that has never had
     one.
+
+    A run whose plan.md is missing, unreadable, or has no parseable table
+    lands in `unchecked`, and main fails on it rather than passing over it.
+    Its footprint is unknown, and an unknown footprint can overlap anything.
+    Skipping it once let a sibling owning a lane's file through (Codex
+    finding 1, PR #141).
+    It isn't counted in `checked` either, since nothing of it was compared.
 
     A sibling's malformed entries are dropped silently rather than failed.
     That plan passed its own `check-waves validate`, and its spelling isn't
@@ -409,7 +423,7 @@ def inflight_entries(runs_dir, lanes):
     paths_overlap, where it would answer 'no overlap' for the wrong reason."""
     if not os.path.isdir(runs_dir):
         return 0, [], []
-    checked, claims, skipped = 0, [], []
+    checked, claims, unchecked = 0, [], []
     for name in sorted(os.listdir(runs_dir)):
         if name == "closed" or name in lanes:
             continue
@@ -419,11 +433,11 @@ def inflight_entries(runs_dir, lanes):
             with open(os.path.join(runs_dir, name, "plan.md"), encoding="utf-8") as f:
                 text = f.read()
         except (OSError, UnicodeDecodeError):
-            skipped.append(name)
+            unchecked.append(name)
             continue
         rows, problems = read_rows(text)
         if problems:
-            skipped.append(name)
+            unchecked.append(name)
             continue
         checked += 1
         claims.extend(
@@ -433,7 +447,7 @@ def inflight_entries(runs_dir, lanes):
             for entry in row.entries
             if owns_entry_problem(entry) is None
         )
-    return checked, claims, skipped
+    return checked, claims, unchecked
 
 
 def parse_lanes(specs):
@@ -513,11 +527,14 @@ def main(argv=None):
                         f"{y.owner} owns {y.entry}"
                     )
 
-    checked, sibling_claims, skipped = (
+    checked, sibling_claims, unchecked = (
         inflight_entries(args.runs, lanes) if args.runs else (0, [], [])
     )
-    for name in skipped:
-        sys.stderr.write(f"check-footprints: skipped: {name} has no ## Waves table\n")
+    for name in unchecked:
+        problems.append(
+            f"unchecked: {name} has no ## Waves table; wait for it to write "
+            "one, or move its run dir to closed/ if the run is dead"
+        )
     for lane in names:
         for x in comparable[lane]:
             for y in sibling_claims:
