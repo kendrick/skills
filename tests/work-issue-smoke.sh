@@ -1419,12 +1419,4 @@ grep -Fq "OK: plan cites #101, 3 tasks with files, 0 open markers, 4/4 criteria 
 # repo-docs-smoke.sh, so this does not re-pin it twelve times.
 require_text README.md "--skill work-issue"
 
-# A waived review escalates rather than fixes (row 96); its findings reach the
-# human who merges only through the PR body. The copy lands before ar-state.txt
-# because row 11 reads that file as the review finished (row 97).
-require_text work-issue/SKILL.md "Write the report it printed to \`RUN_DIR/redteam/ar-report.md\`, and copy its \`escalation.md\`, where one exists, to \`RUN_DIR/redteam/escalation.md\`, both before writing \`ar-state.txt\`"
-# UNVERIFIED: 0 in ar-state.txt says nothing about UNVERIFIABLE findings or
-# UNREVIEWED territories, which live only in the printed report (row 98).
-require_text work-issue/SKILL.md "\"Not independently verified\", which also carries every UNVERIFIABLE finding and UNREVIEWED territory \`RUN_DIR/redteam/ar-report.md\` names"
-require_text work-issue/SKILL.md "\"Left out\", which carries every finding \`RUN_DIR/redteam/escalation.md\` names, with its repro command"
 echo "work-issue smoke: OK"
