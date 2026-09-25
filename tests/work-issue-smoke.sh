@@ -213,11 +213,25 @@ require_text work-issue/SKILL.md "what you left and why"
 require_text work-issue/references/worker-prompt.md "Flag rather than route around"
 require_text work-issue/references/worker-prompt.md "what you left and why"
 
-# Step 4 re-derives its grep from adversarial-review's table at run time rather
-# than copying the signals, but which rows it reads is fixed here. Drop a row
-# and the red-team phase stops firing on money, authz, or schema diffs while
-# the step still reads as intact, with nothing in the output to say otherwise.
+# Step 4's trigger reads adversarial-review's table at run time through that
+# skill's own script, so no signal is copied here, but which rows it reads is
+# fixed here. Drop a row and the red-team phase stops firing on money, authz, or
+# schema diffs while the step still reads as intact, with nothing in the output
+# to say otherwise.
 require_text work-issue/SKILL.md "rows 1 (money), 2 (authz), and 4 (schema) of \`adversarial-review/references/trigger-table.md\`"
+# SKILL.md and redteam.md both run the match through the script (row 98). A
+# grep rebuilt from the table's prose broke on the table's own `round(` recipe
+# (#114), so the rebuild-the-grep wording is refuted in both files.
+require_file adversarial-review/scripts/match-triggers.py
+require_text work-issue/SKILL.md "git diff BASE_SHA..HEAD | adversarial-review/scripts/match-triggers.py rows --only 1,2,4"
+require_text work-issue/references/redteam.md "git diff BASE_SHA..HEAD | adversarial-review/scripts/match-triggers.py rows --only 1,2,4"
+# A failed script run prints nothing, and an empty output records `fired: no`.
+require_text work-issue/SKILL.md "A non-zero exit decides nothing"
+require_text work-issue/references/redteam.md "A non-zero exit decides nothing"
+for f in work-issue/SKILL.md work-issue/references/redteam.md; do
+  refute_text "$f" "Re-derive the grep from"
+  refute_text "$f" "build the grep"
+done
 
 # Step 0's yes answers `adversarial-review`'s own Step 2 question (row 93).
 # Without that, an unattended run stops mid-run on a prompt nobody is there to
@@ -247,9 +261,9 @@ require_text work-issue/SKILL.md "Take \`<n>\` from the Depth table in \`adversa
 require_text work-issue/README.md "After yes, the run is unattended unless the real diff trips an \`adversarial-review\` the confirmation didn't forecast, or forecast at a lower depth."
 require_text work-issue/README.md "Only \`adversarial-review\` can ask again"
 
-# `--deep` fires the trigger without a grep hit, so Step 0 item 7 names the
+# `--deep` fires the trigger without a match, so Step 0 item 7 names the
 # review for a `--deep` run as well. Without this clause, a `--deep` run whose
-# forecast grep missed reaches the review's Step 2 question with no yes
+# forecast match missed reaches the review's Step 2 question with no yes
 # covering it (row 93).
 require_text work-issue/SKILL.md "or \`reproduce claims, then adversarial-review (--deep; depth 2 forecast)\` when \`--deep\` is set, since that flag fires the trigger on its own."
 # Step 0 forecasts depth 2 for a `--deep` run, and the review pins Depth 2 only

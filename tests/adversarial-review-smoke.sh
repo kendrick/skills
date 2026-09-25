@@ -45,6 +45,7 @@ require_file adversarial-review/assets/finding.schema.json
 require_file adversarial-review/assets/event.schema.json
 require_file adversarial-review/scripts/check-territories.py
 require_file adversarial-review/scripts/ledger.py
+require_file adversarial-review/scripts/match-triggers.py
 require_file _maintenance/adversarial-review/RATIONALE.md
 require_file _maintenance/adversarial-review/EVALS.md
 require_file tests/fixtures/adversarial-review/scope-good.json
@@ -191,6 +192,16 @@ require_text adversarial-review/references/trigger-table.md "| 6 | representatio
 require_text adversarial-review/references/trigger-table.md "| 7 | general |"
 require_text adversarial-review/references/trigger-table.md "An assertion that recomputes the implementation rather than observing the result."
 require_text adversarial-review/references/trigger-table.md "A unit suffix matches against the number in front of it"
+# Step 2 matches through the script, which reads the table's own signals
+# (RATIONALE row 41). The recipe it replaced, rebuilt by hand each run, exits 2
+# on the `round(` signal (#114), so the refutes pin that recipe's sentence and
+# the outline that sent a reader to build it.
+require_text adversarial-review/SKILL.md "adversarial-review/scripts/match-triggers.py rows"
+require_text adversarial-review/references/trigger-table.md "implements these rules"
+require_text adversarial-review/references/trigger-table.md "adversarial-review/scripts/match-triggers.py rows\` for each changed file"
+refute_text adversarial-review/references/trigger-table.md "In practice, \`grep -Ei"
+refute_text adversarial-review/references/trigger-table.md "Grep the file's hunks"
+refute_text adversarial-review/SKILL.md "grep each changed file's hunks"
 require_text adversarial-review/SKILL.md 'no row above `general` matched'
 refute_text adversarial-review/SKILL.md "no row above 6 matched"
 refute_text adversarial-review/SKILL.md "no row above 7 matched"
@@ -626,6 +637,65 @@ binary_status=$?
 set -e
 [[ "$binary_status" == "3" ]] || {
   echo "an unreadable --exclude file must exit 3, got: $binary_status" >&2
+  exit 1
+}
+
+# match-triggers.py: each falsifier from #157 runs through the real script on
+# its committed fixture. Exact stdout and exit code, because an empty stdout is
+# the passing answer for half of them, and a crash also prints nothing.
+match_py=adversarial-review/scripts/match-triggers.py
+diffs="$fixtures/diffs"
+expect_match() {
+  local want="$1"
+  shift
+  local got status
+  set +e
+  got="$(python3 "$match_py" rows "$@")"
+  status=$?
+  set -e
+  [[ "$status" == "0" && "$got" == "$want" ]] || {
+    echo "match-triggers.py rows $*: want exit 0 and '$want', got exit $status and '$got'" >&2
+    exit 1
+  }
+}
+expect_match "1 money" --only 1 <"$diffs/money-round-paren.diff"
+expect_match "1 money" --only 1 < <(printf '+total = round(amount, 2)\n')
+# Whole-word: `index` inside `page_index` is no schema signal, and a bare
+# `CREATE INDEX` is. A substring matcher prints `4 schema` for both.
+expect_match "" <"$diffs/schema-page-index.diff"
+expect_match "4 schema" <"$diffs/schema-create-index.diff"
+# Unit suffix: `px` matches after a digit, never as an identifier.
+expect_match "6 representation" <"$diffs/unit-12px.diff"
+expect_match "" <"$diffs/unit-const-px.diff"
+# The only `round(` in this diff sits on an unchanged context line.
+expect_match "" <"$diffs/context-only.diff"
+
+# The recipe the script replaced, filled in for `round(`, is a regex error
+# rather than a match: exit 2 on the very line the script matches (#114).
+set +e
+printf '+total = round(amount, 2)\n' | grep -Ei '\bround(\b' >/dev/null 2>&1
+recipe_status=$?
+set -e
+[[ "$recipe_status" == "2" ]] || {
+  echo "grep -Ei '\\bround(\\b' was expected to exit 2 on round(amount, 2), got: $recipe_status" >&2
+  exit 1
+}
+
+# A table the script can't parse exits 1, so Step 2 stops rather than
+# deriving every file into `general`. A missing table is unreadable input: 3.
+printf '# not a trigger table\n\nno rows here\n' >"$tmp/bad-table.md"
+set +e
+python3 "$match_py" rows --table "$tmp/bad-table.md" </dev/null >/dev/null 2>&1
+bad_table_status=$?
+python3 "$match_py" rows --table "$tmp/no-such-table.md" </dev/null >/dev/null 2>&1
+missing_table_status=$?
+set -e
+[[ "$bad_table_status" == "1" ]] || {
+  echo "an unparseable --table must exit 1, got: $bad_table_status" >&2
+  exit 1
+}
+[[ "$missing_table_status" == "3" ]] || {
+  echo "a missing --table must exit 3, got: $missing_table_status" >&2
   exit 1
 }
 
