@@ -160,7 +160,7 @@ require_text adversarial-review/SKILL.md "check-territories.py intersect"
 # Step 7 filters exclusions in the script. The grep stage it replaced printed
 # nothing under ugrep for an empty excluded.txt (RATIONALE row 38).
 require_text adversarial-review/SKILL.md "--exclude RUN_DIR/excluded.txt"
-require_text adversarial-review/SKILL.md "write them to \`RUN_DIR/excluded.txt\`"
+require_text adversarial-review/SKILL.md "write the \`excluded\` entries to \`RUN_DIR/excluded.txt\`"
 refute_text adversarial-review/SKILL.md "grep -vFf"
 require_text adversarial-review/SKILL.md "escalation.md"
 
@@ -418,8 +418,26 @@ for ex in "$tmp/excluded-one.txt" "$tmp/excluded-dir.txt"; do
     exit 1
   }
 done
-printf 'dist/app.js\n' | python3 "$territories" intersect "$fixtures/scope-good.json" --exclude "$tmp/no-such-file.txt" >/dev/null 2>&1 && {
-  echo "a missing --exclude file must exclude nothing, so dist/app.js stays unowned" >&2
+# Exit 1 with the unowned line, not merely non-zero: a missing file rejected
+# as unreadable (exit 3) would pass a bare status check while excluding
+# nothing no longer held.
+set +e
+missing_err="$(printf 'dist/app.js\n' | python3 "$territories" intersect "$fixtures/scope-good.json" --exclude "$tmp/no-such-file.txt" 2>&1 >/dev/null)"
+missing_status=$?
+set -e
+[[ "$missing_status" == "1" ]] && grep -Fq "unowned in fix diff: dist/app.js" <<<"$missing_err" || {
+  echo "a missing --exclude file must exclude nothing, so dist/app.js stays unowned (exit 1), got $missing_status: $missing_err" >&2
+  exit 1
+}
+# Unreadable input is a usage failure under the validator convention, never
+# a traceback that exits 1 and reads as an unowned path.
+printf '\377\n' >"$tmp/excluded-binary.txt"
+set +e
+printf 'src/billing/tax.py\n' | python3 "$territories" intersect "$fixtures/scope-good.json" --exclude "$tmp/excluded-binary.txt" >/dev/null 2>&1
+binary_status=$?
+set -e
+[[ "$binary_status" == "3" ]] || {
+  echo "an unreadable --exclude file must exit 3, got: $binary_status" >&2
   exit 1
 }
 

@@ -25,7 +25,8 @@ nothing.
 
 Exit codes: 0 pass; 1 semantic failure (overlap, malformed entry, unowned or
 multiply-owned path) with one line per problem on stderr; 3 usage, missing file,
-unreadable JSON. Argparse supplies 2 for a mistyped flag.
+unreadable JSON. A missing `--exclude` file is the exception: it excludes
+nothing, the way an empty one does, and an unreadable one exits 3. Argparse supplies 2 for a mistyped flag.
 
 Stdlib only, so the skill stays copy-in portable.
 """
@@ -349,7 +350,7 @@ def load_excludes(path):
             return [line.strip() for line in f if line.strip()]
     except FileNotFoundError:
         return []
-    except OSError as e:
+    except (OSError, UnicodeDecodeError) as e:
         sys.stderr.write(f"check-territories: {path}: {e}\n")
         raise SystemExit(3)
 
