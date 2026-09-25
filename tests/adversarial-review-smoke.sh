@@ -406,6 +406,18 @@ listed_ok_out="$(python3 "$ledger_py" validate --ledger "$tmp/listed-ok.jsonl" 2
   echo "an advisory LISTED beside a blocker TEST_WRITTEN must validate: $listed_ok_out" >&2
   exit 1
 }
+# validate holds a LISTED line to the same reason rule append-event does, so
+# a hand-edited ledger can't carry a listing nobody explained.
+cp "$tmp/listed-ok.jsonl" "$tmp/listed-noreason.jsonl"
+printf '%s\n' '{"record": "event", "finding_id": "F-r1-money-02", "disposition": "LISTED", "actor": "orchestrator", "repro_command": null, "observed_output": null, "counter_evidence": null, "reason": null, "artifact": null, "at": "2026-09-24T00:00:01Z"}' >>"$tmp/listed-noreason.jsonl"
+noreason_out="$(python3 "$ledger_py" validate --ledger "$tmp/listed-noreason.jsonl" 2>&1)" && {
+  echo "validate must refuse a LISTED event with no reason" >&2
+  exit 1
+}
+grep -Fq "LISTED requires reason" <<<"$noreason_out" || {
+  echo "validate's refusal must name LISTED and its reason, got: $noreason_out" >&2
+  exit 1
+}
 listed_ledger "$tmp/listed-blocker.jsonl" LISTED
 listed_bad_out="$(python3 "$ledger_py" validate --ledger "$tmp/listed-blocker.jsonl" 2>&1)" && {
   echo "a blocking finding recorded LISTED must fail validate" >&2
