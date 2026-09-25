@@ -450,6 +450,21 @@ grep -Fq "unknown finding_id F-missing" <<<"$orphan_out" || {
   echo "the orphan-event refusal must name the missing finding, got: $orphan_out" >&2
   exit 1
 }
+# An event above its finding fails validate even when every other rule
+# holds: derive() folds in file order and drops it, so an advisory's LISTED
+# line placed first would vanish from state while validate said OK.
+{
+  printf '%s\n' '{"record": "event", "finding_id": "F-r1-money-02", "disposition": "LISTED", "actor": "orchestrator", "repro_command": null, "observed_output": null, "counter_evidence": null, "reason": "listed in PR Left Out", "artifact": null, "at": "2026-09-24T00:00:00Z"}'
+  sed -n 2p "$tmp/listed-ok.jsonl"
+} >"$tmp/listed-forward-advisory.jsonl"
+fwd_adv_out="$(python3 "$ledger_py" validate --ledger "$tmp/listed-forward-advisory.jsonl" 2>&1)" && {
+  echo "validate must refuse an event that precedes its finding, got OK: $fwd_adv_out" >&2
+  exit 1
+}
+grep -Fq "precedes its finding F-r1-money-02" <<<"$fwd_adv_out" || {
+  echo "the forward-event refusal must name the finding, got: $fwd_adv_out" >&2
+  exit 1
+}
 listed_ledger "$tmp/listed-blocker.jsonl" LISTED
 listed_bad_out="$(python3 "$ledger_py" validate --ledger "$tmp/listed-blocker.jsonl" 2>&1)" && {
   echo "a blocking finding recorded LISTED must fail validate" >&2

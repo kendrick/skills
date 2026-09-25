@@ -388,11 +388,13 @@ def cmd_validate(args):
     seen = {
         obj.get("id"): obj for _, obj in lines if obj.get("record") == "finding"
     }
+    read_so_far = set()
     for lineno, obj in lines:
         record = obj.get("record")
         if record == "finding":
             schema = finding_schema
             findings += 1
+            read_so_far.add(obj.get("id"))
         elif record == "event":
             schema = event_schema
             events += 1
@@ -416,6 +418,13 @@ def cmd_validate(args):
         if record == "event" and obj.get("finding_id") not in seen:
             problems.append(f"line {lineno}: unknown finding_id {obj.get('finding_id')}")
             continue
+        # derive() folds in file order and skips an event whose finding it
+        # hasn't read yet, so a forward event would drop out of `state`.
+        # append-event never writes one; only a hand edit does.
+        if record == "event" and obj.get("finding_id") not in read_so_far:
+            problems.append(
+                f"line {lineno}: event precedes its finding {obj.get('finding_id')}"
+            )
         if record == "event" and obj.get("finding_id") in seen:
             problem = severity_problem(obj["disposition"], seen[obj["finding_id"]])
             if problem:
