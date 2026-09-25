@@ -39,6 +39,8 @@ A finding is **in scope** where any of these holds:
 
 It is **out of scope** otherwise. Two shapes account for most of them: pre-existing code the diff did not touch, and a capability neither the issue nor the plan ever asked for. The issue this skill came from has the second kind on record — a reviewer asking for `navigator.storage.persist()` on a change that was about something else entirely. The suggestion was good. It was also a new feature, arriving through a review thread, with no issue behind it and no plan covering it, and building it there would have grown the diff past what anyone approved.
 
+Every row of `RUN_DIR/triage/round-<k>.md` carries a `Severity` cell: the reviewer's marker, `P0`, `P1`, or `P2`, or `-` where they gave none. Take it from the badge or bold run that opens the finding's body in `RUN_DIR/review/poll-<k>.json`, never from words later in the body. `run-state.py`'s deciding line is no substitute: it marks thread lines only, and it matches `P0` or `P1` anywhere in the body, so a finding that says "not a P1" reads as one. Write `blocking` where the finding says it blocks merge in words rather than a badge. Step 8 reads this cell to decide whether a repair goes back through `adversarial-review`, and the resume probe counts it, so write the marker alone in the cell.
+
 Ambiguous goes in scope where the reviewer marked it P0, and out otherwise. Either way the ambiguity is recorded on the row, because the next reader's question is always why this one went the way it did.
 
 Scope is not a judgment about whether the finding is right. An out-of-scope finding can be entirely correct and still belong in the queue; what puts it there is that fixing it here would make this pull request about something the issue did not ask for.

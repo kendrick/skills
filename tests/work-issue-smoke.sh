@@ -1133,6 +1133,7 @@ declare -a probe_cases=(
   "row-07:2" "row-07-isolation-incomplete:1" "row-08:3" "row-09:3" "row-10:4" "row-11:4" "row-11-trigger-unrecorded:4" "row-12:5" "row-13:5"
   "row-14:6" "row-15:6" "row-16:7" "row-17:8" "row-17-queued:8" "row-17-postpush:8"
   "row-10-repair-unverified:4" "row-10-repair-needed:4" "row-10-failed-twice:stop" "row-13-prepr-repair-clean:5" "row-16-earlier-queued:8" "row-17-review-repair-unpushed:8" "row-17-deferred-owed:8" "row-17-worker-queue:8" "row-18-answered:done" "row-18:done"
+  "row-17-repair-advisory-only:8" "row-17-repair-blocking:8" "row-17-repair-blocking-settled:8"
 )
 for case in "${probe_cases[@]}"; do
   fixture="${case%%:*}"
@@ -1187,6 +1188,64 @@ grep -Fq "run round k+1" <<<"$(python3 "$run_state" phase --probe "$probes_dir/r
   echo "row-10-repair-unverified.json should resume at round k+1, not at the repair dispatch" >&2
   exit 1
 }
+
+# Step 8 item 1's re-fire rule (#151, work-issue row 97). A repair whose round
+# held only P2 rows gets the reproducer and nothing more, so the run goes
+# straight to pushing and replying. One P1 row sends it back into
+# adversarial-review until that review settles. Re-firing after every repair
+# is what ran cambium #23/#26 to 7 cycles per lane.
+advisory_reason="$(python3 "$run_state" phase --probe "$probes_dir/row-17-repair-advisory-only.json")"
+grep -Fq "adversarial-review" <<<"$advisory_reason" && {
+  echo "a repair whose round held only P2 rows must not re-enter adversarial-review, got: $advisory_reason" >&2
+  exit 1
+}
+blocking_reason="$(python3 "$run_state" phase --probe "$probes_dir/row-17-repair-blocking.json")"
+# The resume starts item 1 from the reproducer until the repair's trigger
+# file exists, so a stop before the reproducer ran can't skip it.
+grep -Fq "resume at Step 8 item 1 from the reproducer where trigger-repair-<k>.txt is absent" <<<"$blocking_reason" || {
+  echo "a repair whose round held a P1 row must re-enter Step 8 item 1 from the reproducer, got: $blocking_reason" >&2
+  exit 1
+}
+settled_reason="$(python3 "$run_state" phase --probe "$probes_dir/row-17-repair-blocking-settled.json")"
+grep -Fq "adversarial-review" <<<"$settled_reason" && {
+  echo "a repair whose adversarial-review settled must move on to the push, got: $settled_reason" >&2
+  exit 1
+}
+
+# The triage_blocking_rows probe, run as resume.md writes it against a round
+# whose finding text says "P1" on a row the reviewer marked none. Reading the
+# Severity cell rather than the row is what keeps that row from counting.
+# The command is the row's first code span, and a table cell escapes its
+# pipes as `\|`, so unescape them the way the markdown renderer would.
+blocking_probe="$(sed -n 's/^| `triage_blocking_rows` | `\([^`]*\)`.*/\1/p' work-issue/references/resume.md \
+  | sed 's/\\|/|/g')"
+[[ -n "$blocking_probe" ]] || {
+  echo "could not extract the triage_blocking_rows probe from work-issue/references/resume.md" >&2
+  exit 1
+}
+tri_run="$tmp/tri-run"
+mkdir -p "$tri_run/triage"
+cp tests/fixtures/work-issue/triage/round-1.md "$tri_run/triage/round-1.md"
+blocking_count="$(bash -c "${blocking_probe//<RUN_DIR>/$tri_run}")"
+[[ "$blocking_count" == "1" ]] || {
+  echo "triage_blocking_rows should count the one P1 row in the fixture round, got: $blocking_count (probe: $blocking_probe)" >&2
+  exit 1
+}
+# A Finding cell quoting a shell pipe escapes it as `\|`, which must not
+# shift the Severity column. A round with no Severity column can't answer, so
+# the probe prints null, which phase's null-field stop (checked below) turns
+# into a stop naming the field rather than reading
+# 0. No round yet prints 0 without reading stdin, where it once hung.
+for tri_case in "triage-pipe:1" "triage-noseverity:null" "empty:0"; do
+  tri_dir="$tmp/tri-${tri_case%%:*}"
+  mkdir -p "$tri_dir/triage"
+  [[ "${tri_case%%:*}" == empty ]] || cp "tests/fixtures/work-issue/${tri_case%%:*}/round-1.md" "$tri_dir/triage/round-1.md"
+  tri_got="$(bash -c "${blocking_probe//<RUN_DIR>/$tri_dir}" </dev/null)"
+  [[ "$tri_got" == "${tri_case##*:}" ]] || {
+    echo "triage_blocking_rows on ${tri_case%%:*} should print ${tri_case##*:}, got: $tri_got" >&2
+    exit 1
+  }
+done
 
 # A field the probe could not answer is written as null. A field that is absent
 # entirely must stop the run instead of defaulting, because a silent `false`
@@ -1321,8 +1380,12 @@ grep -Fq "reply 2026-09-17T16:20:00Z https://github.com/kendrick/skills/pull/1#d
 require_text work-issue/references/triage.md "the newest one not by the author, not always the last"
 # Row 17 is post-PR; a pre-PR repair goes to row 10 or row 13, both of which
 # still open the pull request.
-require_text work-issue/SKILL.md "| 17 | PR open; a queue row missing from the \`Deferred findings\` comment, or a repair report"
-require_text work-issue/references/resume.md "| 17 | PR open; a queue row missing from the \`Deferred findings\` comment, or a repair report"
+require_text work-issue/SKILL.md "(resume at item 1: the reproducer until \`trigger-repair-<k>.txt\` exists, then the adversarial-review invocation); or a queue row missing from the \`Deferred findings\` comment, or a repair report"
+require_text work-issue/references/resume.md "(resume at item 1: the reproducer until \`trigger-repair-<k>.txt\` exists, then the adversarial-review invocation); or a queue row missing from the \`Deferred findings\` comment, or a repair report"
+# Both Resume tables once sent the re-fire leg straight to the invocation,
+# skipping the repair's reproducer, after the script had stopped saying so.
+refute_text work-issue/SKILL.md "(resume at item 1's adversarial-review invocation)"
+refute_text work-issue/references/resume.md "(resume at item 1's adversarial-review invocation)"
 # The queue's comment is probed, and rows 14 and 17 both read it.
 require_text work-issue/SKILL.md "or a triage row without a reply URL | Step 8 |"
 require_text work-issue/references/resume.md "or a triage row without a reply URL | Step 8 |"
@@ -1361,6 +1424,13 @@ require_text work-issue/SKILL.md "Write \`date -u +%FT%TZ\` to \`RUN_DIR/pushed_
 # Step 5's "Left out" is where adversarial-review's LISTED advisories land
 # (adversarial-review row 39, work-issue row 96), in place of one issue each.
 require_text work-issue/SKILL.md "\"Left out\" names every finding \`adversarial-review\`'s report lists as \`LISTED\`"
+# Step 8 re-fires adversarial-review on a repair only for a P0/P1/blocking
+# round (work-issue row 97), into the repair's own files.
+require_text work-issue/SKILL.md "The trigger re-fires only where that triage round held a row whose Severity is \`P0\`, \`P1\`, or \`blocking\`."
+require_text work-issue/SKILL.md "RUN_DIR/redteam/trigger-repair-<k>.txt"
+require_text work-issue/references/redteam.md "RUN_DIR/redteam/ar-state-repair-<k>.txt"
+require_text work-issue/references/triage.md "carries a \`Severity\` cell"
+refute_text work-issue/SKILL.md "with the trigger re-evaluated on the full diff"
 require_text work-issue/references/resume.md "redteam/ar-state.txt"
 require_text work-issue/SKILL.md "no \`redteam/ar-state.txt\` showing \`UNVERIFIED: 0\`"
 refute_text work-issue/references/resume.md "ar_run_dir"

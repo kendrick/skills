@@ -10,7 +10,7 @@
         --finding-id F-r1-money-01 --disposition REPRODUCED \\
         --actor verifier-r1-money --repro-command 'pytest -k rounding' \\
         --observed-output 'E assert 10.01 == 10.00'
-    scripts/ledger.py state --ledger RUN/ledger.jsonl
+    scripts/ledger.py state --ledger RUN/ledger.jsonl [--round N]
     scripts/ledger.py validate --ledger RUN/ledger.jsonl
 
 A finding carries no disposition field. Its state is derived from the events
@@ -341,7 +341,7 @@ def cmd_state(args):
         # A territory that mostly could not be checked is telling you its hunt
         # items produced claims nobody can test. That is worth reporting and
         # worth a human's attention, but it deliberately does not trigger a
-        # re-fan-out: the loop terminates on REPRODUCED findings alone, and a
+        # re-fan-out: the loop terminates on reproduced blockers alone, and a
         # second trigger would make termination depend on a judgment call.
         unverifiable = counts.get("UNVERIFIABLE", 0)
         if unverifiable * 2 > len(group):
@@ -360,6 +360,18 @@ def cmd_state(args):
     unverified = [r for r in rows if r["verification"] == "UNVERIFIED"]
     print()
     print(f"blocking (REPRODUCED): {len(blocking)}   UNVERIFIED: {len(unverified)}")
+
+    # Step 7's termination rule. Only a reproduced blocker in the round just
+    # reviewed starts another. An advisory still gets its Step 6 outcome, but
+    # counting advisories kept cambium #23/#26's review loops going: each fix is new code,
+    # new code draws a slightly smaller advisory, and the round never came
+    # back empty.
+    if args.round is not None:
+        in_round = [r for r in blocking if r["finding"]["round"] == args.round]
+        if in_round:
+            print(f"loop: continue ({len(in_round)} blocking REPRODUCED in round {args.round})")
+        else:
+            print(f"loop: stop (no blocking REPRODUCED in round {args.round})")
     return 0
 
 
@@ -460,6 +472,13 @@ def parse_args(argv=None):
     s = sub.add_parser("state", help="derived disposition per finding")
     s.add_argument("--ledger", required=True, metavar="PATH")
     s.add_argument("--json", action="store_true")
+    s.add_argument(
+        "--round",
+        type=int,
+        default=None,
+        metavar="N",
+        help="also print Step 7's loop decision for round N",
+    )
     s.set_defaults(func=cmd_state)
 
     v = sub.add_parser("validate", help="every line parses and conforms")
