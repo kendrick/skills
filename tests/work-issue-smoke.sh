@@ -129,7 +129,7 @@ require_file tests/fixtures/work-issue/review/changes-requested.json
 for gated in 10 11 16 17; do
   require_file "tests/fixtures/work-issue/probes/row-$gated-over-budget.json"
 done
-for timing in build30-review61 build30-review59 poll-excluded budget-raised open-start-closed-at-poll bad-label end-with-no-start; do
+for timing in build30-review61 build30-review59 poll-excluded poll-nested budget-raised open-start-closed-at-poll open-review build-25s crash-closed-at-latest bad-label end-with-no-start; do
   require_file "tests/fixtures/work-issue/timing/$timing.txt"
 done
 require_file tests/fixtures/work-issue/review/pr-comment-finding.json
@@ -277,10 +277,12 @@ for f in work-issue/SKILL.md work-issue/references/redteam.md; do
   refute_text "$f" "work-issue/scripts/match-triggers.py"
 done
 require_text _maintenance/work-issue/RATIONALE.md "A vendored copy of \`match-triggers.py\` and the trigger table inside \`work-issue\`"
-# The README promised a run that never asks again, and the forecast gap means
-# one can. Pinned so the exception stays where a user decides to walk away.
-require_text work-issue/README.md "After yes, the run is unattended unless the real diff trips an \`adversarial-review\` the confirmation didn't forecast, or forecast at a lower depth."
-require_text work-issue/README.md "Only \`adversarial-review\` can ask again"
+# The README promised a run that never asks again, and the forecast gap and
+# the budget stop (#158) both mean one can. Pinned so both exceptions stay
+# at the point a user decides to walk away.
+require_text work-issue/README.md "After yes, the run is unattended, with two exceptions."
+require_text work-issue/README.md "\`adversarial-review\` can ask again, when the real diff trips a review the confirmation didn't forecast"
+require_text work-issue/README.md "the run stops before the next review cycle and asks whether to raise the ratio"
 
 # `--deep` fires the trigger without a match, so Step 0 item 7 names the
 # review for a `--deep` run as well. Without this clause, a `--deep` run whose
@@ -1272,14 +1274,24 @@ grep -Fq "phase: stop reason: unknown probe fields: review_over_budget" <<<"$(py
 
 # Each timing fixture through the real `budget`. poll-excluded is the
 # falsifier for what counts as review: counting wall-clock time since the
-# build would put it at 80 min against 30 and print `over: yes`.
+# build would put it at 80 min against 30 and print `over: yes`. poll-nested
+# is the layout Step 6 actually writes, its poll inside the `6` bracket,
+# which ignoring poll lines without subtracting them read as 80 min too.
+# open-start-closed-at-poll's open `4` interval is covered by the poll after
+# it, so only the 5 min before the poll counts. crash-closed-at-latest is a
+# crashed `6` closed at its last stamp by SKILL.md's close-first rule, so the
+# 4.5 h it sat dead counts toward nothing. build-25s is a build under 30 s,
+# which rounds to 0m and once read 5 h of review as `ratio: n/a over: no`.
 timing_dir=tests/fixtures/work-issue/timing
 declare -a budget_cases=(
   "build30-review61:build: 30m review: 61m ratio: 2.03 over: yes"
   "build30-review59:build: 30m review: 59m ratio: 1.97 over: no"
   "poll-excluded:build: 30m review: 20m ratio: 0.67 over: no"
   "budget-raised:build: 20m review: 60m ratio: 3.00 over: no"
-  "open-start-closed-at-poll:build: 30m review: 65m ratio: 2.17 over: yes"
+  "poll-nested:build: 30m review: 20m ratio: 0.67 over: no"
+  "open-start-closed-at-poll:build: 30m review: 5m ratio: 0.17 over: no"
+  "crash-closed-at-latest:build: 30m review: 15m ratio: 0.50 over: no"
+  "build-25s:build: 0m review: 300m ratio: 720.00 over: yes"
 )
 for case in "${budget_cases[@]}"; do
   fixture="${case%%:*}"
@@ -1294,6 +1306,31 @@ done
 grep -v '^budget-raised' "$timing_dir/budget-raised.txt" >"$tmp/unraised.txt"
 [[ "$(python3 "$run_state" budget --timing "$tmp/unraised.txt")" == *"ratio: 3.00 over: yes" ]] || {
   echo "the 3x run without its budget-raised line should be over budget" >&2
+  exit 1
+}
+# An in-run check passes --now, which closes the running step at that moment.
+# Without it the open `4 start` is the log's newest stamp, and Step 4 reads as
+# 0 min of review however long it runs.
+[[ "$(python3 "$run_state" budget --timing "$timing_dir/open-review.txt" --now 2026-01-01T01:40:00Z)" == "build: 30m review: 70m ratio: 2.33 over: yes" ]] || {
+  echo "budget --now should close the open 4 start 70 min on and print over: yes" >&2
+  exit 1
+}
+[[ "$(python3 "$run_state" budget --timing "$timing_dir/open-review.txt")" == "build: 30m review: 0m ratio: 0.00 over: no" ]] || {
+  echo "budget without --now should close the open 4 start at the log's newest stamp" >&2
+  exit 1
+}
+set +e
+python3 "$run_state" budget --timing "$timing_dir/open-review.txt" --now not-a-time >/dev/null 2>&1
+bad_now_status=$?
+set -e
+[[ "$bad_now_status" == "3" ]] || {
+  echo "budget with an unreadable --now should exit 3, got: $bad_now_status" >&2
+  exit 1
+}
+# An explicit --ratio outranks the log's budget-raised line for that check;
+# with none, the line outranks 2.0.
+[[ "$(python3 "$run_state" budget --timing "$timing_dir/budget-raised.txt" --ratio 2.5)" == *"ratio: 3.00 over: yes" ]] || {
+  echo "budget --ratio 2.5 should beat the log's budget-raised 4.0 on a 3x run" >&2
   exit 1
 }
 # A missing log is every run that predates timing.log: under budget. Anything
@@ -1335,6 +1372,14 @@ done
 require_text work-issue/SKILL.md 'echo "<n> start $(date -u +%FT%TZ)" >> RUN_DIR/timing.log'
 require_text work-issue/SKILL.md "with \`poll start\` written to \`RUN_DIR/timing.log\` before the first poll and \`poll end\` after the last"
 require_text work-issue/SKILL.md "A raise appends \`budget-raised <ratio>\` to the log"
+# Every in-run check passes --now; the resume probe does not, so a crashed
+# run's dead hours stay out.
+require_text work-issue/SKILL.md 'budget --timing RUN_DIR/timing.log --now "$(date -u +%FT%TZ)"'
+refute_text work-issue/references/resume.md "budget --timing <RUN_DIR>/timing.log --now"
+# The close-first rule, which ends a crashed interval at the log's newest stamp.
+require_text work-issue/SKILL.md "append \`<n> end <latest>\` first"
+require_text work-issue/SKILL.md "awk 'NF == 3 { print \$3 }' RUN_DIR/timing.log | sort | tail -1"
+require_text work-issue/references/resume.md "Passing \`--ratio <r>\` to one \`budget\` command outranks every \`budget-raised\` line"
 require_text work-issue/SKILL.md "the queue, the \`budget\` line,"
 
 # The triage_blocking_rows probe, run as resume.md writes it against a round

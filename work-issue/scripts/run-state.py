@@ -972,13 +972,36 @@ def phase_of(probe):
     )
 
 
-def parse_timing_log(text, label):
+def _overlap_seconds(start, end, spans):
+    """Seconds of [start, end) that any of `spans` covers. `spans` is sorted
+    and non-overlapping, so no second is subtracted twice."""
+    covered = 0.0
+    for span_start, span_end in spans:
+        low = max(start, span_start)
+        high = min(end, span_end)
+        if high > low:
+            covered += (high - low).total_seconds()
+    return covered
+
+
+def _merge(spans):
+    merged = []
+    for start, end in sorted(spans):
+        if merged and start <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+        else:
+            merged.append((start, end))
+    return merged
+
+
+def parse_timing_log(text, label, now=None):
     """`(build_seconds, review_seconds, raised_ratio)` from a timing.log's text.
 
     `raised_ratio` is the last `budget-raised <ratio>` line's value, or None
-    where the log never raised it — the caller falls back to `--ratio`. Every
-    malformed line is collected before raising, same discipline as
-    `check_bundle`: a hand-edited log is usually wrong in more than one
+    if the log never raised it—the caller decides what it yields to. An
+    unpaired start closes at `now` when given, else at the log's latest
+    stamp. Every malformed line is collected before raising, same discipline
+    as `check_bundle`: a hand-edited log is usually wrong in more than one
     place, and one problem per run turns that into one round trip per typo.
     """
     problems = []
@@ -989,28 +1012,28 @@ def parse_timing_log(text, label):
         line = raw_line.strip()
         if not line:
             continue
-        where = f"{label}:{line_no}"
+        at = f"{label}:{line_no}"
         parts = line.split()
         if parts[0] == "budget-raised":
             if len(parts) != 2:
-                problems.append(f"{where}: 'budget-raised' takes exactly one value: {raw_line!r}")
+                problems.append(f"{at}: 'budget-raised' takes exactly one value: {raw_line!r}")
                 continue
             try:
                 raised = float(parts[1])
             except ValueError:
-                problems.append(f"{where}: budget-raised value {parts[1]!r} is not a number")
+                problems.append(f"{at}: budget-raised value {parts[1]!r} is not a number")
             continue
         if len(parts) != 3:
-            problems.append(f"{where}: expected '<phase> <start|end> <timestamp>': {raw_line!r}")
+            problems.append(f"{at}: expected '<phase> <start|end> <timestamp>': {raw_line!r}")
             continue
         phase, kind, ts_raw = parts
         if phase not in TIMING_LABELS:
-            problems.append(f"{where}: unknown phase {phase!r}")
+            problems.append(f"{at}: unknown phase {phase!r}")
             continue
         if kind not in ("start", "end"):
-            problems.append(f"{where}: expected 'start' or 'end', got {kind!r}")
+            problems.append(f"{at}: expected 'start' or 'end', got {kind!r}")
             continue
-        moment = parse_ts(ts_raw, where, problems)
+        moment = parse_ts(ts_raw, at, problems)
         if moment is None:
             continue
         events.append((phase, kind, moment))
@@ -1022,7 +1045,7 @@ def parse_timing_log(text, label):
     # starts rather than a single pending slot: "next end of same label"
     # pairs the earliest unclosed start, not the most recent.
     open_starts = {}
-    durations = {}
+    intervals = {}
     for phase, kind, moment in events:
         if kind == "start":
             open_starts.setdefault(phase, []).append(moment)
@@ -1031,26 +1054,44 @@ def parse_timing_log(text, label):
             if not pending:
                 problems.append(f"{label}: {phase!r} end with no open start")
                 continue
-            start = pending.pop(0)
-            durations[phase] = durations.get(phase, 0.0) + (moment - start).total_seconds()
+            intervals.setdefault(phase, []).append((pending.pop(0), moment))
     if problems:
         raise InputError(problems)
 
-    # An unpaired start is closed at the latest timestamp anywhere in the
-    # log, poll stamps included: that is what lets a poll wait cap a review
-    # interval whose closing stamp a run never wrote.
-    latest = max(moments) if moments else None
+    # Without `now`, the resume probe closes a crashed run's open start at
+    # the last thing the run recorded, so the hours it sat dead stay out. An
+    # in-run check passes `now`, or a Step 4 still running reads as 0 min of
+    # review for as long as it runs, since its own start is the newest stamp.
+    close_at = now if now is not None else (max(moments) if moments else None)
     for phase, pending in open_starts.items():
         for start in pending:
-            end = latest if latest is not None else start
-            durations[phase] = durations.get(phase, 0.0) + (end - start).total_seconds()
+            intervals.setdefault(phase, []).append((start, max(start, close_at)))
 
-    build_seconds = sum(durations.get(p, 0.0) for p in BUILD_LABELS)
-    review_seconds = sum(durations.get(p, 0.0) for p in REVIEW_LABELS)
+    def seconds(phase):
+        return sum((end - start).total_seconds() for start, end in intervals.get(phase, ()))
+
+    # Step 6 writes its poll inside its own `6` bracket, so ignoring `poll`
+    # lines alone still counted the reviewer's wait as review. Subtracting
+    # the covered time zeroes a poll nested in a bracket, before it, or after it.
+    polls = _merge(intervals.get("poll", ()))
+    build_seconds = sum(seconds(p) for p in BUILD_LABELS)
+    review_seconds = sum(
+        (end - start).total_seconds() - _overlap_seconds(start, end, polls)
+        for p in REVIEW_LABELS
+        for start, end in intervals.get(p, ())
+    )
     return build_seconds, review_seconds, raised
 
 
 def cmd_budget(args):
+    now = None
+    if args.now is not None:
+        problems = []
+        now = parse_ts(args.now, "--now", problems)
+        if problems:
+            for problem in problems:
+                sys.stderr.write(f"run-state: {problem}\n")
+            return 3
     try:
         with open(args.timing, encoding="utf-8") as handle:
             text = handle.read()
@@ -1059,8 +1100,7 @@ def cmd_budget(args):
         # log as `over: no` rather than failing keeps those old runs off the
         # stop this feature adds; a probe that turned this into `null` would
         # halt them instead.
-        print("build: 0m review: 0m ratio: n/a over: no")
-        return 0
+        text = ""
     except (OSError, UnicodeDecodeError) as e:
         # Only absence means "no log yet". A directory, an unreadable file, or
         # a binary file is a log that exists and can't be read, and reading
@@ -1070,22 +1110,32 @@ def cmd_budget(args):
         return 3
 
     try:
-        build_seconds, review_seconds, raised = parse_timing_log(text, "timing.log")
+        build_seconds, review_seconds, raised = parse_timing_log(text, "timing.log", now)
     except InputError as e:
         for problem in e.problems:
             sys.stderr.write(f"run-state: {problem}\n")
         return 3
 
-    build_minutes = round(build_seconds / 60)
-    review_minutes = round(review_seconds / 60)
-    if build_minutes == 0:
-        print(f"build: 0m review: {review_minutes}m ratio: n/a over: no")
-        return 0
-
-    ratio_threshold = raised if raised is not None else args.ratio
-    ratio = review_seconds / build_seconds
-    over = "yes" if ratio > ratio_threshold else "no"
-    print(f"build: {build_minutes}m review: {review_minutes}m ratio: {ratio:.2f} over: {over}")
+    # A flag typed for this one check outranks the log, and the log's last
+    # raise outranks the 2.0 the issue set. `--ratio` has no preset value
+    # so an explicit `--ratio 2.0` still counts as explicit.
+    if args.ratio is not None:
+        threshold = args.ratio
+    elif raised is not None:
+        threshold = raised
+    else:
+        threshold = DEFAULT_BUDGET_RATIO
+    # Zero seconds, not zero rounded minutes: a 25 s build rounds to 0m, and
+    # gating on that read 5 h of review as under budget.
+    if build_seconds == 0:
+        ratio_text, over = "n/a", "no"
+    else:
+        ratio = review_seconds / build_seconds
+        ratio_text, over = f"{ratio:.2f}", "yes" if ratio > threshold else "no"
+    print(
+        f"build: {round(build_seconds / 60)}m review: {round(review_seconds / 60)}m "
+        f"ratio: {ratio_text} over: {over}"
+    )
     return 0
 
 
@@ -1130,7 +1180,8 @@ def parse_args(argv=None):
 
     b = sub.add_parser("budget", help="build vs. review minutes from a timing.log, and whether review is over budget")
     b.add_argument("--timing", metavar="TIMING_LOG", required=True, help="path to timing.log; a missing file reads as under budget")
-    b.add_argument("--ratio", metavar="RATIO", type=float, default=DEFAULT_BUDGET_RATIO, help="review:build ratio that trips 'over'; a 'budget-raised' line in the log overrides this")
+    b.add_argument("--ratio", metavar="RATIO", type=float, help="review:build ratio that trips 'over'; beats any 'budget-raised' line, which beats 2.0")
+    b.add_argument("--now", metavar="ISO8601", help="close open starts at this UTC moment rather than the log's latest stamp")
     b.set_defaults(func=cmd_budget)
 
     return ap.parse_args(argv)
