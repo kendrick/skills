@@ -1436,6 +1436,9 @@ refute_text work-issue/SKILL.md "with the trigger re-evaluated on the full diff"
 # never sees them.
 require_text work-issue/SKILL.md "add every finding its report lists as \`LISTED\` to the open pull request's \"Left out\" section"
 require_text work-issue/SKILL.md "every \`LISTED\` finding from a re-fired review is in the pull request's \"Left out\" section"
+# A repo's PR template doesn't get to drop listed advisories: the "Left out"
+# section is added whatever the template carries.
+require_text work-issue/SKILL.md "With a template or without one, the body carries a \"Left out\" section naming every finding"
 require_text work-issue/references/resume.md "redteam/ar-state.txt"
 require_text work-issue/SKILL.md "no \`redteam/ar-state.txt\` showing \`UNVERIFIED: 0\`"
 refute_text work-issue/references/resume.md "ar_run_dir"
