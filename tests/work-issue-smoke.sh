@@ -1431,6 +1431,11 @@ require_text work-issue/SKILL.md "RUN_DIR/redteam/trigger-repair-<k>.txt"
 require_text work-issue/references/redteam.md "RUN_DIR/redteam/ar-state-repair-<k>.txt"
 require_text work-issue/references/triage.md "carries a \`Severity\` cell"
 refute_text work-issue/SKILL.md "with the trigger re-evaluated on the full diff"
+# A repair round's re-fired review can list advisories after Step 5 has
+# already written the PR body, so Step 8 copies them in itself; Step 5's copy
+# never sees them.
+require_text work-issue/SKILL.md "add every finding its report lists as \`LISTED\` to the open pull request's \"Left out\" section"
+require_text work-issue/SKILL.md "every \`LISTED\` finding from a re-fired review is in the pull request's \"Left out\" section"
 require_text work-issue/references/resume.md "redteam/ar-state.txt"
 require_text work-issue/SKILL.md "no \`redteam/ar-state.txt\` showing \`UNVERIFIED: 0\`"
 refute_text work-issue/references/resume.md "ar_run_dir"
