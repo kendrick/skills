@@ -42,7 +42,7 @@ git clone git@github.com:kendrick/skills.git
 cp -R skills/adversarial-review ~/.claude/skills/adversarial-review
 ```
 
-Needs a git repo and Python 3 for the two bundled scripts. Both are stdlib-only.
+Needs a git repo and Python 3 for the three bundled scripts. All three are stdlib-only.
 
 ## Use
 

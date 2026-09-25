@@ -1,6 +1,6 @@
 # adversarial-review — evals
 
-The smoke test (`bash tests/adversarial-review-smoke.sh`) pins the artifact: files present, load-bearing strings intact, both scripts behaving. It says nothing about whether the review works, because that needs live subagents. This file is the procedure for that.
+The smoke test (`bash tests/adversarial-review-smoke.sh`) pins the artifact: files present, load-bearing strings intact, all three scripts behaving. It says nothing about whether the review works, because that needs live subagents. This file is the procedure for that.
 
 Method follows `skill-creator`: run each scenario with the skill and without it, then grade the delta. These runs are manual—they dispatch real subagents and cost real time, so they belong in a deliberate session rather than in CI.
 

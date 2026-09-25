@@ -683,6 +683,20 @@ expect_match "1 money" --only 1 <"$diffs/money-plusplus-added.diff"
 # the first hunk's counts run out, so they stay headers.
 expect_match "1 money
 4 schema" --only 1,4 < <(cat "$diffs/schema-removed-sql-comment.diff" "$diffs/money-plusplus-added.diff")
+# The same two-file change, once plain and once as `git -c color.ui=always
+# diff` wrote it, escape bytes and all (row 45). Without the strip, the
+# colored copy prints nothing and exits 0, which reads as a diff with no
+# triggers.
+grep -q $'\x1b\\[' "$diffs/colored-money-schema.diff" || {
+  echo "colored-money-schema.diff lost its ANSI escapes, so it no longer tests the strip" >&2
+  exit 1
+}
+expect_match "1 money
+4 schema
+6 representation" <"$diffs/plain-money-schema.diff"
+expect_match "1 money
+4 schema
+6 representation" <"$diffs/colored-money-schema.diff"
 
 # The recipe the script replaced, filled in for `round(`, is a regex error
 # rather than a match: exit 2 on the very line the script matches (#114).

@@ -1,0 +1,16 @@
+[1mdiff --git a/billing.py b/billing.py[m
+[1mindex c09f829..429e705 100644[m
+[1m--- a/billing.py[m
+[1m+++ b/billing.py[m
+[36m@@ -1,3 +1,4 @@[m
+ def compute_total(amount):[m
+     tax = compute_tax(amount)[m
+[32m+[m[32m    total = round(amount, 2)[m
+     return tax[m
+[1mdiff --git a/schema.sql b/schema.sql[m
+[1mindex 5a3a7be..27450b5 100644[m
+[1m--- a/schema.sql[m
+[1m+++ b/schema.sql[m
+[36m@@ -1 +1,2 @@[m
+ CREATE TABLE t (c int);[m
+[32m+[m[32mCREATE INDEX idx ON t(c);[m

@@ -38,6 +38,13 @@ DEFAULT_TABLE_PATH = os.path.normpath(
 UNIT_LIST_RE = re.compile(r"The unit suffixes are (`[^.]*)\.")
 # Either count may be omitted, and an omitted count means 1.
 HUNK_RE = re.compile(r"^@@ -\d+(?:,(\d+))? \+\d+(?:,(\d+))? @@")
+# Under `color.ui=always`, git opens every diff line with an SGR escape, so
+# HUNK_RE never sees `@@` and the prefix tests never see `+` or `-`. An
+# unstripped colored diff matches nothing and still exits 0, which callers
+# read as no triggers: adversarial-review puts every file in `general` alone,
+# and work-issue records `fired: no`. Stripping here covers every caller at
+# once. A `--no-color` flag instead is one more string each caller must keep.
+ANSI_CSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
 HEADER_RE = re.compile(r"^\|\s*#\s*\|\s*Row\s*\|", re.IGNORECASE)
 SEPARATOR_RE = re.compile(r"^\|[\s:-]+\|")
@@ -147,6 +154,7 @@ def diff_content_lines(diff_text):
     lines = []
     old_left = new_left = 0
     for raw in diff_text.splitlines():
+        raw = ANSI_CSI_RE.sub("", raw)
         in_hunk = old_left > 0 or new_left > 0
         # The hunk's counts say where the hunk ends. A prefix test can't: a
         # removed SQL comment `-- CHECK (a > 0)` prints as `--- CHECK (a > 0)`,
