@@ -23,7 +23,7 @@ One finder per territory, in parallel, each told what to be suspicious of, what'
 Then the gate. Fresh verifiers get the claim, the quoted code, and the proposed reproduction command—never the finder's reasoning, and never its proposed fix, which is the reasoning wearing a hat. Each finding lands as reproduced, not reproduced, or unverifiable, and it's the routing that makes it matter:
 
 - **Reproduced and blocking** — a failing test gets written from the repro command, before the fix. A test written afterward is written by someone who already believes the fix works.
-- **Reproduced and advisory** — off to `file-issue`, repro attached.
+- **Reproduced and advisory** — listed in the report with its repro command, ready for a PR's "Left out" section. `--file-advisories` sends it to `file-issue` instead.
 - **Not reproduced** — closed in the ledger, counter-evidence recorded.
 - **Unverifiable** — filed as an open question for `inbox-to-memory`.
 

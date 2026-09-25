@@ -151,6 +151,13 @@ require_text adversarial-review/SKILL.md "never the finder's reasoning"
 # fixes.
 require_text adversarial-review/SKILL.md "before** writing the fix"
 require_text adversarial-review/SKILL.md "file-issue"
+# A reproduced advisory is listed by default and filed only on request (row
+# 39). The refute pins the old default row, which filed one issue per finding.
+require_text adversarial-review/SKILL.md "| REPRODUCED + advisory | List it: record \`LISTED\`"
+require_text adversarial-review/SKILL.md "Under \`--file-advisories\`, hand it to the \`file-issue\` skill instead"
+require_text adversarial-review/SKILL.md "every \`LISTED\` finding appears in the listed section with its repro command"
+require_text adversarial-review/assets/event.schema.json '"LISTED"'
+refute_text adversarial-review/SKILL.md "| REPRODUCED + advisory | Hand to the \`file-issue\` skill"
 require_text adversarial-review/SKILL.md "inbox-to-memory"
 
 # The round loop's rationale is load-bearing, not decoration: it is the whole
@@ -360,6 +367,77 @@ python3 "$ledger_py" state --ledger "$L" | grep -Fq "REPRODUCED" || {
 
 python3 "$ledger_py" validate --ledger "$L" >/dev/null || {
   echo "ledger round-trip must validate" >&2
+  exit 1
+}
+
+# Step 6 lists a reproduced advisory as LISTED instead of filing an issue for
+# it (#152, RATIONALE row 39). LISTED carries a reason and no artifact, and it
+# is valid only on an advisory: a blocker recorded LISTED would skip the
+# failing test and the fix without anything noticing.
+listed_ledger() {
+  local out="$1" blocker_outcome="$2"
+  : >"$out"
+  python3 "$ledger_py" append-finding --ledger "$out" \
+    --id F-r1-money-01 --round 1 --territory money --file src/billing/invoice.py \
+    --quoted-evidence 'total += round(x, 2)' --claim 'rounds per line' \
+    --proposed-fix 'round once at the end' --proposed-repro 'pytest -k rounding' \
+    --claimed-severity blocking >/dev/null
+  python3 "$ledger_py" append-finding --ledger "$out" \
+    --id F-r1-money-02 --round 1 --territory money --file src/billing/tax.py \
+    --quoted-evidence 'rate = 0.2' --claim 'magic number' \
+    --proposed-fix 'name the constant' --proposed-repro 'grep -n 0.2 src/billing/tax.py' \
+    --claimed-severity advisory >/dev/null
+  local id
+  for id in F-r1-money-01 F-r1-money-02; do
+    python3 "$ledger_py" append-event --ledger "$out" --finding-id "$id" \
+      --disposition REPRODUCED --actor verifier-r1-money \
+      --repro-command 'pytest -k rounding' --observed-output 'assert 10.01 == 10.00' >/dev/null
+  done
+  # Written as raw lines so the validate check below meets the ledger a
+  # hand-edited or older-script ledger could hold, not only what append-event
+  # lets through.
+  printf '%s\n' \
+    "{\"record\": \"event\", \"finding_id\": \"F-r1-money-01\", \"disposition\": \"$blocker_outcome\", \"actor\": \"orchestrator\", \"repro_command\": null, \"observed_output\": null, \"counter_evidence\": null, \"reason\": \"listed in PR Left Out\", \"artifact\": \"tests/test_rounding.py\", \"at\": \"2026-09-24T00:00:00Z\"}" \
+    '{"record": "event", "finding_id": "F-r1-money-02", "disposition": "LISTED", "actor": "orchestrator", "repro_command": null, "observed_output": null, "counter_evidence": null, "reason": "listed in PR Left Out", "artifact": null, "at": "2026-09-24T00:00:00Z"}' \
+    >>"$out"
+}
+listed_ledger "$tmp/listed-ok.jsonl" TEST_WRITTEN
+listed_ok_out="$(python3 "$ledger_py" validate --ledger "$tmp/listed-ok.jsonl" 2>&1)" || {
+  echo "an advisory LISTED beside a blocker TEST_WRITTEN must validate: $listed_ok_out" >&2
+  exit 1
+}
+listed_ledger "$tmp/listed-blocker.jsonl" LISTED
+listed_bad_out="$(python3 "$ledger_py" validate --ledger "$tmp/listed-blocker.jsonl" 2>&1)" && {
+  echo "a blocking finding recorded LISTED must fail validate" >&2
+  exit 1
+}
+grep -Fq "LISTED is valid only on an advisory finding" <<<"$listed_bad_out" || {
+  echo "validate must name LISTED's severity rule for a blocker recorded LISTED, got: $listed_bad_out" >&2
+  exit 1
+}
+listed_append_err="$(python3 "$ledger_py" append-event --ledger "$tmp/listed-ok.jsonl" \
+  --finding-id F-r1-money-02 --disposition LISTED --actor orchestrator 2>&1)" && {
+  echo "LISTED with no --reason must be refused" >&2
+  exit 1
+}
+grep -Fq "LISTED requires --reason" <<<"$listed_append_err" || {
+  echo "the refusal must name LISTED and --reason, got: $listed_append_err" >&2
+  exit 1
+}
+python3 "$ledger_py" append-event --ledger "$tmp/listed-ok.jsonl" \
+  --finding-id F-r1-money-02 --disposition LISTED --actor orchestrator \
+  --reason "listed in PR Left Out" >/dev/null || {
+  echo "LISTED with --reason on an advisory must append" >&2
+  exit 1
+}
+listed_blocker_err="$(python3 "$ledger_py" append-event --ledger "$tmp/listed-ok.jsonl" \
+  --finding-id F-r1-money-01 --disposition LISTED --actor orchestrator \
+  --reason "listed in PR Left Out" 2>&1)" && {
+  echo "append-event must refuse LISTED on a blocking finding" >&2
+  exit 1
+}
+grep -Fq "LISTED is valid only on an advisory finding" <<<"$listed_blocker_err" || {
+  echo "append-event's refusal must name LISTED's severity rule, got: $listed_blocker_err" >&2
   exit 1
 }
 
