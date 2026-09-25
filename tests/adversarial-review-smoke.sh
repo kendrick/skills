@@ -157,6 +157,11 @@ require_text adversarial-review/SKILL.md "inbox-to-memory"
 # reason the loop exists past round 1.
 require_text adversarial-review/SKILL.md "introduced while fixing"
 require_text adversarial-review/SKILL.md "check-territories.py intersect"
+# Step 7 filters exclusions in the script. The grep stage it replaced printed
+# nothing under ugrep for an empty excluded.txt (RATIONALE row 38).
+require_text adversarial-review/SKILL.md "--exclude RUN_DIR/excluded.txt"
+require_text adversarial-review/SKILL.md "write them to \`RUN_DIR/excluded.txt\`"
+refute_text adversarial-review/SKILL.md "grep -vFf"
 require_text adversarial-review/SKILL.md "escalation.md"
 
 # Per-territory verdicts and the calibration signal that deliberately does not
@@ -355,6 +360,66 @@ python3 "$ledger_py" state --ledger "$L" | grep -Fq "REPRODUCED" || {
 
 python3 "$ledger_py" validate --ledger "$L" >/dev/null || {
   echo "ledger round-trip must validate" >&2
+  exit 1
+}
+
+# Step 7's command, run as SKILL.md writes it rather than paraphrased. On
+# cambium #23/#26 the old `grep -vFf RUN_DIR/excluded.txt` stage printed
+# nothing under ugrep whenever excluded.txt was empty, so `intersect` saw no
+# input, exited 0, and the loop ended with the fix unreviewed. The second run
+# puts a grep on PATH that always fails, so the case fails on any machine if
+# the command pipes through grep again, whichever grep is installed.
+step7_cmd="$(awk '/Once fixes are committed:/{f=1;next} f&&/^```$/{if(in_block)exit; in_block=1;next} in_block{print}' adversarial-review/SKILL.md \
+  | sed -e 's/\\$//' | tr '\n' ' ')"
+[[ -n "$step7_cmd" ]] || {
+  echo "could not extract Step 7's command from adversarial-review/SKILL.md" >&2
+  exit 1
+}
+s7="$tmp/step7"
+mkdir -p "$s7/repo/src/billing" "$s7/run" "$s7/shim"
+cp "$fixtures/scope-good.json" "$s7/run/scope.json"
+: >"$s7/run/excluded.txt"
+printf '#!/bin/sh\necho "grep called from the Step 7 pipe" >&2\nexit 97\n' >"$s7/shim/grep"
+chmod +x "$s7/shim/grep"
+(
+  cd "$s7/repo"
+  git init -q
+  git -c user.name=smoke -c user.email=smoke@example.invalid commit -q --allow-empty -m base
+  git rev-parse HEAD >"$s7/prev_sha"
+  echo 'rate = 0.2' >src/billing/tax.py
+  git add src/billing/tax.py
+  git -c user.name=smoke -c user.email=smoke@example.invalid commit -q -m fix
+  # Untracked, so the script path resolves without entering the fix diff.
+  ln -s "$repo_root/adversarial-review" adversarial-review
+)
+step7_run="${step7_cmd//<prev_round_head_sha>/$(cat "$s7/prev_sha")}"
+step7_run="${step7_run//RUN_DIR/$s7/run}"
+for step7_shim in "" "$s7/shim:"; do
+  step7_out="$(cd "$s7/repo" && PATH="$step7_shim$PATH" bash -o pipefail -c "$step7_run" 2>&1)" || true
+  [[ "$step7_out" == "money" ]] || {
+    echo "Step 7's command with an empty excluded.txt must print the fix's territory (${step7_shim:+grep shimmed to fail}${step7_shim:-ambient PATH}), got: $step7_out" >&2
+    exit 1
+  }
+done
+
+# An excluded path drops out before ownership is checked: dist/app.js belongs
+# to no territory, so without the filter this diff would exit 1 as unowned.
+# A directory entry covers what sits under it; a missing file excludes nothing.
+printf 'dist/app.js\n' >"$tmp/excluded-one.txt"
+printf 'dist/\n' >"$tmp/excluded-dir.txt"
+only_src="$(printf 'src/billing/tax.py\n' | python3 "$territories" intersect "$fixtures/scope-good.json")"
+for ex in "$tmp/excluded-one.txt" "$tmp/excluded-dir.txt"; do
+  with_dist="$(printf 'dist/app.js\nsrc/billing/tax.py\n' | python3 "$territories" intersect "$fixtures/scope-good.json" --exclude "$ex")" || {
+    echo "an excluded path must not reach the unowned check ($ex)" >&2
+    exit 1
+  }
+  [[ "$with_dist" == "$only_src" ]] || {
+    echo "excluding dist/app.js must intersect like src/billing/tax.py alone ($ex): got '$with_dist', want '$only_src'" >&2
+    exit 1
+  }
+done
+printf 'dist/app.js\n' | python3 "$territories" intersect "$fixtures/scope-good.json" --exclude "$tmp/no-such-file.txt" >/dev/null 2>&1 && {
+  echo "a missing --exclude file must exclude nothing, so dist/app.js stays unowned" >&2
   exit 1
 }
 

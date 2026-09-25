@@ -30,10 +30,10 @@ Everything here fails in front of the user. A bad ref discovered inside six para
 3. `DIFF_CMD` is `git diff <merge_base_sha>..HEAD`. Capture it once into the scope contract, and hand that same string to every finder.
 4. `git diff <merge_base_sha>..HEAD --name-only` — empty means there is nothing to review. Stop.
 5. `git status --porcelain` — a dirty tree stops the run with "commit or stash first." Verification evidence is only meaningful against the code the diff describes, and a verifier running commands against uncommitted changes is testing something the review never looked at. When the user overrides deliberately, record `dirty_tree_accepted: true` in the scope contract so the report can say the evidence was gathered under that condition.
-6. Identify generated and vendored trees from the changed-file list (`dist/`, `build/`, `__pycache__/`, compiled artifacts like `*.pyc`, lockfiles, `*.generated.*`, vendored dependency directories) and hold them out as `excluded`. These exclusions hold for the whole run, not just this step — Step 7 filters the fix diff through the same list, because a build artifact reappearing every round would send each round to the scope-amendment branch for nothing.
+6. Identify generated and vendored trees from the changed-file list (`dist/`, `build/`, `__pycache__/`, compiled artifacts like `*.pyc`, lockfiles, `*.generated.*`, vendored dependency directories) and hold them out as `excluded`. Once RUN_DIR exists, also write them to `RUN_DIR/excluded.txt`, one per line, a directory spelled with its trailing `/`. These exclusions hold for the whole run, not just this step — Step 7 hands that file to `intersect --exclude`, because a build artifact reappearing every round would send each round to the scope-amendment branch for nothing.
 7. Create RUN_DIR, and in the same breath append `.adversarial-review/` to the path `git rev-parse --git-path info/exclude` prints, if it is not already there — never a path hardcoded under `.git/` directly, which in a linked worktree is a file rather than a directory, so that hardcoded spelling does not exist and the append fails. Use `info/exclude` rather than `.gitignore`: `.gitignore` is a tracked file, so editing it would add a change to the very diff under review and pollute the next round's fix intersection.
 
-**Done when:** RUN_DIR exists and `scope.json` holds `fixed_point`, `merge_base_sha`, `diff_cmd`, `changed_files`, and `excluded`; the tree is clean or the override is recorded. Any check above failed and stopped the run before a single subagent was dispatched.
+**Done when:** RUN_DIR exists, `scope.json` holds `fixed_point`, `merge_base_sha`, `diff_cmd`, `changed_files`, and `excluded`, and `RUN_DIR/excluded.txt` lists the same entries, empty where there are none; the tree is clean or the override is recorded. Any check above failed and stopped the run before a single subagent was dispatched.
 
 ## Step 2 — Scope Contract
 
@@ -129,11 +129,11 @@ Record each round's `head_sha` in the scope contract as that round fans out. Fix
 
 ```
 git diff <prev_round_head_sha>..HEAD --name-only \
-    | grep -vFf RUN_DIR/excluded.txt \
-    | adversarial-review/scripts/check-territories.py intersect RUN_DIR/scope.json
+    | adversarial-review/scripts/check-territories.py intersect RUN_DIR/scope.json \
+        --exclude RUN_DIR/excluded.txt
 ```
 
-Filter the fix diff through the scope contract's `excluded` list first. Skipping that sends every round to the amendment branch over `__pycache__` and build output, and an amendment that gets rubber-stamped each round stops being a signal.
+Run it as written, with `--exclude`. Without it every round goes to the amendment branch over `__pycache__` and build output, and an amendment that gets rubber-stamped each round stops being a signal. The filtering lives in the script because a `grep -f` stage depends on which `grep` is installed: ugrep prints nothing for an empty pattern file, `intersect` reads that as a fix that touched no territory, and the loop ends with the fix unreviewed.
 
 Re-run Steps 3 through 6 for the printed territories only, at `--round N+1`, with each finder prompt carrying what previous rounds found here and which fixes introduced new blockers. That last part is the whole reason for the loop—a finder who knows a fix landed hunts the fix rather than re-hunting the original.
 
