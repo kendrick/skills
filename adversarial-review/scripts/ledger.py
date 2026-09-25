@@ -388,6 +388,13 @@ def cmd_validate(args):
             json_path, reason = violation
             problems.append(f"line {lineno}: {json_path}: {reason}")
             continue
+        # The same evidence table append-event enforces, so a line written
+        # by hand or by an older script can't carry a verdict or a listing
+        # with nothing behind it.
+        if record == "event":
+            for field in REQUIRED_EVIDENCE.get(obj["disposition"], ()):
+                if not obj.get(field):
+                    problems.append(f"line {lineno}: {obj['disposition']} requires {field}")
         if record == "event" and obj.get("finding_id") in seen:
             problem = severity_problem(obj["disposition"], seen[obj["finding_id"]])
             if problem:
