@@ -122,6 +122,16 @@ BUNDLE_KEYS = (
     ("comments", (list,)),
 )
 
+# `poll` is a real label in a timing.log but never a build or review phase:
+# it exists only so the external-reviewer wait stays visible without adding
+# wall-clock time to either total. `1` (isolate/baseline) and `5` (publish)
+# are read and ignored the same way.
+TIMING_LABELS = frozenset(("1", "2", "3", "4", "5", "6", "7", "8", "poll"))
+BUILD_LABELS = ("2", "3")
+REVIEW_LABELS = ("4", "6", "7", "8")
+
+DEFAULT_BUDGET_RATIO = 2.0
+
 
 class InputError(Exception):
     """Input this script cannot read: bad JSON, a missing key, a bad timestamp.
@@ -930,6 +940,116 @@ def phase_of(probe):
     )
 
 
+def parse_timing_log(text, label):
+    """`(build_seconds, review_seconds, raised_ratio)` from a timing.log's text.
+
+    `raised_ratio` is the last `budget-raised <ratio>` line's value, or None
+    where the log never raised it — the caller falls back to `--ratio`. Every
+    malformed line is collected before raising, same discipline as
+    `check_bundle`: a hand-edited log is usually wrong in more than one
+    place, and one problem per run turns that into one round trip per typo.
+    """
+    problems = []
+    events = []
+    moments = []
+    raised = None
+    for line_no, raw_line in enumerate(text.splitlines(), start=1):
+        line = raw_line.strip()
+        if not line:
+            continue
+        where = f"{label}:{line_no}"
+        parts = line.split()
+        if parts[0] == "budget-raised":
+            if len(parts) != 2:
+                problems.append(f"{where}: 'budget-raised' takes exactly one value: {raw_line!r}")
+                continue
+            try:
+                raised = float(parts[1])
+            except ValueError:
+                problems.append(f"{where}: budget-raised value {parts[1]!r} is not a number")
+            continue
+        if len(parts) != 3:
+            problems.append(f"{where}: expected '<phase> <start|end> <timestamp>': {raw_line!r}")
+            continue
+        phase, kind, ts_raw = parts
+        if phase not in TIMING_LABELS:
+            problems.append(f"{where}: unknown phase {phase!r}")
+            continue
+        if kind not in ("start", "end"):
+            problems.append(f"{where}: expected 'start' or 'end', got {kind!r}")
+            continue
+        moment = parse_ts(ts_raw, where, problems)
+        if moment is None:
+            continue
+        events.append((phase, kind, moment))
+        moments.append(moment)
+    if problems:
+        raise InputError(problems)
+
+    # A phase may run many cycles, so each label gets its own FIFO of open
+    # starts rather than a single pending slot: "next end of same label"
+    # pairs the earliest unclosed start, not the most recent.
+    open_starts = {}
+    durations = {}
+    for phase, kind, moment in events:
+        if kind == "start":
+            open_starts.setdefault(phase, []).append(moment)
+        else:
+            pending = open_starts.get(phase)
+            if not pending:
+                problems.append(f"{label}: {phase!r} end with no open start")
+                continue
+            start = pending.pop(0)
+            durations[phase] = durations.get(phase, 0.0) + (moment - start).total_seconds()
+    if problems:
+        raise InputError(problems)
+
+    # An unpaired start is closed at the latest timestamp anywhere in the
+    # log, poll stamps included: that is what lets a poll wait cap a review
+    # interval whose closing stamp a run never wrote.
+    latest = max(moments) if moments else None
+    for phase, pending in open_starts.items():
+        for start in pending:
+            end = latest if latest is not None else start
+            durations[phase] = durations.get(phase, 0.0) + (end - start).total_seconds()
+
+    build_seconds = sum(durations.get(p, 0.0) for p in BUILD_LABELS)
+    review_seconds = sum(durations.get(p, 0.0) for p in REVIEW_LABELS)
+    return build_seconds, review_seconds, raised
+
+
+def cmd_budget(args):
+    try:
+        with open(args.timing, encoding="utf-8") as handle:
+            text = handle.read()
+    except OSError:
+        # Every run started before this change has no log. Reading a missing
+        # log as `over: no` rather than failing keeps those old runs off the
+        # stop this feature adds; a probe that turned this into `null` would
+        # halt them instead.
+        print("build: 0m review: 0m ratio: n/a over: no")
+        return 0
+
+    try:
+        build_seconds, review_seconds, raised = parse_timing_log(text, "timing.log")
+    except InputError as e:
+        for problem in e.problems:
+            sys.stderr.write(f"run-state: {problem}\n")
+        return 3
+
+    build_minutes = round(build_seconds / 60)
+    review_minutes = round(review_seconds / 60)
+    if build_minutes == 0:
+        print(f"build: 0m review: {review_minutes}m ratio: n/a over: no")
+        return 0
+
+    ratio_threshold = raised if raised is not None else args.ratio
+    ratio = review_seconds / build_seconds
+    over = "yes" if ratio > ratio_threshold else "no"
+    print(f"build: {build_minutes}m review: {review_minutes}m ratio: {ratio:.2f} over: {over}")
+    return 0
+
+
 def cmd_phase(args):
     try:
         probe = load_json(args.probe, "probe")
@@ -968,6 +1088,11 @@ def parse_args(argv=None):
     p = sub.add_parser("phase", help="where a half-finished run resumes")
     p.add_argument("--probe", metavar="PROBE_JSON", required=True)
     p.set_defaults(func=cmd_phase)
+
+    b = sub.add_parser("budget", help="build vs. review minutes from a timing.log, and whether review is over budget")
+    b.add_argument("--timing", metavar="TIMING_LOG", required=True, help="path to timing.log; a missing file reads as under budget")
+    b.add_argument("--ratio", metavar="RATIO", type=float, default=DEFAULT_BUDGET_RATIO, help="review:build ratio that trips 'over'; a 'budget-raised' line in the log overrides this")
+    b.set_defaults(func=cmd_budget)
 
     return ap.parse_args(argv)
 
