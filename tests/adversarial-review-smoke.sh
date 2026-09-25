@@ -669,6 +669,20 @@ expect_match "6 representation" <"$diffs/unit-12px.diff"
 expect_match "" <"$diffs/unit-const-px.diff"
 # The only `round(` in this diff sits on an unchanged context line.
 expect_match "" <"$diffs/context-only.diff"
+# Every unit in the table's "The unit suffixes are" sentence gets the digit
+# rule, row 1's `ms` and `kb` included (RATIONALE row 42). A hardcoded
+# `px`/`rem`/`em` set matched `ms = 3` as a word and missed `500ms`.
+expect_match "1 money" --only 1 < <(printf '+timeout = 500ms\n')
+expect_match "1 money" --only 1 < <(printf '+size = 10kb\n')
+expect_match "" --only 1 < <(printf '+ms = 3\n')
+# Inside a hunk, `---`/`+++` lines are content (row 43). A removed SQL
+# comment and an added `++total;` each carry their fixture's only signal.
+expect_match "4 schema" <"$diffs/schema-removed-sql-comment.diff"
+expect_match "1 money" --only 1 <"$diffs/money-plusplus-added.diff"
+# Two files back to back: the second file's `---`/`+++` headers sit after
+# the first hunk's counts run out, so they stay headers.
+expect_match "1 money
+4 schema" --only 1,4 < <(cat "$diffs/schema-removed-sql-comment.diff" "$diffs/money-plusplus-added.diff")
 
 # The recipe the script replaced, filled in for `round(`, is a regex error
 # rather than a match: exit 2 on the very line the script matches (#114).
@@ -696,6 +710,32 @@ set -e
 }
 [[ "$missing_table_status" == "3" ]] || {
   echo "a missing --table must exit 3, got: $missing_table_status" >&2
+  exit 1
+}
+
+# The unit list is table data (row 42), so a table that drops the "The unit
+# suffixes are" sentence can't be parsed and exits 1.
+sed 's/The unit suffixes are `px`[^.]*\. //' adversarial-review/references/trigger-table.md >"$tmp/no-units-table.md"
+refute_text "$tmp/no-units-table.md" 'The unit suffixes are `'
+set +e
+python3 "$match_py" rows --table "$tmp/no-units-table.md" </dev/null >/dev/null 2>&1
+no_units_status=$?
+set -e
+[[ "$no_units_status" == "1" ]] || {
+  echo "a --table with no unit-suffix sentence must exit 1, got: $no_units_status" >&2
+  exit 1
+}
+
+# Usage errors exit 3 under the validator convention (row 44); argparse's
+# own default is 2.
+set +e
+python3 "$match_py" rows --bogus </dev/null >/dev/null 2>&1
+bogus_flag_status=$?
+python3 "$match_py" </dev/null >/dev/null 2>&1
+no_command_status=$?
+set -e
+[[ "$bogus_flag_status" == "3" && "$no_command_status" == "3" ]] || {
+  echo "usage errors must exit 3: rows --bogus got $bogus_flag_status, no subcommand got $no_command_status" >&2
   exit 1
 }
 

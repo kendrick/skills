@@ -79,7 +79,13 @@ The user owns two phases of this loop, and both are outside it. Planning comes b
    ```
 
    A non-zero exit is a hard stop whatever the isolation decision was. Two worktrees rewriting one file produce a rebase conflict at Step 5, and a run the user has walked away from cannot resolve it.
-7. Red-team mode for the confirmation text: `reproduce claims`, or `reproduce claims, then adversarial-review (<row names>; depth <n> forecast)` when the Step 4 trigger match hits over the plan's owned paths, or `reproduce claims, then adversarial-review (--deep; depth 2 forecast)` when `--deep` is set, since that flag fires the trigger on its own. Take `<n>` from the Depth table in `adversarial-review`'s Step 2, applied to the plan's owned paths. Step 4 re-runs that match against the real diff, so this is the forecast rather than the verdict. Where the mode names `adversarial-review`, a yes to this confirmation also answers `adversarial-review`'s Step 2 question for this run, at any depth up to the forecast one.
+7. Red-team mode for the confirmation text: `reproduce claims`, or `reproduce claims, then adversarial-review (<row names>; depth <n> forecast)` when the forecast match below prints a row, or `reproduce claims, then adversarial-review (--deep; depth 2 forecast)` when `--deep` is set, since that flag fires the trigger on its own. The forecast match feeds the current contents of the plan's owned paths to Step 4's script as an all-added diff against the empty tree, run in the tree that will host the work:
+
+   ```
+   git diff $(git hash-object -t tree /dev/null) HEAD -- <the plan's owned paths> | adversarial-review/scripts/match-triggers.py rows --only 1,2,4
+   ```
+
+   The script reads only `+` and `-` lines, so file contents piped in bare match nothing; the empty-tree diff marks every line added. An owned path that does not exist yet contributes nothing, so a file the plan creates is forecast from nothing. `<row names>` are the names the command printed. A non-zero exit decides nothing: stop and quote its stderr, since an empty output from a failed run reads as `reproduce claims`. Take `<n>` from the Depth table in `adversarial-review`'s Step 2, applied to the plan's owned paths. The rows it counts are the ones the forecast match printed. Step 4 re-runs that match against the real diff, so this is the forecast rather than the verdict. Where the mode names `adversarial-review`, a yes to this confirmation also answers `adversarial-review`'s Step 2 question for this run, at any depth up to the forecast one.
 8. The one confirmation, in one message:
 
    ```
@@ -90,7 +96,7 @@ The user owns two phases of this loop, and both are outside it. Planning comes b
 
    Once the user answers yes, write the red-team mode line this message carried to `RUN_DIR/redteam/mode.txt`, replacing any earlier copy. Step 4 hands that file's line to `adversarial-review` as the confirmation its Step 2 checks, because a resumed run reaches Step 4 without this conversation.
 
-**Done when:** `check-plan.py` exited 0 and no derivation question was recorded; `check-inflight.py` exited 0; the shape line, the isolation choice, the red-team mode, and the push grant were put to the user in one message and answered yes, and `RUN_DIR/redteam/mode.txt` holds the red-team mode line that message carried — or the run stopped at a refusal, a stop, a dry-run, or a no, with nothing dispatched and nothing pushed.
+**Done when:** `check-plan.py` exited 0 and no derivation question was recorded; `check-inflight.py` exited 0; the forecast match exited 0, or `--deep` is set; the shape line, the isolation choice, the red-team mode, and the push grant were put to the user in one message and answered yes, and `RUN_DIR/redteam/mode.txt` holds the red-team mode line that message carried — or the run stopped at a refusal, a stop, a dry-run, or a no, with nothing dispatched and nothing pushed.
 
 ## Step 1 — Isolate
 

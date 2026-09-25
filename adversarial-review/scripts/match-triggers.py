@@ -2,21 +2,20 @@
 """Match a diff's added/removed lines against trigger-table.md's own signals,
 instead of a grep hand-copied from the table's prose.
 
-The table ships its own recipe (`grep -Ei '\\bround(\\b'`) as a worked example
-of the matching rules, not as the actual command to run: a literal `(` inside
-a `\\b...\\b` word-boundary grep is invalid, and that recipe exits 2 on `total =
-round(amount, 2)` instead of matching it (#114). Copying the recipe by hand
-into a real invocation just moves the bug: every rebuild has to independently
-get whole-word matching, the `_` prefix rule, and the unit-suffix rule right,
-and two runs that each got it *slightly* wrong disagree with each other as
-often as they agree with the table. This script parses the table once, so
-every run and every skill that shells out to it shares one matcher instead of
-one grep per reader.
+Until #157 the table shipped its own recipe (`grep -Ei '\\bsignal\\b'`) for
+each reader to fill in by hand. Filled in for `round(`, the recipe is
+`grep -Ei '\\bround(\\b'`, which exits 2 on `total = round(amount, 2)`
+instead of matching it: the literal `(` opens a group nothing closes (#114).
+Each hand rebuild also had to get whole-word matching, the `_` prefix rule,
+and the unit-suffix rule right on its own, and two runs that each got one
+slightly wrong disagreed with each other as often as with the table. This
+script parses the table once, so every run and every skill that shells out
+to it shares one matcher.
 
     match-triggers.py rows [--only 1,2,4] [--table PATH] < diff
 
 Exit codes: 0 with matches printed (possibly none), 1 on a table it can't
-parse, 3 on usage or unreadable input — the convention check-territories.py
+parse, 3 on usage or unreadable input—the convention check-territories.py
 sets in this same directory.
 """
 import argparse
@@ -29,13 +28,16 @@ DEFAULT_TABLE_PATH = os.path.normpath(
     os.path.join(SCRIPT_DIR, "..", "references", "trigger-table.md")
 )
 
-# The table's own prose names only these three as the unit-suffix case: a
-# unit matches the number in front of it, not the identifier it would
-# otherwise collide with (`\bpx\b` finds `const px`, never `padding: 12px`).
-# This set is read off the rule in trigger-table.md:11, not off any one row,
-# so it applies to any row that happens to carry one of these three signals —
-# row 6 today, whichever row picks them up next.
-UNIT_SUFFIX_SIGNALS = {"px", "rem", "em"}
+# The unit list comes from the table's matching paragraph, so a unit added
+# to the table's prose takes effect with no code change. A hardcoded
+# `px`/`rem`/`em` set inverted row 1's `ms`, `bytes`, and `kb`: `ms = 3`
+# matched as a whole word, and `500ms` never matched.
+# The capture must open on a backtick: the table also quotes this sentence's
+# opening words elsewhere, and a looser match would read `<n> <name>` off
+# that quote as a unit once the real sentence was deleted.
+UNIT_LIST_RE = re.compile(r"The unit suffixes are (`[^.]*)\.")
+# Either count may be omitted, and an omitted count means 1.
+HUNK_RE = re.compile(r"^@@ -\d+(?:,(\d+))? \+\d+(?:,(\d+))? @@")
 
 HEADER_RE = re.compile(r"^\|\s*#\s*\|\s*Row\s*\|", re.IGNORECASE)
 SEPARATOR_RE = re.compile(r"^\|[\s:-]+\|")
@@ -50,13 +52,17 @@ def _is_word_char(ch):
     return bool(ch) and re.match(r"\w", ch, re.UNICODE) is not None
 
 
-def compile_signal(signal):
-    """One compiled pattern per table signal, applying trigger-table.md:11's
-    rules: whole word/identifier, case-insensitive; a trailing `_` is a
-    prefix; `px`/`rem`/`em` match after a digit. `re.escape` first, so a
-    signal like `float(` or `CHECK (` can't reinterpret its own punctuation
-    as regex syntax."""
-    if signal.lower() in UNIT_SUFFIX_SIGNALS:
+def compile_signal(signal, units):
+    """One compiled pattern per table signal, applying the table's rules
+    under "Match signals as whole words or identifiers, case-insensitively":
+    whole word or identifier; a trailing `_` is a prefix; a signal in `units`
+    matches only straight after a digit. `re.escape` runs first, so a signal
+    like `float(` or `CHECK (` can't turn its own punctuation into regex
+    syntax."""
+    if signal.lower() in units:
+        # Digit immediately before, no space allowed: code writes the literal
+        # as `12px`, `"500ms"`, `10kb`, and a space would let prose like
+        # `3 em dashes` match row 6.
         return re.compile(r"\d(?:" + re.escape(signal) + r")\b", re.IGNORECASE)
 
     escaped = re.escape(signal)
@@ -73,10 +79,22 @@ def compile_signal(signal):
     return re.compile(left + escaped + right, re.IGNORECASE)
 
 
+def parse_units(text):
+    """The lowercased unit suffixes the table's "The unit suffixes are ..."
+    sentence names in backticks. Raises TableError if the sentence is
+    missing or names no unit."""
+    m = UNIT_LIST_RE.search(text)
+    units = BACKTICK_RE.findall(m.group(1)) if m else []
+    if not units:
+        raise TableError("no 'The unit suffixes are `...`.' sentence found")
+    return {u.lower() for u in units}
+
+
 def parse_table(text):
     """Rows in table order, as {"number": int, "name": str, "patterns": [...]}.
-    Raises TableError if no row-table header is found, or a row's own shape
-    (number, name, signals cell) can't be read."""
+    Raises TableError if the unit list or the row-table header is missing,
+    or a row's own shape (number, name, signals cell) can't be read."""
+    units = parse_units(text)
     lines = text.splitlines()
     header_idx = next(
         (i for i, line in enumerate(lines) if HEADER_RE.match(line)), None
@@ -112,7 +130,7 @@ def parse_table(text):
                 # file" is prose, not a grep target — so it never matches
                 # here. adversarial-review adds it to every file by its own
                 # rule, not by anything this script prints.
-                "patterns": [compile_signal(s) for s in signals],
+                "patterns": [compile_signal(s, units) for s in signals],
             }
         )
 
@@ -122,12 +140,39 @@ def parse_table(text):
 
 
 def diff_content_lines(diff_text):
-    """Added and removed line bodies only — never context lines, and never
-    the `+++`/`---` file-header lines, which look like +/- content but name
-    a path rather than a change."""
+    """Added and removed line bodies, without the one-character prefix.
+    Context lines and file headers are left out. Inside a counted hunk every
+    `+`/`-` line is content; outside one, `--- `/`+++ ` lines are file
+    headers and every other `+`/`-` line is content."""
     lines = []
+    old_left = new_left = 0
     for raw in diff_text.splitlines():
-        if raw.startswith("+++") or raw.startswith("---"):
+        in_hunk = old_left > 0 or new_left > 0
+        # The hunk's counts say where the hunk ends. A prefix test can't: a
+        # removed SQL comment `-- CHECK (a > 0)` prints as `--- CHECK (a > 0)`,
+        # which reads as a file header.
+        if in_hunk and raw[:1] in ("+", "-", " ", "", "\\"):
+            if raw.startswith("+"):
+                lines.append(raw[1:])
+                new_left -= 1
+            elif raw.startswith("-"):
+                lines.append(raw[1:])
+                old_left -= 1
+            elif raw[:1] in (" ", ""):
+                old_left -= 1
+                new_left -= 1
+            continue
+        # Any other line ends the hunk early, so a header that overstates its
+        # counts can't swallow the next file's `---`/`+++` lines as content.
+        old_left = new_left = 0
+        hunk = HUNK_RE.match(raw)
+        if hunk:
+            old_left = int(hunk.group(1) or 1)
+            new_left = int(hunk.group(2) or 1)
+            continue
+        # Outside a counted hunk: a bare `@@`, or stdin with no `@@` at all,
+        # like the `printf '+total = round(amount, 2)\n'` in #157's criteria.
+        if raw.startswith("+++ ") or raw.startswith("--- "):
             continue
         if raw.startswith("+") or raw.startswith("-"):
             lines.append(raw[1:])
@@ -184,8 +229,18 @@ def cmd_rows(args):
     return 0
 
 
+class _Parser(argparse.ArgumentParser):
+    # argparse exits 2 on a usage error, and the validator convention says 3.
+    # add_subparsers builds each subparser from type(self), so `rows --bogus`
+    # reaches this override too.
+    def error(self, message):
+        self.print_usage(sys.stderr)
+        sys.stderr.write(f"{self.prog}: error: {message}\n")
+        sys.exit(3)
+
+
 def parse_args(argv=None):
-    ap = argparse.ArgumentParser(
+    ap = _Parser(
         description="Match a diff's changed lines against trigger-table.md's "
         "own signals."
     )

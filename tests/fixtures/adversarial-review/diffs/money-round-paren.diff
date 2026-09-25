@@ -2,7 +2,7 @@ diff --git a/app/billing.py b/app/billing.py
 index 1111111..2222222 100644
 --- a/app/billing.py
 +++ b/app/billing.py
-@@ -8,4 +8,5 @@ def compute_total(amount):
+@@ -8,2 +8,3 @@ def compute_total(amount):
      tax = compute_tax(amount)
 +    total = round(amount, 2)
      return tax

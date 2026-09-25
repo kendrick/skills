@@ -256,6 +256,10 @@ require_text work-issue/SKILL.md "A deeper derived depth answers nothing"
 require_text work-issue/references/redteam.md "A deeper derived depth answers nothing"
 # The bound needs a depth to compare against, so Step 0 has to forecast one.
 require_text work-issue/SKILL.md "Take \`<n>\` from the Depth table in \`adversarial-review\`'s Step 2, applied to the plan's owned paths."
+# Step 0's forecast feeds the owned paths to Step 4's script as an all-added
+# diff (row 99). Bare file contents carry no `+`, so the script matched nothing and
+# every run without `--deep` forecast `reproduce claims`.
+require_text work-issue/SKILL.md "git diff \$(git hash-object -t tree /dev/null) HEAD -- <the plan's owned paths> | adversarial-review/scripts/match-triggers.py rows --only 1,2,4"
 # The README promised a run that never asks again, and the forecast gap means
 # one can. Pinned so the exception stays where a user decides to walk away.
 require_text work-issue/README.md "After yes, the run is unattended unless the real diff trips an \`adversarial-review\` the confirmation didn't forecast, or forecast at a lower depth."
