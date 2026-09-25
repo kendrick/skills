@@ -1233,7 +1233,8 @@ blocking_count="$(bash -c "${blocking_probe//<RUN_DIR>/$tri_run}")"
 }
 # A Finding cell quoting a shell pipe escapes it as `\|`, which must not
 # shift the Severity column. A round with no Severity column can't answer, so
-# the probe prints null and phase stops naming the field rather than reading
+# the probe prints null, which phase's null-field stop (checked below) turns
+# into a stop naming the field rather than reading
 # 0. No round yet prints 0 without reading stdin, where it once hung.
 for tri_case in "triage-pipe:1" "triage-noseverity:null" "empty:0"; do
   tri_dir="$tmp/tri-${tri_case%%:*}"
@@ -1379,8 +1380,12 @@ grep -Fq "reply 2026-09-17T16:20:00Z https://github.com/kendrick/skills/pull/1#d
 require_text work-issue/references/triage.md "the newest one not by the author, not always the last"
 # Row 17 is post-PR; a pre-PR repair goes to row 10 or row 13, both of which
 # still open the pull request.
-require_text work-issue/SKILL.md "(resume at item 1's adversarial-review invocation); or a queue row missing from the \`Deferred findings\` comment, or a repair report"
-require_text work-issue/references/resume.md "(resume at item 1's adversarial-review invocation); or a queue row missing from the \`Deferred findings\` comment, or a repair report"
+require_text work-issue/SKILL.md "(resume at item 1: the reproducer until \`trigger-repair-<k>.txt\` exists, then the adversarial-review invocation); or a queue row missing from the \`Deferred findings\` comment, or a repair report"
+require_text work-issue/references/resume.md "(resume at item 1: the reproducer until \`trigger-repair-<k>.txt\` exists, then the adversarial-review invocation); or a queue row missing from the \`Deferred findings\` comment, or a repair report"
+# Both Resume tables once sent the re-fire leg straight to the invocation,
+# skipping the repair's reproducer, after the script had stopped saying so.
+refute_text work-issue/SKILL.md "(resume at item 1's adversarial-review invocation)"
+refute_text work-issue/references/resume.md "(resume at item 1's adversarial-review invocation)"
 # The queue's comment is probed, and rows 14 and 17 both read it.
 require_text work-issue/SKILL.md "or a triage row without a reply URL | Step 8 |"
 require_text work-issue/references/resume.md "or a triage row without a reply URL | Step 8 |"
