@@ -1439,6 +1439,11 @@ require_text work-issue/SKILL.md "every \`LISTED\` finding from a re-fired revie
 # A repo's PR template doesn't get to drop listed advisories: the "Left out"
 # section is added whatever the template carries.
 require_text work-issue/SKILL.md "With a template or without one, the body carries a \"Left out\" section naming every finding"
+# An existing pull request gets its "Left out" section updated too. It isn't
+# only pushed to, or a Step 4 review that re-ran after the PR opened loses its
+# listed advisories.
+require_text work-issue/SKILL.md "an existing pull request keeps its number, receives the push, and has any \`LISTED\` finding its \"Left out\" section lacks added to it"
+refute_text work-issue/SKILL.md "an existing pull request keeps its number and simply receives the push"
 require_text work-issue/references/resume.md "redteam/ar-state.txt"
 require_text work-issue/SKILL.md "no \`redteam/ar-state.txt\` showing \`UNVERIFIED: 0\`"
 refute_text work-issue/references/resume.md "ar_run_dir"
