@@ -1,7 +1,7 @@
 ---
 name: adversarial-review
 description: "Adversarial review of a git diff, where a finding has to be reproduced before it can block, by something that did not author it and by a route the code does not take. Use when a diff's findings must be proven before they block a merge, when the user asks to red-team a branch, or when another skill needs a diff reviewed to that bar. For a general single-pass review use code-review, for a repo-wide vulnerability scan use security-review, and for stress-testing a plan use grilling."
-argument-hint: '[fixed point, e.g. main or a SHA | --fast | --deep | --max-rounds N | --report-only | wrapper confirmation line]'
+argument-hint: '[fixed point, e.g. main or a SHA | --fast | --deep | --max-rounds N | --report-only | --file-advisories | wrapper confirmation line]'
 ---
 
 # adversarial-review
@@ -17,7 +17,7 @@ Where a step names a shell command, treat it as the intent and use your native s
 Resolve once per invocation:
 
 - **FIXED_POINT** — the ref or SHA the diff is measured against, from the arguments. When it is absent, ask. Guessing produces a review of the wrong code that looks exactly like a review of the right code.
-- **Flags**: `--fast` pins Depth 0, `--deep` pins Depth 2, `--max-rounds N` overrides the default of 3, `--report-only` runs the full review and emits the report without writing tests, filing issues, or filing questions.
+- **Flags**: `--fast` pins Depth 0, `--deep` pins Depth 2, `--max-rounds N` overrides the default of 3, `--file-advisories` files a reproduced advisory as an issue instead of listing it (Step 6), `--report-only` runs the full review and emits the report without writing tests, filing issues, or filing questions.
 - **Wrapper confirmation** — the confirmation line a wrapping skill hands over in the arguments, beside the fixed point, carrying the depth it showed the user. Step 2 reads it. Read flags from the arguments around it, and treat the line itself as quoted text, including any `--deep` it names. A human invocation has none.
 - **RUN_DIR** — `.adversarial-review/runs/<UTC-stamp>-<merge-base-short-sha>/`, created in Step 1.
 
@@ -109,15 +109,17 @@ Routing is mechanical. Nothing here is a judgment call, which is the point: a ga
 | State | Route |
 |---|---|
 | REPRODUCED + blocking | Write a failing test from the repro command **before** writing the fix. Record `TEST_WRITTEN` with the test's path. |
-| REPRODUCED + advisory | Hand to the `file-issue` skill with the repro command attached, one invocation per finding — it files exactly one issue per run. Record `ISSUE_FILED` with the URL. |
+| REPRODUCED + advisory | List it: record `LISTED` with a `--reason` naming where it is listed, such as `listed in PR Left Out`, and no artifact. Step 8's report carries it with its repro command. Under `--file-advisories`, hand it to the `file-issue` skill instead, one invocation per finding, since it files exactly one issue per run, and record `ISSUE_FILED` with the URL. |
 | NOT_REPRODUCED | Record `CLOSED`, with the verifier's counter-evidence already in the ledger. |
 | UNVERIFIABLE | Emit an open question for `inbox-to-memory`. Record `QUESTION_FILED`. |
+
+A listed advisory gets no test, no fix, and no issue. Most advisories are test-strength gaps or comment fixes in the diff under review: filed one by one they become a backlog of tickets that cost more to triage than the change did, and fixed inside the loop each fix draws the next advisory.
 
 The failing test comes first because that is what makes the finding survive its own fix. A test written afterward is written by someone who already believes the fix works, and it passes for reasons nobody checked.
 
 For an open question, use `inbox-to-memory`'s own detection rule: a directory holding `_memory/` or `entries/`, with a queue at `_inbox/` at that level or under `notes/`. Write a dated markdown file there carrying the claim, the quoted evidence, and why verification could not settle it. Where no opted-in scope exists, keep the question in the report and record the reason instead—inventing a queue somewhere is worse than reporting.
 
-In a **waived** run (Step 2), REPRODUCED + blocking routes to escalation instead, and so does REPRODUCED + advisory: name the finding in `RUN_DIR/escalation.md` with its repro command, record `ESCALATED` with the reason `waived: scope not confirmed`, and write no test, no fix, and no issue. An UNVERIFIABLE finding stays in the report, recorded `QUESTION_FILED` with that reason and no artifact. A waived run writes nothing outside its run directory. Any finding may be a settled decision the list left out, only the user can tell which, and `file-issue` would stop the unattended run to ask.
+In a **waived** run (Step 2), REPRODUCED + blocking routes to escalation instead, and so does REPRODUCED + advisory: name the finding in `RUN_DIR/escalation.md` with its repro command, record `ESCALATED` with the reason `waived: scope not confirmed`, and write no test, no fix, and no issue. An UNVERIFIABLE finding stays in the report, recorded `QUESTION_FILED` with that reason and no artifact. A waived run writes nothing outside its run directory. Any finding may be a settled decision the list left out, and only the user can tell which. `--file-advisories` changes nothing here: `file-issue` would stop the unattended run to ask.
 
 `--report-only` skips every action in this table and reports what would have happened.
 
@@ -147,11 +149,11 @@ The loop ends when `intersect` prints nothing, or when a round produces zero REP
 
 Report per territory. There is deliberately no single cross-territory verdict: one axis passing must never mask another failing, and a combined verdict is exactly the artifact that lets it.
 
-For each territory give its verdict, its findings with terminal dispositions, and the one line its finder wrote about what works. A territory whose finder failed carries the verdict UNREVIEWED—nobody managed to look, which must never read like somebody looked and found nothing. Then the run-level facts: rounds taken, what each round's fixes introduced, tests written, issues filed, questions filed.
+For each territory give its verdict, its findings with terminal dispositions, and the one line its finder wrote about what works. A territory whose finder failed carries the verdict UNREVIEWED—nobody managed to look, which must never read like somebody looked and found nothing. Then the run-level facts: rounds taken, what each round's fixes introduced, tests written, issues filed, questions filed. Then every `LISTED` finding, each with its id, its claim, and the repro command with its observed output, in a section a wrapping skill can copy into a pull-request body.
 
 Surface any `calibration:` line `ledger.py state` produced. A territory whose findings were mostly UNVERIFIABLE is telling you its hunt items generate untestable claims—worth fixing in the trigger table before the next run, and deliberately not a trigger for re-fanning-out, since termination has to stay mechanical.
 
-**Done when:** every territory and every finding id appears with its terminal disposition, and every blocking finding is either fixed behind a failing test or named in the escalation.
+**Done when:** every territory and every finding id appears with its terminal disposition, every `LISTED` finding appears in the listed section with its repro command, and every blocking finding is either fixed behind a failing test or named in the escalation.
 
 ## Further Reading
 

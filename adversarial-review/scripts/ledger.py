@@ -58,7 +58,23 @@ REQUIRED_EVIDENCE = {
     "TEST_WRITTEN": ("artifact",),
     "ISSUE_FILED": ("artifact",),
     "ESCALATED": ("reason",),
+    "LISTED": ("reason",),
 }
+
+# LISTED puts a finding in the report and nowhere else: no test, no fix, no
+# issue. On a blocking finding that skips the failing test Step 6 requires
+# before the fix, so it is refused there.
+ADVISORY_ONLY = ("LISTED",)
+
+
+def severity_problem(disposition, finding):
+    """A reason `disposition` can't land on `finding`, or None if it can."""
+    if disposition in ADVISORY_ONLY and finding.get("claimed_severity") != "advisory":
+        return (
+            f"{disposition} is valid only on an advisory finding; "
+            f"{finding.get('id')} is {finding.get('claimed_severity')}"
+        )
+    return None
 
 
 def _type_name(value):
@@ -237,12 +253,16 @@ def cmd_append_event(args):
         return 1
 
     known = {
-        obj.get("id")
+        obj.get("id"): obj
         for _, obj in read_lines(args.ledger, strict=False)
         if obj.get("record") == "finding"
     }
     if args.finding_id not in known:
         sys.stderr.write(f"ledger: unknown finding_id {args.finding_id}\n")
+        return 1
+    problem = severity_problem(args.disposition, known[args.finding_id])
+    if problem:
+        sys.stderr.write(f"ledger: {problem}\n")
         return 1
 
     append_line(line, args.ledger)
@@ -350,11 +370,13 @@ def cmd_validate(args):
     findings = 0
     events = 0
     problems = []
+    seen = {}
     for lineno, obj in read_lines(args.ledger, strict=True):
         record = obj.get("record")
         if record == "finding":
             schema = finding_schema
             findings += 1
+            seen[obj.get("id")] = obj
         elif record == "event":
             schema = event_schema
             events += 1
@@ -365,6 +387,11 @@ def cmd_validate(args):
         if violation:
             json_path, reason = violation
             problems.append(f"line {lineno}: {json_path}: {reason}")
+            continue
+        if record == "event" and obj.get("finding_id") in seen:
+            problem = severity_problem(obj["disposition"], seen[obj["finding_id"]])
+            if problem:
+                problems.append(f"line {lineno}: {problem}")
 
     if problems:
         for problem in problems:
@@ -407,13 +434,14 @@ def parse_args(argv=None):
             "CLOSED",
             "QUESTION_FILED",
             "ESCALATED",
+            "LISTED",
         ],
     )
     e.add_argument("--actor", required=True, help="e.g. verifier-r1-money")
     e.add_argument("--repro-command", default=None)
     e.add_argument("--observed-output", default=None)
     e.add_argument("--counter-evidence", default=None)
-    e.add_argument("--reason", default=None)
+    e.add_argument("--reason", default=None, help="required on LISTED, e.g. 'listed in PR Left Out'")
     e.add_argument("--artifact", default=None, help="test path, issue URL, note path")
     e.add_argument("--at", default=None, help="ISO-8601 UTC; defaults to now")
     e.set_defaults(func=cmd_append_event)

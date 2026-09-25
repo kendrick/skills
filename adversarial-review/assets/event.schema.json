@@ -24,7 +24,7 @@
     "finding_id": { "type": "string" },
     "disposition": {
       "type": "string",
-      "description": "The first three are verification outcomes and only REPRODUCED can block. The rest record what was then done about it.",
+      "description": "The first three are verification outcomes and only REPRODUCED can block. The rest record what was then done about it. LISTED is a reproduced advisory kept in the report and filed nowhere; ledger.py refuses it on a blocking finding.",
       "enum": [
         "REPRODUCED",
         "NOT_REPRODUCED",
@@ -33,7 +33,8 @@
         "ISSUE_FILED",
         "CLOSED",
         "QUESTION_FILED",
-        "ESCALATED"
+        "ESCALATED",
+        "LISTED"
       ]
     },
     "actor": {

@@ -1358,6 +1358,9 @@ require_text work-issue/references/resume.md "two failed rounds in a row stop wi
 require_text work-issue/SKILL.md "Write \`date -u +%FT%TZ\` to \`RUN_DIR/pushed_at\`, then push"
 # Completion of adversarial-review is read from Step 4's record of its ledger
 # state, never from its run directory, which exists from preflight onward.
+# Step 5's "Left out" is where adversarial-review's LISTED advisories land
+# (adversarial-review row 39, work-issue row 96), in place of one issue each.
+require_text work-issue/SKILL.md "\"Left out\" names every finding \`adversarial-review\`'s report lists as \`LISTED\`"
 require_text work-issue/references/resume.md "redteam/ar-state.txt"
 require_text work-issue/SKILL.md "no \`redteam/ar-state.txt\` showing \`UNVERIFIED: 0\`"
 refute_text work-issue/references/resume.md "ar_run_dir"
