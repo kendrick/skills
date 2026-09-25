@@ -394,10 +394,16 @@ chmod +x "$s7/shim/grep"
 )
 step7_run="${step7_cmd//<prev_round_head_sha>/$(cat "$s7/prev_sha")}"
 step7_run="${step7_run//RUN_DIR/$s7/run}"
+# Stdout only: the shim also catches grep calls a runtime makes on its own,
+# such as pyenv's python3 shim resolving a version, and those leave stderr
+# noise without touching the answer. A grep stage in the pipe itself empties
+# stdout, which is what fails here.
 for step7_shim in "" "$s7/shim:"; do
-  step7_out="$(cd "$s7/repo" && PATH="$step7_shim$PATH" bash -o pipefail -c "$step7_run" 2>&1)" || true
+  step7_label="ambient PATH"
+  [[ -z "$step7_shim" ]] || step7_label="grep shimmed to fail"
+  step7_out="$(cd "$s7/repo" && PATH="$step7_shim$PATH" bash -o pipefail -c "$step7_run" 2>/dev/null)" || true
   [[ "$step7_out" == "money" ]] || {
-    echo "Step 7's command with an empty excluded.txt must print the fix's territory (${step7_shim:+grep shimmed to fail}${step7_shim:-ambient PATH}), got: $step7_out" >&2
+    echo "Step 7's command with an empty excluded.txt must print the fix's territory ($step7_label), got: $step7_out" >&2
     exit 1
   }
 done
