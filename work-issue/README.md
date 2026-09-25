@@ -90,7 +90,7 @@ work-issue/
 
 ## Maintainers
 
-The decision ledger and eval suite live in [`_maintenance/work-issue/`](../_maintenance/work-issue/). Every contested choice has a row in [RATIONALE.md](../_maintenance/work-issue/RATIONALE.md), including where each borrowed mechanism came from and everything deliberately cut. Smoke test: `bash tests/work-issue-smoke.sh` from the repo root, which pins the documents and runs the three scripts against fixtures. [EVALS.md](../_maintenance/work-issue/EVALS.md) carries the live end-to-end scenarios, unrun until somebody runs one.
+The decision ledger and eval suite live in [`_maintenance/work-issue/`](../_maintenance/work-issue/). Every contested choice has a row in [RATIONALE.md](../_maintenance/work-issue/RATIONALE.md), including where each borrowed mechanism came from and everything deliberately cut. Smoke tests: `bash tests/work-issue-smoke.sh` from the repo root, which pins the documents and runs the three scripts against fixtures, and `bash tests/work-issue-resume-tables-smoke.sh`, which checks that both copies of the Resume table and `run-state.py` agree row for row. [EVALS.md](../_maintenance/work-issue/EVALS.md) carries the live end-to-end scenarios, unrun until somebody runs one.
 
 ## License
 
