@@ -29,5 +29,6 @@
   "deferred_comment_needed": false,
   "newest_repair_report": true,
   "triage_blocking_rows": 1,
-  "repair_ar_settled": true
+  "repair_ar_settled": true,
+  "review_over_budget": false
 }

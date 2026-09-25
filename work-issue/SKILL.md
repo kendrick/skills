@@ -32,7 +32,7 @@ Resolve once per invocation:
 - **BRANCH** — `issue-<N>`
 - **WORKTREE** — `<ROOT>/../<PROJECT>-issue-<N>/`
 - **WORKER** — `issue-<N>`: the herdr agent name, and the label for a plain subagent
-- **RUN_DIR** — `<COMMON>/work-issue/issue-<N>/`. Subpaths: `issue.md`, `plan.md`, `base_sha`, `baseline.txt`, `pushed_at`, `conflict.txt`, `reports/`, `review/`, `redteam/`, `triage/`, `queue.md`, `pr-body.md`. A finished run moves to `<COMMON>/work-issue/closed/issue-<N>/`. Under the common dir it is one location visible from every worktree, invisible to `git status` without an exclude entry, and it survives `git worktree remove`. It holds phase *outputs* — reports, verdicts, triage rows — and the resume probe reads those outputs. Nothing in it records which phase the run believes it reached: a note saying "phase 4" outlives the crash that stranded the run at 3.
+- **RUN_DIR** — `<COMMON>/work-issue/issue-<N>/`. Subpaths: `issue.md`, `plan.md`, `base_sha`, `baseline.txt`, `pushed_at`, `timing.log`, `conflict.txt`, `reports/`, `review/`, `redteam/`, `triage/`, `queue.md`, `pr-body.md`. A finished run moves to `<COMMON>/work-issue/closed/issue-<N>/`. Under the common dir it is one location visible from every worktree, invisible to `git status` without an exclude entry, and it survives `git worktree remove`. It holds phase *outputs* — reports, verdicts, triage rows — and the resume probe reads those outputs. Nothing in it records which phase the run believes it reached: a note saying "phase 4" outlives the crash that stranded the run at 3.
 - **PLAN** — first hit wins:
 
   1. the path in the arguments
@@ -56,6 +56,14 @@ Resolve once per invocation:
 `gh auth status` is a Step 0 preflight, the way `file-issue` runs one. Unauthenticated at Step 0 stops the run, because the issue cannot be read and CRITERIA would be invented. Unauthenticated at Step 5 or later renders the pull-request body to `RUN_DIR/pr-body.md`, pushes nothing, and stops with "resume after `gh auth login`". A rendered body says on its face that it is rendered: a draft that reads like an opened pull request is a draft somebody goes looking for on GitHub.
 
 The user owns two phases of this loop, and both are outside it. Planning comes before Step 0: an issue with no approved plan gets the refusal, which names `writing-plans` and plans nothing itself. Merging comes after Step 8, where the final report ends "a human merges" once the review is `cleared` — or, once every finding is answered and the queue published but nothing has cleared the round yet, "waiting on the reviewer" instead, since resolving stays their act either way. Waiting on an external reviewer is not a third phase — it is the poll inside Step 6, bounded per invocation and continued by re-invoking.
+
+**Timing.** Steps 1 through 8 each stamp `RUN_DIR/timing.log`: `echo "<n> start $(date -u +%FT%TZ)" >> RUN_DIR/timing.log` as step `<n>` begins, and the same line with `end` once its Done-when holds. A resumed step whose newest line in the log is its own unclosed `start` writes no second `start`, because the budget pairs each `end` with the oldest open `start` of its label and a second one would count the same minutes twice. Step 6 adds its own `poll start` and `poll end` around the wait for a reviewer, which counts as neither build nor review: the reviewer's latency is not this run's review. Read the log with:
+
+```
+work-issue/scripts/run-state.py budget --timing RUN_DIR/timing.log
+```
+
+It prints `build: <m>m review: <m>m ratio: <r> over: yes|no`, build being Steps 2 and 3 and review being Steps 4, 6, 7, and 8. Run it before each red-team round, each `adversarial-review` invocation, each Step 7 dispatch, and Step 8 item 1's re-fire. `over: yes` is the **budget stop**, the same one the Resume table's rows 10, 11, 16, and 17 give: print the `budget` line, and ask the user to stop here or raise the ratio. A raise appends `budget-raised <ratio>` to the log, which replaces the 2.0 ratio from that line on. On cambium #23 and #26, about 50 min of build drew about 5 h of review and 7 repair cycles per lane for 1 blocker, and nothing in the loop said so until a human counted.
 
 ## Step 0 — Gate and confirm
 
@@ -179,7 +187,7 @@ Input is `claims`, `left`, and `plan_concerns` from the final report. The rule, 
 
 ## Step 6 — Triage
 
-Poll every 60 seconds, for at most 10 minutes in one invocation:
+Poll every 60 seconds, for at most 10 minutes in one invocation, with `poll start` written to `RUN_DIR/timing.log` before the first poll and `poll end` after the last:
 
 ```
 work-issue/scripts/run-state.py review <PR> --since <SINCE> --author <login> --save RUN_DIR/review/poll-<k>.json
@@ -221,7 +229,7 @@ Gate it the way Step 3 gates: VERIFY_CMD, then `code-review` against BASE_SHA, w
 2. Where local HEAD is ahead of origin: rebase, verify, write `pushed_at`, push — Step 5 items 1 through 4. Never a no-op push: it moves SINCE past the review just triaged and makes it read as stale.
 3. Reply to every finding thread with what changed and the commit SHA: `gh api repos/{owner}/{repo}/pulls/<pr>/comments/<id>/replies -f body=…`, where `<id>` is the `reply-to` id on the thread's deciding line, and a pull-request comment for review-level and issue-level findings. The push in item 2 moves SINCE past the rows being answered, and that is why `triage_rows_unanswered` counts every round: a stop between the push and these replies resumes here, at row 17, rather than at row 14's poll. A queued row gets "deferred: <Outside because>; tracked in the deferred-findings comment". Replies go through `technical-writing`. **Answer, never resolve**: marking a thread resolved is the reviewer's act, and taking it from them destroys the only signal they have that anyone read the finding.
 4. One pull-request comment headed `Deferred findings` carries the queue table copied byte-for-byte, never reformatted as a link or wrapped in backticks (see [references/triage.md](references/triage.md)), edited in place on later rounds rather than posted again. The resume probe compares every queue row, whole, against that comment as literal text, so a round that added rows, or changed a row's Status without touching its Source, and stopped before this edit resumes here rather than at the poll.
-5. The final report: pull-request URL, review state, rounds run, per-model task counts, escalations, the queue, and the closing line the review state earns — "a human merges" where `review_state` is `cleared`; "waiting on the reviewer" where every finding is answered and the queue published but the round has not cleared (row 18's second reading). Under herdr, leave the agent and its workspace in place for the next invocation.
+5. The final report: pull-request URL, review state, rounds run, per-model task counts, escalations, the queue, the `budget` line, and the closing line the review state earns — "a human merges" where `review_state` is `cleared`; "waiting on the reviewer" where every finding is answered and the queue published but the round has not cleared (row 18's second reading). Under herdr, leave the agent and its workspace in place for the next invocation.
 
 **Done when:** every triage row has a reply URL; every repair's claims carry reproducer verdicts; a repair whose triage round held a `P0`, `P1`, or `blocking` row has `trigger-repair-<k>.txt` written and, where it fired, `ar-state-repair-<k>.txt` showing `UNVERIFIED: 0`, and every `LISTED` finding from a re-fired review is in the pull request's "Left out" section; `origin/issue-N` equals HEAD; the deferred-findings comment exists wherever the queue is non-empty; and the final report was printed.
 
@@ -248,14 +256,14 @@ It prints `phase: <0-8|done|wait|stop> reason: <one line>` and exits 0, or exits
 | 7 | `## Waves` present; no `base_sha` or no `baseline.txt`, or `reports/` lacks a report for some task | Step 1 at the missing artifact; else Step 2 at that wave (re-record WAVE_BASE; revert a half-written wave with no report) |
 | 8 | all wave reports; no `review/self-*.md` | Step 3 at the `code-review` invocation |
 | 9 | `review/self-*` present; no `reports/build-final.json` | Step 3 at the fix dispatch |
-| 10 | `build-final.json`; no `redteam/round-*.json`, or newest round has NOT_REPRODUCED | Step 4: the repair dispatch, or round k+1 where a repair report followed the failed round; two failed rounds in a row stop with the evidence |
-| 11 | red-team clean; `trigger.txt` absent, or its first line `fired: yes` with no `redteam/ar-state.txt` showing `UNVERIFIED: 0`. Build diff only: a repair's re-fire reads its own files at row 17 | Step 4 at the trigger, or at the adversarial-review invocation |
+| 10 | `build-final.json`; no `redteam/round-*.json`, or newest round has NOT_REPRODUCED | Step 4: the repair dispatch, or round k+1 where a repair report followed the failed round; two failed rounds in a row stop with the evidence; review over budget: the budget stop |
+| 11 | red-team clean; `trigger.txt` absent, or its first line `fired: yes` with no `redteam/ar-state.txt` showing `UNVERIFIED: 0`. Build diff only: a repair's re-fire reads its own files at row 17 | Step 4 at the trigger, or at the adversarial-review invocation; review over budget: the budget stop |
 | 12 | `conflict.txt` exists, or a rebase in progress | Step 5 item 1 |
 | 13 | red-team clean; trigger recorded; no triage round yet; no PR, or local HEAD ahead of `origin/issue-N` | Step 5 |
 | 14 | PR open; review `pending`; no triage row without a reply URL; no queue row missing from its comment | Step 6 poll |
 | 15 | PR open; `findings`; no `triage/round-<k>.md` newer than SINCE | Step 6 triage |
-| 16 | newest triage round has in-scope rows; no `reports/repair-<k>.json` for that round | Step 7 |
-| 17 | PR open; a repair report for a triage round holding a P0, P1, or blocking row, with the repair's adversarial-review not settled (resume at item 1: the reproducer until `trigger-repair-<k>.txt` exists, then the adversarial-review invocation); or a queue row missing from the `Deferred findings` comment, or a repair report or an all-queued triage round with local ahead of origin or a triage row without a reply URL | Step 8 |
+| 16 | newest triage round has in-scope rows; no `reports/repair-<k>.json` for that round | Step 7; review over budget: the budget stop |
+| 17 | PR open; a repair report for a triage round holding a P0, P1, or blocking row, with the repair's adversarial-review not settled (resume at item 1: the reproducer until `trigger-repair-<k>.txt` exists, then the adversarial-review invocation); or a queue row missing from the `Deferred findings` comment, or a repair report or an all-queued triage round with local ahead of origin or a triage row without a reply URL | Step 8; review over budget on the unsettled-review leg: the budget stop |
 | 18 | PR open; `cleared`, or `findings` with the round triaged, answered, and its queue published | done: final report, then wait on the reviewer |
 
 ## Further Reading
@@ -266,4 +274,4 @@ It prints `phase: <0-8|done|wait|stop> reason: <one line>` and exits 0, or exits
 - [references/triage.md](references/triage.md) — read at Steps 6 and 8 to score review signal, queue what is out of scope, and answer every thread
 - [scripts/check-plan.py](scripts/check-plan.py) — run at Step 0 as the mechanical half of the plan gate: `work-issue/scripts/check-plan.py PLAN.md --issue N [--criteria ISSUE.md]`
 - [scripts/check-inflight.py](scripts/check-inflight.py) — run at Step 0 to prove no in-flight run owns a path this plan owns: `work-issue/scripts/check-inflight.py PLAN.md --runs DIR [--self issue-N]`
-- [scripts/run-state.py](scripts/run-state.py) — run at Step 0 to place the run, and at Steps 6 and 8 to score the review: `work-issue/scripts/run-state.py phase --probe PROBE.json` and `work-issue/scripts/run-state.py review <PR> [--since ISO8601] [--author LOGIN] [--input BUNDLE.json] [--save PATH]`
+- [scripts/run-state.py](scripts/run-state.py) — run at Step 0 to place the run, at Steps 6 and 8 to score the review, and ahead of each review cycle to read the budget: `work-issue/scripts/run-state.py phase --probe PROBE.json`, `work-issue/scripts/run-state.py review <PR> [--since ISO8601] [--author LOGIN] [--input BUNDLE.json] [--save PATH]`, and `work-issue/scripts/run-state.py budget --timing RUN_DIR/timing.log [--ratio R]`

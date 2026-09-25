@@ -125,6 +125,13 @@ require_file tests/fixtures/work-issue/probes/row-17-review-repair-unpushed.json
 require_file tests/fixtures/work-issue/probes/row-07-isolation-incomplete.json
 require_file tests/fixtures/work-issue/probes/row-11-trigger-unrecorded.json
 require_file tests/fixtures/work-issue/review/changes-requested.json
+# One over-budget probe per gated row, and the timing logs the budget reads.
+for gated in 10 11 16 17; do
+  require_file "tests/fixtures/work-issue/probes/row-$gated-over-budget.json"
+done
+for timing in build30-review61 build30-review59 poll-excluded budget-raised open-start-closed-at-poll bad-label end-with-no-start; do
+  require_file "tests/fixtures/work-issue/timing/$timing.txt"
+done
 require_file tests/fixtures/work-issue/review/pr-comment-finding.json
 
 [[ "$(find work-issue -maxdepth 1 -type f | wc -l | tr -d ' ')" == "2" ]] || {
@@ -1162,6 +1169,7 @@ declare -a probe_cases=(
   "row-14:6" "row-15:6" "row-16:7" "row-17:8" "row-17-queued:8" "row-17-postpush:8"
   "row-10-repair-unverified:4" "row-10-repair-needed:4" "row-10-failed-twice:stop" "row-13-prepr-repair-clean:5" "row-16-earlier-queued:8" "row-17-review-repair-unpushed:8" "row-17-deferred-owed:8" "row-17-worker-queue:8" "row-18-answered:done" "row-18:done"
   "row-17-repair-advisory-only:8" "row-17-repair-blocking:8" "row-17-repair-blocking-settled:8"
+  "row-10-over-budget:stop" "row-11-over-budget:stop" "row-16-over-budget:stop" "row-17-over-budget:stop"
 )
 for case in "${probe_cases[@]}"; do
   fixture="${case%%:*}"
@@ -1239,6 +1247,95 @@ grep -Fq "adversarial-review" <<<"$settled_reason" && {
   echo "a repair whose adversarial-review settled must move on to the push, got: $settled_reason" >&2
   exit 1
 }
+
+# The budget stop (#158). The same row-16 probe gives Step 7 under budget and
+# stops over it, and the stop keeps its row prefix so the Resume tables suite
+# can hold it to row 16's cell. A null is a probe that could not read the log,
+# and it stops like every other non-nullable field.
+over_reason="$(python3 "$run_state" phase --probe "$probes_dir/row-16-over-budget.json")"
+grep -Fq "phase: stop reason: row 16: review time is over budget" <<<"$over_reason" || {
+  echo "a row-16 probe over budget should stop at row 16, got: $over_reason" >&2
+  exit 1
+}
+grep -Fq "phase: 7 reason: row 16:" <<<"$(python3 "$run_state" phase --probe "$probes_dir/row-16.json")" || {
+  echo "the same row-16 probe under budget should resume at Step 7" >&2
+  exit 1
+}
+python3 -c 'import json, sys
+probe = json.load(open(sys.argv[1]))
+probe["review_over_budget"] = None
+json.dump(probe, open(sys.argv[2], "w"))' "$probes_dir/row-16.json" "$tmp/null-budget.json"
+grep -Fq "phase: stop reason: unknown probe fields: review_over_budget" <<<"$(python3 "$run_state" phase --probe "$tmp/null-budget.json")" || {
+  echo "a null review_over_budget should stop the run naming the field" >&2
+  exit 1
+}
+
+# Each timing fixture through the real `budget`. poll-excluded is the
+# falsifier for what counts as review: counting wall-clock time since the
+# build would put it at 80 min against 30 and print `over: yes`.
+timing_dir=tests/fixtures/work-issue/timing
+declare -a budget_cases=(
+  "build30-review61:build: 30m review: 61m ratio: 2.03 over: yes"
+  "build30-review59:build: 30m review: 59m ratio: 1.97 over: no"
+  "poll-excluded:build: 30m review: 20m ratio: 0.67 over: no"
+  "budget-raised:build: 20m review: 60m ratio: 3.00 over: no"
+  "open-start-closed-at-poll:build: 30m review: 65m ratio: 2.17 over: yes"
+)
+for case in "${budget_cases[@]}"; do
+  fixture="${case%%:*}"
+  expected="${case#*:}"
+  got="$(python3 "$run_state" budget --timing "$timing_dir/$fixture.txt")"
+  [[ "$got" == "$expected" ]] || {
+    echo "budget on $fixture.txt should print '$expected', got: $got" >&2
+    exit 1
+  }
+done
+# budget-raised.txt minus its raise is the 3x run the raise clears.
+grep -v '^budget-raised' "$timing_dir/budget-raised.txt" >"$tmp/unraised.txt"
+[[ "$(python3 "$run_state" budget --timing "$tmp/unraised.txt")" == *"ratio: 3.00 over: yes" ]] || {
+  echo "the 3x run without its budget-raised line should be over budget" >&2
+  exit 1
+}
+# A missing log is every run that predates timing.log: under budget. Anything
+# else that can't be read exits 3, since reading it as under budget fails in
+# the permissive direction.
+[[ "$(python3 "$run_state" budget --timing "$tmp/no-such-timing.log")" == "build: 0m review: 0m ratio: n/a over: no" ]] || {
+  echo "budget on a missing log should print over: no" >&2
+  exit 1
+}
+for unreadable in "$timing_dir/bad-label.txt" "$timing_dir/end-with-no-start.txt" "$timing_dir"; do
+  set +e
+  python3 "$run_state" budget --timing "$unreadable" >/dev/null 2>&1
+  unreadable_status=$?
+  set -e
+  [[ "$unreadable_status" == "3" ]] || {
+    echo "budget on $unreadable should exit 3, got: $unreadable_status" >&2
+    exit 1
+  }
+done
+
+# The review_over_budget probe, run as resume.md writes it.
+budget_probe="$(sed -n 's/^| `review_over_budget` | `\([^`]*\)`.*/\1/p' work-issue/references/resume.md)"
+[[ -n "$budget_probe" ]] || {
+  echo "could not extract the review_over_budget probe from work-issue/references/resume.md" >&2
+  exit 1
+}
+for budget_case in "build30-review61:true" "build30-review59:false" "bad-label:null" "missing:false"; do
+  budget_run="$tmp/budget-${budget_case%%:*}"
+  mkdir -p "$budget_run"
+  [[ "${budget_case%%:*}" == missing ]] || cp "$timing_dir/${budget_case%%:*}.txt" "$budget_run/timing.log"
+  budget_got="$(bash -c "${budget_probe//<RUN_DIR>/$budget_run}" 2>/dev/null)"
+  [[ "$budget_got" == "${budget_case##*:}" ]] || {
+    echo "review_over_budget on ${budget_case%%:*} should print ${budget_case##*:}, got: $budget_got" >&2
+    exit 1
+  }
+done
+# The log's writers. Without them the budget reads an empty log as under
+# budget forever.
+require_text work-issue/SKILL.md 'echo "<n> start $(date -u +%FT%TZ)" >> RUN_DIR/timing.log'
+require_text work-issue/SKILL.md "with \`poll start\` written to \`RUN_DIR/timing.log\` before the first poll and \`poll end\` after the last"
+require_text work-issue/SKILL.md "A raise appends \`budget-raised <ratio>\` to the log"
+require_text work-issue/SKILL.md "the queue, the \`budget\` line,"
 
 # The triage_blocking_rows probe, run as resume.md writes it against a round
 # whose finding text says "P1" on a row the reviewer marked none. Reading the
@@ -1415,8 +1512,8 @@ require_text work-issue/references/resume.md "(resume at item 1: the reproducer 
 refute_text work-issue/SKILL.md "(resume at item 1's adversarial-review invocation)"
 refute_text work-issue/references/resume.md "(resume at item 1's adversarial-review invocation)"
 # The queue's comment is probed, and rows 14 and 17 both read it.
-require_text work-issue/SKILL.md "or a triage row without a reply URL | Step 8 |"
-require_text work-issue/references/resume.md "or a triage row without a reply URL | Step 8 |"
+require_text work-issue/SKILL.md "or a triage row without a reply URL | Step 8;"
+require_text work-issue/references/resume.md "or a triage row without a reply URL | Step 8;"
 # The probe compares the queue's rows to the comment, never just the heading:
 # a comment from an earlier round satisfied the heading test while a later
 # round's rows had never reached it.

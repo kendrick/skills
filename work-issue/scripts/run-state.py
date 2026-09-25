@@ -112,6 +112,7 @@ PROBE_FIELDS = (
     ("deferred_comment_needed", "bool", ()),
     ("triage_blocking_rows", "int", ()),
     ("repair_ar_settled", "bool", ()),
+    ("review_over_budget", "bool", ()),
 )
 
 BUNDLE_KEYS = (
@@ -752,6 +753,20 @@ def count(probe, name):
     return 0 if value is None else int(value)
 
 
+def budget_stop(row):
+    """Row `row`'s answer when review time has passed its budget.
+
+    The probe carries only the verdict, so the reason names the command that
+    prints both totals rather than the totals themselves."""
+    return (
+        "stop",
+        f"row {row}: review time is over budget against build time; print "
+        "`run-state.py budget --timing RUN_DIR/timing.log` for both totals and "
+        "ask whether to stop here or raise the ratio, which appends "
+        "`budget-raised <ratio>` to timing.log",
+    )
+
+
 def phase_of(probe):
     """The Resume table, in its own order, first match wins.
 
@@ -789,6 +804,11 @@ def phase_of(probe):
     redteam_clean = redteam_rounds > 0 and not flag(probe, "redteam_last_failed")
     triage_rounds = count(probe, "triage_rounds")
     repair_reports = count(probe, "repair_reports")
+    # Rows 10, 11, 16, and row 17's re-fire leg each start another review
+    # cycle, and only those are gated. Rows past them publish, reply to, or
+    # report on work already done, and stopping there would strand it. On
+    # cambium #23/#26, about 50 min of build drew about 5 h of review.
+    over_budget = flag(probe, "review_over_budget")
 
     if herdr == "working":
         return "wait", "row 2: the herdr agent is working; wait and re-probe"
@@ -818,6 +838,8 @@ def phase_of(probe):
     if count(probe, "self_reviews") > 0 and not flag(probe, "build_final"):
         return "3", "row 9: a self-review with no build-final report; resume at the fix dispatch"
     if flag(probe, "build_final") and redteam_rounds == 0:
+        if over_budget:
+            return budget_stop(10)
         return "4", "row 10: a build-final report with no red-team round yet"
     # A failed round owns the run until a later round is clean. Which way it
     # resumes turns on order, not on counts: a repair report that predates the
@@ -828,6 +850,8 @@ def phase_of(probe):
     if flag(probe, "build_final") and flag(probe, "redteam_last_failed"):
         if flag(probe, "redteam_failed_twice"):
             return "stop", "row 10: two red-team rounds in a row have NOT_REPRODUCED; stop and report with the evidence"
+        if over_budget:
+            return budget_stop(10)
         if flag(probe, "repair_after_last_round"):
             return "4", "row 10: the newest red-team round has NOT_REPRODUCED and a repair followed it; run round k+1"
         return "4", "row 10: the newest red-team round has NOT_REPRODUCED and no repair has followed it; dispatch the repair"
@@ -841,8 +865,12 @@ def phase_of(probe):
     # never evaluated.
     trigger = probe["trigger_fired"]
     if redteam_clean and trigger == "absent":
+        if over_budget:
+            return budget_stop(11)
         return "4", "row 11: red-team is clean and trigger.txt is not written yet; resume at the trigger"
     if redteam_clean and trigger == "yes" and not flag(probe, "ar_complete"):
+        if over_budget:
+            return budget_stop(11)
         return "4", "row 11: trigger.txt says fired and adversarial-review has not finished"
     if flag(probe, "conflict") or flag(probe, "rebase_in_progress"):
         return "5", "row 12: a rebase conflict is in progress; resume at Step 5 item 1"
@@ -882,6 +910,8 @@ def phase_of(probe):
         and count(probe, "triage_inscope_rows") > 0
         and not flag(probe, "newest_repair_report")
     ):
+        if over_budget:
+            return budget_stop(16)
         return "7", "row 16: the newest triage round has in-scope rows and no repair report of its own"
     # Step 8 item 1's re-fire leg, ahead of the push. Only a repair whose
     # triage round held a P0, P1, or blocking row re-enters adversarial-review;
@@ -899,6 +929,8 @@ def phase_of(probe):
         and count(probe, "triage_blocking_rows") > 0
         and not flag(probe, "repair_ar_settled")
     ):
+        if over_budget:
+            return budget_stop(17)
         return (
             "8",
             "row 17: the repaired triage round held a P0, P1, or blocking row "
@@ -1022,13 +1054,20 @@ def cmd_budget(args):
     try:
         with open(args.timing, encoding="utf-8") as handle:
             text = handle.read()
-    except OSError:
+    except FileNotFoundError:
         # Every run started before this change has no log. Reading a missing
         # log as `over: no` rather than failing keeps those old runs off the
         # stop this feature adds; a probe that turned this into `null` would
         # halt them instead.
         print("build: 0m review: 0m ratio: n/a over: no")
         return 0
+    except (OSError, UnicodeDecodeError) as e:
+        # Only absence means "no log yet". A directory, an unreadable file, or
+        # a binary file is a log that exists and can't be read, and reading
+        # that as under budget fails in the permissive direction.
+        why = e.strerror if isinstance(e, OSError) and e.strerror else e
+        sys.stderr.write(f"run-state: --timing {args.timing}: {why}\n")
+        return 3
 
     try:
         build_seconds, review_seconds, raised = parse_timing_log(text, "timing.log")
