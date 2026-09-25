@@ -1,0 +1,9 @@
+diff --git a/app/notes.py b/app/notes.py
+index 1111111..2222222 100644
+--- a/app/notes.py
++++ b/app/notes.py
+@@ -1,5 +1,5 @@
+ def helper(amount):
+     total = round(amount, 2)  # unchanged money logic, context only
+-    return None
++    return 0
