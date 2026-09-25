@@ -10,7 +10,7 @@ The usual fix is to run several reviewers and trust whatever they agree on. That
 
 This skill swaps the confidence mechanism. Territories don't overlap, so there's nobody to agree with, and instead every finding gets handed to a fresh agent that never saw the reasoning behind it and is told to break it. Only a finding that survives can block a merge. Findings that don't survive still get recorded, with the counter-evidence that killed them, because "we checked and it was fine" is worth knowing.
 
-Then there's the part nobody plans for. In the session this design came out of, two of the three merge-blockers weren't in the original diff at all—they were introduced while fixing the previous round's findings. Code written under review pressure is the most suspicious code in the run, and a review that stops when the first round's fixes land will miss it. So the loop keeps going, re-reviewing exactly the territories a fix touched.
+Then there's the part nobody plans for. In the session this design came out of, two of the three merge-blockers weren't in the original diff at all—they were introduced while fixing the previous round's findings. Code written under review pressure is the most suspicious code in the run, and a review that stops when the first round's fixes land will miss it. So the loop keeps going, re-reviewing exactly the territories a fix touched, until a round reproduces no blocker. Advisories from that round get listed, but they don't start another one, because every fix draws a slightly smaller advisory and a loop that waits for a spotless round rarely ends.
 
 ## How It Works
 

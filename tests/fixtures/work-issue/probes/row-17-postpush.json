@@ -27,5 +27,7 @@
   "repair_reports": 1,
   "triage_rows_unanswered": 3,
   "deferred_comment_needed": false,
-  "newest_repair_report": true
+  "newest_repair_report": true,
+  "triage_blocking_rows": 0,
+  "repair_ar_settled": false
 }

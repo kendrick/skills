@@ -151,6 +151,12 @@ require_text adversarial-review/SKILL.md "never the finder's reasoning"
 # fixes.
 require_text adversarial-review/SKILL.md "before** writing the fix"
 require_text adversarial-review/SKILL.md "file-issue"
+# The round loop ends on reproduced blockers, not on reproduced findings of
+# any severity (row 40): advisories alone kept cambium #23/#26 looping.
+require_text adversarial-review/SKILL.md "zero REPRODUCED findings whose \`claimed_severity\` is \`blocking\`"
+require_text adversarial-review/SKILL.md "ledger.py state --ledger RUN_DIR/ledger.jsonl --round N"
+require_text adversarial-review/SKILL.md "printed \`loop: stop\` for the newest round"
+refute_text adversarial-review/SKILL.md "zero REPRODUCED findings in the territories it re-reviewed"
 # A reproduced advisory is listed by default and filed only on request (row
 # 39). The refute pins the old default row, which filed one issue per finding.
 require_text adversarial-review/SKILL.md "| REPRODUCED + advisory | List it: record \`LISTED\`"
@@ -464,6 +470,51 @@ listed_blocker_err="$(python3 "$ledger_py" append-event --ledger "$tmp/listed-ok
 }
 grep -Fq "LISTED is valid only on an advisory finding" <<<"$listed_blocker_err" || {
   echo "append-event's refusal must name LISTED's severity rule, got: $listed_blocker_err" >&2
+  exit 1
+}
+
+# Step 7's termination rule, decided by ledger.py itself (#151, row 40): a
+# round whose reproduced findings are all advisory ends the loop, and one
+# reproduced blocker in that round continues it. Ending only on zero
+# reproduced findings of any severity, the rule this replaced, continues on
+# the first fixture, which is how cambium #23/#26 ran 7 cycles per lane.
+round_ledger() {
+  local out="$1" second_severity="$2"
+  : >"$out"
+  # A round-1 blocker that round 2 exists to follow up. It must not count
+  # toward round 2's decision.
+  python3 "$ledger_py" append-finding --ledger "$out" \
+    --id F-r1-money-01 --round 1 --territory money --file src/billing/invoice.py \
+    --quoted-evidence 'total += round(x, 2)' --claim 'rounds per line' \
+    --proposed-fix 'round once at the end' --proposed-repro 'pytest -k rounding' \
+    --claimed-severity blocking >/dev/null
+  python3 "$ledger_py" append-finding --ledger "$out" \
+    --id F-r2-money-01 --round 2 --territory money --file src/billing/invoice.py \
+    --quoted-evidence 'ROUNDING = 2' --claim 'constant lacks a comment' \
+    --proposed-fix 'say why 2' --proposed-repro 'grep -n ROUNDING src/billing/invoice.py' \
+    --claimed-severity advisory >/dev/null
+  python3 "$ledger_py" append-finding --ledger "$out" \
+    --id F-r2-money-02 --round 2 --territory money --file tests/test_invoice.py \
+    --quoted-evidence 'assert total' --claim 'test asserts truthiness only' \
+    --proposed-fix 'assert the value' --proposed-repro 'pytest -k total' \
+    --claimed-severity "$second_severity" >/dev/null
+  local id
+  for id in F-r1-money-01 F-r2-money-01 F-r2-money-02; do
+    python3 "$ledger_py" append-event --ledger "$out" --finding-id "$id" \
+      --disposition REPRODUCED --actor verifier-money \
+      --repro-command 'pytest -k total' --observed-output 'assert 10.01 == 10.00' >/dev/null
+  done
+}
+round_ledger "$tmp/round-advisory.jsonl" advisory
+loop_out="$(python3 "$ledger_py" state --ledger "$tmp/round-advisory.jsonl" --round 2 2>&1)" || true
+grep -Fq "loop: stop" <<<"$loop_out" || {
+  echo "a round whose reproduced findings are all advisory must end the loop, got: $loop_out" >&2
+  exit 1
+}
+round_ledger "$tmp/round-blocking.jsonl" blocking
+loop_out="$(python3 "$ledger_py" state --ledger "$tmp/round-blocking.jsonl" --round 2 2>&1)" || true
+grep -Fq "loop: continue" <<<"$loop_out" || {
+  echo "a round with one reproduced blocker must continue the loop, got: $loop_out" >&2
   exit 1
 }
 

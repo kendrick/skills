@@ -39,6 +39,8 @@ Every field below is present in the probe JSON, `null` where the probe could not
 | `newest_repair_report` | `test -f <RUN_DIR>/reports/repair-<k>.json` for the newest `triage/round-<k>.md`. Row 16 reads this rather than comparing counts, because an all-queued round writes no repair report and the counts drift apart |
 | `triage_rows_unanswered` | triage rows carrying no reply URL, across every round. Not cut off at SINCE: Step 8 pushes before it replies, so the rows it owes are always older than the push that answered them |
 | `deferred_comment_needed` | some row of `queue.md` is missing from the author's `## Deferred findings` comment on the pull request. Read the comment, then check every queue row, whole, against it: `body="$(gh api --paginate repos/{owner}/{repo}/issues/<pr>/comments --jq '.[] \| select(.user.login == "<login>") \| .body' \| awk '/^## Deferred findings/{f=1} f')"; missing=0; while IFS= read -r row; do grep -qF -- "$row" <<<"$body" \|\| missing=1; done < <(grep -E '^\| [0-9]+ \|' <RUN_DIR>/queue.md); [ "$missing" = 1 ]`. True with no comment at all, false with no queue rows, and false where there is no pull request. The whole row, because a row can change without its Source changing: a Status moved from `queued` to `filed #M` is a row the comment no longer carries. Comparing Sources alone missed that, and testing for the heading alone missed a later round's rows |
+| `triage_blocking_rows` | `awk -F'\|' '!c{for(i=1;i<=NF;i++){v=$i;gsub(/[ \t]/,"",v);if(v=="Severity")c=i};next} {v=$c;gsub(/[ \t]/,"",v);if(v~/^(P0\|P1\|blocking)$/)n++} END{print n+0}' "$(ls -t <RUN_DIR>/triage/round-*.md \| head -1)"`: rows of the newest triage round whose Severity cell is P0, P1, or blocking. It reads the cell and nothing else, because a quoted finding can say "P1" on a row the reviewer marked lower. Row 17's re-fire leg keys on this count: only a repair that answered such a row goes back through `adversarial-review` |
+| `repair_ar_settled` | for the newest `triage/round-<k>.md`: `head -1 <RUN_DIR>/redteam/trigger-repair-<k>.txt` is `fired: no`, or `grep -q 'UNVERIFIED: 0' <RUN_DIR>/redteam/ar-state-repair-<k>.txt`. False when neither file exists. These are the repair's own files, apart from Step 4's `trigger.txt` and `ar-state.txt`, which record the build's review and are already settled by the time a repair exists |
 
 Write them to a JSON file and map them:
 
@@ -64,13 +66,13 @@ The same eighteen rows the script implements, written out so a reader can fail o
 | 8 | all wave reports; no `review/self-*.md` | Step 3 at the `code-review` invocation |
 | 9 | `review/self-*` present; no `reports/build-final.json` | Step 3 at the fix dispatch |
 | 10 | `build-final.json`; no `redteam/round-*.json`, or newest round has NOT_REPRODUCED | Step 4: the repair dispatch, or round k+1 where a repair report followed the failed round; two failed rounds in a row stop with the evidence |
-| 11 | red-team clean; `trigger.txt` absent, or its first line `fired: yes` with no `redteam/ar-state.txt` showing `UNVERIFIED: 0` | Step 4 at the trigger, or at the adversarial-review invocation |
+| 11 | red-team clean; `trigger.txt` absent, or its first line `fired: yes` with no `redteam/ar-state.txt` showing `UNVERIFIED: 0`. Build diff only: a repair's re-fire reads its own files at row 17 | Step 4 at the trigger, or at the adversarial-review invocation |
 | 12 | `conflict.txt` exists, or a rebase in progress | Step 5 item 1 |
 | 13 | red-team clean; trigger recorded; no triage round yet; no PR, or local HEAD ahead of `origin/issue-N` | Step 5 |
 | 14 | PR open; review `pending`; no triage row without a reply URL; no queue row missing from its comment | Step 6 poll |
 | 15 | PR open; `findings`; no `triage/round-<k>.md` newer than SINCE | Step 6 triage |
 | 16 | newest triage round has in-scope rows; no `reports/repair-<k>.json` for that round | Step 7 |
-| 17 | PR open; a queue row missing from the `Deferred findings` comment, or a repair report or an all-queued triage round with local ahead of origin or a triage row without a reply URL | Step 8 |
+| 17 | PR open; a repair report for a triage round holding a P0, P1, or blocking row, with the repair's adversarial-review not settled (resume at item 1's adversarial-review invocation); or a queue row missing from the `Deferred findings` comment, or a repair report or an all-queued triage round with local ahead of origin or a triage row without a reply URL | Step 8 |
 | 18 | PR open; `cleared`, or `findings` with the round triaged, answered, and its queue published | done: final report, then wait on the reviewer |
 
 Row order is the mechanism, not a convenience. Rows 1 through 3 read the world and outrank every RUN_DIR row below them: a pull request somebody closed while the session was away ends the run no matter how much unfinished state is on disk, and an agent still `working` is waited on rather than duplicated by a second dispatch into the same tree.
