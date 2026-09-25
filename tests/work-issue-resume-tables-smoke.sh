@@ -123,12 +123,16 @@ for entry in "${allowlist[@]}"; do
 done
 
 checked=0
+landed=" "
+named=""
 for path in "$probes"/row-[0-9][0-9]*.json; do
   [[ -f "$path" ]] || continue
   name="$(basename "$path")"
   nn="${name#row-}"
   nn="$((10#${nn:0:2}))"
   expected="$nn"
+  named="$named$nn:$name
+"
   if want="$(allowed_row "$name")"; then
     expected="$want"
   fi
@@ -138,6 +142,7 @@ for path in "$probes"/row-[0-9][0-9]*.json; do
   }
   got="$(sed -n 's/^phase: [^ ]* reason: row \([0-9][0-9]*\):.*/\1/p' <<<"$out")"
   checked=$((checked + 1))
+  [[ -n "$got" ]] && landed="$landed$got "
   if [[ -z "$got" ]]; then
     fail "$name: named for row $nn, but run-state.py gave no row: $out"
   elif [[ "$got" != "$expected" ]]; then
@@ -150,6 +155,19 @@ for path in "$probes"/row-[0-9][0-9]*.json; do
 done
 
 (( checked > 0 )) || fail "no row-<nn> fixtures found under $probes"
+
+# --- Check 3: every table row has a fixture landing on it, and every fixture
+# names a table row. Checks 1 and 2 pass when both tables gain or drop a row
+# together: the docs still agree cell for cell, and no fixture asks whether
+# run-state.py reaches the new row or still reaches the dropped one. ---
+
+for row in $rows; do
+  [[ "$landed" == *" $row "* ]] || fail "row $row: in the Resume tables, but no fixture under $probes lands on it"
+done
+while IFS=: read -r nn name; do
+  [[ -z "$nn" ]] && continue
+  grep -qx -- "$nn" <<<"$rows" || fail "$name: named for row $nn, which neither Resume table has"
+done <<<"$named"
 
 if (( failures > 0 )); then
   echo "work-issue resume tables: $failures problem(s)" >&2
