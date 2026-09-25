@@ -260,6 +260,16 @@ require_text work-issue/SKILL.md "Take \`<n>\` from the Depth table in \`adversa
 # diff (row 99). Bare file contents carry no `+`, so the script matched nothing and
 # every run without `--deep` forecast `reproduce claims`.
 require_text work-issue/SKILL.md "git diff \$(git hash-object -t tree /dev/null) HEAD -- <the plan's owned paths> | adversarial-review/scripts/match-triggers.py rows --only 1,2,4"
+# In a work-issue-only install the forecast pipe exits 127 with a bare shell
+# error (row 100), so Step 0 checks for the sibling first and refuses by name.
+# Vendoring the script and table instead is a Deliberately Not Built row: the
+# review still could not run, and the copied table would stop gaining rows.
+require_text work-issue/SKILL.md "Where either is missing, refuse the run here and name \`adversarial-review\` as the sibling to install, before anything is dispatched, because every Step 4 path needs it"
+require_text work-issue/SKILL.md "\`adversarial-review\`'s script and trigger table were both found"
+for f in work-issue/SKILL.md work-issue/references/redteam.md; do
+  refute_text "$f" "work-issue/scripts/match-triggers.py"
+done
+require_text _maintenance/work-issue/RATIONALE.md "A vendored copy of \`match-triggers.py\` and the trigger table inside \`work-issue\`"
 # The README promised a run that never asks again, and the forecast gap means
 # one can. Pinned so the exception stays where a user decides to walk away.
 require_text work-issue/README.md "After yes, the run is unattended unless the real diff trips an \`adversarial-review\` the confirmation didn't forecast, or forecast at a lower depth."

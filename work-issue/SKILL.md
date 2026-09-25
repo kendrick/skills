@@ -79,7 +79,11 @@ The user owns two phases of this loop, and both are outside it. Planning comes b
    ```
 
    A non-zero exit is a hard stop whatever the isolation decision was. Two worktrees rewriting one file produce a rebase conflict at Step 5, and a run the user has walked away from cannot resolve it.
-7. Red-team mode for the confirmation text: `reproduce claims`, or `reproduce claims, then adversarial-review (<row names>; depth <n> forecast)` when the forecast match below prints a row, or `reproduce claims, then adversarial-review (--deep; depth 2 forecast)` when `--deep` is set, since that flag fires the trigger on its own. The forecast match feeds the current contents of the plan's owned paths to Step 4's script as an all-added diff against the empty tree, run in the tree that will host the work:
+7. Red-team mode for the confirmation text: `reproduce claims`, or `reproduce claims, then adversarial-review (<row names>; depth <n> forecast)` when the forecast match below prints a row, or `reproduce claims, then adversarial-review (--deep; depth 2 forecast)` when `--deep` is set, since that flag fires the trigger on its own. The forecast match feeds the current contents of the plan's owned paths to Step 4's script as an all-added diff against the empty tree, run in the tree that will host the work.
+
+   Check first that `adversarial-review` is installed: `adversarial-review/scripts/match-triggers.py` and `adversarial-review/references/trigger-table.md` both exist, at the paths the forecast command names. Where either is missing, refuse the run here and name `adversarial-review` as the sibling to install, before anything is dispatched, because every Step 4 path needs it: the match, `--deep`, and the review itself. A run that went on would build the whole change and stop at Step 4 for the same missing skill.
+
+   The forecast command:
 
    ```
    git diff $(git hash-object -t tree /dev/null) HEAD -- <the plan's owned paths> | adversarial-review/scripts/match-triggers.py rows --only 1,2,4
@@ -96,7 +100,7 @@ The user owns two phases of this loop, and both are outside it. Planning comes b
 
    Once the user answers yes, write the red-team mode line this message carried to `RUN_DIR/redteam/mode.txt`, replacing any earlier copy. Step 4 hands that file's line to `adversarial-review` as the confirmation its Step 2 checks, because a resumed run reaches Step 4 without this conversation.
 
-**Done when:** `check-plan.py` exited 0 and no derivation question was recorded; `check-inflight.py` exited 0; the forecast match exited 0, or `--deep` is set; the shape line, the isolation choice, the red-team mode, and the push grant were put to the user in one message and answered yes, and `RUN_DIR/redteam/mode.txt` holds the red-team mode line that message carried — or the run stopped at a refusal, a stop, a dry-run, or a no, with nothing dispatched and nothing pushed.
+**Done when:** `check-plan.py` exited 0 and no derivation question was recorded; `check-inflight.py` exited 0; `adversarial-review`'s script and trigger table were both found; the forecast match exited 0, or `--deep` is set; the shape line, the isolation choice, the red-team mode, and the push grant were put to the user in one message and answered yes, and `RUN_DIR/redteam/mode.txt` holds the red-team mode line that message carried — or the run stopped at a refusal, a stop, a dry-run, or a no, with nothing dispatched and nothing pushed.
 
 ## Step 1 — Isolate
 
