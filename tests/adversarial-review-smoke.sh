@@ -477,7 +477,7 @@ grep -Fq "LISTED is valid only on an advisory finding" <<<"$listed_blocker_err" 
 # round whose reproduced findings are all advisory ends the loop, and one
 # reproduced blocker in that round continues it. Ending only on zero
 # reproduced findings of any severity, the rule this replaced, continues on
-# the first fixture, which is how cambium #23/#26 ran 7 cycles per lane.
+# the first fixture, which is how the loops around cambium #23/#26 ran 7 repair cycles per lane.
 round_ledger() {
   local out="$1" second_severity="$2"
   : >"$out"

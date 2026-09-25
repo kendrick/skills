@@ -1189,19 +1189,21 @@ grep -Fq "run round k+1" <<<"$(python3 "$run_state" phase --probe "$probes_dir/r
   exit 1
 }
 
-# Step 8 item 1's re-fire rule (#151, work-issue row 97). A repair that
-# answered only P2 rows gets the reproducer and nothing more, so the run goes
+# Step 8 item 1's re-fire rule (#151, work-issue row 97). A repair whose round
+# held only P2 rows gets the reproducer and nothing more, so the run goes
 # straight to pushing and replying. One P1 row sends it back into
 # adversarial-review until that review settles. Re-firing after every repair
 # is what ran cambium #23/#26 to 7 cycles per lane.
 advisory_reason="$(python3 "$run_state" phase --probe "$probes_dir/row-17-repair-advisory-only.json")"
 grep -Fq "adversarial-review" <<<"$advisory_reason" && {
-  echo "a repair that answered only P2 rows must not re-enter adversarial-review, got: $advisory_reason" >&2
+  echo "a repair whose round held only P2 rows must not re-enter adversarial-review, got: $advisory_reason" >&2
   exit 1
 }
 blocking_reason="$(python3 "$run_state" phase --probe "$probes_dir/row-17-repair-blocking.json")"
-grep -Fq "resume at Step 8 item 1's adversarial-review invocation" <<<"$blocking_reason" || {
-  echo "a repair that answered a P1 row must re-enter adversarial-review, got: $blocking_reason" >&2
+# The resume starts item 1 from the reproducer until the repair's trigger
+# file exists, so a stop before the reproducer ran can't skip it.
+grep -Fq "resume at Step 8 item 1 from the reproducer where trigger-repair-<k>.txt is absent" <<<"$blocking_reason" || {
+  echo "a repair whose round held a P1 row must re-enter Step 8 item 1 from the reproducer, got: $blocking_reason" >&2
   exit 1
 }
 settled_reason="$(python3 "$run_state" phase --probe "$probes_dir/row-17-repair-blocking-settled.json")"
@@ -1229,6 +1231,20 @@ blocking_count="$(bash -c "${blocking_probe//<RUN_DIR>/$tri_run}")"
   echo "triage_blocking_rows should count the one P1 row in the fixture round, got: $blocking_count (probe: $blocking_probe)" >&2
   exit 1
 }
+# A Finding cell quoting a shell pipe escapes it as `\|`, which must not
+# shift the Severity column. A round with no Severity column can't answer, so
+# the probe prints null and phase stops naming the field rather than reading
+# 0. No round yet prints 0 without reading stdin, where it once hung.
+for tri_case in "triage-pipe:1" "triage-noseverity:null" "empty:0"; do
+  tri_dir="$tmp/tri-${tri_case%%:*}"
+  mkdir -p "$tri_dir/triage"
+  [[ "${tri_case%%:*}" == empty ]] || cp "tests/fixtures/work-issue/${tri_case%%:*}/round-1.md" "$tri_dir/triage/round-1.md"
+  tri_got="$(bash -c "${blocking_probe//<RUN_DIR>/$tri_dir}" </dev/null)"
+  [[ "$tri_got" == "${tri_case##*:}" ]] || {
+    echo "triage_blocking_rows on ${tri_case%%:*} should print ${tri_case##*:}, got: $tri_got" >&2
+    exit 1
+  }
+done
 
 # A field the probe could not answer is written as null. A field that is absent
 # entirely must stop the run instead of defaulting, because a silent `false`

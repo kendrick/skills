@@ -363,7 +363,7 @@ def cmd_state(args):
 
     # Step 7's termination rule. Only a reproduced blocker in the round just
     # reviewed starts another. An advisory still gets its Step 6 outcome, but
-    # counting it here kept cambium #23/#26 looping: each fix is new code,
+    # counting advisories kept cambium #23/#26's review loops going: each fix is new code,
     # new code draws a slightly smaller advisory, and the round never came
     # back empty.
     if args.round is not None:
