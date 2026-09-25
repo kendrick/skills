@@ -39,7 +39,7 @@ Everything here fails in front of the user. A bad ref discovered inside six para
 
 The contract is written to disk before anything fans out. It is what makes two runs on the same diff produce the same territories, and what a reader consults later to see what nobody was asked to look at.
 
-Read [references/trigger-table.md](references/trigger-table.md) and follow its derivation algorithm. In outline: grep each changed file's hunks against the table's rows, assign each file to a territory named for its first matching row, and give each territory the union of its files' suspicion classes. Disjoint ownership, layered lenses—a file that is both money and authz keeps both hunts, and exactly one owner.
+Read [references/trigger-table.md](references/trigger-table.md) and follow its derivation algorithm. In outline: pipe each changed file's hunks through the table's matcher (`git diff <merge_base_sha>..HEAD -- <file> | adversarial-review/scripts/match-triggers.py rows`) to get the rows they match, assign each file to a territory named for its first matching row, and give each territory the union of its files' suspicion classes. Disjoint ownership, layered lenses—a file that is both money and authz keeps both hunts, and exactly one owner.
 
 Collect the **out-of-scope list** from the user and the conversation: settled decisions, deliberate renames, prose-only changes. This list goes to every finder verbatim, and reporting an item on it is a false positive by definition.
 

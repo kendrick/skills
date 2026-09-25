@@ -45,6 +45,7 @@ require_file adversarial-review/assets/finding.schema.json
 require_file adversarial-review/assets/event.schema.json
 require_file adversarial-review/scripts/check-territories.py
 require_file adversarial-review/scripts/ledger.py
+require_file adversarial-review/scripts/match-triggers.py
 require_file _maintenance/adversarial-review/RATIONALE.md
 require_file _maintenance/adversarial-review/EVALS.md
 require_file tests/fixtures/adversarial-review/scope-good.json
@@ -191,6 +192,16 @@ require_text adversarial-review/references/trigger-table.md "| 6 | representatio
 require_text adversarial-review/references/trigger-table.md "| 7 | general |"
 require_text adversarial-review/references/trigger-table.md "An assertion that recomputes the implementation rather than observing the result."
 require_text adversarial-review/references/trigger-table.md "A unit suffix matches against the number in front of it"
+# Step 2 matches through the script, which reads the table's own signals
+# (RATIONALE row 41). The recipe it replaced, rebuilt by hand each run, exits 2
+# on the `round(` signal (#114), so the refutes pin that recipe's sentence and
+# the outline that sent a reader to build it.
+require_text adversarial-review/SKILL.md "adversarial-review/scripts/match-triggers.py rows"
+require_text adversarial-review/references/trigger-table.md "implements these rules"
+require_text adversarial-review/references/trigger-table.md "adversarial-review/scripts/match-triggers.py rows\` for each changed file"
+refute_text adversarial-review/references/trigger-table.md "In practice, \`grep -Ei"
+refute_text adversarial-review/references/trigger-table.md "Grep the file's hunks"
+refute_text adversarial-review/SKILL.md "grep each changed file's hunks"
 require_text adversarial-review/SKILL.md 'no row above `general` matched'
 refute_text adversarial-review/SKILL.md "no row above 6 matched"
 refute_text adversarial-review/SKILL.md "no row above 7 matched"
@@ -626,6 +637,119 @@ binary_status=$?
 set -e
 [[ "$binary_status" == "3" ]] || {
   echo "an unreadable --exclude file must exit 3, got: $binary_status" >&2
+  exit 1
+}
+
+# match-triggers.py: each falsifier from #157 runs through the real script on
+# its committed fixture. Exact stdout and exit code, because an empty stdout is
+# the passing answer for half of them, and a crash also prints nothing.
+match_py=adversarial-review/scripts/match-triggers.py
+diffs="$fixtures/diffs"
+expect_match() {
+  local want="$1"
+  shift
+  local got status
+  set +e
+  got="$(python3 "$match_py" rows "$@")"
+  status=$?
+  set -e
+  [[ "$status" == "0" && "$got" == "$want" ]] || {
+    echo "match-triggers.py rows $*: want exit 0 and '$want', got exit $status and '$got'" >&2
+    exit 1
+  }
+}
+expect_match "1 money" --only 1 <"$diffs/money-round-paren.diff"
+expect_match "1 money" --only 1 < <(printf '+total = round(amount, 2)\n')
+# Whole-word: `index` inside `page_index` is no schema signal, and a bare
+# `CREATE INDEX` is. A substring matcher prints `4 schema` for both.
+expect_match "" <"$diffs/schema-page-index.diff"
+expect_match "4 schema" <"$diffs/schema-create-index.diff"
+# Unit suffix: `px` matches after a digit, never as an identifier.
+expect_match "6 representation" <"$diffs/unit-12px.diff"
+expect_match "" <"$diffs/unit-const-px.diff"
+# The only `round(` in this diff sits on an unchanged context line.
+expect_match "" <"$diffs/context-only.diff"
+# Every unit in the table's "The unit suffixes are" sentence gets the digit
+# rule, row 1's `ms` and `kb` included (RATIONALE row 42). A hardcoded
+# `px`/`rem`/`em` set matched `ms = 3` as a word and missed `500ms`.
+expect_match "1 money" --only 1 < <(printf '+timeout = 500ms\n')
+expect_match "1 money" --only 1 < <(printf '+size = 10kb\n')
+expect_match "" --only 1 < <(printf '+ms = 3\n')
+# Inside a hunk, `---`/`+++` lines are content (row 43). A removed SQL
+# comment and an added `++total;` each carry their fixture's only signal.
+expect_match "4 schema" <"$diffs/schema-removed-sql-comment.diff"
+expect_match "1 money" --only 1 <"$diffs/money-plusplus-added.diff"
+# Two files back to back: the second file's `---`/`+++` headers sit after
+# the first hunk's counts run out, so they stay headers.
+expect_match "1 money
+4 schema" --only 1,4 < <(cat "$diffs/schema-removed-sql-comment.diff" "$diffs/money-plusplus-added.diff")
+# The same two-file change, once plain and once as `git -c color.ui=always
+# diff` wrote it, escape bytes and all (row 45). Without the strip, the
+# colored copy prints nothing and exits 0, which reads as a diff with no
+# triggers.
+grep -q $'\x1b\\[' "$diffs/colored-money-schema.diff" || {
+  echo "colored-money-schema.diff lost its ANSI escapes, so it no longer tests the strip" >&2
+  exit 1
+}
+expect_match "1 money
+4 schema
+6 representation" <"$diffs/plain-money-schema.diff"
+expect_match "1 money
+4 schema
+6 representation" <"$diffs/colored-money-schema.diff"
+
+# The recipe the script replaced, filled in for `round(`, is a regex error
+# rather than a match: exit 2 on the very line the script matches (#114).
+set +e
+printf '+total = round(amount, 2)\n' | grep -Ei '\bround(\b' >/dev/null 2>&1
+recipe_status=$?
+set -e
+[[ "$recipe_status" == "2" ]] || {
+  echo "grep -Ei '\\bround(\\b' was expected to exit 2 on round(amount, 2), got: $recipe_status" >&2
+  exit 1
+}
+
+# A table the script can't parse exits 1, so Step 2 stops rather than
+# deriving every file into `general`. A missing table is unreadable input: 3.
+printf '# not a trigger table\n\nno rows here\n' >"$tmp/bad-table.md"
+set +e
+python3 "$match_py" rows --table "$tmp/bad-table.md" </dev/null >/dev/null 2>&1
+bad_table_status=$?
+python3 "$match_py" rows --table "$tmp/no-such-table.md" </dev/null >/dev/null 2>&1
+missing_table_status=$?
+set -e
+[[ "$bad_table_status" == "1" ]] || {
+  echo "an unparseable --table must exit 1, got: $bad_table_status" >&2
+  exit 1
+}
+[[ "$missing_table_status" == "3" ]] || {
+  echo "a missing --table must exit 3, got: $missing_table_status" >&2
+  exit 1
+}
+
+# The unit list is table data (row 42), so a table that drops the "The unit
+# suffixes are" sentence can't be parsed and exits 1.
+sed 's/The unit suffixes are `px`[^.]*\. //' adversarial-review/references/trigger-table.md >"$tmp/no-units-table.md"
+refute_text "$tmp/no-units-table.md" 'The unit suffixes are `'
+set +e
+python3 "$match_py" rows --table "$tmp/no-units-table.md" </dev/null >/dev/null 2>&1
+no_units_status=$?
+set -e
+[[ "$no_units_status" == "1" ]] || {
+  echo "a --table with no unit-suffix sentence must exit 1, got: $no_units_status" >&2
+  exit 1
+}
+
+# Usage errors exit 3 under the validator convention (row 44); argparse's
+# own default is 2.
+set +e
+python3 "$match_py" rows --bogus </dev/null >/dev/null 2>&1
+bogus_flag_status=$?
+python3 "$match_py" </dev/null >/dev/null 2>&1
+no_command_status=$?
+set -e
+[[ "$bogus_flag_status" == "3" && "$no_command_status" == "3" ]] || {
+  echo "usage errors must exit 3: rows --bogus got $bogus_flag_status, no subcommand got $no_command_status" >&2
   exit 1
 }
 

@@ -154,12 +154,20 @@ Saved verbatim to `RUN_DIR/redteam/round-<k>.json`. A verdict file you tidied is
 
 **The trigger fires where the hunks of `git diff BASE_SHA..HEAD` match the diff signals of rows 1 (money), 2 (authz), or 4 (schema) of `adversarial-review/references/trigger-table.md`, or where `--deep` was passed.**
 
-Two rules on the match:
+Run the match with the script `adversarial-review` ships for it:
 
-- **Re-derive the grep from the table at run time.** Read the three rows, pull their signal lists, build the grep. Never copy the signals into this file: the table is upstream, it gains rows and signals, and a copy here becomes a quietly narrower trigger that still looks like the real one.
-- **Match whole words and identifiers, case-insensitively — never bare substrings.** `grep -Ei '\b<signal>\b'` over the hunks. The table gives the reason: `index` inside `page_index` files a paging helper as a schema change, and `rate` inside `generate` makes every function a money change. A trigger that fires on everything is a trigger nobody keeps.
+```
+git diff BASE_SHA..HEAD | adversarial-review/scripts/match-triggers.py rows --only 1,2,4
+```
 
-Record the outcome in `RUN_DIR/redteam/trigger.txt`. The first line is exactly `fired: yes` or `fired: no`; the lines after it name the rows that matched and the grep that decided it. The resume probe reads the first line and nothing else, so a run interrupted between the trigger and the invocation picks up at the invocation rather than re-deriving the answer, and a note such as `not fired: docs-only diff` cannot read as fired.
+It prints one `<n> <name>` line per matched row, and any output line fires the trigger. Two reasons the match is that script and nothing hand-built:
+
+- **The script reads the table at run time.** No signal is copied into this file: the table is upstream, it gains rows and signals, and a copy here becomes a quietly narrower trigger that still looks like the real one.
+- **The script owns the table's matching rules.** Whole words and identifiers, case-insensitively, a trailing `_` as a prefix, a unit only after a digit, and only added or removed lines, never context. The table gives the reason for whole words: `index` inside `page_index` files a paging helper as a schema change, and `rate` inside `generate` makes every function a money change. A trigger that fires on everything is a trigger nobody keeps. Until #157 the table closed on a worked grep recipe, and that recipe, filled in as `grep -Ei '\bround(\b'`, exited 2 on `total = round(amount, 2)` instead of matching it (#114): a grep rebuilt from the prose failed on exactly the money signal this trigger exists for, which is why the script replaced it.
+
+A non-zero exit decides nothing: stop and quote its stderr, since an empty output from a failed run reads as `fired: no`.
+
+Record the outcome in `RUN_DIR/redteam/trigger.txt`. The first line is exactly `fired: yes` or `fired: no`; the lines after it hold the command that ran and its output lines, verbatim. The resume probe reads the first line and nothing else, so a run interrupted between the trigger and the invocation picks up at the invocation rather than re-deriving the answer, and a note such as `not fired: docs-only diff` cannot read as fired.
 
 Once `adversarial-review` has run and its report has been read, copy the `blocking (REPRODUCED): … UNVERIFIED: …` line from its `ledger.py state` into `RUN_DIR/redteam/ar-state.txt`, with its run directory on the line above. The resume probe reads that file for whether the review finished; the run directory alone exists from preflight onward and says nothing.
 

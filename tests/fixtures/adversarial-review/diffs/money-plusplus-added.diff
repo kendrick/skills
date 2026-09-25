@@ -1,0 +1,9 @@
+diff --git a/src/tally.c b/src/tally.c
+index dd0b730..63545e9 100644
+--- a/src/tally.c
++++ b/src/tally.c
+@@ -1,3 +1,4 @@
+ void tally(void) {
+     count = 0;
++++total;
+ }
