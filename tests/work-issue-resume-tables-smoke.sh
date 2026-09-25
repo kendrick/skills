@@ -67,7 +67,18 @@ for t in skill resume; do
   [[ -s "$tmp/$t.tsv" ]] || { echo "no rows parsed under '$header' in the $t table" >&2; exit 1; }
 done
 
-# --- Check 1: the two prose tables agree cell for cell, keyed by row number. ---
+# --- Check 1: the two prose tables agree cell for cell, in the same order. ---
+
+# The table is first-match-wins, so the order of its rows decides where a run
+# resumes. The per-row compare below is keyed by number, which makes it blind
+# to reordering, so the order gets its own check.
+paste <(cut -f1 "$tmp/skill.tsv") <(cut -f1 "$tmp/resume.tsv") >"$tmp/order.tsv"
+pos=0
+while IFS=$'\t' read -r s_row m_row; do
+  pos=$((pos + 1))
+  [[ "$s_row" == "$m_row" ]] && continue
+  fail "row order differs at position $pos: $skill_md has row ${s_row:-<none>}, $resume_md has row ${m_row:-<none>}"
+done <"$tmp/order.tsv"
 
 rows="$(cut -f1 "$tmp/skill.tsv" "$tmp/resume.tsv" | sort -n | uniq)"
 for row in $rows; do
