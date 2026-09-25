@@ -411,6 +411,11 @@ def cmd_validate(args):
             for field in REQUIRED_EVIDENCE.get(obj["disposition"], ()):
                 if not obj.get(field):
                     problems.append(f"line {lineno}: {obj['disposition']} requires {field}")
+        # derive() skips an event with no finding behind it, so one that
+        # validated would drop out of the report without a trace.
+        if record == "event" and obj.get("finding_id") not in seen:
+            problems.append(f"line {lineno}: unknown finding_id {obj.get('finding_id')}")
+            continue
         if record == "event" and obj.get("finding_id") in seen:
             problem = severity_problem(obj["disposition"], seen[obj["finding_id"]])
             if problem:

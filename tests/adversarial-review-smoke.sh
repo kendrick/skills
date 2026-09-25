@@ -438,6 +438,18 @@ grep -Fq "LISTED is valid only on an advisory finding" <<<"$forward_out" || {
   echo "the forward-reference refusal must name LISTED's severity rule, got: $forward_out" >&2
   exit 1
 }
+# An event naming no finding anywhere in the ledger fails validate. derive()
+# drops such an event, so a hand-edited LISTED line for a missing finding
+# would vanish from the report while the ledger still read as valid.
+printf '%s\n' '{"record": "event", "finding_id": "F-missing", "disposition": "LISTED", "actor": "orchestrator", "repro_command": null, "observed_output": null, "counter_evidence": null, "reason": "listed in PR Left Out", "artifact": null, "at": "2026-09-24T00:00:00Z"}' >"$tmp/listed-orphan.jsonl"
+orphan_out="$(python3 "$ledger_py" validate --ledger "$tmp/listed-orphan.jsonl" 2>&1)" && {
+  echo "validate must refuse an event whose finding is absent" >&2
+  exit 1
+}
+grep -Fq "unknown finding_id F-missing" <<<"$orphan_out" || {
+  echo "the orphan-event refusal must name the missing finding, got: $orphan_out" >&2
+  exit 1
+}
 listed_ledger "$tmp/listed-blocker.jsonl" LISTED
 listed_bad_out="$(python3 "$ledger_py" validate --ledger "$tmp/listed-blocker.jsonl" 2>&1)" && {
   echo "a blocking finding recorded LISTED must fail validate" >&2
