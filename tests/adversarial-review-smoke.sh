@@ -418,6 +418,20 @@ grep -Fq "LISTED requires reason" <<<"$noreason_out" || {
   echo "validate's refusal must name LISTED and its reason, got: $noreason_out" >&2
   exit 1
 }
+# An event placed ahead of its finding still meets the severity rule: a
+# hand-edited ledger with the LISTED line first once validated clean.
+{
+  printf '%s\n' '{"record": "event", "finding_id": "F-r1-money-01", "disposition": "LISTED", "actor": "orchestrator", "repro_command": null, "observed_output": null, "counter_evidence": null, "reason": "listed in PR Left Out", "artifact": null, "at": "2026-09-24T00:00:00Z"}'
+  head -1 "$tmp/listed-ok.jsonl"
+} >"$tmp/listed-forward.jsonl"
+forward_out="$(python3 "$ledger_py" validate --ledger "$tmp/listed-forward.jsonl" 2>&1)" && {
+  echo "validate must refuse a LISTED event on a blocker even when the event precedes the finding" >&2
+  exit 1
+}
+grep -Fq "LISTED is valid only on an advisory finding" <<<"$forward_out" || {
+  echo "the forward-reference refusal must name LISTED's severity rule, got: $forward_out" >&2
+  exit 1
+}
 listed_ledger "$tmp/listed-blocker.jsonl" LISTED
 listed_bad_out="$(python3 "$ledger_py" validate --ledger "$tmp/listed-blocker.jsonl" 2>&1)" && {
   echo "a blocking finding recorded LISTED must fail validate" >&2

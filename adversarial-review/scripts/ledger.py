@@ -370,13 +370,17 @@ def cmd_validate(args):
     findings = 0
     events = 0
     problems = []
-    seen = {}
-    for lineno, obj in read_lines(args.ledger, strict=True):
+    lines = list(read_lines(args.ledger, strict=True))
+    # Findings first, so an event written above its finding (a hand-edited
+    # ledger) still meets the severity rule rather than slipping past it.
+    seen = {
+        obj.get("id"): obj for _, obj in lines if obj.get("record") == "finding"
+    }
+    for lineno, obj in lines:
         record = obj.get("record")
         if record == "finding":
             schema = finding_schema
             findings += 1
-            seen[obj.get("id")] = obj
         elif record == "event":
             schema = event_schema
             events += 1
