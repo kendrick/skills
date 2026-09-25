@@ -4,7 +4,8 @@ and later work out which territories a fix diff landed in.
 
     scripts/check-territories.py validate RUN_DIR/scope.json
     git diff <prev_round_head_sha>..HEAD --name-only \\
-        | scripts/check-territories.py intersect RUN_DIR/scope.json
+        | scripts/check-territories.py intersect RUN_DIR/scope.json \\
+            --exclude RUN_DIR/excluded.txt
 
 `validate` is the hard gate at the end of the scope contract step. Overlapping
 territories are worth failing a run over: the whole reason findings can be
@@ -16,11 +17,16 @@ is standing on.
 any part of the fix diff, which is how a round ends. A path in the fix diff that
 no territory owns exits 1 instead of being skipped, because a blind spot that
 appears mid-run is precisely the thing that should stop and get recorded rather
-than pass unnoticed.
+than pass unnoticed. `--exclude` drops the run's generated and vendored paths
+before any of that. It lives here rather than in a `grep -vFf` stage because
+ugrep prints nothing at all for an empty pattern file, so on cambium #23/#26
+the pipe fed `intersect` no input and the round ended as if the fix touched
+nothing.
 
 Exit codes: 0 pass; 1 semantic failure (overlap, malformed entry, unowned or
 multiply-owned path) with one line per problem on stderr; 3 usage, missing file,
-unreadable JSON. Argparse supplies 2 for a mistyped flag.
+unreadable JSON. A missing `--exclude` file is the exception: it excludes
+nothing, the way an empty one does, and an unreadable one exits 3. Argparse supplies 2 for a mistyped flag.
 
 Stdlib only, so the skill stays copy-in portable.
 """
@@ -333,11 +339,41 @@ def cmd_validate(args):
     return 0
 
 
+def load_excludes(path):
+    """Exclusion entries, one per line. A missing or empty file excludes
+    nothing: Step 1 writes the file only as long as its `excluded` list, and
+    a diff with no generated files is the common case, not an error."""
+    if path is None:
+        return []
+    try:
+        with open(path, encoding="utf-8") as f:
+            return [line.strip() for line in f if line.strip()]
+    except FileNotFoundError:
+        return []
+    except (OSError, UnicodeDecodeError) as e:
+        sys.stderr.write(f"check-territories: {path}: {e}\n")
+        raise SystemExit(3)
+
+
+def is_excluded(path, excludes):
+    # Step 1 records trees as `dist/`, so a trailing slash is a directory
+    # and matches what sits inside it; anything else is one exact file.
+    return any(
+        path_within(path, entry) if entry.endswith("/") else path == entry
+        for entry in excludes
+    )
+
+
 def cmd_intersect(args):
     scope = load_json(args.scope, args.scope)
     territories = scope["territories"]
+    excludes = load_excludes(args.exclude)
 
-    paths = [line.strip() for line in sys.stdin.read().splitlines() if line.strip()]
+    paths = [
+        line.strip()
+        for line in sys.stdin.read().splitlines()
+        if line.strip() and not is_excluded(line.strip(), excludes)
+    ]
 
     hit = []
     unowned = []
@@ -384,6 +420,12 @@ def parse_args(argv=None):
 
     i = sub.add_parser("intersect", help="territories a fix diff (stdin) lands in")
     i.add_argument("scope", metavar="SCOPE_JSON")
+    i.add_argument(
+        "--exclude",
+        metavar="FILE",
+        help="paths to drop from stdin, one per line; an entry ending in '/' "
+        "drops everything under it",
+    )
     i.set_defaults(func=cmd_intersect)
 
     return ap.parse_args(argv)
