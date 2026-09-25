@@ -125,6 +125,7 @@ done
 checked=0
 landed=" "
 named=""
+emitted=""
 for path in "$probes"/row-[0-9][0-9]*.json; do
   [[ -f "$path" ]] || continue
   name="$(basename "$path")"
@@ -140,7 +141,10 @@ for path in "$probes"/row-[0-9][0-9]*.json; do
     fail "$name: run-state.py phase exited non-zero: $out"
     continue
   }
-  got="$(sed -n 's/^phase: [^ ]* reason: row \([0-9][0-9]*\):.*/\1/p' <<<"$out")"
+  parsed="$(sed -n 's/^phase: \([^ ]*\) reason: row \([0-9][0-9]*\):.*/\2 \1/p' <<<"$out")"
+  got="${parsed%% *}"
+  [[ -n "$got" ]] && emitted="$emitted$name:$got:${parsed#* }
+"
   checked=$((checked + 1))
   [[ -n "$got" ]] && landed="$landed$got "
   if [[ -z "$got" ]]; then
@@ -168,6 +172,34 @@ while IFS=: read -r nn name; do
   [[ -z "$nn" ]] && continue
   grep -qx -- "$nn" <<<"$rows" || fail "$name: named for row $nn, which neither Resume table has"
 done <<<"$named"
+
+# --- Check 4: the phase run-state.py emits is one the landing row's Resume at
+# cell names. Without it, both tables can send a row to the wrong step in
+# identical words and every check above still passes. ---
+
+# Each `Step <n>` in a cell allows phase <n>; the words done, wait, and stop
+# allow themselves. Read from the SKILL.md copy, which check 1 pins resume.md to.
+cell_phases() {
+  local cell
+  cell="$(awk -F'\t' -v r="$1" '$1 == r { print $3 }' "$tmp/skill.tsv")"
+  { grep -oE 'Step [0-9]+' <<<"$cell" | sed 's/^Step //'
+    grep -owE 'done|wait|stop' <<<"$cell"
+  } | sort -u | tr '\n' ' ' || true
+}
+cell_text() {
+  awk -F'\t' -v r="$1" '$1 == r { print $3 }' "$tmp/skill.tsv"
+}
+
+for row in $(cut -f1 "$tmp/skill.tsv"); do
+  [[ -n "$(cell_phases "$row")" ]] || fail "row $row: Resume at cell ('$(cell_text "$row")') names no phase"
+done
+while IFS=: read -r name row phase; do
+  [[ -z "$name" ]] && continue
+  awk -F'\t' -v r="$row" '$1 == r { found = 1 } END { exit !found }' "$tmp/skill.tsv" || continue
+  allowed="$(cell_phases "$row")"
+  [[ -z "$allowed" || " $allowed" == *" $phase "* ]] && continue
+  fail "$name: run-state.py emitted phase $phase, but row $row's Resume at cell ('$(cell_text "$row")') allows ${allowed% }"
+done <<<"$emitted"
 
 if (( failures > 0 )); then
   echo "work-issue resume tables: $failures problem(s)" >&2
