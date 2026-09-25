@@ -10,7 +10,7 @@
         --finding-id F-r1-money-01 --disposition REPRODUCED \\
         --actor verifier-r1-money --repro-command 'pytest -k rounding' \\
         --observed-output 'E assert 10.01 == 10.00'
-    scripts/ledger.py state --ledger RUN/ledger.jsonl
+    scripts/ledger.py state --ledger RUN/ledger.jsonl [--round N]
     scripts/ledger.py validate --ledger RUN/ledger.jsonl
 
 A finding carries no disposition field. Its state is derived from the events
@@ -58,7 +58,23 @@ REQUIRED_EVIDENCE = {
     "TEST_WRITTEN": ("artifact",),
     "ISSUE_FILED": ("artifact",),
     "ESCALATED": ("reason",),
+    "LISTED": ("reason",),
 }
+
+# LISTED puts a finding in the report and nowhere else: no test, no fix, no
+# issue. On a blocking finding that skips the failing test Step 6 requires
+# before the fix, so it is refused there.
+ADVISORY_ONLY = ("LISTED",)
+
+
+def severity_problem(disposition, finding):
+    """A reason `disposition` can't land on `finding`, or None if it can."""
+    if disposition in ADVISORY_ONLY and finding.get("claimed_severity") != "advisory":
+        return (
+            f"{disposition} is valid only on an advisory finding; "
+            f"{finding.get('id')} is {finding.get('claimed_severity')}"
+        )
+    return None
 
 
 def _type_name(value):
@@ -237,12 +253,16 @@ def cmd_append_event(args):
         return 1
 
     known = {
-        obj.get("id")
+        obj.get("id"): obj
         for _, obj in read_lines(args.ledger, strict=False)
         if obj.get("record") == "finding"
     }
     if args.finding_id not in known:
         sys.stderr.write(f"ledger: unknown finding_id {args.finding_id}\n")
+        return 1
+    problem = severity_problem(args.disposition, known[args.finding_id])
+    if problem:
+        sys.stderr.write(f"ledger: {problem}\n")
         return 1
 
     append_line(line, args.ledger)
@@ -321,7 +341,7 @@ def cmd_state(args):
         # A territory that mostly could not be checked is telling you its hunt
         # items produced claims nobody can test. That is worth reporting and
         # worth a human's attention, but it deliberately does not trigger a
-        # re-fan-out: the loop terminates on REPRODUCED findings alone, and a
+        # re-fan-out: the loop terminates on reproduced blockers alone, and a
         # second trigger would make termination depend on a judgment call.
         unverifiable = counts.get("UNVERIFIABLE", 0)
         if unverifiable * 2 > len(group):
@@ -340,6 +360,18 @@ def cmd_state(args):
     unverified = [r for r in rows if r["verification"] == "UNVERIFIED"]
     print()
     print(f"blocking (REPRODUCED): {len(blocking)}   UNVERIFIED: {len(unverified)}")
+
+    # Step 7's termination rule. Only a reproduced blocker in the round just
+    # reviewed starts another. An advisory still gets its Step 6 outcome, but
+    # counting advisories kept cambium #23/#26's review loops going: each fix is new code,
+    # new code draws a slightly smaller advisory, and the round never came
+    # back empty.
+    if args.round is not None:
+        in_round = [r for r in blocking if r["finding"]["round"] == args.round]
+        if in_round:
+            print(f"loop: continue ({len(in_round)} blocking REPRODUCED in round {args.round})")
+        else:
+            print(f"loop: stop (no blocking REPRODUCED in round {args.round})")
     return 0
 
 
@@ -350,11 +382,19 @@ def cmd_validate(args):
     findings = 0
     events = 0
     problems = []
-    for lineno, obj in read_lines(args.ledger, strict=True):
+    lines = list(read_lines(args.ledger, strict=True))
+    # Findings first, so an event written above its finding (a hand-edited
+    # ledger) still meets the severity rule rather than slipping past it.
+    seen = {
+        obj.get("id"): obj for _, obj in lines if obj.get("record") == "finding"
+    }
+    read_so_far = set()
+    for lineno, obj in lines:
         record = obj.get("record")
         if record == "finding":
             schema = finding_schema
             findings += 1
+            read_so_far.add(obj.get("id"))
         elif record == "event":
             schema = event_schema
             events += 1
@@ -365,6 +405,30 @@ def cmd_validate(args):
         if violation:
             json_path, reason = violation
             problems.append(f"line {lineno}: {json_path}: {reason}")
+            continue
+        # The same evidence table append-event enforces, so a line written
+        # by hand or by an older script can't carry a verdict or a listing
+        # with nothing behind it.
+        if record == "event":
+            for field in REQUIRED_EVIDENCE.get(obj["disposition"], ()):
+                if not obj.get(field):
+                    problems.append(f"line {lineno}: {obj['disposition']} requires {field}")
+        # derive() skips an event with no finding behind it, so one that
+        # validated would drop out of the report without a trace.
+        if record == "event" and obj.get("finding_id") not in seen:
+            problems.append(f"line {lineno}: unknown finding_id {obj.get('finding_id')}")
+            continue
+        # derive() folds in file order and skips an event whose finding it
+        # hasn't read yet, so a forward event would drop out of `state`.
+        # append-event never writes one; only a hand edit does.
+        if record == "event" and obj.get("finding_id") not in read_so_far:
+            problems.append(
+                f"line {lineno}: event precedes its finding {obj.get('finding_id')}"
+            )
+        if record == "event" and obj.get("finding_id") in seen:
+            problem = severity_problem(obj["disposition"], seen[obj["finding_id"]])
+            if problem:
+                problems.append(f"line {lineno}: {problem}")
 
     if problems:
         for problem in problems:
@@ -407,13 +471,14 @@ def parse_args(argv=None):
             "CLOSED",
             "QUESTION_FILED",
             "ESCALATED",
+            "LISTED",
         ],
     )
     e.add_argument("--actor", required=True, help="e.g. verifier-r1-money")
     e.add_argument("--repro-command", default=None)
     e.add_argument("--observed-output", default=None)
     e.add_argument("--counter-evidence", default=None)
-    e.add_argument("--reason", default=None)
+    e.add_argument("--reason", default=None, help="required on LISTED, e.g. 'listed in PR Left Out'")
     e.add_argument("--artifact", default=None, help="test path, issue URL, note path")
     e.add_argument("--at", default=None, help="ISO-8601 UTC; defaults to now")
     e.set_defaults(func=cmd_append_event)
@@ -421,6 +486,13 @@ def parse_args(argv=None):
     s = sub.add_parser("state", help="derived disposition per finding")
     s.add_argument("--ledger", required=True, metavar="PATH")
     s.add_argument("--json", action="store_true")
+    s.add_argument(
+        "--round",
+        type=int,
+        default=None,
+        metavar="N",
+        help="also print Step 7's loop decision for round N",
+    )
     s.set_defaults(func=cmd_state)
 
     v = sub.add_parser("validate", help="every line parses and conforms")

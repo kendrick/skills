@@ -110,6 +110,8 @@ PROBE_FIELDS = (
     ("newest_repair_report", "bool", ()),
     ("triage_rows_unanswered", "int", ()),
     ("deferred_comment_needed", "bool", ()),
+    ("triage_blocking_rows", "int", ()),
+    ("repair_ar_settled", "bool", ()),
 )
 
 BUNDLE_KEYS = (
@@ -871,6 +873,29 @@ def phase_of(probe):
         and not flag(probe, "newest_repair_report")
     ):
         return "7", "row 16: the newest triage round has in-scope rows and no repair report of its own"
+    # Step 8 item 1's re-fire leg, ahead of the push. Only a repair whose
+    # triage round held a P0, P1, or blocking row re-enters adversarial-review;
+    # one whose round held nothing above P2 gets the reproducer and moves on.
+    # The reason names the reproducer first: `repair_ar_settled` is false until
+    # a file exists, which includes a stop before the reproducer ran.
+    # Re-firing after every repair ran cambium #23/#26 to 7 cycles per lane,
+    # because each fix drew a new advisory and the review never came back
+    # empty. `repair_ar_settled` is also true where the repair's own trigger
+    # re-evaluation said `fired: no`, so a P1 repair with no trigger-table hit
+    # doesn't wait on a review nobody will run.
+    if (
+        pr_state == "OPEN"
+        and flag(probe, "newest_repair_report")
+        and count(probe, "triage_blocking_rows") > 0
+        and not flag(probe, "repair_ar_settled")
+    ):
+        return (
+            "8",
+            "row 17: the repaired triage round held a P0, P1, or blocking row "
+            "and the repair's adversarial-review has not settled; resume at "
+            "Step 8 item 1 from the reproducer where trigger-repair-<k>.txt is "
+            "absent, else at the adversarial-review invocation",
+        )
     # Post-PR only: Step 8 pushes and replies but never opens a pull request,
     # so a repair with no PR behind it belongs to row 10 (unverified) or row
     # 13 (clean), never here. The repair-report leg still stands alone: a

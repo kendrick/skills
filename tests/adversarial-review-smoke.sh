@@ -151,6 +151,19 @@ require_text adversarial-review/SKILL.md "never the finder's reasoning"
 # fixes.
 require_text adversarial-review/SKILL.md "before** writing the fix"
 require_text adversarial-review/SKILL.md "file-issue"
+# The round loop ends on reproduced blockers, not on reproduced findings of
+# any severity (row 40): advisories alone kept cambium #23/#26 looping.
+require_text adversarial-review/SKILL.md "zero REPRODUCED findings whose \`claimed_severity\` is \`blocking\`"
+require_text adversarial-review/SKILL.md "ledger.py state --ledger RUN_DIR/ledger.jsonl --round N"
+require_text adversarial-review/SKILL.md "printed \`loop: stop\` for the newest round"
+refute_text adversarial-review/SKILL.md "zero REPRODUCED findings in the territories it re-reviewed"
+# A reproduced advisory is listed by default and filed only on request (row
+# 39). The refute pins the old default row, which filed one issue per finding.
+require_text adversarial-review/SKILL.md "| REPRODUCED + advisory | List it: record \`LISTED\`"
+require_text adversarial-review/SKILL.md "Under \`--file-advisories\`, hand it to the \`file-issue\` skill instead"
+require_text adversarial-review/SKILL.md "every \`LISTED\` finding appears in the listed section with its repro command"
+require_text adversarial-review/assets/event.schema.json '"LISTED"'
+refute_text adversarial-review/SKILL.md "| REPRODUCED + advisory | Hand to the \`file-issue\` skill"
 require_text adversarial-review/SKILL.md "inbox-to-memory"
 
 # The round loop's rationale is load-bearing, not decoration: it is the whole
@@ -360,6 +373,175 @@ python3 "$ledger_py" state --ledger "$L" | grep -Fq "REPRODUCED" || {
 
 python3 "$ledger_py" validate --ledger "$L" >/dev/null || {
   echo "ledger round-trip must validate" >&2
+  exit 1
+}
+
+# Step 6 lists a reproduced advisory as LISTED instead of filing an issue for
+# it (#152, RATIONALE row 39). LISTED carries a reason and no artifact, and it
+# is valid only on an advisory: a blocker recorded LISTED would skip the
+# failing test and the fix without anything noticing.
+listed_ledger() {
+  local out="$1" blocker_outcome="$2"
+  : >"$out"
+  python3 "$ledger_py" append-finding --ledger "$out" \
+    --id F-r1-money-01 --round 1 --territory money --file src/billing/invoice.py \
+    --quoted-evidence 'total += round(x, 2)' --claim 'rounds per line' \
+    --proposed-fix 'round once at the end' --proposed-repro 'pytest -k rounding' \
+    --claimed-severity blocking >/dev/null
+  python3 "$ledger_py" append-finding --ledger "$out" \
+    --id F-r1-money-02 --round 1 --territory money --file src/billing/tax.py \
+    --quoted-evidence 'rate = 0.2' --claim 'magic number' \
+    --proposed-fix 'name the constant' --proposed-repro 'grep -n 0.2 src/billing/tax.py' \
+    --claimed-severity advisory >/dev/null
+  local id
+  for id in F-r1-money-01 F-r1-money-02; do
+    python3 "$ledger_py" append-event --ledger "$out" --finding-id "$id" \
+      --disposition REPRODUCED --actor verifier-r1-money \
+      --repro-command 'pytest -k rounding' --observed-output 'assert 10.01 == 10.00' >/dev/null
+  done
+  # Written as raw lines so the validate check below meets the ledger a
+  # hand-edited or older-script ledger could hold, not only what append-event
+  # lets through.
+  printf '%s\n' \
+    "{\"record\": \"event\", \"finding_id\": \"F-r1-money-01\", \"disposition\": \"$blocker_outcome\", \"actor\": \"orchestrator\", \"repro_command\": null, \"observed_output\": null, \"counter_evidence\": null, \"reason\": \"listed in PR Left Out\", \"artifact\": \"tests/test_rounding.py\", \"at\": \"2026-09-24T00:00:00Z\"}" \
+    '{"record": "event", "finding_id": "F-r1-money-02", "disposition": "LISTED", "actor": "orchestrator", "repro_command": null, "observed_output": null, "counter_evidence": null, "reason": "listed in PR Left Out", "artifact": null, "at": "2026-09-24T00:00:00Z"}' \
+    >>"$out"
+}
+listed_ledger "$tmp/listed-ok.jsonl" TEST_WRITTEN
+listed_ok_out="$(python3 "$ledger_py" validate --ledger "$tmp/listed-ok.jsonl" 2>&1)" || {
+  echo "an advisory LISTED beside a blocker TEST_WRITTEN must validate: $listed_ok_out" >&2
+  exit 1
+}
+# validate holds a LISTED line to the same reason rule append-event does, so
+# a hand-edited ledger can't carry a listing nobody explained.
+cp "$tmp/listed-ok.jsonl" "$tmp/listed-noreason.jsonl"
+printf '%s\n' '{"record": "event", "finding_id": "F-r1-money-02", "disposition": "LISTED", "actor": "orchestrator", "repro_command": null, "observed_output": null, "counter_evidence": null, "reason": null, "artifact": null, "at": "2026-09-24T00:00:01Z"}' >>"$tmp/listed-noreason.jsonl"
+noreason_out="$(python3 "$ledger_py" validate --ledger "$tmp/listed-noreason.jsonl" 2>&1)" && {
+  echo "validate must refuse a LISTED event with no reason" >&2
+  exit 1
+}
+grep -Fq "LISTED requires reason" <<<"$noreason_out" || {
+  echo "validate's refusal must name LISTED and its reason, got: $noreason_out" >&2
+  exit 1
+}
+# An event placed ahead of its finding still meets the severity rule: a
+# hand-edited ledger with the LISTED line first once validated clean.
+{
+  printf '%s\n' '{"record": "event", "finding_id": "F-r1-money-01", "disposition": "LISTED", "actor": "orchestrator", "repro_command": null, "observed_output": null, "counter_evidence": null, "reason": "listed in PR Left Out", "artifact": null, "at": "2026-09-24T00:00:00Z"}'
+  head -1 "$tmp/listed-ok.jsonl"
+} >"$tmp/listed-forward.jsonl"
+forward_out="$(python3 "$ledger_py" validate --ledger "$tmp/listed-forward.jsonl" 2>&1)" && {
+  echo "validate must refuse a LISTED event on a blocker even when the event precedes the finding" >&2
+  exit 1
+}
+grep -Fq "LISTED is valid only on an advisory finding" <<<"$forward_out" || {
+  echo "the forward-reference refusal must name LISTED's severity rule, got: $forward_out" >&2
+  exit 1
+}
+# An event naming no finding anywhere in the ledger fails validate. derive()
+# drops such an event, so a hand-edited LISTED line for a missing finding
+# would vanish from the report while the ledger still read as valid.
+printf '%s\n' '{"record": "event", "finding_id": "F-missing", "disposition": "LISTED", "actor": "orchestrator", "repro_command": null, "observed_output": null, "counter_evidence": null, "reason": "listed in PR Left Out", "artifact": null, "at": "2026-09-24T00:00:00Z"}' >"$tmp/listed-orphan.jsonl"
+orphan_out="$(python3 "$ledger_py" validate --ledger "$tmp/listed-orphan.jsonl" 2>&1)" && {
+  echo "validate must refuse an event whose finding is absent" >&2
+  exit 1
+}
+grep -Fq "unknown finding_id F-missing" <<<"$orphan_out" || {
+  echo "the orphan-event refusal must name the missing finding, got: $orphan_out" >&2
+  exit 1
+}
+# An event above its finding fails validate even when every other rule
+# holds: derive() folds in file order and drops it, so an advisory's LISTED
+# line placed first would vanish from state while validate said OK.
+{
+  printf '%s\n' '{"record": "event", "finding_id": "F-r1-money-02", "disposition": "LISTED", "actor": "orchestrator", "repro_command": null, "observed_output": null, "counter_evidence": null, "reason": "listed in PR Left Out", "artifact": null, "at": "2026-09-24T00:00:00Z"}'
+  sed -n 2p "$tmp/listed-ok.jsonl"
+} >"$tmp/listed-forward-advisory.jsonl"
+fwd_adv_out="$(python3 "$ledger_py" validate --ledger "$tmp/listed-forward-advisory.jsonl" 2>&1)" && {
+  echo "validate must refuse an event that precedes its finding, got OK: $fwd_adv_out" >&2
+  exit 1
+}
+grep -Fq "precedes its finding F-r1-money-02" <<<"$fwd_adv_out" || {
+  echo "the forward-event refusal must name the finding, got: $fwd_adv_out" >&2
+  exit 1
+}
+listed_ledger "$tmp/listed-blocker.jsonl" LISTED
+listed_bad_out="$(python3 "$ledger_py" validate --ledger "$tmp/listed-blocker.jsonl" 2>&1)" && {
+  echo "a blocking finding recorded LISTED must fail validate" >&2
+  exit 1
+}
+grep -Fq "LISTED is valid only on an advisory finding" <<<"$listed_bad_out" || {
+  echo "validate must name LISTED's severity rule for a blocker recorded LISTED, got: $listed_bad_out" >&2
+  exit 1
+}
+listed_append_err="$(python3 "$ledger_py" append-event --ledger "$tmp/listed-ok.jsonl" \
+  --finding-id F-r1-money-02 --disposition LISTED --actor orchestrator 2>&1)" && {
+  echo "LISTED with no --reason must be refused" >&2
+  exit 1
+}
+grep -Fq "LISTED requires --reason" <<<"$listed_append_err" || {
+  echo "the refusal must name LISTED and --reason, got: $listed_append_err" >&2
+  exit 1
+}
+python3 "$ledger_py" append-event --ledger "$tmp/listed-ok.jsonl" \
+  --finding-id F-r1-money-02 --disposition LISTED --actor orchestrator \
+  --reason "listed in PR Left Out" >/dev/null || {
+  echo "LISTED with --reason on an advisory must append" >&2
+  exit 1
+}
+listed_blocker_err="$(python3 "$ledger_py" append-event --ledger "$tmp/listed-ok.jsonl" \
+  --finding-id F-r1-money-01 --disposition LISTED --actor orchestrator \
+  --reason "listed in PR Left Out" 2>&1)" && {
+  echo "append-event must refuse LISTED on a blocking finding" >&2
+  exit 1
+}
+grep -Fq "LISTED is valid only on an advisory finding" <<<"$listed_blocker_err" || {
+  echo "append-event's refusal must name LISTED's severity rule, got: $listed_blocker_err" >&2
+  exit 1
+}
+
+# Step 7's termination rule, decided by ledger.py itself (#151, row 40): a
+# round whose reproduced findings are all advisory ends the loop, and one
+# reproduced blocker in that round continues it. Ending only on zero
+# reproduced findings of any severity, the rule this replaced, continues on
+# the first fixture, which is how the loops around cambium #23/#26 ran 7 repair cycles per lane.
+round_ledger() {
+  local out="$1" second_severity="$2"
+  : >"$out"
+  # A round-1 blocker that round 2 exists to follow up. It must not count
+  # toward round 2's decision.
+  python3 "$ledger_py" append-finding --ledger "$out" \
+    --id F-r1-money-01 --round 1 --territory money --file src/billing/invoice.py \
+    --quoted-evidence 'total += round(x, 2)' --claim 'rounds per line' \
+    --proposed-fix 'round once at the end' --proposed-repro 'pytest -k rounding' \
+    --claimed-severity blocking >/dev/null
+  python3 "$ledger_py" append-finding --ledger "$out" \
+    --id F-r2-money-01 --round 2 --territory money --file src/billing/invoice.py \
+    --quoted-evidence 'ROUNDING = 2' --claim 'constant lacks a comment' \
+    --proposed-fix 'say why 2' --proposed-repro 'grep -n ROUNDING src/billing/invoice.py' \
+    --claimed-severity advisory >/dev/null
+  python3 "$ledger_py" append-finding --ledger "$out" \
+    --id F-r2-money-02 --round 2 --territory money --file tests/test_invoice.py \
+    --quoted-evidence 'assert total' --claim 'test asserts truthiness only' \
+    --proposed-fix 'assert the value' --proposed-repro 'pytest -k total' \
+    --claimed-severity "$second_severity" >/dev/null
+  local id
+  for id in F-r1-money-01 F-r2-money-01 F-r2-money-02; do
+    python3 "$ledger_py" append-event --ledger "$out" --finding-id "$id" \
+      --disposition REPRODUCED --actor verifier-money \
+      --repro-command 'pytest -k total' --observed-output 'assert 10.01 == 10.00' >/dev/null
+  done
+}
+round_ledger "$tmp/round-advisory.jsonl" advisory
+loop_out="$(python3 "$ledger_py" state --ledger "$tmp/round-advisory.jsonl" --round 2 2>&1)" || true
+grep -Fq "loop: stop" <<<"$loop_out" || {
+  echo "a round whose reproduced findings are all advisory must end the loop, got: $loop_out" >&2
+  exit 1
+}
+round_ledger "$tmp/round-blocking.jsonl" blocking
+loop_out="$(python3 "$ledger_py" state --ledger "$tmp/round-blocking.jsonl" --round 2 2>&1)" || true
+grep -Fq "loop: continue" <<<"$loop_out" || {
+  echo "a round with one reproduced blocker must continue the loop, got: $loop_out" >&2
   exit 1
 }
 

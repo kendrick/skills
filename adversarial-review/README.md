@@ -10,7 +10,7 @@ The usual fix is to run several reviewers and trust whatever they agree on. That
 
 This skill swaps the confidence mechanism. Territories don't overlap, so there's nobody to agree with, and instead every finding gets handed to a fresh agent that never saw the reasoning behind it and is told to break it. Only a finding that survives can block a merge. Findings that don't survive still get recorded, with the counter-evidence that killed them, because "we checked and it was fine" is worth knowing.
 
-Then there's the part nobody plans for. In the session this design came out of, two of the three merge-blockers weren't in the original diff at all—they were introduced while fixing the previous round's findings. Code written under review pressure is the most suspicious code in the run, and a review that stops when the first round's fixes land will miss it. So the loop keeps going, re-reviewing exactly the territories a fix touched.
+Then there's the part nobody plans for. In the session this design came out of, two of the three merge-blockers weren't in the original diff at all—they were introduced while fixing the previous round's findings. Code written under review pressure is the most suspicious code in the run, and a review that stops when the first round's fixes land will miss it. So the loop keeps going, re-reviewing exactly the territories a fix touched, until a round reproduces no blocker. Advisories from that round get listed, but they don't start another one, because every fix draws a slightly smaller advisory and a loop that waits for a spotless round rarely ends.
 
 ## How It Works
 
@@ -23,7 +23,7 @@ One finder per territory, in parallel, each told what to be suspicious of, what'
 Then the gate. Fresh verifiers get the claim, the quoted code, and the proposed reproduction command—never the finder's reasoning, and never its proposed fix, which is the reasoning wearing a hat. Each finding lands as reproduced, not reproduced, or unverifiable, and it's the routing that makes it matter:
 
 - **Reproduced and blocking** — a failing test gets written from the repro command, before the fix. A test written afterward is written by someone who already believes the fix works.
-- **Reproduced and advisory** — off to `file-issue`, repro attached.
+- **Reproduced and advisory** — listed in the report with its repro command, ready for a PR's "Left out" section. `--file-advisories` sends it to `file-issue` instead.
 - **Not reproduced** — closed in the ledger, counter-evidence recorded.
 - **Unverifiable** — filed as an open question for `inbox-to-memory`.
 
