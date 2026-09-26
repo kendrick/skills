@@ -112,6 +112,7 @@ PROBE_FIELDS = (
     ("deferred_comment_needed", "bool", ()),
     ("triage_blocking_rows", "int", ()),
     ("repair_ar_settled", "bool", ()),
+    ("review_over_budget", "bool", ()),
 )
 
 BUNDLE_KEYS = (
@@ -121,6 +122,16 @@ BUNDLE_KEYS = (
     ("threads", (list,)),
     ("comments", (list,)),
 )
+
+# `poll` is a real label in a timing.log but never a build or review phase:
+# it exists only so the external-reviewer wait stays visible without adding
+# wall-clock time to either total. `1` (isolate/baseline) and `5` (publish)
+# are read and ignored the same way.
+TIMING_LABELS = frozenset(("1", "2", "3", "4", "5", "6", "7", "8", "poll"))
+BUILD_LABELS = ("2", "3")
+REVIEW_LABELS = ("4", "6", "7", "8")
+
+DEFAULT_BUDGET_RATIO = 2.0
 
 
 class InputError(Exception):
@@ -742,6 +753,20 @@ def count(probe, name):
     return 0 if value is None else int(value)
 
 
+def budget_stop(row):
+    """Row `row`'s answer when review time has passed its budget.
+
+    The probe carries only the verdict, so the reason names the command that
+    prints both totals rather than the totals themselves."""
+    return (
+        "stop",
+        f"row {row}: review time is over budget against build time; print "
+        "`run-state.py budget --timing RUN_DIR/timing.log` for both totals and "
+        "ask whether to stop here or raise the ratio, which appends "
+        "`budget-raised <ratio>` to timing.log",
+    )
+
+
 def phase_of(probe):
     """The Resume table, in its own order, first match wins.
 
@@ -779,6 +804,11 @@ def phase_of(probe):
     redteam_clean = redteam_rounds > 0 and not flag(probe, "redteam_last_failed")
     triage_rounds = count(probe, "triage_rounds")
     repair_reports = count(probe, "repair_reports")
+    # Rows 10, 11, 16, and row 17's re-fire leg each start another review
+    # cycle, and only those are gated. Rows past them publish, reply to, or
+    # report on work already done, and stopping there would strand it. On
+    # cambium #23/#26, about 50 min of build drew about 5 h of review.
+    over_budget = flag(probe, "review_over_budget")
 
     if herdr == "working":
         return "wait", "row 2: the herdr agent is working; wait and re-probe"
@@ -808,6 +838,8 @@ def phase_of(probe):
     if count(probe, "self_reviews") > 0 and not flag(probe, "build_final"):
         return "3", "row 9: a self-review with no build-final report; resume at the fix dispatch"
     if flag(probe, "build_final") and redteam_rounds == 0:
+        if over_budget:
+            return budget_stop(10)
         return "4", "row 10: a build-final report with no red-team round yet"
     # A failed round owns the run until a later round is clean. Which way it
     # resumes turns on order, not on counts: a repair report that predates the
@@ -818,6 +850,8 @@ def phase_of(probe):
     if flag(probe, "build_final") and flag(probe, "redteam_last_failed"):
         if flag(probe, "redteam_failed_twice"):
             return "stop", "row 10: two red-team rounds in a row have NOT_REPRODUCED; stop and report with the evidence"
+        if over_budget:
+            return budget_stop(10)
         if flag(probe, "repair_after_last_round"):
             return "4", "row 10: the newest red-team round has NOT_REPRODUCED and a repair followed it; run round k+1"
         return "4", "row 10: the newest red-team round has NOT_REPRODUCED and no repair has followed it; dispatch the repair"
@@ -831,8 +865,12 @@ def phase_of(probe):
     # never evaluated.
     trigger = probe["trigger_fired"]
     if redteam_clean and trigger == "absent":
+        if over_budget:
+            return budget_stop(11)
         return "4", "row 11: red-team is clean and trigger.txt is not written yet; resume at the trigger"
     if redteam_clean and trigger == "yes" and not flag(probe, "ar_complete"):
+        if over_budget:
+            return budget_stop(11)
         return "4", "row 11: trigger.txt says fired and adversarial-review has not finished"
     if flag(probe, "conflict") or flag(probe, "rebase_in_progress"):
         return "5", "row 12: a rebase conflict is in progress; resume at Step 5 item 1"
@@ -872,6 +910,8 @@ def phase_of(probe):
         and count(probe, "triage_inscope_rows") > 0
         and not flag(probe, "newest_repair_report")
     ):
+        if over_budget:
+            return budget_stop(16)
         return "7", "row 16: the newest triage round has in-scope rows and no repair report of its own"
     # Step 8 item 1's re-fire leg, ahead of the push. Only a repair whose
     # triage round held a P0, P1, or blocking row re-enters adversarial-review;
@@ -889,6 +929,8 @@ def phase_of(probe):
         and count(probe, "triage_blocking_rows") > 0
         and not flag(probe, "repair_ar_settled")
     ):
+        if over_budget:
+            return budget_stop(17)
         return (
             "8",
             "row 17: the repaired triage round held a P0, P1, or blocking row "
@@ -930,6 +972,193 @@ def phase_of(probe):
     )
 
 
+def _overlap_seconds(start, end, spans):
+    """Seconds of [start, end) that any of `spans` covers. `spans` is sorted
+    and non-overlapping, so no second is subtracted twice."""
+    covered = 0.0
+    for span_start, span_end in spans:
+        low = max(start, span_start)
+        high = min(end, span_end)
+        if high > low:
+            covered += (high - low).total_seconds()
+    return covered
+
+
+def _merge(spans):
+    merged = []
+    for start, end in sorted(spans):
+        if merged and start <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+        else:
+            merged.append((start, end))
+    return merged
+
+
+def parse_timing_log(text, label, now=None):
+    """`(build_seconds, review_seconds, raised_ratio)` from a timing.log's text.
+
+    `raised_ratio` is the last `budget-raised <ratio>` line's value, or None
+    if the log never raised it—the caller decides what it yields to. An
+    unpaired start closes at `now` when given, else at the log's latest
+    stamp. Every malformed line is collected before raising, same discipline
+    as `check_bundle`: a hand-edited log is usually wrong in more than one
+    place, and one problem per run turns that into one round trip per typo.
+    """
+    problems = []
+    events = []
+    moments = []
+    raised = None
+    for line_no, raw_line in enumerate(text.splitlines(), start=1):
+        line = raw_line.strip()
+        if not line:
+            continue
+        at = f"{label}:{line_no}"
+        parts = line.split()
+        if parts[0] == "budget-raised":
+            if len(parts) != 2:
+                problems.append(f"{at}: 'budget-raised' takes exactly one value: {raw_line!r}")
+                continue
+            try:
+                raised = float(parts[1])
+            except ValueError:
+                problems.append(f"{at}: budget-raised value {parts[1]!r} is not a number")
+            continue
+        if len(parts) != 3:
+            problems.append(f"{at}: expected '<phase> <start|end> <timestamp>': {raw_line!r}")
+            continue
+        phase, kind, ts_raw = parts
+        if phase not in TIMING_LABELS:
+            problems.append(f"{at}: unknown phase {phase!r}")
+            continue
+        if kind not in ("start", "end"):
+            problems.append(f"{at}: expected 'start' or 'end', got {kind!r}")
+            continue
+        moment = parse_ts(ts_raw, at, problems)
+        if moment is None:
+            continue
+        events.append((phase, kind, moment))
+        moments.append(moment)
+    if problems:
+        raise InputError(problems)
+
+    # A phase may run many cycles, so each label gets its own FIFO of open
+    # starts rather than a single pending slot: "next end of same label"
+    # pairs the earliest unclosed start, not the most recent.
+    open_starts = {}
+    intervals = {}
+    seen = None
+    for phase, kind, moment in events:
+        if kind == "start" and phase != "poll":
+            # Steps run one at a time, so a new step's start ends any other
+            # step a crash left open. The resume table often jumps a run to a
+            # different step than the one that crashed, and SKILL.md's
+            # close-first rule only reaches the label about to start: a `3`
+            # left open grew build with the clock and hid every review minute.
+            # The close lands on the newest stamp before this line, the last
+            # thing the run recorded, so a crash's dead hours count toward
+            # nothing. An open `poll` closes the same way: a nested poll
+            # writes `poll end` before the next start, so only a crashed one
+            # is still open here, and left open it ran to the log's end and
+            # its subtraction ate every later review minute. A `poll start`
+            # closes nothing, since it opens inside a running `6`.
+            for other, pending in open_starts.items():
+                if other == phase:
+                    continue
+                while pending:
+                    intervals.setdefault(other, []).append((pending.pop(0), seen))
+        if kind == "start":
+            open_starts.setdefault(phase, []).append(moment)
+        else:
+            pending = open_starts.get(phase)
+            if not pending:
+                problems.append(f"{label}: {phase!r} end with no open start")
+                continue
+            intervals.setdefault(phase, []).append((pending.pop(0), moment))
+        seen = moment if seen is None else max(seen, moment)
+    if problems:
+        raise InputError(problems)
+
+    # Without `now`, the resume probe closes a crashed run's open start at
+    # the last thing the run recorded, so the hours it sat dead stay out. An
+    # in-run check passes `now`, or a Step 4 still running reads as 0 min of
+    # review for as long as it runs, since its own start is the newest stamp.
+    close_at = now if now is not None else (max(moments) if moments else None)
+    for phase, pending in open_starts.items():
+        for start in pending:
+            intervals.setdefault(phase, []).append((start, max(start, close_at)))
+
+    def seconds(phase):
+        return sum((end - start).total_seconds() for start, end in intervals.get(phase, ()))
+
+    # Step 6 writes its poll inside its own `6` bracket, so ignoring `poll`
+    # lines alone still counted the reviewer's wait as review. Subtracting
+    # the covered time zeroes a poll nested in a bracket, before it, or after it.
+    polls = _merge(intervals.get("poll", ()))
+    build_seconds = sum(seconds(p) for p in BUILD_LABELS)
+    review_seconds = sum(
+        (end - start).total_seconds() - _overlap_seconds(start, end, polls)
+        for p in REVIEW_LABELS
+        for start, end in intervals.get(p, ())
+    )
+    return build_seconds, review_seconds, raised
+
+
+def cmd_budget(args):
+    now = None
+    if args.now is not None:
+        problems = []
+        now = parse_ts(args.now, "--now", problems)
+        if problems:
+            for problem in problems:
+                sys.stderr.write(f"run-state: {problem}\n")
+            return 3
+    try:
+        with open(args.timing, encoding="utf-8") as handle:
+            text = handle.read()
+    except FileNotFoundError:
+        # Every run started before this change has no log. Reading a missing
+        # log as `over: no` rather than failing keeps those old runs off the
+        # stop this feature adds; a probe that turned this into `null` would
+        # halt them instead.
+        text = ""
+    except (OSError, UnicodeDecodeError) as e:
+        # Only absence means "no log yet". A directory, an unreadable file, or
+        # a binary file is a log that exists and can't be read, and reading
+        # that as under budget fails in the permissive direction.
+        why = e.strerror if isinstance(e, OSError) and e.strerror else e
+        sys.stderr.write(f"run-state: --timing {args.timing}: {why}\n")
+        return 3
+
+    try:
+        build_seconds, review_seconds, raised = parse_timing_log(text, "timing.log", now)
+    except InputError as e:
+        for problem in e.problems:
+            sys.stderr.write(f"run-state: {problem}\n")
+        return 3
+
+    # A flag typed for this one check outranks the log, and the log's last
+    # raise outranks the 2.0 the issue set. `--ratio` has no preset value
+    # so an explicit `--ratio 2.0` still counts as explicit.
+    if args.ratio is not None:
+        threshold = args.ratio
+    elif raised is not None:
+        threshold = raised
+    else:
+        threshold = DEFAULT_BUDGET_RATIO
+    # Zero seconds, not zero rounded minutes: a 25 s build rounds to 0m, and
+    # gating on that read 5 h of review as under budget.
+    if build_seconds == 0:
+        ratio_text, over = "n/a", "no"
+    else:
+        ratio = review_seconds / build_seconds
+        ratio_text, over = f"{ratio:.2f}", "yes" if ratio > threshold else "no"
+    print(
+        f"build: {round(build_seconds / 60)}m review: {round(review_seconds / 60)}m "
+        f"ratio: {ratio_text} over: {over}"
+    )
+    return 0
+
+
 def cmd_phase(args):
     try:
         probe = load_json(args.probe, "probe")
@@ -968,6 +1197,12 @@ def parse_args(argv=None):
     p = sub.add_parser("phase", help="where a half-finished run resumes")
     p.add_argument("--probe", metavar="PROBE_JSON", required=True)
     p.set_defaults(func=cmd_phase)
+
+    b = sub.add_parser("budget", help="build vs. review minutes from a timing.log, and whether review is over budget")
+    b.add_argument("--timing", metavar="TIMING_LOG", required=True, help="path to timing.log; a missing file reads as under budget")
+    b.add_argument("--ratio", metavar="RATIO", type=float, help="review:build ratio that trips 'over'; beats any 'budget-raised' line, which beats 2.0")
+    b.add_argument("--now", metavar="ISO8601", help="close open starts at this UTC moment rather than the log's latest stamp")
+    b.set_defaults(func=cmd_budget)
 
     return ap.parse_args(argv)
 

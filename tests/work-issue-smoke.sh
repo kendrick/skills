@@ -125,6 +125,13 @@ require_file tests/fixtures/work-issue/probes/row-17-review-repair-unpushed.json
 require_file tests/fixtures/work-issue/probes/row-07-isolation-incomplete.json
 require_file tests/fixtures/work-issue/probes/row-11-trigger-unrecorded.json
 require_file tests/fixtures/work-issue/review/changes-requested.json
+# One over-budget probe per gated row, and the timing logs the budget reads.
+for gated in 10 11 16 17; do
+  require_file "tests/fixtures/work-issue/probes/row-$gated-over-budget.json"
+done
+for timing in build30-review61 build30-review59 poll-excluded poll-nested budget-raised open-start-closed-at-poll open-review build-25s crash-closed-at-latest open-earlier-step crash-open-other-step crash-open-poll bad-label end-with-no-start; do
+  require_file "tests/fixtures/work-issue/timing/$timing.txt"
+done
 require_file tests/fixtures/work-issue/review/pr-comment-finding.json
 
 [[ "$(find work-issue -maxdepth 1 -type f | wc -l | tr -d ' ')" == "2" ]] || {
@@ -270,10 +277,12 @@ for f in work-issue/SKILL.md work-issue/references/redteam.md; do
   refute_text "$f" "work-issue/scripts/match-triggers.py"
 done
 require_text _maintenance/work-issue/RATIONALE.md "A vendored copy of \`match-triggers.py\` and the trigger table inside \`work-issue\`"
-# The README promised a run that never asks again, and the forecast gap means
-# one can. Pinned so the exception stays where a user decides to walk away.
-require_text work-issue/README.md "After yes, the run is unattended unless the real diff trips an \`adversarial-review\` the confirmation didn't forecast, or forecast at a lower depth."
-require_text work-issue/README.md "Only \`adversarial-review\` can ask again"
+# The README promised a run that never asks again, and the forecast gap and
+# the budget stop (#158) both mean one can. Pinned so both exceptions stay
+# at the point a user decides to walk away.
+require_text work-issue/README.md "After yes, the run is unattended, with two exceptions."
+require_text work-issue/README.md "\`adversarial-review\` can ask again, when the real diff trips a review the confirmation didn't forecast"
+require_text work-issue/README.md "the run stops before the next review cycle and asks whether to raise the ratio"
 
 # `--deep` fires the trigger without a match, so Step 0 item 7 names the
 # review for a `--deep` run as well. Without this clause, a `--deep` run whose
@@ -1162,6 +1171,7 @@ declare -a probe_cases=(
   "row-14:6" "row-15:6" "row-16:7" "row-17:8" "row-17-queued:8" "row-17-postpush:8"
   "row-10-repair-unverified:4" "row-10-repair-needed:4" "row-10-failed-twice:stop" "row-13-prepr-repair-clean:5" "row-16-earlier-queued:8" "row-17-review-repair-unpushed:8" "row-17-deferred-owed:8" "row-17-worker-queue:8" "row-18-answered:done" "row-18:done"
   "row-17-repair-advisory-only:8" "row-17-repair-blocking:8" "row-17-repair-blocking-settled:8"
+  "row-10-over-budget:stop" "row-11-over-budget:stop" "row-16-over-budget:stop" "row-17-over-budget:stop"
 )
 for case in "${probe_cases[@]}"; do
   fixture="${case%%:*}"
@@ -1239,6 +1249,150 @@ grep -Fq "adversarial-review" <<<"$settled_reason" && {
   echo "a repair whose adversarial-review settled must move on to the push, got: $settled_reason" >&2
   exit 1
 }
+
+# The budget stop (#158). The same row-16 probe gives Step 7 under budget and
+# stops over it, and the stop keeps its row prefix so the Resume tables suite
+# can hold it to row 16's cell. A null is a probe that could not read the log,
+# and it stops like every other non-nullable field.
+over_reason="$(python3 "$run_state" phase --probe "$probes_dir/row-16-over-budget.json")"
+grep -Fq "phase: stop reason: row 16: review time is over budget" <<<"$over_reason" || {
+  echo "a row-16 probe over budget should stop at row 16, got: $over_reason" >&2
+  exit 1
+}
+grep -Fq "phase: 7 reason: row 16:" <<<"$(python3 "$run_state" phase --probe "$probes_dir/row-16.json")" || {
+  echo "the same row-16 probe under budget should resume at Step 7" >&2
+  exit 1
+}
+python3 -c 'import json, sys
+probe = json.load(open(sys.argv[1]))
+probe["review_over_budget"] = None
+json.dump(probe, open(sys.argv[2], "w"))' "$probes_dir/row-16.json" "$tmp/null-budget.json"
+grep -Fq "phase: stop reason: unknown probe fields: review_over_budget" <<<"$(python3 "$run_state" phase --probe "$tmp/null-budget.json")" || {
+  echo "a null review_over_budget should stop the run naming the field" >&2
+  exit 1
+}
+
+# Each timing fixture through the real `budget`. poll-excluded is the
+# falsifier for what counts as review: counting wall-clock time since the
+# build would put it at 80 min against 30 and print `over: yes`. poll-nested
+# is the layout Step 6 actually writes, its poll inside the `6` bracket,
+# which ignoring poll lines without subtracting them read as 80 min too.
+# open-start-closed-at-poll's open `4` interval is covered by the poll after
+# it, so only the 5 min before the poll counts. crash-closed-at-latest is a
+# crashed `6` closed at its last stamp by SKILL.md's close-first rule, so the
+# 4.5 h it sat dead counts toward nothing. build-25s is a build under 30 s,
+# which rounds to 0m and once read 5 h of review as `ratio: n/a over: no`.
+# open-earlier-step leaves `3` open when the run resumes at Step 4, and
+# crash-open-other-step leaves `7` open across a crash before Step 8: the
+# next step's start ends each at the stamp before it. Left open, the first
+# grew build with the clock to 235m and the second charged 4 h of dead time
+# to review.
+# crash-open-poll leaves a `poll` open across a crash that resumes straight
+# into triage, where no new poll triggers the close-first rule. The next `6`
+# start ends it too; left open it covered the 61 min of triage after it and
+# printed `review: 0m over: no`.
+timing_dir=tests/fixtures/work-issue/timing
+declare -a budget_cases=(
+  "build30-review61:build: 30m review: 61m ratio: 2.03 over: yes"
+  "build30-review59:build: 30m review: 59m ratio: 1.97 over: no"
+  "poll-excluded:build: 30m review: 20m ratio: 0.67 over: no"
+  "budget-raised:build: 20m review: 60m ratio: 3.00 over: no"
+  "poll-nested:build: 30m review: 20m ratio: 0.67 over: no"
+  "open-start-closed-at-poll:build: 30m review: 5m ratio: 0.17 over: no"
+  "crash-closed-at-latest:build: 30m review: 15m ratio: 0.50 over: no"
+  "build-25s:build: 0m review: 300m ratio: 720.00 over: yes"
+  "open-earlier-step:build: 20m review: 210m ratio: 10.50 over: yes"
+  "crash-open-other-step:build: 30m review: 40m ratio: 1.33 over: no"
+  "crash-open-poll:build: 30m review: 61m ratio: 2.03 over: yes"
+)
+for case in "${budget_cases[@]}"; do
+  fixture="${case%%:*}"
+  expected="${case#*:}"
+  got="$(python3 "$run_state" budget --timing "$timing_dir/$fixture.txt")"
+  [[ "$got" == "$expected" ]] || {
+    echo "budget on $fixture.txt should print '$expected', got: $got" >&2
+    exit 1
+  }
+done
+# budget-raised.txt minus its raise is the 3x run the raise clears.
+grep -v '^budget-raised' "$timing_dir/budget-raised.txt" >"$tmp/unraised.txt"
+[[ "$(python3 "$run_state" budget --timing "$tmp/unraised.txt")" == *"ratio: 3.00 over: yes" ]] || {
+  echo "the 3x run without its budget-raised line should be over budget" >&2
+  exit 1
+}
+# An in-run check passes --now, which closes the running step at that moment.
+# Without it the open `4 start` is the log's newest stamp, and Step 4 reads as
+# 0 min of review however long it runs.
+[[ "$(python3 "$run_state" budget --timing "$timing_dir/open-review.txt" --now 2026-01-01T01:40:00Z)" == "build: 30m review: 70m ratio: 2.33 over: yes" ]] || {
+  echo "budget --now should close the open 4 start 70 min on and print over: yes" >&2
+  exit 1
+}
+[[ "$(python3 "$run_state" budget --timing "$timing_dir/open-review.txt")" == "build: 30m review: 0m ratio: 0.00 over: no" ]] || {
+  echo "budget without --now should close the open 4 start at the log's newest stamp" >&2
+  exit 1
+}
+set +e
+python3 "$run_state" budget --timing "$timing_dir/open-review.txt" --now not-a-time >/dev/null 2>&1
+bad_now_status=$?
+set -e
+[[ "$bad_now_status" == "3" ]] || {
+  echo "budget with an unreadable --now should exit 3, got: $bad_now_status" >&2
+  exit 1
+}
+# An explicit --ratio outranks the log's budget-raised line for that check;
+# with none, the line outranks 2.0.
+[[ "$(python3 "$run_state" budget --timing "$timing_dir/budget-raised.txt" --ratio 2.5)" == *"ratio: 3.00 over: yes" ]] || {
+  echo "budget --ratio 2.5 should beat the log's budget-raised 4.0 on a 3x run" >&2
+  exit 1
+}
+# A missing log is every run that predates timing.log: under budget. Anything
+# else that can't be read exits 3, since reading it as under budget fails in
+# the permissive direction.
+[[ "$(python3 "$run_state" budget --timing "$tmp/no-such-timing.log")" == "build: 0m review: 0m ratio: n/a over: no" ]] || {
+  echo "budget on a missing log should print over: no" >&2
+  exit 1
+}
+for unreadable in "$timing_dir/bad-label.txt" "$timing_dir/end-with-no-start.txt" "$timing_dir"; do
+  set +e
+  python3 "$run_state" budget --timing "$unreadable" >/dev/null 2>&1
+  unreadable_status=$?
+  set -e
+  [[ "$unreadable_status" == "3" ]] || {
+    echo "budget on $unreadable should exit 3, got: $unreadable_status" >&2
+    exit 1
+  }
+done
+
+# The review_over_budget probe, run as resume.md writes it.
+budget_probe="$(sed -n 's/^| `review_over_budget` | `\([^`]*\)`.*/\1/p' work-issue/references/resume.md)"
+[[ -n "$budget_probe" ]] || {
+  echo "could not extract the review_over_budget probe from work-issue/references/resume.md" >&2
+  exit 1
+}
+for budget_case in "build30-review61:true" "build30-review59:false" "bad-label:null" "missing:false"; do
+  budget_run="$tmp/budget-${budget_case%%:*}"
+  mkdir -p "$budget_run"
+  [[ "${budget_case%%:*}" == missing ]] || cp "$timing_dir/${budget_case%%:*}.txt" "$budget_run/timing.log"
+  budget_got="$(bash -c "${budget_probe//<RUN_DIR>/$budget_run}" 2>/dev/null)"
+  [[ "$budget_got" == "${budget_case##*:}" ]] || {
+    echo "review_over_budget on ${budget_case%%:*} should print ${budget_case##*:}, got: $budget_got" >&2
+    exit 1
+  }
+done
+# The log's writers. Without them the budget reads an empty log as under
+# budget forever.
+require_text work-issue/SKILL.md 'echo "<n> start $(date -u +%FT%TZ)" >> RUN_DIR/timing.log'
+require_text work-issue/SKILL.md "with \`poll start\` written to \`RUN_DIR/timing.log\` before the first poll and \`poll end\` after the last"
+require_text work-issue/SKILL.md "A raise appends \`budget-raised <ratio>\` to the log"
+# Every in-run check passes --now; the resume probe does not, so a crashed
+# run's dead hours stay out.
+require_text work-issue/SKILL.md 'budget --timing RUN_DIR/timing.log --now "$(date -u +%FT%TZ)"'
+refute_text work-issue/references/resume.md "budget --timing <RUN_DIR>/timing.log --now"
+# The close-first rule, which ends a crashed interval at the log's newest stamp.
+require_text work-issue/SKILL.md "append \`<n> end <latest>\` first"
+require_text work-issue/SKILL.md "awk 'NF == 3 { print \$3 }' RUN_DIR/timing.log | sort | tail -1"
+require_text work-issue/references/resume.md "Passing \`--ratio <r>\` to one \`budget\` command outranks every \`budget-raised\` line"
+require_text work-issue/SKILL.md "the queue, the \`budget\` line,"
 
 # The triage_blocking_rows probe, run as resume.md writes it against a round
 # whose finding text says "P1" on a row the reviewer marked none. Reading the
@@ -1415,8 +1569,8 @@ require_text work-issue/references/resume.md "(resume at item 1: the reproducer 
 refute_text work-issue/SKILL.md "(resume at item 1's adversarial-review invocation)"
 refute_text work-issue/references/resume.md "(resume at item 1's adversarial-review invocation)"
 # The queue's comment is probed, and rows 14 and 17 both read it.
-require_text work-issue/SKILL.md "or a triage row without a reply URL | Step 8 |"
-require_text work-issue/references/resume.md "or a triage row without a reply URL | Step 8 |"
+require_text work-issue/SKILL.md "or a triage row without a reply URL | Step 8;"
+require_text work-issue/references/resume.md "or a triage row without a reply URL | Step 8;"
 # The probe compares the queue's rows to the comment, never just the heading:
 # a comment from an earlier round satisfied the heading test while a later
 # round's rows had never reached it.

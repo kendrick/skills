@@ -20,15 +20,15 @@
   "ar_complete": false,
   "conflict": false,
   "rebase_in_progress": false,
-  "ahead_of_origin": false,
+  "ahead_of_origin": true,
   "triage_rounds": 1,
   "triage_newer_than_since": true,
-  "triage_inscope_rows": 0,
-  "repair_reports": 0,
-  "triage_rows_unanswered": 0,
+  "triage_inscope_rows": 2,
+  "repair_reports": 1,
+  "triage_rows_unanswered": 3,
   "deferred_comment_needed": false,
-  "newest_repair_report": false,
-  "triage_blocking_rows": 0,
+  "newest_repair_report": true,
+  "triage_blocking_rows": 1,
   "repair_ar_settled": false,
-  "review_over_budget": false
+  "review_over_budget": true
 }
