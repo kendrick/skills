@@ -1521,6 +1521,15 @@ scope_got="$(run_diff_probe)"
   echo "repair_diff_triggers with no repair-base file should print false, got: $scope_got" >&2
   exit 1
 }
+# A base SHA that no longer resolves makes `git diff` fail. Piped straight into
+# the matcher, that failure was masked and the probe printed false, dropping
+# the re-fire in silence; the probe has to print null so the run stops.
+printf 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n' >"$scope_run/redteam/repair-base-1"
+scope_got="$(run_diff_probe 2>/dev/null)"
+[[ "$scope_got" == "null" ]] || {
+  echo "repair_diff_triggers with an unresolvable repair-base SHA should print null, got: $scope_got" >&2
+  exit 1
+}
 
 # A field the probe could not answer is written as null. A field that is absent
 # entirely must stop the run instead of defaulting, because a silent `false`
@@ -1699,9 +1708,21 @@ require_text work-issue/SKILL.md "Write \`date -u +%FT%TZ\` to \`RUN_DIR/pushed_
 # Step 5's "Left out" is where adversarial-review's LISTED advisories land
 # (adversarial-review row 39, work-issue row 96), in place of one issue each.
 require_text work-issue/SKILL.md "\"Left out\" names every finding \`adversarial-review\`'s report lists as \`LISTED\`"
-# Step 8 re-fires adversarial-review on a repair only for a P0/P1/blocking
-# round (work-issue row 97), into the repair's own files.
-require_text work-issue/SKILL.md "The trigger re-fires only where that triage round held a row whose Severity is \`P0\`, \`P1\`, or \`blocking\`."
+# Step 8 re-fires adversarial-review on a repair on two conditions, into the
+# repair's own files: the round held a P0/P1/blocking row and the full diff
+# fires (work-issue row 97), or the repair's own diff hits rows 1, 2, or 4
+# (row 104, #162). Each condition is pinned on its own, so dropping either one
+# goes red, and the repair-diff one names its base so it can't drift back to
+# the whole branch.
+require_text work-issue/SKILL.md "Once the reproducer comes back clean, the trigger re-fires on either of two conditions."
+require_text work-issue/SKILL.md "**Severity:** that triage round held a row whose Severity is \`P0\`, \`P1\`, or \`blocking\`, and the full diff fires the trigger as Step 4 item 7 evaluates it."
+require_text work-issue/SKILL.md "**Repair diff:** the repair's own diff, \`git diff \"\$(cat RUN_DIR/redteam/repair-base-<k>)\"..HEAD | adversarial-review/scripts/match-triggers.py rows --only 1,2,4\`, prints a row"
+require_text work-issue/SKILL.md "second line \`condition: repair-diff\`, \`condition: severity\`, \`condition: both\`, or \`condition: none\`, naming which fired"
+require_text work-issue/SKILL.md "A repair whose round held no such row and whose own diff prints no row gets the reproducer and nothing more"
+# Step 7 writes the base before its dispatch and never overwrites it: a base
+# rewritten on resume would drop the commits an interrupted repair already made.
+require_text work-issue/SKILL.md "Before the dispatch, write \`git rev-parse HEAD\` to \`RUN_DIR/redteam/repair-base-<k>\`, k the triage round this repair answers, unless that file already exists. Write it once and never overwrite it"
+require_text _maintenance/work-issue/RATIONALE.md "The new condition reads the repair's own diff and never the whole branch."
 require_text work-issue/SKILL.md "RUN_DIR/redteam/trigger-repair-<k>.txt"
 require_text work-issue/references/redteam.md "RUN_DIR/redteam/ar-state-repair-<k>.txt"
 require_text work-issue/references/triage.md "carries a \`Severity\` cell"
