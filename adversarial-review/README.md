@@ -10,7 +10,7 @@ The usual fix is to run several reviewers and trust whatever they agree on. That
 
 This skill swaps the confidence mechanism. Territories don't overlap, so there's nobody to agree with, and instead every finding gets handed to a fresh agent that never saw the reasoning behind it and is told to break it. Only a finding that survives can block a merge. Findings that don't survive still get recorded, with the counter-evidence that killed them, because "we checked and it was fine" is worth knowing.
 
-Then there's the part nobody plans for. In the session this design came out of, two of the three merge-blockers weren't in the original diff at all—they were introduced while fixing the previous round's findings. Code written under review pressure is the most suspicious code in the run, and a review that stops when the first round's fixes land will miss it. So the loop keeps going, re-reviewing exactly the territories a fix touched, until a round reproduces no blocker. Advisories from that round get listed, but they don't start another one, because every fix draws a slightly smaller advisory and a loop that waits for a spotless round rarely ends.
+Then there's the part nobody plans for. In the session this design came out of, two of the three merge-blockers weren't in the original diff at all—they were introduced while fixing the previous round's findings. Code written under review pressure is the most suspicious code in the run, and a review that stops when the first round's fixes land will miss it. So the loop keeps going, re-reviewing exactly the territories a fix touched, until a round reproduces no blocker a normal run can reach. Advisories from that round get listed, but they don't start another one, because every fix draws a slightly smaller advisory and a loop that waits for a spotless round rarely ends.
 
 ## How It Works
 
@@ -18,11 +18,11 @@ Preflight resolves your fixed point and pins the merge-base SHA, so a branch mov
 
 Then it matches the diff's changed lines against a trigger table—money, authz, state transitions, schema, budgets, representation boundaries—and partitions the changed files into territories. Each file has exactly one owner, but a territory carries every suspicion class its files earned, so a file that's both an authz change and a money change gets hunted both ways. A script proves the territories don't overlap before anything runs. Overlap is a hard error, not a warning.
 
-One finder per territory, in parallel, each told what to be suspicious of, what's already settled and off-limits, and to trust code over comments. Their findings go into an append-only ledger as claims, not conclusions.
+One finder per territory, in parallel, each told what to be suspicious of, what's already settled and off-limits, and to trust code over comments. Each finding also says what it takes to hit the bug and whether it fails loudly or silently, and the finder sets both before anyone verifies it. The findings go into an append-only ledger as claims, not conclusions.
 
 Then the gate. Fresh verifiers get the claim, the quoted code, and the proposed reproduction command—never the finder's reasoning, and never its proposed fix, which is the reasoning wearing a hat. Each finding lands as reproduced, not reproduced, or unverifiable, and it's the routing that makes it matter:
 
-- **Reproduced and blocking** — a failing test gets written from the repro command, before the fix. A test written afterward is written by someone who already believes the fix works.
+- **Reproduced and blocking** — when a normal run hits the bug, or the finder couldn't say, a failing test gets written from the repro command, before the fix. A test written afterward is written by someone who already believes the fix works. A blocker that only a hand-edited input or one machine's setup can reach skips the fix cycle. If it fails loudly, the report lists it with its repro command. If it fails silently, the review escalates it to you, because whoever hits it won't notice and come back to the list.
 - **Reproduced and advisory** — listed in the report with its repro command, ready for a PR's "Left out" section. `--file-advisories` sends it to `file-issue` instead.
 - **Not reproduced** — closed in the ledger, counter-evidence recorded.
 - **Unverifiable** — filed as an open question for `inbox-to-memory`.

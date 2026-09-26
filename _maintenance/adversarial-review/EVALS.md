@@ -6,7 +6,7 @@ Method follows `skill-creator`: run each scenario with the skill and without it,
 
 ## The planted-bug fixture
 
-Build a throwaway repo with a base commit and one feature commit. The feature commit plants six things, and the last two are the ones most eval suites forget.
+Build a throwaway repo with a base commit and one feature commit. The feature commit plants eight things. The fifth and sixth are the ones most eval suites forget, and the last two grade reachability.
 
 1. **A money bug** — `total += round(line.amount * qty, 2)` inside the loop, so rounding happens per line and drifts on accumulation. Reproducible: sum a basket whose exact total ends in a half cent.
 2. **An authz bug** — a query whose docstring says results are scoped to the caller's tenant, with no tenant predicate in the SQL. Reproducible: query as tenant A and see tenant B's row.
@@ -14,6 +14,8 @@ Build a throwaway repo with a base commit and one feature commit. The feature co
 4. **A red herring** — a deliberate rename covered by the out-of-scope list. Should never reach the ledger.
 5. **A false-looking-but-correct passage** — code that reads like an off-by-one but is guarded upstream, e.g. `items[n]` where the caller has already bounded `n`. This is the verifier's test, not the finder's: a finder reporting it is behaving correctly, and the run passes only if it ends `NOT_REPRODUCED` with counter-evidence naming the guard. Build this one carefully: the first run's version carried a docstring that was independently false, so the finder reported that instead and reproduced it, which grades nothing. Everything a finder could say about this passage has to be wrong, or the probe does not probe.
 6. **A value whose obvious check recomputes the implementation**—a price rendered through `format_price`. It rounds with Python's `round`, so 4.005 comes out `$4.00` where the spec rounds half up to `$4.01`. The tempting assertion is `render(item) == format_price(item.price)`, which agrees with the code whatever `format_price` does and so passes on the bug. The independent route exists and is duller: assert the literal `"$4.01"`. A finder proposing the round-trip and a verifier stamping `REPRODUCED` on it both fail row 27's rule.
+7. **A blocker only a hand-edited input reaches, failing loudly**—a loader that raises `ValueError` on a config line placed above the section it belongs to. The writer in the same commit always emits sections first, so no code path produces that file, and the loader's error names the line. Correct fields: `hand_edited_input` + `loud`.
+8. **A blocker only one machine's setup reaches, failing silently**—a check that pipes its input through `grep -vFf patterns.txt` with `patterns.txt` empty in the fixture. BSD and GNU `grep` pass every line; ugrep prints nothing and the check reports zero problems. Correct fields: `specific_environment` + `silent`.
 
 Also make a **docs-only sibling diff** (README and comment changes alone) to exercise the depth governor.
 
@@ -28,7 +30,7 @@ Also make a **docs-only sibling diff** (README and comment changes alone) to exe
 | 5 | Detection | At least two of the three planted bugs end `REPRODUCED`, each with a real command and its actual output in the ledger. |
 | 6 | Out-of-scope discipline | The red herring appears in no findings file and no ledger row. |
 | 7 | Verifier independence | The false-looking passage, if reported, ends `NOT_REPRODUCED` with counter-evidence naming the upstream guard. A run where it ends `REPRODUCED` is a failure of the gate, not of the finder. |
-| 8 | Test-before-fix | Every `REPRODUCED` blocking finding has a `TEST_WRITTEN` event whose artifact exists and fails when run against the unfixed code. |
+| 8 | Test-before-fix | Every `REPRODUCED` blocking finding whose `reachability` is `normal_use` or `unknown` has a `TEST_WRITTEN` event whose artifact exists and fails when run against the unfixed code. |
 | 9 | Round loop | Apply a fix that deliberately introduces a new bug in the same territory. Round 2 fans out to only the intersected territory, and catches it. |
 | 10 | Scope amendment | Apply a fix that touches a path no territory owns. `intersect` exits 1, and the run records an `amendments` entry and re-validates before fanning out. |
 | 11 | Termination | A round producing zero `REPRODUCED` findings in its intersected territories ends the loop without asking anyone. |
@@ -36,6 +38,7 @@ Also make a **docs-only sibling diff** (README and comment changes alone) to exe
 | 13 | Depth governor | The docs-only diff runs Depth 0 with no opus finder. A run that spends an opus fan-out on comment changes fails this, whatever else it found. |
 | 14 | Calibration signal | A territory seeded with untestable hunt items reports a `calibration:` line and does **not** re-fan-out. |
 | 15 | Method independence | The sixth plant ends `REPRODUCED` on a command asserting the literal `"$4.01"`. It fails two ways, and they are different failures: `REPRODUCED` on a command calling `format_price` means the gate never fired, and `UNVERIFIABLE` means it fired and then stopped short of the route that was there. Step 5 licenses `UNVERIFIABLE` only where no independent route exists, and this plant has one. |
+| 16 | Reachability calibration | The money bug (plant 1) carries `normal_use` and ends `TEST_WRITTEN`. Plant 7 carries `hand_edited_input` + `loud` and ends `LISTED` with a reason naming the reachability. Plant 8 carries `specific_environment` + `silent` and ends `ESCALATED`, named in `escalation.md`. A finder that marks plant 1 anything narrower than `normal_use` fails this whatever else it got right: that downgrade lists a blocker every user hits. `unknown` on plants 7 or 8 is a miss that costs a fix cycle, not a failure. |
 
 ## First run, 2026-08-17
 
@@ -51,7 +54,7 @@ Scenarios 4, 5, 6, 8, 9, 10, and 12 passed. Scenario 7 landed differently than w
 
 Two defects in the skill itself surfaced and were fixed before the run finished: signals were matching as substrings, and preflight's exclusions were never applied to the round loop's fix diff. Both have rows in the RATIONALE ledger.
 
-Still unexercised: scenarios 3, 11, 13, 14, and 15. Scenario 15 and the sixth plant were written after this run and have never been executed. Scenarios 1 and 2 were confirmed by hand against the fixture rather than through a full run. Termination by the zero-reproduced rule never got tested, because no round of this run was clean; that needs a fixture whose fixes hold.
+Still unexercised: scenarios 3, 11, 13, 14, 15, and 16. Scenario 15 and the sixth plant, and scenario 16 with plants 7 and 8, were written after this run and have never been executed. Scenarios 1 and 2 were confirmed by hand against the fixture rather than through a full run. Termination by the zero-reproduced rule never got tested, because no round of this run was clean; that needs a fixture whose fixes hold.
 
 ## Grading the delta
 

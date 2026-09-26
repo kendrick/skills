@@ -165,6 +165,35 @@ require_text adversarial-review/SKILL.md "Under \`--file-advisories\`, hand it t
 require_text adversarial-review/SKILL.md "every \`LISTED\` finding appears in the listed section with its repro command"
 require_text adversarial-review/assets/event.schema.json '"LISTED"'
 refute_text adversarial-review/SKILL.md "| REPRODUCED + advisory | Hand to the \`file-issue\` skill"
+# A reproduced blocker routes on reachability and failure mode as well as
+# claimed_severity (#160, RATIONALE row 46): a reachable one takes a failing
+# test, a loud one outside normal use is listed, a silent one escalates. The
+# rows must say what ledger.py enforces, so each is pinned, and the old
+# severity-only row is refuted so it can't come back beside them.
+require_text adversarial-review/SKILL.md "| REPRODUCED + blocking + \`normal_use\` or \`unknown\` | Write a failing test from the repro command"
+require_text adversarial-review/SKILL.md "| REPRODUCED + blocking + \`specific_environment\` or \`hand_edited_input\` + \`loud\` | List it: record \`LISTED\` with a \`--reason\` naming its reachability"
+require_text adversarial-review/SKILL.md "| REPRODUCED + blocking + \`specific_environment\` or \`hand_edited_input\` + \`silent\` | Escalate it: name the finding in \`RUN_DIR/escalation.md\`"
+refute_text adversarial-review/SKILL.md "| REPRODUCED + blocking | Write a failing test"
+require_text adversarial-review/SKILL.md "REPRODUCED + blocking routes to escalation instead, whatever its reachability"
+require_text adversarial-review/SKILL.md "--claimed-severity <s> --reachability <r> --failure-mode <m>"
+# Step 7 counts reachable blockers alone, matching ledger.py state; Step 8
+# puts silent findings first, since a silent defect reads as a working run.
+require_text adversarial-review/SKILL.md "and whose \`reachability\` is \`normal_use\` or \`unknown\`, in the territories it re-reviewed"
+require_text adversarial-review/SKILL.md "grouped by \`failure_mode\` with \`silent\` first"
+require_text adversarial-review/SKILL.md "within each territory every \`silent\` finding comes before every \`loud\` one"
+require_text adversarial-review/SKILL.md "fixed behind a failing test, listed with its reachability, or named in the escalation"
+require_text adversarial-review/references/finder-prompt.md "\`unknown\`: you cannot say. It routes exactly as \`normal_use\` does"
+require_text adversarial-review/references/finder-prompt.md "\`specific_environment\` + \`silent\`, because only a machine with ugrep"
+require_text adversarial-review/references/finder-prompt.md "\`hand_edited_input\` + \`loud\`, because no script writes an event above its finding"
+require_text adversarial-review/references/finder-prompt.md '"failure_mode": "silent"'
+require_text adversarial-review/README.md "until a round reproduces no blocker a normal run can reach"
+require_text adversarial-review/README.md "If it fails silently, the review escalates it to you"
+require_text _maintenance/adversarial-review/EVALS.md "| 16 | Reachability calibration |"
+# The verifier never derives reachability or failure mode (Deliberately Not
+# Built): the finder binds both before verification, and a verifier that
+# re-derived them would reopen the routing at the point it has to stay fixed.
+refute_text adversarial-review/references/verifier-prompt.md "reachability"
+refute_text adversarial-review/assets/event.schema.json "reachability"
 require_text adversarial-review/SKILL.md "inbox-to-memory"
 
 # The round loop's rationale is load-bearing, not decoration: it is the whole

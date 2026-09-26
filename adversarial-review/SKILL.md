@@ -81,8 +81,11 @@ Append every finding, in the order its finder ranked it:
 
 ```
 adversarial-review/scripts/ledger.py append-finding --ledger RUN_DIR/ledger.jsonl \
-    --id F-r<round>-<territory>-<NN> --round <N> --territory <name> ...
+    --id F-r<round>-<territory>-<NN> --round <N> --territory <name> ... \
+    --claimed-severity <s> --reachability <r> --failure-mode <m>
 ```
+
+Copy `claimed_severity`, `reachability`, and `failure_mode` from the finder's JSON exactly as it wrote them. All three are bound before verification, and Step 6 routes on them.
 
 This step is transcription. Two territories reporting the same underlying bug is information about the bug, not duplication to clean up; re-ranking across territories reintroduces the single ordering the per-territory verdicts exist to avoid. Dedupe, re-rank, and synthesis all belong after verification, if anywhere.
 
@@ -104,14 +107,20 @@ Only REPRODUCED can block. A finding nobody could reproduce is not a small findi
 
 ## Step 6 — Disposition
 
-Routing is mechanical. Nothing here is a judgment call, which is the point: a gate that can be argued with is a gate that gets argued with at the end of a long review. Blocking and advisory are the finding's `claimed_severity`, exactly as the finder recorded it—set before verification ran, and not reopened here. A severity fixed before anyone had a stake in the routing is what lets the table stay mechanical.
+Routing is mechanical. Nothing here is a judgment call, which is the point: a gate that can be argued with is a gate that gets argued with at the end of a long review. Blocking and advisory are the finding's `claimed_severity`, exactly as the finder recorded it—set before verification ran, and not reopened here. A severity fixed before anyone had a stake in the routing is what lets the table stay mechanical. A blocker's `reachability` and `failure_mode` work the same way: the finder bound them, the verifier never saw them, and nobody re-derives them here.
 
 | State | Route |
 |---|---|
-| REPRODUCED + blocking | Write a failing test from the repro command **before** writing the fix. Record `TEST_WRITTEN` with the test's path. |
+| REPRODUCED + blocking + `normal_use` or `unknown` | Write a failing test from the repro command **before** writing the fix. Record `TEST_WRITTEN` with the test's path. |
+| REPRODUCED + blocking + `specific_environment` or `hand_edited_input` + `loud` | List it: record `LISTED` with a `--reason` naming its reachability, such as `listed in PR Left Out: hand_edited_input`, and no test, no fix. Step 8's report carries it with its repro command. |
+| REPRODUCED + blocking + `specific_environment` or `hand_edited_input` + `silent` | Escalate it: name the finding in `RUN_DIR/escalation.md` with its repro command, and record `ESCALATED` with a reason naming its reachability and failure mode. Write no test and no fix; the human merging rules on it. |
 | REPRODUCED + advisory | List it: record `LISTED` with a `--reason` naming where it is listed, such as `listed in PR Left Out`, and no artifact. Step 8's report carries it with its repro command. Under `--file-advisories`, hand it to the `file-issue` skill instead, one invocation per finding, since it files exactly one issue per run, and record `ISSUE_FILED` with the URL. |
 | NOT_REPRODUCED | Record `CLOSED`, with the verifier's counter-evidence already in the ledger. |
 | UNVERIFIABLE | Emit an open question for `inbox-to-memory`. Record `QUESTION_FILED`. |
+
+`ledger.py` enforces the three blocking rows at `append-event` and again at `validate`, and a refusal opens with `reachability rule:`. `unknown` routes as `normal_use`, so a finder who could not say never downgrades a blocker.
+
+A blocker only a hand-edited input or one machine's setup can reach still cost a full fix cycle when it routed like any other: most late blockers in the #151–#153 run were that kind. A loud one announces itself to whoever hits it, so listing it is enough. A silent one leaves the run reading as clean on the one machine or input that hits it, so nobody comes back to a listing, and it goes to a human instead.
 
 A listed advisory gets no test, no fix, and no issue. Most advisories are test-strength gaps or comment fixes in the diff under review: filed one by one they become a backlog of tickets that cost more to triage than the change did, and fixed inside the loop each fix draws the next advisory.
 
@@ -119,11 +128,11 @@ The failing test comes first because that is what makes the finding survive its 
 
 For an open question, use `inbox-to-memory`'s own detection rule: a directory holding `_memory/` or `entries/`, with a queue at `_inbox/` at that level or under `notes/`. Write a dated markdown file there carrying the claim, the quoted evidence, and why verification could not settle it. Where no opted-in scope exists, keep the question in the report and record the reason instead—inventing a queue somewhere is worse than reporting.
 
-In a **waived** run (Step 2), REPRODUCED + blocking routes to escalation instead, and so does REPRODUCED + advisory: name the finding in `RUN_DIR/escalation.md` with its repro command, record `ESCALATED` with the reason `waived: scope not confirmed`, and write no test, no fix, and no issue. An UNVERIFIABLE finding stays in the report, recorded `QUESTION_FILED` with that reason and no artifact. A waived run writes nothing outside its run directory. Any finding may be a settled decision the list left out, and only the user can tell which. `--file-advisories` changes nothing here: `file-issue` would stop the unattended run to ask.
+In a **waived** run (Step 2), REPRODUCED + blocking routes to escalation instead, whatever its reachability, and so does REPRODUCED + advisory: name the finding in `RUN_DIR/escalation.md` with its repro command, record `ESCALATED` with the reason `waived: scope not confirmed`, and write no test, no fix, and no issue. An UNVERIFIABLE finding stays in the report, recorded `QUESTION_FILED` with that reason and no artifact. A waived run writes nothing outside its run directory. This is the one case that records `ESCALATED` on a loud blocker outside normal use, and `ledger.py` accepts it there for that reason. Any finding may be a settled decision the list left out, and only the user can tell which. `--file-advisories` changes nothing here: `file-issue` would stop the unattended run to ask.
 
 `--report-only` skips every action in this table and reports what would have happened.
 
-**Done when:** every finding id carries a terminal outcome event, and every test written for a blocking finding exists and fails.
+**Done when:** every finding id carries a terminal outcome event, `ledger.py validate` exits 0 so every blocker's outcome matches its reachability and failure mode, every test written for a blocking finding exists and fails, and every silent blocker outside normal use is named in `escalation.md`.
 
 ## Step 7 — Round Loop
 
@@ -141,13 +150,13 @@ Re-run Steps 3 through 6 for the printed territories only, at `--round N+1`, wit
 
 A non-zero exit from `intersect` means the fix touched a path no territory owns. Amend the scope contract—add the path to the nearest territory with a recorded `amendments` entry, re-run `validate`—and then fan out. A blind spot that appears mid-run is exactly what should stop and get written down.
 
-The loop ends when `intersect` prints nothing, or when a round produces zero REPRODUCED findings whose `claimed_severity` is `blocking` in the territories it re-reviewed. Decide the second with the ledger rather than by reading it:
+The loop ends when `intersect` prints nothing, or when a round produces zero REPRODUCED findings whose `claimed_severity` is `blocking` and whose `reachability` is `normal_use` or `unknown`, in the territories it re-reviewed. A blocker outside normal use was listed or escalated in Step 6 and is never fixed in the loop, so it starts no round. Decide the second with the ledger rather than by reading it:
 
 ```
 adversarial-review/scripts/ledger.py state --ledger RUN_DIR/ledger.jsonl --round N
 ```
 
-Its last line is `loop: stop` or `loop: continue`. A round's advisory findings still take their Step 6 disposition, and none of them starts another round. Every fix is new code, and new code draws an advisory a notch smaller than the last, so a loop that waits for a round with no reproduced findings at all almost never ends: on cambium #23 and #26 the review loops around each lane ran 7 repair cycles and found 1 blocker among about 30 reproduced findings. At `--max-rounds` with blockers still landing, write `RUN_DIR/escalation.md` naming the unresolved finding ids and what each still needs, record `ESCALATED` for each, and stop. Any failed territory gets its own section there: a territory that never reported is a different kind of unknown than a blocker that will not die, and the reader should know which they are looking at. Three rounds of new blockers means something structural is wrong with the change, and a fourth automated round is less use than a human reading the escalation.
+Its last line is `loop: stop` or `loop: continue`, and its `blocking (REPRODUCED)` count holds reachable blockers alone. A round's advisory findings still take their Step 6 disposition, and none of them starts another round. Every fix is new code, and new code draws an advisory a notch smaller than the last, so a loop that waits for a round with no reproduced findings at all almost never ends: on cambium #23 and #26 the review loops around each lane ran 7 repair cycles and found 1 blocker among about 30 reproduced findings. At `--max-rounds` with reachable blockers still landing, write `RUN_DIR/escalation.md`, or add to the one Step 6 started, naming the unresolved finding ids and what each still needs, record `ESCALATED` for each, and stop. Any failed territory gets its own section there: a territory that never reported is a different kind of unknown than a blocker that will not die, and the reader should know which they are looking at. Three rounds of new blockers means something structural is wrong with the change, and a fourth automated round is less use than a human reading the escalation.
 
 **Done when:** the loop exited because `intersect` printed nothing or `ledger.py state --round N` printed `loop: stop` for the newest round, or `escalation.md` exists and every unresolved finding is named in it.
 
@@ -155,11 +164,11 @@ Its last line is `loop: stop` or `loop: continue`. A round's advisory findings s
 
 Report per territory. There is deliberately no single cross-territory verdict: one axis passing must never mask another failing, and a combined verdict is exactly the artifact that lets it.
 
-For each territory give its verdict, its findings with terminal dispositions, and the one line its finder wrote about what works. A territory whose finder failed carries the verdict UNREVIEWED—nobody managed to look, which must never read like somebody looked and found nothing. Then the run-level facts: rounds taken, what each round's fixes introduced, tests written, issues filed, questions filed. Then every `LISTED` finding, each with its id, its claim, and the repro command with its observed output, in a section a wrapping skill can copy into a pull-request body.
+For each territory give its verdict, its findings with terminal dispositions grouped by `failure_mode` with `silent` first, and the one line its finder wrote about what works. Silent findings lead because a silent defect reads as a working run to whoever meets it, and this report is the one place it announces itself. A territory whose finder failed carries the verdict UNREVIEWED—nobody managed to look, which must never read like somebody looked and found nothing. Then the run-level facts: rounds taken, what each round's fixes introduced, tests written, issues filed, questions filed. Then every `LISTED` finding, each with its id, its claim, its reachability when it is a blocker, and the repro command with its observed output, in a section a wrapping skill can copy into a pull-request body.
 
 Surface any `calibration:` line `ledger.py state` produced. A territory whose findings were mostly UNVERIFIABLE is telling you its hunt items generate untestable claims—worth fixing in the trigger table before the next run, and deliberately not a trigger for re-fanning-out, since termination has to stay mechanical.
 
-**Done when:** every territory and every finding id appears with its terminal disposition, every `LISTED` finding appears in the listed section with its repro command, and every blocking finding is either fixed behind a failing test or named in the escalation.
+**Done when:** every territory and every finding id appears with its terminal disposition, every `LISTED` finding appears in the listed section with its repro command, within each territory every `silent` finding comes before every `loud` one, and every blocking finding is fixed behind a failing test, listed with its reachability, or named in the escalation.
 
 ## Further Reading
 
