@@ -1046,7 +1046,22 @@ def parse_timing_log(text, label, now=None):
     # pairs the earliest unclosed start, not the most recent.
     open_starts = {}
     intervals = {}
+    seen = None
     for phase, kind, moment in events:
+        if kind == "start" and phase != "poll":
+            # Steps run one at a time, so a new step's start ends any other
+            # step a crash left open. The resume table often jumps a run to a
+            # different step than the one that crashed, and SKILL.md's
+            # close-first rule only reaches the label about to start: a `3`
+            # left open grew build with the clock and hid every review minute.
+            # The close lands on the newest stamp before this line, the last
+            # thing the run recorded, so a crash's dead hours count toward
+            # nothing. `poll` nests inside `6` and takes no part.
+            for other, pending in open_starts.items():
+                if other in ("poll", phase):
+                    continue
+                while pending:
+                    intervals.setdefault(other, []).append((pending.pop(0), seen))
         if kind == "start":
             open_starts.setdefault(phase, []).append(moment)
         else:
@@ -1055,6 +1070,7 @@ def parse_timing_log(text, label, now=None):
                 problems.append(f"{label}: {phase!r} end with no open start")
                 continue
             intervals.setdefault(phase, []).append((pending.pop(0), moment))
+        seen = moment if seen is None else max(seen, moment)
     if problems:
         raise InputError(problems)
 

@@ -129,7 +129,7 @@ require_file tests/fixtures/work-issue/review/changes-requested.json
 for gated in 10 11 16 17; do
   require_file "tests/fixtures/work-issue/probes/row-$gated-over-budget.json"
 done
-for timing in build30-review61 build30-review59 poll-excluded poll-nested budget-raised open-start-closed-at-poll open-review build-25s crash-closed-at-latest bad-label end-with-no-start; do
+for timing in build30-review61 build30-review59 poll-excluded poll-nested budget-raised open-start-closed-at-poll open-review build-25s crash-closed-at-latest open-earlier-step crash-open-other-step bad-label end-with-no-start; do
   require_file "tests/fixtures/work-issue/timing/$timing.txt"
 done
 require_file tests/fixtures/work-issue/review/pr-comment-finding.json
@@ -1282,6 +1282,11 @@ grep -Fq "phase: stop reason: unknown probe fields: review_over_budget" <<<"$(py
 # crashed `6` closed at its last stamp by SKILL.md's close-first rule, so the
 # 4.5 h it sat dead counts toward nothing. build-25s is a build under 30 s,
 # which rounds to 0m and once read 5 h of review as `ratio: n/a over: no`.
+# open-earlier-step leaves `3` open when the run resumes at Step 4, and
+# crash-open-other-step leaves `7` open across a crash before Step 8: the
+# next step's start ends each at the stamp before it. Left open, the first
+# grew build with the clock to 235m and the second charged 4 h of dead time
+# to review.
 timing_dir=tests/fixtures/work-issue/timing
 declare -a budget_cases=(
   "build30-review61:build: 30m review: 61m ratio: 2.03 over: yes"
@@ -1292,6 +1297,8 @@ declare -a budget_cases=(
   "open-start-closed-at-poll:build: 30m review: 5m ratio: 0.17 over: no"
   "crash-closed-at-latest:build: 30m review: 15m ratio: 0.50 over: no"
   "build-25s:build: 0m review: 300m ratio: 720.00 over: yes"
+  "open-earlier-step:build: 20m review: 210m ratio: 10.50 over: yes"
+  "crash-open-other-step:build: 30m review: 40m ratio: 1.33 over: no"
 )
 for case in "${budget_cases[@]}"; do
   fixture="${case%%:*}"
