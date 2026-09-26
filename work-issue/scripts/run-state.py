@@ -1056,9 +1056,13 @@ def parse_timing_log(text, label, now=None):
             # left open grew build with the clock and hid every review minute.
             # The close lands on the newest stamp before this line, the last
             # thing the run recorded, so a crash's dead hours count toward
-            # nothing. `poll` nests inside `6` and takes no part.
+            # nothing. An open `poll` closes the same way: a nested poll
+            # writes `poll end` before the next start, so only a crashed one
+            # is still open here, and left open it ran to the log's end and
+            # its subtraction ate every later review minute. A `poll start`
+            # closes nothing, since it opens inside a running `6`.
             for other, pending in open_starts.items():
-                if other in ("poll", phase):
+                if other == phase:
                     continue
                 while pending:
                     intervals.setdefault(other, []).append((pending.pop(0), seen))
