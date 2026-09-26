@@ -1716,7 +1716,12 @@ require_text work-issue/SKILL.md "\"Left out\" names every finding \`adversarial
 # the whole branch.
 require_text work-issue/SKILL.md "Once the reproducer comes back clean, the trigger re-fires on either of two conditions."
 require_text work-issue/SKILL.md "**Severity:** that triage round held a row whose Severity is \`P0\`, \`P1\`, or \`blocking\`, and the full diff fires the trigger as Step 4 item 7 evaluates it."
-require_text work-issue/SKILL.md "**Repair diff:** the repair's own diff, \`git diff \"\$(cat RUN_DIR/redteam/repair-base-<k>)\"..HEAD | adversarial-review/scripts/match-triggers.py rows --only 1,2,4\`, prints a row"
+require_text work-issue/SKILL.md "**Repair diff:** run \`git diff \"\$(cat RUN_DIR/redteam/repair-base-<k>)\"..HEAD\` as its own command and check its exit, then pass its output to \`adversarial-review/scripts/match-triggers.py rows --only 1,2,4\`"
+# Piped straight into the matcher, a failing diff reads as "no row" (#162
+# review); Step 8 and the resume probe both run it apart and check its exit.
+refute_text work-issue/SKILL.md "HEAD | adversarial-review/scripts/match-triggers.py rows --only 1,2,4\`, prints a row"
+# The probe prints through if/elif; an \`exit\` in it closes a pasted-into shell.
+refute_text work-issue/references/resume.md "{ echo null; exit; }"
 require_text work-issue/SKILL.md "second line \`condition: repair-diff\`, \`condition: severity\`, \`condition: both\`, or \`condition: none\`, naming which fired"
 require_text work-issue/SKILL.md "A repair whose round held no such row and whose own diff prints no row gets the reproducer and nothing more"
 # Step 7 writes the base before its dispatch and never overwrites it: a base
