@@ -124,6 +124,8 @@ require_file tests/fixtures/work-issue/probes/row-17-review-repair-unpushed.json
 # (read as "not fired", then published).
 require_file tests/fixtures/work-issue/probes/row-07-isolation-incomplete.json
 require_file tests/fixtures/work-issue/probes/row-11-trigger-unrecorded.json
+# A P2-only round whose repair diff hits a money, authz, or schema row (#162).
+require_file tests/fixtures/work-issue/probes/row-17-repair-diff-trigger.json
 require_file tests/fixtures/work-issue/review/changes-requested.json
 # One over-budget probe per gated row, and the timing logs the budget reads.
 for gated in 10 11 16 17; do
@@ -1170,7 +1172,7 @@ declare -a probe_cases=(
   "row-07:2" "row-07-isolation-incomplete:1" "row-08:3" "row-09:3" "row-10:4" "row-11:4" "row-11-trigger-unrecorded:4" "row-12:5" "row-13:5"
   "row-14:6" "row-15:6" "row-16:7" "row-17:8" "row-17-queued:8" "row-17-postpush:8"
   "row-10-repair-unverified:4" "row-10-repair-needed:4" "row-10-failed-twice:stop" "row-13-prepr-repair-clean:5" "row-16-earlier-queued:8" "row-17-review-repair-unpushed:8" "row-17-deferred-owed:8" "row-17-worker-queue:8" "row-18-answered:done" "row-18:done"
-  "row-17-repair-advisory-only:8" "row-17-repair-blocking:8" "row-17-repair-blocking-settled:8"
+  "row-17-repair-advisory-only:8" "row-17-repair-blocking:8" "row-17-repair-blocking-settled:8" "row-17-repair-diff-trigger:8"
   "row-10-over-budget:stop" "row-11-over-budget:stop" "row-16-over-budget:stop" "row-17-over-budget:stop"
 )
 for case in "${probe_cases[@]}"; do
@@ -1247,6 +1249,39 @@ grep -Fq "resume at Step 8 item 1 from the reproducer where trigger-repair-<k>.t
 settled_reason="$(python3 "$run_state" phase --probe "$probes_dir/row-17-repair-blocking-settled.json")"
 grep -Fq "adversarial-review" <<<"$settled_reason" && {
   echo "a repair whose adversarial-review settled must move on to the push, got: $settled_reason" >&2
+  exit 1
+}
+# The second re-fire condition (#162). A reviewer can label a real money,
+# authz, or schema blocker P2, so a round of P2 rows alone still re-fires when
+# the repair's own diff hits trigger rows 1, 2, or 4. The twin is the same
+# probe with the flag false, and it must fall through to row 17's push leg.
+# Both land at phase 8, so the reason is what tells them apart.
+diff_reason="$(python3 "$run_state" phase --probe "$probes_dir/row-17-repair-diff-trigger.json")"
+grep -Fq "phase: 8 reason: row 17:" <<<"$diff_reason" && grep -Fq "resume at Step 8 item 1 from the reproducer where trigger-repair-<k>.txt is absent" <<<"$diff_reason" || {
+  echo "a P2-only repair whose own diff hits a trigger row must re-enter Step 8 item 1 from the reproducer, got: $diff_reason" >&2
+  exit 1
+}
+python3 -c 'import json, sys
+probe = json.load(open(sys.argv[1]))
+assert probe["triage_blocking_rows"] == 0 and probe["repair_diff_triggers"] is True
+probe["repair_diff_triggers"] = False
+json.dump(probe, open(sys.argv[2], "w"))' "$probes_dir/row-17-repair-diff-trigger.json" "$tmp/repair-diff-quiet.json"
+quiet_reason="$(python3 "$run_state" phase --probe "$tmp/repair-diff-quiet.json")"
+grep -Fq "phase: 8 reason: row 17: the deferred-findings comment is owed" <<<"$quiet_reason" || {
+  echo "the same P2-only repair with a quiet diff should land past the re-fire leg on row 17's push leg, got: $quiet_reason" >&2
+  exit 1
+}
+grep -Fq "adversarial-review" <<<"$quiet_reason" && {
+  echo "a P2-only repair with a quiet diff must not re-enter adversarial-review, got: $quiet_reason" >&2
+  exit 1
+}
+# The #158 budget gate covers the new condition too: it starts a review cycle.
+python3 -c 'import json, sys
+probe = json.load(open(sys.argv[1]))
+probe["review_over_budget"] = True
+json.dump(probe, open(sys.argv[2], "w"))' "$probes_dir/row-17-repair-diff-trigger.json" "$tmp/repair-diff-over.json"
+grep -Fq "phase: stop reason: row 17: review time is over budget" <<<"$(python3 "$run_state" phase --probe "$tmp/repair-diff-over.json")" || {
+  echo "a P2-only repair re-firing on its own diff should hit the row-17 budget stop when over budget" >&2
   exit 1
 }
 
@@ -1428,6 +1463,64 @@ for tri_case in "triage-pipe:1" "triage-noseverity:null" "empty:0"; do
     exit 1
   }
 done
+
+# The repair_diff_triggers probe's scope (#162), run as resume.md writes it.
+# The branch changes billing.py's rounding and the repair touches README.md
+# only. Diffing from repair-base-<k> reads the repair alone and prints false.
+# Diffing from the merge-base, the nearest wrong rule, re-reads the branch's
+# money change on every repair and prints true: that is the every-repair loop
+# #151 removed from cambium #23/#26.
+diff_probe="$(sed -n 's/^| `repair_diff_triggers` | `\([^`]*\)`.*/\1/p' work-issue/references/resume.md \
+  | sed 's/\\|/|/g')"
+[[ -n "$diff_probe" ]] || {
+  echo "could not extract the repair_diff_triggers probe from work-issue/references/resume.md" >&2
+  exit 1
+}
+scope_repo="$tmp/scope-repo"
+scope_run="$tmp/scope-run"
+mkdir -p "$scope_run/redteam"
+# Pinned identity, no signing, no hooks: the user's global git config must not
+# decide whether a throwaway commit succeeds.
+scope_git() {
+  git -C "$scope_repo" -c user.name=smoke -c user.email=smoke@example.invalid \
+    -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"
+}
+git init -q -b main "$scope_repo"
+printf 'amount = round(price * qty, 2)\n' >"$scope_repo/billing.py"
+scope_git add billing.py
+scope_git commit -q -m base
+scope_git checkout -q -b issue-1
+printf 'amount = round(price * qty * (1 - discount), 2)\n' >"$scope_repo/billing.py"
+scope_git commit -q -am branch
+scope_git rev-parse HEAD >"$scope_run/redteam/repair-base-1"
+printf 'Run the tests before you push.\n' >"$scope_repo/README.md"
+scope_git add README.md
+scope_git commit -q -m repair
+run_diff_probe() {
+  local cmd="${diff_probe//<RUN_DIR>/$scope_run}"
+  cmd="${cmd//<TREE>/$scope_repo}"
+  cmd="${cmd//<newest triage round>/1}"
+  bash -c "$cmd" </dev/null
+}
+scope_got="$(run_diff_probe)"
+[[ "$scope_got" == "false" ]] || {
+  echo "repair_diff_triggers should read the repair's own README.md diff and print false, got: $scope_got (probe: $diff_probe)" >&2
+  exit 1
+}
+scope_git merge-base main issue-1 >"$scope_run/redteam/repair-base-1"
+scope_got="$(run_diff_probe)"
+[[ "$scope_got" == "true" ]] || {
+  echo "the same probe from the merge-base should see billing.py's round( and print true, got: $scope_got" >&2
+  exit 1
+}
+# A repair from before #162 has no base file, and falls back to the severity
+# condition rather than stopping the run on a null.
+rm "$scope_run/redteam/repair-base-1"
+scope_got="$(run_diff_probe)"
+[[ "$scope_got" == "false" ]] || {
+  echo "repair_diff_triggers with no repair-base file should print false, got: $scope_got" >&2
+  exit 1
+}
 
 # A field the probe could not answer is written as null. A field that is absent
 # entirely must stop the run instead of defaulting, because a silent `false`
