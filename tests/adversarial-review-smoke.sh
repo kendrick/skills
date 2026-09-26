@@ -349,7 +349,7 @@ python3 "$ledger_py" append-finding --ledger "$L" \
   --id F-r1-money-01 --round 1 --territory money --file src/billing/invoice.py \
   --quoted-evidence 'total += round(x, 2)' --claim 'rounds per line' \
   --proposed-fix 'round once at the end' --proposed-repro 'pytest -k rounding' \
-  --claimed-severity blocking >/dev/null
+  --reachability normal_use --failure-mode loud --claimed-severity blocking >/dev/null
 
 # A fresh finding is UNVERIFIED because no event has landed, not because a field
 # says so. That is what keeps the ledger append-only.
@@ -398,12 +398,12 @@ listed_ledger() {
     --id F-r1-money-01 --round 1 --territory money --file src/billing/invoice.py \
     --quoted-evidence 'total += round(x, 2)' --claim 'rounds per line' \
     --proposed-fix 'round once at the end' --proposed-repro 'pytest -k rounding' \
-    --claimed-severity blocking >/dev/null
+    --reachability normal_use --failure-mode loud --claimed-severity blocking >/dev/null
   python3 "$ledger_py" append-finding --ledger "$out" \
     --id F-r1-money-02 --round 1 --territory money --file src/billing/tax.py \
     --quoted-evidence 'rate = 0.2' --claim 'magic number' \
     --proposed-fix 'name the constant' --proposed-repro 'grep -n 0.2 src/billing/tax.py' \
-    --claimed-severity advisory >/dev/null
+    --reachability normal_use --failure-mode loud --claimed-severity advisory >/dev/null
   local id
   for id in F-r1-money-01 F-r1-money-02; do
     python3 "$ledger_py" append-event --ledger "$out" --finding-id "$id" \
@@ -525,17 +525,17 @@ round_ledger() {
     --id F-r1-money-01 --round 1 --territory money --file src/billing/invoice.py \
     --quoted-evidence 'total += round(x, 2)' --claim 'rounds per line' \
     --proposed-fix 'round once at the end' --proposed-repro 'pytest -k rounding' \
-    --claimed-severity blocking >/dev/null
+    --reachability normal_use --failure-mode loud --claimed-severity blocking >/dev/null
   python3 "$ledger_py" append-finding --ledger "$out" \
     --id F-r2-money-01 --round 2 --territory money --file src/billing/invoice.py \
     --quoted-evidence 'ROUNDING = 2' --claim 'constant lacks a comment' \
     --proposed-fix 'say why 2' --proposed-repro 'grep -n ROUNDING src/billing/invoice.py' \
-    --claimed-severity advisory >/dev/null
+    --reachability normal_use --failure-mode loud --claimed-severity advisory >/dev/null
   python3 "$ledger_py" append-finding --ledger "$out" \
     --id F-r2-money-02 --round 2 --territory money --file tests/test_invoice.py \
     --quoted-evidence 'assert total' --claim 'test asserts truthiness only' \
     --proposed-fix 'assert the value' --proposed-repro 'pytest -k total' \
-    --claimed-severity "$second_severity" >/dev/null
+    --reachability normal_use --failure-mode loud --claimed-severity "$second_severity" >/dev/null
   local id
   for id in F-r1-money-01 F-r2-money-01 F-r2-money-02; do
     python3 "$ledger_py" append-event --ledger "$out" --finding-id "$id" \
@@ -553,6 +553,179 @@ round_ledger "$tmp/round-blocking.jsonl" blocking
 loop_out="$(python3 "$ledger_py" state --ledger "$tmp/round-blocking.jsonl" --round 2 2>&1)" || true
 grep -Fq "loop: continue" <<<"$loop_out" || {
   echo "a round with one reproduced blocker must continue the loop, got: $loop_out" >&2
+  exit 1
+}
+
+# A reproduced blocker routes by reachability and failure mode, not by
+# claimed_severity alone (#160). One reachable in normal use, or of unknown
+# reach, takes a failing test and is never LISTED. One that needs a
+# specific environment or a hand-edited input to reach may be LISTED when it fails
+# loudly and must be ESCALATED when it fails silently. Every verdict below
+# comes from ledger.py itself; the ledgers are built through append-finding
+# and append-event, and only the outcome line is raw, so validate meets what a
+# hand-edited ledger could hold rather than what append-event lets through.
+reach_ledger() {
+  local out="$1" reachability="$2" failure_mode="$3" outcome="$4"
+  : >"$out"
+  python3 "$ledger_py" append-finding --ledger "$out" \
+    --id F-r1-input-01 --round 1 --territory input --file src/config/load.py \
+    --quoted-evidence 'port = int(raw["port"])' --claim 'a non-numeric port raises' \
+    --proposed-fix 'validate the port' --proposed-repro 'python3 -c "import load"' \
+    --reachability "$reachability" --failure-mode "$failure_mode" \
+    --claimed-severity blocking >/dev/null
+  python3 "$ledger_py" append-event --ledger "$out" --finding-id F-r1-input-01 \
+    --disposition REPRODUCED --actor verifier-r1-input \
+    --repro-command 'python3 -c "import load"' --observed-output 'ValueError: invalid literal' >/dev/null
+  printf '%s\n' \
+    "{\"record\": \"event\", \"finding_id\": \"F-r1-input-01\", \"disposition\": \"$outcome\", \"actor\": \"orchestrator\", \"repro_command\": null, \"observed_output\": null, \"counter_evidence\": null, \"reason\": \"listed in PR Left Out\", \"artifact\": \"tests/test_load.py\", \"at\": \"2026-09-26T00:00:00Z\"}" \
+    >>"$out"
+}
+expect_valid() {
+  local ledger="$1" why="$2" out
+  out="$(python3 "$ledger_py" validate --ledger "$ledger" 2>&1)" || {
+    echo "$why must validate, got: $out" >&2
+    exit 1
+  }
+}
+expect_reach_refused() {
+  local ledger="$1" why="$2" out
+  out="$(python3 "$ledger_py" validate --ledger "$ledger" 2>&1)" && {
+    echo "$why must fail validate, got: $out" >&2
+    exit 1
+  }
+  grep -Fq "reachability rule:" <<<"$out" || {
+    echo "$why must fail naming the reachability rule, got: $out" >&2
+    exit 1
+  }
+}
+reach_ledger "$tmp/reach-hand-loud-listed.jsonl" hand_edited_input loud LISTED
+expect_valid "$tmp/reach-hand-loud-listed.jsonl" "a hand_edited_input + loud blocker recorded LISTED"
+reach_ledger "$tmp/reach-hand-loud-test.jsonl" hand_edited_input loud TEST_WRITTEN
+expect_reach_refused "$tmp/reach-hand-loud-test.jsonl" "a hand_edited_input + loud blocker recorded TEST_WRITTEN"
+reach_ledger "$tmp/reach-normal-loud-listed.jsonl" normal_use loud LISTED
+expect_reach_refused "$tmp/reach-normal-loud-listed.jsonl" "a normal_use blocker recorded LISTED"
+reach_ledger "$tmp/reach-hand-silent-listed.jsonl" hand_edited_input silent LISTED
+expect_reach_refused "$tmp/reach-hand-silent-listed.jsonl" "a hand_edited_input + silent blocker recorded LISTED"
+reach_ledger "$tmp/reach-hand-silent-escalated.jsonl" hand_edited_input silent ESCALATED
+expect_valid "$tmp/reach-hand-silent-escalated.jsonl" "a hand_edited_input + silent blocker recorded ESCALATED"
+reach_ledger "$tmp/reach-unknown-listed.jsonl" unknown loud LISTED
+expect_reach_refused "$tmp/reach-unknown-listed.jsonl" "an unknown-reachability blocker recorded LISTED"
+
+# The nearest wrong rule, routing on claimed_severity alone, lets the
+# TEST_WRITTEN ledger through. A scratch copy of ledger.py with that rule
+# patched in must pass it, or the case above can't tell the two rules apart.
+mkdir -p "$tmp/severity-only/scripts"
+cp -R adversarial-review/assets "$tmp/severity-only/assets"
+python3 - "$ledger_py" "$tmp/severity-only/scripts/ledger.py" <<'PY'
+import sys
+src = open(sys.argv[1], encoding="utf-8").read()
+mutant = '''
+def severity_problem(disposition, finding, verification=None):
+    if disposition == "LISTED" and finding.get("claimed_severity") != "advisory":
+        return "LISTED is valid only on an advisory finding"
+    return None
+
+
+if __name__ == "__main__":'''
+assert src.count('\nif __name__ == "__main__":') == 1
+open(sys.argv[2], "w", encoding="utf-8").write(src.replace('\nif __name__ == "__main__":', mutant, 1))
+PY
+python3 "$tmp/severity-only/scripts/ledger.py" validate --ledger "$tmp/reach-hand-loud-test.jsonl" >/dev/null 2>&1 || {
+  echo "a severity-only copy of ledger.py must pass the hand_edited_input TEST_WRITTEN ledger, or that case pins nothing" >&2
+  exit 1
+}
+
+# append-event applies the same rule at write time, so a disallowed outcome
+# never reaches the ledger in the first place.
+reach_ledger "$tmp/reach-append.jsonl" hand_edited_input loud ESCALATED
+append_reach_err="$(python3 "$ledger_py" append-event --ledger "$tmp/reach-append.jsonl" \
+  --finding-id F-r1-input-01 --disposition TEST_WRITTEN --actor orchestrator \
+  --artifact tests/test_load.py 2>&1)" && {
+  echo "append-event must refuse TEST_WRITTEN on a hand_edited_input + loud blocker" >&2
+  exit 1
+}
+grep -Fq "reachability rule:" <<<"$append_reach_err" || {
+  echo "append-event's refusal must name the reachability rule, got: $append_reach_err" >&2
+  exit 1
+}
+python3 "$ledger_py" append-event --ledger "$tmp/reach-append.jsonl" \
+  --finding-id F-r1-input-01 --disposition LISTED --actor orchestrator \
+  --reason "listed in PR Left Out" >/dev/null || {
+  echo "append-event must accept LISTED on a hand_edited_input + loud blocker" >&2
+  exit 1
+}
+
+# The rule reads the verdict the outcome followed. A blocker outside normal
+# use that didn't reproduce closes like any other: refusing CLOSED there would
+# leave it no terminal outcome at all.
+: >"$tmp/reach-closed.jsonl"
+python3 "$ledger_py" append-finding --ledger "$tmp/reach-closed.jsonl" \
+  --id F-r1-input-01 --round 1 --territory input --file src/config/load.py \
+  --quoted-evidence 'port = int(raw["port"])' --claim 'a non-numeric port raises' \
+  --proposed-fix 'validate the port' --proposed-repro 'python3 -c "import load"' \
+  --reachability hand_edited_input --failure-mode silent --claimed-severity blocking >/dev/null
+python3 "$ledger_py" append-event --ledger "$tmp/reach-closed.jsonl" --finding-id F-r1-input-01 \
+  --disposition NOT_REPRODUCED --actor verifier-r1-input \
+  --counter-evidence 'port is parsed by the schema first' >/dev/null
+python3 "$ledger_py" append-event --ledger "$tmp/reach-closed.jsonl" --finding-id F-r1-input-01 \
+  --disposition CLOSED --actor orchestrator >/dev/null || {
+  echo "append-event must accept CLOSED on a NOT_REPRODUCED hand_edited_input blocker" >&2
+  exit 1
+}
+expect_valid "$tmp/reach-closed.jsonl" "a NOT_REPRODUCED hand_edited_input + silent blocker recorded CLOSED"
+
+# The round loop counts only reachable blockers. A listed blocker that still
+# counted would spend the fix cycle listing it was meant to save. The line's
+# exact shape is pinned too: work-issue copies it into ar-state.txt and greps it.
+reach_ledger "$tmp/reach-state.jsonl" hand_edited_input loud LISTED
+state_only_listed="$(python3 "$ledger_py" state --ledger "$tmp/reach-state.jsonl" --round 1 2>&1)" || true
+grep -Fxq "blocking (REPRODUCED): 0   UNVERIFIED: 0" <<<"$state_only_listed" \
+  && grep -Fq "loop: stop" <<<"$state_only_listed" || {
+  echo "a round whose only blocker is listed hand_edited_input + loud must count 0 and stop, got: $state_only_listed" >&2
+  exit 1
+}
+python3 "$ledger_py" append-finding --ledger "$tmp/reach-state.jsonl" \
+  --id F-r1-input-02 --round 1 --territory input --file src/config/load.py \
+  --quoted-evidence 'return cfg' --claim 'defaults are dropped' \
+  --proposed-fix 'merge defaults' --proposed-repro 'pytest -k defaults' \
+  --reachability normal_use --failure-mode silent --claimed-severity blocking >/dev/null
+python3 "$ledger_py" append-event --ledger "$tmp/reach-state.jsonl" --finding-id F-r1-input-02 \
+  --disposition REPRODUCED --actor verifier-r1-input \
+  --repro-command 'pytest -k defaults' --observed-output 'KeyError: timeout' >/dev/null
+state_mixed="$(python3 "$ledger_py" state --ledger "$tmp/reach-state.jsonl" --round 1 2>&1)" || true
+grep -Fxq "blocking (REPRODUCED): 1   UNVERIFIED: 0" <<<"$state_mixed" \
+  && grep -Fq "loop: continue" <<<"$state_mixed" || {
+  echo "one reachable blocker beside one listed hand_edited_input + loud blocker must count 1 and continue, got: $state_mixed" >&2
+  exit 1
+}
+
+# Both fields are required. A finder that skipped the call can't be recorded,
+# and a ledger written before the fields existed fails validate loudly.
+for missing in --reachability --failure-mode; do
+  if [[ "$missing" == "--reachability" ]]; then
+    kept_flag=(--failure-mode loud)
+  else
+    kept_flag=(--reachability unknown)
+  fi
+  python3 "$ledger_py" append-finding --ledger "$tmp/reach-missing.jsonl" \
+    --id F-r1-input-09 --round 1 --territory input --file src/config/load.py \
+    --quoted-evidence 'x' --claim 'y' --proposed-fix 'z' --proposed-repro 'true' \
+    "${kept_flag[@]}" --claimed-severity blocking >/dev/null 2>&1 && {
+    echo "append-finding with no $missing must exit non-zero" >&2
+    exit 1
+  }
+done
+[[ ! -s "$tmp/reach-missing.jsonl" ]] || {
+  echo "a refused append-finding must leave the ledger untouched" >&2
+  exit 1
+}
+printf '%s\n' '{"record": "finding", "id": "F-r1-old-01", "round": 1, "territory": "old", "file": "a.py", "quoted_evidence": "x", "claim": "y", "proposed_fix": "z", "proposed_repro": "true", "claimed_severity": "blocking"}' >"$tmp/reach-old.jsonl"
+old_out="$(python3 "$ledger_py" validate --ledger "$tmp/reach-old.jsonl" 2>&1)" && {
+  echo "a finding written before reachability existed must fail validate" >&2
+  exit 1
+}
+grep -Fq "reachability: required field missing" <<<"$old_out" || {
+  echo "the old-ledger refusal must name the missing field, got: $old_out" >&2
   exit 1
 }
 

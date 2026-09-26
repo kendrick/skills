@@ -5,7 +5,7 @@
         --id F-r1-money-01 --round 1 --territory money \\
         --file src/billing/invoice.py --quoted-evidence 'total += round(x, 2)' \\
         --claim '...' --proposed-fix '...' --proposed-repro 'pytest -k rounding' \\
-        --claimed-severity blocking
+        --claimed-severity blocking --reachability normal_use --failure-mode silent
     scripts/ledger.py append-event --ledger RUN/ledger.jsonl \\
         --finding-id F-r1-money-01 --disposition REPRODUCED \\
         --actor verifier-r1-money --repro-command 'pytest -k rounding' \\
@@ -45,6 +45,8 @@ FINDING_SCHEMA = os.path.join(ASSETS_DIR, "finding.schema.json")
 EVENT_SCHEMA = os.path.join(ASSETS_DIR, "event.schema.json")
 
 VERIFICATION = ("REPRODUCED", "NOT_REPRODUCED", "UNVERIFIABLE")
+REACHABILITY = ("normal_use", "specific_environment", "hand_edited_input", "unknown")
+FAILURE_MODES = ("silent", "loud")
 
 # What each disposition must carry to mean anything. A REPRODUCED event with no
 # observed output is the exact artifact this skill exists to refuse: a confident
@@ -62,17 +64,60 @@ REQUIRED_EVIDENCE = {
 }
 
 # LISTED puts a finding in the report and nowhere else: no test, no fix, no
-# issue. On a blocking finding that skips the failing test Step 6 requires
-# before the fix, so it is refused there.
+# issue. On a blocker anyone can hit, LISTED skips the failing test Step 6
+# requires before the fix, so it is refused there.
 ADVISORY_ONLY = ("LISTED",)
 
+# Reachability decides whether a reproduced blocker earns a fix cycle (#160).
+# unknown counts as reachable, so a finder that skips the question gains
+# nothing by it. The rest are listed or escalated, never fixed in the loop:
+# most late P0s in the #151-#153 run took a hand-edited input or one
+# machine's setup to reach, and each cost a full fix cycle. A silent one still
+# escalates, because a run that checks less than it claims (#153's loop ending
+# on empty input) goes unnoticed wherever it runs, and nobody comes back to
+# read its listing.
+REACHABLE = ("normal_use", "unknown")
+UNREACHABLE_ROUTES = {"loud": ("LISTED", "ESCALATED"), "silent": ("ESCALATED",)}
 
-def severity_problem(disposition, finding):
-    """A reason `disposition` can't land on `finding`, or None if it can."""
-    if disposition in ADVISORY_ONLY and finding.get("claimed_severity") != "advisory":
+
+def is_reachable(finding):
+    # A finding without the field predates it. validate refuses that ledger,
+    # and state still counts the finding as reachable, the conservative read.
+    return finding.get("reachability", "unknown") in REACHABLE
+
+
+def severity_problem(disposition, finding, verification):
+    """A reason `disposition` can't land on `finding`, whose verification
+    state is `verification` at that point in the ledger, or None if it can."""
+    if disposition in VERIFICATION or finding.get("claimed_severity") == "advisory":
+        return None
+    fid = finding.get("id")
+    reachability = finding.get("reachability", "unknown")
+    if verification != "REPRODUCED":
+        if disposition in ADVISORY_ONLY:
+            return (
+                f"{disposition} is valid only on an advisory finding or a "
+                f"REPRODUCED blocker outside normal use; {fid} is blocking "
+                f"and {verification}"
+            )
+        return None
+    if is_reachable(finding):
+        if disposition in ADVISORY_ONLY:
+            return (
+                f"reachability rule: {disposition} is valid only on an advisory "
+                f"finding or a blocker outside normal use that fails loudly; "
+                f"{fid} is blocking with reachability {reachability}"
+            )
+        return None
+    # A missing failure_mode is read as silent, the stricter route, for the
+    # same reason unknown reachability is read as reachable.
+    failure_mode = finding.get("failure_mode", "silent")
+    allowed = UNREACHABLE_ROUTES.get(failure_mode, UNREACHABLE_ROUTES["silent"])
+    if disposition not in allowed:
         return (
-            f"{disposition} is valid only on an advisory finding; "
-            f"{finding.get('id')} is {finding.get('claimed_severity')}"
+            f"reachability rule: {fid} is a REPRODUCED blocker with reachability "
+            f"{reachability} and failure_mode {failure_mode}, so it routes to "
+            f"{' or '.join(allowed)}, not {disposition}"
         )
     return None
 
@@ -202,6 +247,8 @@ def cmd_append_finding(args):
         "proposed_fix": args.proposed_fix,
         "proposed_repro": args.proposed_repro,
         "claimed_severity": args.claimed_severity,
+        "reachability": args.reachability,
+        "failure_mode": args.failure_mode,
     }
 
     violation = schema_violation(line, load_schema(FINDING_SCHEMA))
@@ -252,15 +299,21 @@ def cmd_append_event(args):
         )
         return 1
 
-    known = {
-        obj.get("id"): obj
-        for _, obj in read_lines(args.ledger, strict=False)
-        if obj.get("record") == "finding"
-    }
+    known = {}
+    verification = "UNVERIFIED"
+    for _, obj in read_lines(args.ledger, strict=False):
+        if obj.get("record") == "finding":
+            known[obj.get("id")] = obj
+        elif (
+            obj.get("record") == "event"
+            and obj.get("finding_id") == args.finding_id
+            and obj.get("disposition") in VERIFICATION
+        ):
+            verification = obj["disposition"]
     if args.finding_id not in known:
         sys.stderr.write(f"ledger: unknown finding_id {args.finding_id}\n")
         return 1
-    problem = severity_problem(args.disposition, known[args.finding_id])
+    problem = severity_problem(args.disposition, known[args.finding_id], verification)
     if problem:
         sys.stderr.write(f"ledger: {problem}\n")
         return 1
@@ -351,11 +404,15 @@ def cmd_state(args):
                 f"producing untestable claims"
             )
 
+    # Only a reachable blocker counts. One outside normal use is listed or
+    # escalated, and counting it would start the fix round listing it was
+    # meant to save. The line's shape stays fixed: work-issue greps it.
     blocking = [
         r
         for r in rows
         if r["verification"] == "REPRODUCED"
         and r["finding"]["claimed_severity"] == "blocking"
+        and is_reachable(r["finding"])
     ]
     unverified = [r for r in rows if r["verification"] == "UNVERIFIED"]
     print()
@@ -389,6 +446,9 @@ def cmd_validate(args):
         obj.get("id"): obj for _, obj in lines if obj.get("record") == "finding"
     }
     read_so_far = set()
+    # Verification as of each line, folded in file order the way derive()
+    # folds it, so an outcome is judged against the verdict it followed.
+    verified = {}
     for lineno, obj in lines:
         record = obj.get("record")
         if record == "finding":
@@ -425,8 +485,14 @@ def cmd_validate(args):
             problems.append(
                 f"line {lineno}: event precedes its finding {obj.get('finding_id')}"
             )
+        if record == "event" and obj["disposition"] in VERIFICATION:
+            verified[obj["finding_id"]] = obj["disposition"]
         if record == "event" and obj.get("finding_id") in seen:
-            problem = severity_problem(obj["disposition"], seen[obj["finding_id"]])
+            problem = severity_problem(
+                obj["disposition"],
+                seen[obj["finding_id"]],
+                verified.get(obj["finding_id"], "UNVERIFIED"),
+            )
             if problem:
                 problems.append(f"line {lineno}: {problem}")
 
@@ -454,6 +520,8 @@ def parse_args(argv=None):
     f.add_argument("--proposed-fix", required=True)
     f.add_argument("--proposed-repro", required=True)
     f.add_argument("--claimed-severity", required=True, choices=["blocking", "advisory"])
+    f.add_argument("--reachability", required=True, choices=REACHABILITY)
+    f.add_argument("--failure-mode", required=True, choices=FAILURE_MODES)
     f.set_defaults(func=cmd_append_finding)
 
     e = sub.add_parser("append-event", help="record what happened to a finding")

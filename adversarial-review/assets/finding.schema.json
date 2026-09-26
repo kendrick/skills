@@ -14,7 +14,9 @@
     "claim",
     "proposed_fix",
     "proposed_repro",
-    "claimed_severity"
+    "claimed_severity",
+    "reachability",
+    "failure_mode"
   ],
   "properties": {
     "record": {
@@ -48,6 +50,16 @@
       "type": "string",
       "description": "Two values on purpose. A finer scale invites the rank inflation this design already refused when it dropped severity promotion on agreement.",
       "enum": ["blocking", "advisory"]
+    },
+    "reachability": {
+      "type": "string",
+      "description": "What it takes to hit the defect: normal_use, a specific_environment, a hand_edited_input, or unknown when the finder cannot say. A blocker nobody reaches in normal use can be listed rather than fixed inside the loop, and unknown routes as normal_use, so a finder that skips the question gains nothing by it. The routing lives in ledger.py.",
+      "enum": ["normal_use", "specific_environment", "hand_edited_input", "unknown"]
+    },
+    "failure_mode": {
+      "type": "string",
+      "description": "How the defect shows itself when hit. loud means an error or crash the user sees; silent means wrong output that reads as right. A blocker outside normal use that fails silently still escalates, because nobody will notice it and come back to the listing.",
+      "enum": ["silent", "loud"]
     }
   }
 }
