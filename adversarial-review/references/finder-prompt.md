@@ -66,6 +66,32 @@ means it should be fixed but need not gate the merge. Use `blocking` where you
 mean it—an inflated severity spends someone's time writing a failing test
 for something that did not need one.
 
+Two more fields say what it takes to hit the defect and how it shows itself.
+Set both on every finding now, from the code you read. Nobody revisits them
+after verification, and the routing of a blocker depends on them.
+
+`reachability` is what it takes to hit the defect:
+
+- `normal_use`: an ordinary run of the code on ordinary input hits it.
+- `specific_environment`: only one machine's setup hits it, such as a
+  particular installed tool, OS, or config. Example: a filter stage piping
+  through `grep -f`, which prints nothing under ugrep when the pattern file
+  is empty.
+- `hand_edited_input`: only input nothing in the code produces hits it, such
+  as a file a person edited by hand. Example: a ledger line written above the
+  record it refers to, which no script writes and the validator refuses.
+- `unknown`: you cannot say. It routes exactly as `normal_use` does, so
+  choose it over guessing a narrower value.
+
+`failure_mode` is how the defect shows itself once hit:
+
+- `loud`: an error, a crash, or a stop the person running it sees. The
+  out-of-order ledger line above is `loud`: the validator exits non-zero
+  naming it.
+- `silent`: output that reads as right and is wrong, such as a check that
+  ran on less than it claims. The empty-pattern `grep` above is `silent`:
+  the loop sees no input, exits clean, and the fix goes unreviewed.
+
 Finding nothing is a complete and legitimate report. An empty findings array
 is a real answer, and manufacturing a finding to look thorough corrupts the
 one thing this process is for.
@@ -84,7 +110,9 @@ preamble, no summary paragraph, no closing assessment. This shape:
       "claim": "one falsifiable statement of what is wrong and why",
       "proposed_fix": "the concrete change",
       "proposed_repro": "a single read-only or test-runner command",
-      "claimed_severity": "blocking"
+      "claimed_severity": "blocking",
+      "reachability": "normal_use",
+      "failure_mode": "silent"
     }
   ]
 }
@@ -99,6 +127,10 @@ preamble, no summary paragraph, no closing assessment. This shape:
 - `{{OUT_OF_SCOPE}}` — the scope contract's `out_of_scope` list, verbatim and complete. Every finder gets the whole list, including items about territories they do not own; a shortened list per territory is how a settled decision gets re-litigated by the one finder who was not told.
 - `{{PRIOR_ROUNDS}}` — empty in round 1. Afterward: what previous rounds found in this territory, which of those fixes landed, and which fixes introduced new blockers. That last part is the reason the round loop exists, and a finder who knows it hunts the fix rather than re-hunting the original.
 - `{{TERRITORY_NAME}}` — this territory's name, so the returned JSON identifies itself.
+
+## Origin of the reachability examples
+
+Both are real blockers from this skill's own runs. The `grep -f` stage is #153's Step 7 exclusion filter, fixed in #154: `specific_environment` + `silent`, because only a machine with ugrep on the PATH hit it, and there the round loop ended with a fix unreviewed and nothing said so. The out-of-order ledger line is from #155's review: `hand_edited_input` + `loud`, because no script writes an event above its finding and `validate` refuses one that is there. Late blockers like that second one each cost a full fix cycle in the #151–#153 run, and that cost is what the two fields exist to route around.
 
 ## Why the output is only JSON
 
