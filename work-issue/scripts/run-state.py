@@ -113,6 +113,7 @@ PROBE_FIELDS = (
     ("triage_blocking_rows", "int", ()),
     ("repair_ar_settled", "bool", ()),
     ("review_over_budget", "bool", ()),
+    ("repair_diff_triggers", "bool", ()),
 )
 
 BUNDLE_KEYS = (
@@ -913,9 +914,12 @@ def phase_of(probe):
         if over_budget:
             return budget_stop(16)
         return "7", "row 16: the newest triage round has in-scope rows and no repair report of its own"
-    # Step 8 item 1's re-fire leg, ahead of the push. Only a repair whose
-    # triage round held a P0, P1, or blocking row re-enters adversarial-review;
-    # one whose round held nothing above P2 gets the reproducer and moves on.
+    # Step 8 item 1's re-fire leg, ahead of the push. A repair re-enters
+    # adversarial-review when its triage round held a P0, P1, or blocking row,
+    # or when its own diff hits a money, authz, or schema trigger row: a
+    # reviewer can label a real blocker P2 (#162). One with neither gets the
+    # reproducer and moves on. `repair_diff_triggers` reads the repair's diff
+    # alone, since the whole branch already fired the trigger at Step 4.
     # The reason names the reproducer first: `repair_ar_settled` is false until
     # a file exists, which includes a stop before the reproducer ran.
     # Re-firing after every repair ran cambium #23/#26 to 7 cycles per lane,
@@ -926,14 +930,15 @@ def phase_of(probe):
     if (
         pr_state == "OPEN"
         and flag(probe, "newest_repair_report")
-        and count(probe, "triage_blocking_rows") > 0
+        and (count(probe, "triage_blocking_rows") > 0 or flag(probe, "repair_diff_triggers"))
         and not flag(probe, "repair_ar_settled")
     ):
         if over_budget:
             return budget_stop(17)
         return (
             "8",
-            "row 17: the repaired triage round held a P0, P1, or blocking row "
+            "row 17: the repaired triage round held a P0, P1, or blocking row, "
+            "or the repair's own diff hits a money, authz, or schema trigger row, "
             "and the repair's adversarial-review has not settled; resume at "
             "Step 8 item 1 from the reproducer where trigger-repair-<k>.txt is "
             "absent, else at the adversarial-review invocation",
