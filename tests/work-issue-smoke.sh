@@ -1850,13 +1850,24 @@ rm "$base_run/base_sha"
 base_case "with no base_sha file" absent
 git -C "$base_clone" merge-base origin/main issue-1 >"$base_run/base_sha"
 git -C "$base_clone" checkout -q --detach
+# A branch left only on origin is not a run rows 4 through 7 own: the branch
+# exists, so they pass it by, and absent there skipped the base check all the
+# way to Step 8 (#137 red-team). It stops naming the field instead.
+git -C "$base_clone" push -q origin issue-1 2>/dev/null
 git -C "$base_clone" branch -q -D issue-1
-base_case "with no local issue branch" absent
+base_case "with the issue branch only on origin" null
+git -C "$base_clone" push -q origin --delete issue-1 2>/dev/null
+git -C "$base_clone" update-ref -d refs/remotes/origin/issue-1
+base_case "with no issue branch anywhere" absent
 # The rewrite has one owner and one repeat. The BASE_SHA bullet names both and
 # claims nothing else writes the file, and Step 8 item 2 names the rewrite
 # outright, so an edit that inlines Step 8's steps cannot drop it silently.
 require_text work-issue/SKILL.md "Written to \`RUN_DIR/base_sha\` by Step 1, and rewritten by Step 5 item 2 after each proven rebase, which Step 8 item 2 repeats; nothing else writes the file."
 require_text work-issue/SKILL.md 'm="$(git merge-base origin/DEFAULT issue-N)" && printf '"'"'%s\n'"'"' "$m" > RUN_DIR/base_sha'
+# Step 8 item 1 reads the repair's diff with the same ancestor check the
+# repair_diff_triggers probe runs, or a resume after item 2's rebase re-fires
+# adversarial-review over upstream code the probe already ignores.
+require_text work-issue/SKILL.md "A \`repair-base-<k>\` that is no longer an ancestor of HEAD leaves this condition unmet too"
 require_text work-issue/SKILL.md "rebase, rewrite \`RUN_DIR/base_sha\`, verify, write \`pushed_at\`, push — Step 5 items 1 through 4, the \`base_sha\` rewrite in item 2 included."
 require_text work-issue/references/resume.md "answers \`stop\` naming the mismatch"
 require_text work-issue/SKILL.md "answers \`stop\` naming the mismatch"
