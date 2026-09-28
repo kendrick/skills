@@ -138,6 +138,8 @@ for capped in row-16-under-cap row-17-review-cap row-16-cap-blocker row-17-cap-r
   require_file "tests/fixtures/work-issue/probes/$capped.json"
 done
 require_file tests/fixtures/work-issue/triage/round-2.md
+require_file tests/fixtures/work-issue/triage/round-3.md
+require_file tests/fixtures/work-issue/triage/round-noscope.md
 for timing in build30-review61 build30-review59 poll-excluded poll-nested budget-raised open-start-closed-at-poll open-review build-25s crash-closed-at-latest open-earlier-step crash-open-other-step crash-open-poll bad-label end-with-no-start; do
   require_file "tests/fixtures/work-issue/timing/$timing.txt"
 done
@@ -1369,7 +1371,15 @@ done
 require_text work-issue/SKILL.md "\`--max-review-rounds N\` caps the post-PR review loop at N triage rounds, default 2, and Step 0 writes it to \`RUN_DIR/max_review_rounds\`"
 require_text work-issue/SKILL.md "Write the \`--max-review-rounds\` value, \`2\` where the flag is absent, to \`RUN_DIR/max_review_rounds\`."
 require_text work-issue/SKILL.md "\`baseline.txt\`, \`max_review_rounds\`, \`pushed_at\`"
+# N is a positive integer: 0 would cap round 1, so no post-PR finding ever got
+# a repair, and nothing downstream checks the file's value. A resume skips
+# Step 0, so the flag it passes changes nothing; the file is the lever.
+require_text work-issue/SKILL.md "Where \`--max-review-rounds\` is given a value that is not a positive integer, \`0\` included, refuse the run naming that value, before anything is written under RUN_DIR."
+require_text work-issue/SKILL.md "where a resume keeps it: to change the cap mid-run, edit that file"
 require_text work-issue/README.md "\`--max-review-rounds N\` sets the review round cap (2 by default)"
+# The queue sentence names what it queues. Written as "the rest" after the cap
+# sentences, it read as the remainder of a capped round.
+require_text work-issue/README.md "The out-of-scope ones go to a queue carrying the reason each is outside"
 # The queue reason, which the Step 8 reply and the deferred-findings comment
 # both carry to the reviewer, so it has to be the one string the issue names.
 require_text work-issue/SKILL.md "Each in-scope row's Scope cell reads \`in scope; queued: review round cap reached (N)\`, and the row is appended to \`queue.md\` with Outside-because \`review round cap reached (N)\`."
@@ -1379,8 +1389,8 @@ require_text work-issue/SKILL.md "A capped round (Step 6) skips this step: it ge
 require_text work-issue/SKILL.md "the rows the review round cap queued with \`review round cap reached (N)\`"
 # The P0/blocking exception, and only those two: P1 stays under the cap, which
 # is why the exception reads triage_stop_rows and not triage_blocking_rows.
-require_text work-issue/SKILL.md "The exception is a row whose Severity is \`P0\` or \`blocking\`: its Scope cell stays \`in scope\`, and the run stops once the round is written, naming the cap and that row, for a human to decide."
-require_text work-issue/references/triage.md "A row whose Severity is \`P0\` or \`blocking\` is never queued this way."
+require_text work-issue/SKILL.md "The exception is an in-scope row whose Severity is \`P0\` or \`blocking\`: its Scope cell stays \`in scope\`, and the run stops once the round is written, naming the cap and that row, for a human to decide."
+require_text work-issue/references/triage.md "An in-scope row whose Severity is \`P0\` or \`blocking\` is never queued this way."
 require_text _maintenance/work-issue/RATIONALE.md "| 106 | \`--max-review-rounds N\`, default 2, caps the post-PR review loop"
 require_text _maintenance/work-issue/RATIONALE.md "\`P0\` and \`blocking\` are the exception because queueing one ships a known blocker, and repairing it breaks the cap"
 require_text _maintenance/work-issue/RATIONALE.md "rather than reusing \`triage_blocking_rows\` as the issue proposed"
@@ -1568,6 +1578,20 @@ for tri_case in "triage:0" "triage-noseverity:null" "empty:0"; do
   tri_got="$(bash -c "${stop_probe//<RUN_DIR>/$tri_dir}" </dev/null)"
   [[ "$tri_got" == "${tri_case##*:}" ]] || {
     echo "triage_stop_rows on ${tri_case%%:*} should print ${tri_case##*:}, got: $tri_got" >&2
+    exit 1
+  }
+done
+# The cap queues in-scope rows, so only an in-scope P0 is a blocker it would
+# ship. An out-of-scope P0 is queued anyway and must not stop a capped round
+# whose in-scope rows are all P2. A round with no Scope column can't tell the
+# two apart, so it prints null, the way a round with no Severity column does.
+for stop_case in "round-3:0" "round-noscope:null"; do
+  tri_dir="$tmp/stop-scope-${stop_case%%:*}"
+  mkdir -p "$tri_dir/triage"
+  cp "tests/fixtures/work-issue/triage/${stop_case%%:*}.md" "$tri_dir/triage/round-1.md"
+  tri_got="$(bash -c "${stop_probe//<RUN_DIR>/$tri_dir}" </dev/null)"
+  [[ "$tri_got" == "${stop_case##*:}" ]] || {
+    echo "triage_stop_rows on triage/${stop_case%%:*}.md should print ${stop_case##*:}, got: $tri_got (probe: $stop_probe)" >&2
     exit 1
   }
 done

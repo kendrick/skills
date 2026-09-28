@@ -51,7 +51,7 @@ Resolve once per invocation:
 - **VERIFY_CMD**, **INSTALL_CMD** — harvested off disk the way `file-issue` harvests, and quoted: manifest scripts first (`package.json`, `Makefile`, `pyproject.toml`, `Cargo.toml`); with no manifest, runnable scripts under `tests/` or `scripts/`, then what `.github/workflows/` runs, then `absent`. INSTALL_CMD is the manifest's install (`pnpm install --frozen-lockfile`, `npm ci`, `uv sync`, …), else `absent`.
 - **HERDR** — `test "${HERDR_ENV:-}" = 1 && command -v herdr`
 - **SINCE** — the contents of `RUN_DIR/pushed_at` (UTC ISO 8601, written immediately before every push, so an event stamped the same second still counts), else the head commit's committer date
-- **FLAGS** — `--isolate` / `--no-isolate` pin the Step 1 row; `--deep` forces `adversarial-review` at Step 4; `--max-review-rounds N` caps the post-PR review loop at N triage rounds, default 2, and Step 0 writes it to `RUN_DIR/max_review_rounds` (see Step 6); `--dry-run` runs every gate and every derivation, renders the confirmation, and dispatches nothing and pushes nothing.
+- **FLAGS** — `--isolate` / `--no-isolate` pin the Step 1 row; `--deep` forces `adversarial-review` at Step 4; `--max-review-rounds N` caps the post-PR review loop at N triage rounds, default 2, and Step 0 writes it to `RUN_DIR/max_review_rounds` (see Step 6), where a resume keeps it: to change the cap mid-run, edit that file; `--dry-run` runs every gate and every derivation, renders the confirmation, and dispatches nothing and pushes nothing.
 
 `gh auth status` is a Step 0 preflight, the way `file-issue` runs one. Unauthenticated at Step 0 stops the run, because the issue cannot be read and CRITERIA would be invented. Unauthenticated at Step 5 or later renders the pull-request body to `RUN_DIR/pr-body.md`, pushes nothing, and stops with "resume after `gh auth login`". A rendered body says on its face that it is rendered: a draft that reads like an opened pull request is a draft somebody goes looking for on GitHub.
 
@@ -68,7 +68,7 @@ It prints `build: <m>m review: <m>m ratio: <r> over: yes|no`, build being Steps 
 ## Step 0 — Gate and confirm
 
 1. Run the resume probe (see [Resume](#resume)) before anything is written under RUN_DIR. A run dir with no branch is row 5's mark of a dead run, so an `issue.md` written first would make every fresh issue look dead and send it to `closed/`. Any phase past 0 jumps there; the rest of this step is for a fresh issue.
-2. Read the issue into `RUN_DIR/issue.md` and extract CRITERIA. Write the `--max-review-rounds` value, `2` where the flag is absent, to `RUN_DIR/max_review_rounds`.
+2. Where `--max-review-rounds` is given a value that is not a positive integer, `0` included, refuse the run naming that value, before anything is written under RUN_DIR. Read the issue into `RUN_DIR/issue.md` and extract CRITERIA. Write the `--max-review-rounds` value, `2` where the flag is absent, to `RUN_DIR/max_review_rounds`.
 3. The plan gate, mechanical half:
 
    ```
@@ -205,7 +205,7 @@ Three states, each scored relative to SINCE:
 
 `pending` at ten minutes writes `RUN_DIR/triage/waiting` and stops: "no review yet on <PR URL>; `work-issue N` resumes here." The URL is there because this stop is the report a run gets when nothing has happened, and a run that entered Step 8 only to post a worker's queue and stopped before its final report reads `pending` here next. `cleared` goes to Step 8's final report. `findings` reads [references/triage.md](references/triage.md) and writes one row per finding into `RUN_DIR/triage/round-<k>.md`, a table with a `Severity` column holding the reviewer's marker (`P0`, `P1`, `P2`, `blocking`, or `-` where none, per [references/triage.md](references/triage.md)), each row scored by the in-scope test: **in scope** when the finding points at a line inside `git diff BASE_SHA..HEAD`, names a CRITERIA line, or names a plan task; **out of scope** otherwise. Ambiguous is in scope where the reviewer marked it P0 and out otherwise, with the ambiguity recorded on the row.
 
-**The review round cap.** Round k is capped once k reaches N, the value in `RUN_DIR/max_review_rounds` (`2` where the file is absent). A capped round is triaged and answered and never repaired. Each in-scope row's Scope cell reads `in scope; queued: review round cap reached (N)`, and the row is appended to `queue.md` with Outside-because `review round cap reached (N)`. The exception is a row whose Severity is `P0` or `blocking`: its Scope cell stays `in scope`, and the run stops once the round is written, naming the cap and that row, for a human to decide. Queueing it ships a known blocker, and repairing it breaks the cap. A fresh review of new code nearly always finds something, so without the cap P2 threads hold a lane in Steps 6 through 8 for good.
+**The review round cap.** Round k is capped once k reaches N, the value in `RUN_DIR/max_review_rounds` (`2` where the file is absent). A capped round is triaged and answered and never repaired. Each in-scope row's Scope cell reads `in scope; queued: review round cap reached (N)`, and the row is appended to `queue.md` with Outside-because `review round cap reached (N)`. The exception is an in-scope row whose Severity is `P0` or `blocking`: its Scope cell stays `in scope`, and the run stops once the round is written, naming the cap and that row, for a human to decide. Queueing it ships a known blocker, and repairing it breaks the cap. A fresh review of new code nearly always finds something, so without the cap P2 threads hold a lane in Steps 6 through 8 for good.
 
 Out-of-scope rows append to `RUN_DIR/queue.md`:
 
@@ -215,7 +215,7 @@ Out-of-scope rows append to `RUN_DIR/queue.md`:
 
 `Source` is the thread or comment URL, or `worker` for a `plan_concerns` entry. `Recommendation` is usually a `file-issue` line for the human to run; the skill leaves the filing to them.
 
-**Done when:** `review` returned `cleared`; or it returned `findings` and every finding has a row marked in scope or queued with its reason, and in a capped round every in-scope row but a `P0` or `blocking` one is queued with `review round cap reached (N)`, and a `P0` or `blocking` row stopped the run; or `pending` timed out and `triage/waiting` says so.
+**Done when:** `review` returned `cleared`; or it returned `findings` and every finding has a row marked in scope or queued with its reason, and in a capped round every in-scope row but a `P0` or `blocking` one is queued with `review round cap reached (N)`, and an in-scope `P0` or `blocking` row stopped the run; or `pending` timed out and `triage/waiting` says so.
 
 ## Step 7 — Repair
 
@@ -268,7 +268,7 @@ It prints `phase: <0-8|done|wait|stop> reason: <one line>` and exits 0, or exits
 | 13 | red-team clean; trigger recorded; no triage round yet; no PR, or local HEAD ahead of `origin/issue-N` | Step 5 |
 | 14 | PR open; review `pending`; no triage row without a reply URL; no queue row missing from its comment | Step 6 poll |
 | 15 | PR open; `findings`; no `triage/round-<k>.md` newer than SINCE | Step 6 triage |
-| 16 | newest triage round has in-scope rows; no `reports/repair-<k>.json` for that round | Step 7; review over budget: the budget stop; round at the review round cap (`triage_rounds` ≥ `max_review_rounds`): the cap stop where it holds a `P0` or `blocking` row, else no repair, on to row 17 |
+| 16 | newest triage round has in-scope rows; no `reports/repair-<k>.json` for that round | Step 7; review over budget: the budget stop; round at the review round cap (`triage_rounds` ≥ `max_review_rounds`): the cap stop where it holds an in-scope `P0` or `blocking` row, else no repair, on to row 17 |
 | 17 | PR open; a repair report whose triage round held a P0, P1, or blocking row, or whose own diff from `repair-base-<k>` hits trigger row 1, 2, or 4 (`repair_diff_triggers`), with the repair's adversarial-review not settled (resume at item 1: the reproducer until `trigger-repair-<k>.txt` exists, then the adversarial-review invocation); or a queue row missing from the `Deferred findings` comment, or a repair report or an all-queued triage round with local ahead of origin or a triage row without a reply URL | Step 8; review over budget on the unsettled-review leg: the budget stop |
 | 18 | PR open; `cleared`, or `findings` with the round triaged, answered, and its queue published | done: final report, then wait on the reviewer |
 

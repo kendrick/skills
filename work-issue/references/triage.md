@@ -49,7 +49,7 @@ Scope is not a judgment about whether the finding is right. An out-of-scope find
 
 The review round cap is the one reason an in-scope row gets queued. Round k is capped once k reaches N, the value `--max-review-rounds` set and Step 0 wrote to `RUN_DIR/max_review_rounds` (`2` where the file is absent). In a capped round, each in-scope row's Scope cell reads `in scope; queued: review round cap reached (N)`, and the row is appended to `queue.md` with Outside-because `review round cap reached (N)`. The cell keeps `in scope` at its head because the finding was in scope and the record should say so. The resume probe's `triage_inscope_rows` still counts the row, and the Resume table's row 17 reads a capped round as all-queued anyway.
 
-A row whose Severity is `P0` or `blocking` is never queued this way. Its Scope cell stays `in scope`, and the resume probe's `triage_stop_rows` stops the run on it with a reason naming the cap and the blocker. Queueing it ships a known blocker, and repairing it breaks the cap, so the call goes to a human.
+An in-scope row whose Severity is `P0` or `blocking` is never queued this way. Its Scope cell stays `in scope`, and the resume probe's `triage_stop_rows`, which counts in-scope rows alone, stops the run on it with a reason naming the cap and the blocker. Queueing it ships a known blocker, and repairing it breaks the cap, so the call goes to a human. An out-of-scope `P0` is queued like any other out-of-scope row and stops nothing: the cap never decided its fate.
 
 ## The queue
 

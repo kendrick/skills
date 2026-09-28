@@ -921,8 +921,8 @@ def phase_of(probe):
         # uncapped loop let P2 threads hold a lane in repair indefinitely. A
         # round at the cap is never repaired, so it gets no repair report and
         # would match this row forever if it answered Step 8 here; it falls
-        # through to row 17's replies instead. Only a P0 or blocking row
-        # stops it: queueing one ships a known blocker, and repairing it
+        # through to row 17's replies instead. Only an in-scope P0 or blocking
+        # row stops it: queueing one ships a known blocker, and repairing it
         # breaks the cap, so that call goes to a human. The cap is checked
         # before the budget because a capped round starts no review cycle,
         # and a budget stop here stranded its replies.
@@ -933,12 +933,12 @@ def phase_of(probe):
                     "stop",
                     f"row 16: the newest triage round is at the review round cap "
                     f"({triage_rounds} of {max_review_rounds}) and holds {stop_rows} "
-                    "P0 or blocking row(s), which the cap never queues; stop and "
+                    "in-scope P0 or blocking row(s), which the cap never queues; stop and "
                     "report the blocker to a human",
                 )
+        elif over_budget:
+            return budget_stop(16)
         else:
-            if over_budget:
-                return budget_stop(16)
             return "7", "row 16: the newest triage round has in-scope rows and no repair report of its own"
     # Step 8 item 1's re-fire leg, ahead of the push. A repair re-enters
     # adversarial-review when its triage round held a P0, P1, or blocking row,
