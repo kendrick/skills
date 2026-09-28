@@ -5,6 +5,7 @@
   "run_dir": true,
   "base_sha": true,
   "baseline": true,
+  "base_sha_state": "current",
   "pr_state": "OPEN",
   "review_state": "cleared",
   "has_waves": true,

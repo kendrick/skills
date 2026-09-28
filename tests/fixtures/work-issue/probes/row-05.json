@@ -5,6 +5,7 @@
   "run_dir": true,
   "base_sha": false,
   "baseline": false,
+  "base_sha_state": "absent",
   "pr_state": null,
   "review_state": null,
   "has_waves": false,

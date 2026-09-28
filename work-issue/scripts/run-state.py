@@ -87,6 +87,7 @@ PROBE_FIELDS = (
     ("run_dir", "bool", ()),
     ("base_sha", "bool", ()),
     ("baseline", "bool", ()),
+    ("base_sha_state", "enum", ("current", "not-merge-base", "not-ancestor", "absent")),
     ("pr_state", "enum", ("OPEN", "MERGED", "CLOSED")),
     ("review_state", "enum", ("findings", "cleared", "pending")),
     ("has_waves", "bool", ()),
@@ -821,6 +822,33 @@ def phase_of(probe):
         return "wait", "row 2: the herdr agent is working; wait and re-probe"
     if herdr == "blocked":
         return "stop", "row 3: the herdr agent is blocked; show its UI and stop"
+    # Step 5 item 2 rewrites base_sha after every proven rebase (#137), so a
+    # base that has drifted from the live merge-base is a rebase nobody
+    # recorded, and every review after it diffs other merged PRs as this
+    # change. On cambium #78 the file held f08cc20 while the real merge-base
+    # was 3d6209f. Row 12's state goes first: a rebase stopped on a conflict,
+    # or finished by hand, is the one Step 5 item 2 is about to record.
+    base_state = probe["base_sha_state"]
+    if base_state in ("not-merge-base", "not-ancestor") and not (
+        flag(probe, "conflict") or flag(probe, "rebase_in_progress")
+    ):
+        if base_state == "not-ancestor":
+            return (
+                "stop",
+                "base_sha mismatch (not-ancestor): RUN_DIR/base_sha is not an ancestor "
+                "of the branch, so a diff from it reads commits the branch never had; "
+                "the default branch was rewritten or the file was edited by hand, so "
+                "stop for a human",
+            )
+        return (
+            "stop",
+            "base_sha mismatch (not-merge-base): RUN_DIR/base_sha is not the live "
+            "merge-base of origin/<DEFAULT> and the branch, so every later review would "
+            "diff against a base the branch has left; if this run's own rebase finished "
+            "before Step 5 item 2 rewrote the file, write git merge-base "
+            "origin/<DEFAULT> issue-<N> to it and re-invoke, else stop for whoever "
+            "rebased the branch",
+        )
     if not branch_anywhere and not flag(probe, "run_dir"):
         return "0", "row 4: no branch anywhere and no run dir, so this issue is fresh"
     if flag(probe, "run_dir") and not branch_anywhere:
