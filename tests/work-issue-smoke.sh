@@ -131,6 +131,15 @@ require_file tests/fixtures/work-issue/review/changes-requested.json
 for gated in 10 11 16 17; do
   require_file "tests/fixtures/work-issue/probes/row-$gated-over-budget.json"
 done
+# The review round cap (#159): one round under it, one at it with only P1/P2
+# rows, the same round holding a P0, and a first round capped by
+# --max-review-rounds 1 whose replies are still owed.
+for capped in row-16-under-cap row-17-review-cap row-16-cap-blocker row-17-cap-replies-owed; do
+  require_file "tests/fixtures/work-issue/probes/$capped.json"
+done
+require_file tests/fixtures/work-issue/triage/round-2.md
+require_file tests/fixtures/work-issue/triage/round-3.md
+require_file tests/fixtures/work-issue/triage/round-noscope.md
 for timing in build30-review61 build30-review59 poll-excluded poll-nested budget-raised open-start-closed-at-poll open-review build-25s crash-closed-at-latest open-earlier-step crash-open-other-step crash-open-poll bad-label end-with-no-start; do
   require_file "tests/fixtures/work-issue/timing/$timing.txt"
 done
@@ -151,7 +160,7 @@ require_text work-issue/SKILL.md "name: work-issue"
 # from siblings too—a wave reaches it once per lane. Refuted on the bare
 # key so `: false` fails here as loudly as `: true`.
 refute_text work-issue/SKILL.md "disable-model-invocation"
-require_text work-issue/SKILL.md "argument-hint: '<issue number or URL> [plan path] [--isolate | --no-isolate] [--deep] [--dry-run]'"
+require_text work-issue/SKILL.md "argument-hint: '<issue number or URL> [plan path] [--isolate | --no-isolate] [--deep] [--max-review-rounds N] [--dry-run]'"
 
 # A description that summarizes the steps becomes the shortcut the model takes
 # instead of reading the body, which is how a nine-step skill collapses into
@@ -1174,6 +1183,7 @@ declare -a probe_cases=(
   "row-10-repair-unverified:4" "row-10-repair-needed:4" "row-10-failed-twice:stop" "row-13-prepr-repair-clean:5" "row-16-earlier-queued:8" "row-17-review-repair-unpushed:8" "row-17-deferred-owed:8" "row-17-worker-queue:8" "row-18-answered:done" "row-18:done"
   "row-17-repair-advisory-only:8" "row-17-repair-blocking:8" "row-17-repair-blocking-settled:8" "row-17-repair-diff-trigger:8"
   "row-10-over-budget:stop" "row-11-over-budget:stop" "row-16-over-budget:stop" "row-17-over-budget:stop"
+  "row-16-under-cap:7" "row-17-review-cap:8" "row-16-cap-blocker:stop" "row-17-cap-replies-owed:8"
 )
 for case in "${probe_cases[@]}"; do
   fixture="${case%%:*}"
@@ -1306,6 +1316,84 @@ grep -Fq "phase: stop reason: unknown probe fields: review_over_budget" <<<"$(py
   echo "a null review_over_budget should stop the run naming the field" >&2
   exit 1
 }
+
+# The review round cap (#159). A fresh review of new code nearly always finds
+# something, so without a cap P2 threads hold a lane in Steps 6-8 for good.
+# The Nth round is triaged and answered but never repaired: it falls through
+# row 16 to row 17's replies. The same probe one round earlier still repairs.
+cap_reason="$(python3 "$run_state" phase --probe "$probes_dir/row-17-review-cap.json")"
+grep -Fq "phase: 8 reason: row 17:" <<<"$cap_reason" || {
+  echo "a round at the review cap with only P1/P2 rows should skip the repair and land on row 17, got: $cap_reason" >&2
+  exit 1
+}
+under_reason="$(python3 "$run_state" phase --probe "$probes_dir/row-16-under-cap.json")"
+grep -Fq "phase: 7 reason: row 16:" <<<"$under_reason" || {
+  echo "the same round under the review cap should resume at Step 7, got: $under_reason" >&2
+  exit 1
+}
+# A P0 or blocking row at the cap is never queued: queueing it ships a known
+# blocker, and repairing it breaks the cap. The run stops for a human, and the
+# reason says why so the human doesn't re-derive it.
+blocker_reason="$(python3 "$run_state" phase --probe "$probes_dir/row-16-cap-blocker.json")"
+grep -Fq "phase: stop reason: row 16:" <<<"$blocker_reason" \
+  && grep -Fq "review round cap" <<<"$blocker_reason" \
+  && grep -Fq "P0 or blocking" <<<"$blocker_reason" || {
+  echo "a capped round holding a P0 row should stop at row 16 naming the cap and the blocker, got: $blocker_reason" >&2
+  exit 1
+}
+# Under --max-review-rounds 1 no repair report exists anywhere, and the capped
+# round has in-scope rows, so a stop after the deferred comment posted and
+# before the replies finished once matched row 18's done with a reply owed.
+owed_reason="$(python3 "$run_state" phase --probe "$probes_dir/row-17-cap-replies-owed.json")"
+grep -Fq "phase: 8 reason: row 17:" <<<"$owed_reason" || {
+  echo "a capped first round with a reply still owed should land on row 17, got: $owed_reason" >&2
+  exit 1
+}
+# The cap sits ahead of the #158 budget gate on row 16. A capped round starts
+# no review cycle, only replies and the queue, and the budget stop exists for
+# the points that start one; ahead of the cap it stranded the replies.
+for pair in "row-17-review-cap:phase: 8 reason: row 17:" "row-16-cap-blocker:phase: stop reason: row 16: the newest triage round is at the review round cap"; do
+  python3 -c 'import json, sys
+probe = json.load(open(sys.argv[1]))
+probe["review_over_budget"] = True
+json.dump(probe, open(sys.argv[2], "w"))' "$probes_dir/${pair%%:*}.json" "$tmp/cap-over.json"
+  got="$(python3 "$run_state" phase --probe "$tmp/cap-over.json")"
+  grep -Fq "${pair#*:}" <<<"$got" || {
+    echo "an over-budget ${pair%%:*} should give '${pair#*:}' ahead of the budget stop, got: $got" >&2
+    exit 1
+  }
+done
+
+# The cap's prose (#159). phase_of only reads the probe; the agent is what
+# writes the cap file, queues the capped rows, and stops on a blocker, so each
+# of those instructions is pinned where the agent reads it. The flag reaches
+# the probe only through Step 0's write, and a missing file silently reads 2.
+require_text work-issue/SKILL.md "\`--max-review-rounds N\` caps the post-PR review loop at N triage rounds, default 2, and Step 0 writes it to \`RUN_DIR/max_review_rounds\`"
+require_text work-issue/SKILL.md "Write the \`--max-review-rounds\` value, \`2\` where the flag is absent, to \`RUN_DIR/max_review_rounds\`."
+require_text work-issue/SKILL.md "\`baseline.txt\`, \`max_review_rounds\`, \`pushed_at\`"
+# N is a positive integer: 0 would cap round 1, so no post-PR finding ever got
+# a repair, and nothing downstream checks the file's value. A resume skips
+# Step 0, so the flag it passes changes nothing; the file is the lever.
+require_text work-issue/SKILL.md "Where \`--max-review-rounds\` is given a value that is not a positive integer, \`0\` included, refuse the run naming that value, before anything is written under RUN_DIR."
+require_text work-issue/SKILL.md "where a resume keeps it: to change the cap mid-run, write another positive integer to that file before the round it would cap is triaged"
+require_text work-issue/README.md "\`--max-review-rounds N\` sets the review round cap (2 by default)"
+# The queue sentence names what it queues. Written as "the rest" after the cap
+# sentences, it read as the remainder of a capped round.
+require_text work-issue/README.md "The out-of-scope ones go to a queue carrying the reason each is outside"
+# The queue reason, which the Step 8 reply and the deferred-findings comment
+# both carry to the reviewer, so it has to be the one string the issue names.
+require_text work-issue/SKILL.md "Each in-scope row's Scope cell reads \`in scope; queued: review round cap reached (N)\`, and the row is appended to \`queue.md\` with Outside-because \`review round cap reached (N)\`."
+require_text work-issue/references/triage.md "The review round cap is the one reason an in-scope row gets queued."
+require_text work-issue/references/triage.md "each in-scope row's Scope cell reads \`in scope; queued: review round cap reached (N)\`, and the row is appended to \`queue.md\` with Outside-because \`review round cap reached (N)\`"
+require_text work-issue/SKILL.md "A capped round (Step 6) skips this step: it gets no dispatch, no \`repair-base-<k>\`, and no \`repair-<k>.json\`"
+require_text work-issue/SKILL.md "the rows the review round cap queued with \`review round cap reached (N)\`"
+# The P0/blocking exception, and only those two: P1 stays under the cap, which
+# is why the exception reads triage_stop_rows and not triage_blocking_rows.
+require_text work-issue/SKILL.md "The exception is an in-scope row whose Severity is \`P0\` or \`blocking\`: its Scope cell stays \`in scope\`, and the run stops once the round is written, naming the cap and that row, for a human to decide."
+require_text work-issue/references/triage.md "An in-scope row whose Severity is \`P0\` or \`blocking\` is never queued this way."
+require_text _maintenance/work-issue/RATIONALE.md "| 106 | \`--max-review-rounds N\`, default 2, caps the post-PR review loop"
+require_text _maintenance/work-issue/RATIONALE.md "\`P0\` and \`blocking\` are the exception because queueing one ships a known blocker, and repairing it breaks the cap"
+require_text _maintenance/work-issue/RATIONALE.md "rather than reusing \`triage_blocking_rows\` as the issue proposed"
 
 # Each timing fixture through the real `budget`. poll-excluded is the
 # falsifier for what counts as review: counting wall-clock time since the
@@ -1463,6 +1551,71 @@ for tri_case in "triage-pipe:1" "triage-noseverity:null" "empty:0"; do
     exit 1
   }
 done
+
+# The triage_stop_rows probe (#159), run as resume.md writes it. The cap stops
+# only on P0 or blocking, narrower than triage_blocking_rows' P0, P1, or
+# blocking, because a capped round holding P1 rows has to reach Step 8. The
+# fixture's P1 row quotes "P0" in its finding, so a row grep would count 2.
+stop_probe="$(sed -n 's/^| `triage_stop_rows` | `\([^`]*\)`.*/\1/p' work-issue/references/resume.md \
+  | sed 's/\\|/|/g')"
+[[ -n "$stop_probe" ]] || {
+  echo "could not extract the triage_stop_rows probe from work-issue/references/resume.md" >&2
+  exit 1
+}
+cap_run="$tmp/cap-run"
+mkdir -p "$cap_run/triage"
+cp tests/fixtures/work-issue/triage/round-2.md "$cap_run/triage/round-2.md"
+cap_stop="$(bash -c "${stop_probe//<RUN_DIR>/$cap_run}" </dev/null)"
+cap_blocking="$(bash -c "${blocking_probe//<RUN_DIR>/$cap_run}" </dev/null)"
+[[ "$cap_stop" == "1" && "$cap_blocking" == "2" ]] || {
+  echo "on the P0/P1/P2 round, triage_stop_rows should print 1 and triage_blocking_rows 2, got: $cap_stop and $cap_blocking (probe: $stop_probe)" >&2
+  exit 1
+}
+for tri_case in "triage:0" "triage-noseverity:null" "empty:0"; do
+  tri_dir="$tmp/stop-${tri_case%%:*}"
+  mkdir -p "$tri_dir/triage"
+  [[ "${tri_case%%:*}" == empty ]] || cp "tests/fixtures/work-issue/${tri_case%%:*}/round-1.md" "$tri_dir/triage/round-1.md"
+  tri_got="$(bash -c "${stop_probe//<RUN_DIR>/$tri_dir}" </dev/null)"
+  [[ "$tri_got" == "${tri_case##*:}" ]] || {
+    echo "triage_stop_rows on ${tri_case%%:*} should print ${tri_case##*:}, got: $tri_got" >&2
+    exit 1
+  }
+done
+# The cap queues in-scope rows, so only an in-scope P0 is a blocker it would
+# ship. An out-of-scope P0 is queued anyway and must not stop a capped round
+# whose in-scope rows are all P2. A round with no Scope column can't tell the
+# two apart, so it prints null, the way a round with no Severity column does.
+for stop_case in "round-3:0" "round-noscope:null"; do
+  tri_dir="$tmp/stop-scope-${stop_case%%:*}"
+  mkdir -p "$tri_dir/triage"
+  cp "tests/fixtures/work-issue/triage/${stop_case%%:*}.md" "$tri_dir/triage/round-1.md"
+  tri_got="$(bash -c "${stop_probe//<RUN_DIR>/$tri_dir}" </dev/null)"
+  [[ "$tri_got" == "${stop_case##*:}" ]] || {
+    echo "triage_stop_rows on triage/${stop_case%%:*}.md should print ${stop_case##*:}, got: $tri_got (probe: $stop_probe)" >&2
+    exit 1
+  }
+done
+
+# The max_review_rounds probe, run as resume.md writes it. A run started before
+# the flag existed has no file and is capped at the default rather than
+# stopped on a null.
+rounds_probe="$(sed -n 's/^| `max_review_rounds` | `\([^`]*\)`.*/\1/p' work-issue/references/resume.md \
+  | sed 's/\\|/|/g')"
+[[ -n "$rounds_probe" ]] || {
+  echo "could not extract the max_review_rounds probe from work-issue/references/resume.md" >&2
+  exit 1
+}
+rounds_run="$tmp/rounds-run"
+mkdir -p "$rounds_run"
+[[ "$(bash -c "${rounds_probe//<RUN_DIR>/$rounds_run}" </dev/null)" == "2" ]] || {
+  echo "max_review_rounds with no RUN_DIR/max_review_rounds should print the default 2" >&2
+  exit 1
+}
+echo 3 >"$rounds_run/max_review_rounds"
+[[ "$(bash -c "${rounds_probe//<RUN_DIR>/$rounds_run}" </dev/null)" == "3" ]] || {
+  echo "max_review_rounds should print the value Step 0 wrote to RUN_DIR/max_review_rounds" >&2
+  exit 1
+}
 
 # The repair_diff_triggers probe's scope (#162), run as resume.md writes it.
 # The branch changes billing.py's rounding and the repair touches README.md
