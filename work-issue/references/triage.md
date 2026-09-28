@@ -45,9 +45,15 @@ Ambiguous goes in scope where the reviewer marked it P0, and out otherwise. Eith
 
 Scope is not a judgment about whether the finding is right. An out-of-scope finding can be entirely correct and still belong in the queue; what puts it there is that fixing it here would make this pull request about something the issue did not ask for.
 
+## The review round cap
+
+The review round cap is the one reason an in-scope row gets queued. Round k is capped once k reaches N, the value `--max-review-rounds` set and Step 0 wrote to `RUN_DIR/max_review_rounds` (`2` where the file is absent). In a capped round, each in-scope row's Scope cell reads `in scope; queued: review round cap reached (N)`, and the row is appended to `queue.md` with Outside-because `review round cap reached (N)`. The cell keeps `in scope` at its head because the finding was in scope and the record should say so. The resume probe's `triage_inscope_rows` still counts the row, and the Resume table's row 17 reads a capped round as all-queued anyway.
+
+A row whose Severity is `P0` or `blocking` is never queued this way. Its Scope cell stays `in scope`, and the resume probe's `triage_stop_rows` stops the run on it with a reason naming the cap and the blocker. Queueing it ships a known blocker, and repairing it breaks the cap, so the call goes to a human.
+
 ## The queue
 
-Out-of-scope rows append to `RUN_DIR/queue.md`:
+Out-of-scope rows, and a capped round's in-scope rows, append to `RUN_DIR/queue.md`:
 
 ```
 | # | Source | Finding | Outside because | Recommendation | Status |
@@ -55,7 +61,7 @@ Out-of-scope rows append to `RUN_DIR/queue.md`:
 
 - `Source` — the thread or comment URL, or the literal `worker` for a `plan_concerns` entry that came out of a build report rather than a review. A thread's URL is the second half of the `reply-to <id> <url>` on its deciding line; a review's or a pull-request comment's URL ends its own line; all three are in the saved poll file as `root_url` or `url`. Where the deciding line carries a `reply <ts> <url>`, the finding is that reply rather than the root: quote its body from the saved file's `comments` list (the entry whose `url` the line names, which is the newest one not by the author, not always the last), and use the reply's URL as the Source, while the reply still goes to the root's `reply-to` id.
 - `Finding` — the reviewer's words, quoted. Paraphrased, it stops being searchable against the thread it came from. Neither a thread's deciding line nor a review's carries the finding's actual words — a thread's carries a severity marker, a review's carries a state, an author, and a timestamp — so the words to quote come from `RUN_DIR/review/poll-<k>.json`, written by `run-state.py review`'s `--save` flag.
-- `Outside because` — which leg of the in-scope test it failed, in a clause. This is the sentence that goes back to the reviewer, so it is written to be read by them.
+- `Outside because` — which leg of the in-scope test it failed, in a clause, or `review round cap reached (N)` for a capped round's in-scope row. This is the sentence that goes back to the reviewer, so it is written to be read by them.
 - `Recommendation` — usually a `file-issue` line for the human to run, with the finding and its URL. The skill writes the recommendation and leaves the filing to a person: an issue opened by an unattended run arrives with nobody's judgment attached to whether it should exist.
 - `Status` — `queued`, or `filed #M` once the human has acted.
 
