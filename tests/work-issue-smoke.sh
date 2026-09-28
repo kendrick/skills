@@ -139,7 +139,7 @@ for capped in row-16-under-cap row-17-review-cap row-16-cap-blocker row-17-cap-r
 done
 # A base_sha that drifted from the live merge-base (#137), each kind of drift,
 # and row 12's rebase, which moves the base on purpose and outranks the stop.
-for drifted in base-sha-not-merge-base base-sha-not-ancestor row-12-stale-base; do
+for drifted in base-sha-not-merge-base base-sha-not-ancestor row-12-stale-base row-12-stale-base-rebasing; do
   require_file "tests/fixtures/work-issue/probes/$drifted.json"
 done
 require_file tests/fixtures/work-issue/triage/round-2.md
@@ -1189,7 +1189,7 @@ declare -a probe_cases=(
   "row-17-repair-advisory-only:8" "row-17-repair-blocking:8" "row-17-repair-blocking-settled:8" "row-17-repair-diff-trigger:8"
   "row-10-over-budget:stop" "row-11-over-budget:stop" "row-16-over-budget:stop" "row-17-over-budget:stop"
   "row-16-under-cap:7" "row-17-review-cap:8" "row-16-cap-blocker:stop" "row-17-cap-replies-owed:8"
-  "row-12-stale-base:5" "base-sha-not-merge-base:stop" "base-sha-not-ancestor:stop"
+  "row-12-stale-base:5" "row-12-stale-base-rebasing:5" "base-sha-not-merge-base:stop" "base-sha-not-ancestor:stop"
 )
 for case in "${probe_cases[@]}"; do
   fixture="${case%%:*}"
@@ -1809,7 +1809,7 @@ base_case "after a rebase with base_sha untouched" not-merge-base
 # just probed (#137). The diff every later review takes from base_sha has to
 # shrink from the upstream billing.py plus the branch's x.txt to x.txt alone,
 # or code-review and adversarial-review read another PR's money line as ours.
-base_rewrite="$(grep -o 'git merge-base origin/DEFAULT issue-N > RUN_DIR/base_sha' work-issue/SKILL.md | head -1 || true)"
+base_rewrite="$(grep -o 'm="$(git merge-base origin/DEFAULT issue-N)" && printf .%s\\n. "$m" > RUN_DIR/base_sha' work-issue/SKILL.md | head -1 || true)"
 [[ -n "$base_rewrite" ]] || {
   echo "could not extract the Step 5 base_sha rewrite from work-issue/SKILL.md" >&2
   exit 1
@@ -1830,6 +1830,18 @@ base_after="$(base_diff)"
   exit 1
 }
 base_case "after Step 5 item 2 rewrites base_sha" current
+# A merge-base that fails must leave the recorded base alone. A bare redirect
+# truncated the file before the command ran, and the probe then read an empty
+# file as absent, so no row stopped the run (#137 self-review).
+base_kept="$(cat "$base_run/base_sha")"
+(cd "$base_clone" && bash -c "${base_rewrite//origin\/main/origin/no-such-branch}" </dev/null 2>/dev/null) || true
+[[ "$(cat "$base_run/base_sha")" == "$base_kept" ]] || {
+  echo "a failed Step 5 merge-base should leave base_sha untouched, got: '$(cat "$base_run/base_sha")'" >&2
+  exit 1
+}
+: >"$base_run/base_sha"
+base_case "with an empty base_sha file" null
+git -C "$base_clone" merge-base origin/main issue-1 >"$base_run/base_sha"
 git -C "$base_clone" commit-tree -p origin/main~1 -m side 'origin/main~1^{tree}' >"$base_run/base_sha"
 base_case "holding a side-branch commit the branch never had" not-ancestor
 printf 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n' >"$base_run/base_sha"
@@ -1844,7 +1856,7 @@ base_case "with no local issue branch" absent
 # claims nothing else writes the file, and Step 8 item 2 names the rewrite
 # outright, so an edit that inlines Step 8's steps cannot drop it silently.
 require_text work-issue/SKILL.md "Written to \`RUN_DIR/base_sha\` by Step 1, and rewritten by Step 5 item 2 after each proven rebase, which Step 8 item 2 repeats; nothing else writes the file."
-require_text work-issue/SKILL.md "git merge-base origin/DEFAULT issue-N > RUN_DIR/base_sha"
+require_text work-issue/SKILL.md 'm="$(git merge-base origin/DEFAULT issue-N)" && printf '"'"'%s\n'"'"' "$m" > RUN_DIR/base_sha'
 require_text work-issue/SKILL.md "rebase, rewrite \`RUN_DIR/base_sha\`, verify, write \`pushed_at\`, push — Step 5 items 1 through 4, the \`base_sha\` rewrite in item 2 included."
 require_text work-issue/references/resume.md "answers \`stop\` naming the mismatch"
 require_text work-issue/SKILL.md "answers \`stop\` naming the mismatch"
@@ -1852,6 +1864,9 @@ require_text _maintenance/work-issue/EVALS.md "A Rebase Mid-Run Moves the Fixed 
 # A mismatch stops for a human. A probe that healed the file itself would adopt
 # whatever base a manual rebase left, one taken before the red-team included.
 refute_text work-issue/references/resume.md "> <RUN_DIR>/base_sha"
+refute_text work-issue/references/resume.md ">\"<RUN_DIR>/base_sha"
+refute_text work-issue/references/resume.md "> \"<RUN_DIR>/base_sha"
+refute_text work-issue/references/resume.md ">><RUN_DIR>/base_sha"
 # The refute above needs its own Deliberately Not Built row.
 require_text _maintenance/work-issue/RATIONALE.md "The resume probe rewriting a stale \`base_sha\`"
 
