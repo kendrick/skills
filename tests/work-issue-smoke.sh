@@ -1731,6 +1731,22 @@ scope_got="$(run_diff_probe 2>/dev/null)"
   echo "repair_diff_triggers with an unresolvable repair-base SHA should print null, got: $scope_got" >&2
   exit 1
 }
+# Step 8 item 2 rebases after item 1 has already evaluated the repair (#137).
+# The rebase orphans repair-base-<k>, and a two-dot diff from it reads every
+# upstream line the rebase brought in as the repair's own, here a money line,
+# sending a settled round back to adversarial-review.
+scope_git rev-parse issue-1~1 >"$scope_run/redteam/repair-base-1"
+scope_git checkout -q main
+printf 'total = round(price * qty)\n' >"$scope_repo/invoice.py"
+scope_git add invoice.py
+scope_git commit -q -m upstream
+scope_git checkout -q issue-1
+scope_git rebase -q main
+scope_got="$(run_diff_probe)"
+[[ "$scope_got" == "false" ]] || {
+  echo "repair_diff_triggers after a rebase should read the orphaned repair-base as false, got: $scope_got" >&2
+  exit 1
+}
 
 # The base_sha_state probe (#137), run as resume.md writes it, in a clone whose
 # origin moves under it. Upstream gaining a commit leaves the base current,
