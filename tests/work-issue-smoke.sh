@@ -1375,7 +1375,7 @@ require_text work-issue/SKILL.md "\`baseline.txt\`, \`max_review_rounds\`, \`pus
 # a repair, and nothing downstream checks the file's value. A resume skips
 # Step 0, so the flag it passes changes nothing; the file is the lever.
 require_text work-issue/SKILL.md "Where \`--max-review-rounds\` is given a value that is not a positive integer, \`0\` included, refuse the run naming that value, before anything is written under RUN_DIR."
-require_text work-issue/SKILL.md "where a resume keeps it: to change the cap mid-run, write another positive integer to that file"
+require_text work-issue/SKILL.md "where a resume keeps it: to change the cap mid-run, write another positive integer to that file before the round it would cap is triaged"
 require_text work-issue/README.md "\`--max-review-rounds N\` sets the review round cap (2 by default)"
 # The queue sentence names what it queues. Written as "the rest" after the cap
 # sentences, it read as the remainder of a capped round.
