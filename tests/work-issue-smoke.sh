@@ -1805,8 +1805,31 @@ git -C "$base_clone" fetch -q origin
 base_case "after upstream moved and the branch did not" current
 git -C "$base_clone" rebase -q origin/main
 base_case "after a rebase with base_sha untouched" not-merge-base
-git -C "$base_clone" merge-base origin/main issue-1 >"$base_run/base_sha"
-base_case "after base_sha is rewritten to the new merge-base" current
+# Step 5 item 2's rewrite, run as SKILL.md writes it, is what heals the drift
+# just probed (#137). The diff every later review takes from base_sha has to
+# shrink from the upstream billing.py plus the branch's x.txt to x.txt alone,
+# or code-review and adversarial-review read another PR's money line as ours.
+base_rewrite="$(grep -o 'git merge-base origin/DEFAULT issue-N > RUN_DIR/base_sha' work-issue/SKILL.md | head -1 || true)"
+[[ -n "$base_rewrite" ]] || {
+  echo "could not extract the Step 5 base_sha rewrite from work-issue/SKILL.md" >&2
+  exit 1
+}
+base_rewrite="${base_rewrite//DEFAULT/main}"
+base_rewrite="${base_rewrite//issue-N/issue-1}"
+base_rewrite="${base_rewrite//RUN_DIR/$base_run}"
+base_diff() { git -C "$base_clone" diff --name-only "$(cat "$base_run/base_sha")"..HEAD | tr '\n' ' '; }
+base_before="$(base_diff)"
+[[ "$base_before" == "billing.py x.txt " ]] || {
+  echo "before the Step 5 rewrite, a diff from the pre-rebase base_sha should list billing.py and x.txt, got: $base_before" >&2
+  exit 1
+}
+(cd "$base_clone" && bash -c "$base_rewrite" </dev/null)
+base_after="$(base_diff)"
+[[ "$base_after" == "x.txt " ]] || {
+  echo "after the Step 5 rewrite ($base_rewrite), a diff from base_sha should list only x.txt, got: $base_after" >&2
+  exit 1
+}
+base_case "after Step 5 item 2 rewrites base_sha" current
 git -C "$base_clone" commit-tree -p origin/main~1 -m side 'origin/main~1^{tree}' >"$base_run/base_sha"
 base_case "holding a side-branch commit the branch never had" not-ancestor
 printf 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n' >"$base_run/base_sha"
@@ -1817,6 +1840,20 @@ git -C "$base_clone" merge-base origin/main issue-1 >"$base_run/base_sha"
 git -C "$base_clone" checkout -q --detach
 git -C "$base_clone" branch -q -D issue-1
 base_case "with no local issue branch" absent
+# The rewrite has one owner and one repeat. The BASE_SHA bullet names both and
+# claims nothing else writes the file, and Step 8 item 2 names the rewrite
+# outright, so an edit that inlines Step 8's steps cannot drop it silently.
+require_text work-issue/SKILL.md "Written to \`RUN_DIR/base_sha\` by Step 1, and rewritten by Step 5 item 2 after each proven rebase, which Step 8 item 2 repeats; nothing else writes the file."
+require_text work-issue/SKILL.md "git merge-base origin/DEFAULT issue-N > RUN_DIR/base_sha"
+require_text work-issue/SKILL.md "rebase, rewrite \`RUN_DIR/base_sha\`, verify, write \`pushed_at\`, push — Step 5 items 1 through 4, the \`base_sha\` rewrite in item 2 included."
+require_text work-issue/references/resume.md "answers \`stop\` naming the mismatch"
+require_text work-issue/SKILL.md "answers \`stop\` naming the mismatch"
+require_text _maintenance/work-issue/EVALS.md "A Rebase Mid-Run Moves the Fixed Point With It"
+# A mismatch stops for a human. A probe that healed the file itself would adopt
+# whatever base a manual rebase left, one taken before the red-team included.
+refute_text work-issue/references/resume.md "> <RUN_DIR>/base_sha"
+# The refute above needs its own Deliberately Not Built row.
+require_text _maintenance/work-issue/RATIONALE.md "The resume probe rewriting a stale \`base_sha\`"
 
 # A field the probe could not answer is written as null. A field that is absent
 # entirely must stop the run instead of defaulting, because a silent `false`
