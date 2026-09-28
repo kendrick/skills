@@ -111,6 +111,8 @@ PROBE_FIELDS = (
     ("triage_rows_unanswered", "int", ()),
     ("deferred_comment_needed", "bool", ()),
     ("triage_blocking_rows", "int", ()),
+    ("max_review_rounds", "int", ()),
+    ("triage_stop_rows", "int", ()),
     ("repair_ar_settled", "bool", ()),
     ("review_over_budget", "bool", ()),
     ("repair_diff_triggers", "bool", ()),
@@ -805,6 +807,10 @@ def phase_of(probe):
     redteam_clean = redteam_rounds > 0 and not flag(probe, "redteam_last_failed")
     triage_rounds = count(probe, "triage_rounds")
     repair_reports = count(probe, "repair_reports")
+    # The Nth round is the capped one, not the one after it: with the default
+    # of 2, round 1 is repaired and round 2 is answered and queued (#159).
+    max_review_rounds = count(probe, "max_review_rounds")
+    at_review_cap = triage_rounds > 0 and triage_rounds >= max_review_rounds
     # Rows 10, 11, 16, and row 17's re-fire leg each start another review
     # cycle, and only those are gated. Rows past them publish, reply to, or
     # report on work already done, and stopping there would strand it. On
@@ -911,9 +917,29 @@ def phase_of(probe):
         and count(probe, "triage_inscope_rows") > 0
         and not flag(probe, "newest_repair_report")
     ):
-        if over_budget:
-            return budget_stop(16)
-        return "7", "row 16: the newest triage round has in-scope rows and no repair report of its own"
+        # A fresh review of new code nearly always finds something, so an
+        # uncapped loop let P2 threads hold a lane in repair indefinitely. A
+        # round at the cap is never repaired, so it gets no repair report and
+        # would match this row forever if it answered Step 8 here; it falls
+        # through to row 17's replies instead. Only a P0 or blocking row
+        # stops it: queueing one ships a known blocker, and repairing it
+        # breaks the cap, so that call goes to a human. The cap is checked
+        # before the budget because a capped round starts no review cycle,
+        # and a budget stop here stranded its replies.
+        if at_review_cap:
+            stop_rows = count(probe, "triage_stop_rows")
+            if stop_rows > 0:
+                return (
+                    "stop",
+                    f"row 16: the newest triage round is at the review round cap "
+                    f"({triage_rounds} of {max_review_rounds}) and holds {stop_rows} "
+                    "P0 or blocking row(s), which the cap never queues; stop and "
+                    "report the blocker to a human",
+                )
+        else:
+            if over_budget:
+                return budget_stop(16)
+            return "7", "row 16: the newest triage round has in-scope rows and no repair report of its own"
     # Step 8 item 1's re-fire leg, ahead of the push. A repair re-enters
     # adversarial-review when its triage round held a P0, P1, or blocking row,
     # or when its own diff hits a money, authz, or schema trigger row: a
@@ -951,17 +977,24 @@ def phase_of(probe):
     # plan_concerns row lands in the queue at Step 4, before any triage round
     # or repair report exists, and a resume that required one of those first
     # matched no row at all and stranded the run.
+    # A capped round reads as all-queued here: it has in-scope rows and, under
+    # --max-review-rounds 1, no repair report anywhere, so a stop between the
+    # deferred comment and the replies fell through to row 18 with replies owed.
     if pr_state == "OPEN" and (
         flag(probe, "deferred_comment_needed")
         or (
-            (repair_reports > 0 or (triage_rounds > 0 and count(probe, "triage_inscope_rows") == 0))
+            (
+                repair_reports > 0
+                or (triage_rounds > 0 and count(probe, "triage_inscope_rows") == 0)
+                or at_review_cap
+            )
             and (flag(probe, "ahead_of_origin") or count(probe, "triage_rows_unanswered") > 0)
         )
     ):
         return (
             "8",
             "row 17: the deferred-findings comment is owed, or a repair report or an "
-            "all-queued triage round leaves work unpushed or a triage row unanswered",
+            "all-queued or capped triage round leaves work unpushed or a triage row unanswered",
         )
     if pr_state == "OPEN" and review_state == "cleared":
         return "done", "row 18: the PR is open and the review is cleared; print the final report"

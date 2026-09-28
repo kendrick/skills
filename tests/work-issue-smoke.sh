@@ -131,6 +131,13 @@ require_file tests/fixtures/work-issue/review/changes-requested.json
 for gated in 10 11 16 17; do
   require_file "tests/fixtures/work-issue/probes/row-$gated-over-budget.json"
 done
+# The review round cap (#159): one round under it, one at it with only P1/P2
+# rows, the same round holding a P0, and a first round capped by
+# --max-review-rounds 1 whose replies are still owed.
+for capped in row-16-under-cap row-17-review-cap row-16-cap-blocker row-17-cap-replies-owed; do
+  require_file "tests/fixtures/work-issue/probes/$capped.json"
+done
+require_file tests/fixtures/work-issue/triage/round-2.md
 for timing in build30-review61 build30-review59 poll-excluded poll-nested budget-raised open-start-closed-at-poll open-review build-25s crash-closed-at-latest open-earlier-step crash-open-other-step crash-open-poll bad-label end-with-no-start; do
   require_file "tests/fixtures/work-issue/timing/$timing.txt"
 done
@@ -1174,6 +1181,7 @@ declare -a probe_cases=(
   "row-10-repair-unverified:4" "row-10-repair-needed:4" "row-10-failed-twice:stop" "row-13-prepr-repair-clean:5" "row-16-earlier-queued:8" "row-17-review-repair-unpushed:8" "row-17-deferred-owed:8" "row-17-worker-queue:8" "row-18-answered:done" "row-18:done"
   "row-17-repair-advisory-only:8" "row-17-repair-blocking:8" "row-17-repair-blocking-settled:8" "row-17-repair-diff-trigger:8"
   "row-10-over-budget:stop" "row-11-over-budget:stop" "row-16-over-budget:stop" "row-17-over-budget:stop"
+  "row-16-under-cap:7" "row-17-review-cap:8" "row-16-cap-blocker:stop" "row-17-cap-replies-owed:8"
 )
 for case in "${probe_cases[@]}"; do
   fixture="${case%%:*}"
@@ -1306,6 +1314,53 @@ grep -Fq "phase: stop reason: unknown probe fields: review_over_budget" <<<"$(py
   echo "a null review_over_budget should stop the run naming the field" >&2
   exit 1
 }
+
+# The review round cap (#159). A fresh review of new code nearly always finds
+# something, so without a cap P2 threads hold a lane in Steps 6-8 for good.
+# The Nth round is triaged and answered but never repaired: it falls through
+# row 16 to row 17's replies. The same probe one round earlier still repairs.
+cap_reason="$(python3 "$run_state" phase --probe "$probes_dir/row-17-review-cap.json")"
+grep -Fq "phase: 8 reason: row 17:" <<<"$cap_reason" || {
+  echo "a round at the review cap with only P1/P2 rows should skip the repair and land on row 17, got: $cap_reason" >&2
+  exit 1
+}
+under_reason="$(python3 "$run_state" phase --probe "$probes_dir/row-16-under-cap.json")"
+grep -Fq "phase: 7 reason: row 16:" <<<"$under_reason" || {
+  echo "the same round under the review cap should resume at Step 7, got: $under_reason" >&2
+  exit 1
+}
+# A P0 or blocking row at the cap is never queued: queueing it ships a known
+# blocker, and repairing it breaks the cap. The run stops for a human, and the
+# reason says why so the human doesn't re-derive it.
+blocker_reason="$(python3 "$run_state" phase --probe "$probes_dir/row-16-cap-blocker.json")"
+grep -Fq "phase: stop reason: row 16:" <<<"$blocker_reason" \
+  && grep -Fq "review round cap" <<<"$blocker_reason" \
+  && grep -Fq "P0 or blocking" <<<"$blocker_reason" || {
+  echo "a capped round holding a P0 row should stop at row 16 naming the cap and the blocker, got: $blocker_reason" >&2
+  exit 1
+}
+# Under --max-review-rounds 1 no repair report exists anywhere, and the capped
+# round has in-scope rows, so a stop after the deferred comment posted and
+# before the replies finished once matched row 18's done with a reply owed.
+owed_reason="$(python3 "$run_state" phase --probe "$probes_dir/row-17-cap-replies-owed.json")"
+grep -Fq "phase: 8 reason: row 17:" <<<"$owed_reason" || {
+  echo "a capped first round with a reply still owed should land on row 17, got: $owed_reason" >&2
+  exit 1
+}
+# The cap sits ahead of the #158 budget gate on row 16. A capped round starts
+# no review cycle, only replies and the queue, and the budget stop exists for
+# the points that start one; ahead of the cap it stranded the replies.
+for pair in "row-17-review-cap:phase: 8 reason: row 17:" "row-16-cap-blocker:phase: stop reason: row 16: the newest triage round is at the review round cap"; do
+  python3 -c 'import json, sys
+probe = json.load(open(sys.argv[1]))
+probe["review_over_budget"] = True
+json.dump(probe, open(sys.argv[2], "w"))' "$probes_dir/${pair%%:*}.json" "$tmp/cap-over.json"
+  got="$(python3 "$run_state" phase --probe "$tmp/cap-over.json")"
+  grep -Fq "${pair#*:}" <<<"$got" || {
+    echo "an over-budget ${pair%%:*} should give '${pair#*:}' ahead of the budget stop, got: $got" >&2
+    exit 1
+  }
+done
 
 # Each timing fixture through the real `budget`. poll-excluded is the
 # falsifier for what counts as review: counting wall-clock time since the
@@ -1463,6 +1518,57 @@ for tri_case in "triage-pipe:1" "triage-noseverity:null" "empty:0"; do
     exit 1
   }
 done
+
+# The triage_stop_rows probe (#159), run as resume.md writes it. The cap stops
+# only on P0 or blocking, narrower than triage_blocking_rows' P0, P1, or
+# blocking, because a capped round holding P1 rows has to reach Step 8. The
+# fixture's P1 row quotes "P0" in its finding, so a row grep would count 2.
+stop_probe="$(sed -n 's/^| `triage_stop_rows` | `\([^`]*\)`.*/\1/p' work-issue/references/resume.md \
+  | sed 's/\\|/|/g')"
+[[ -n "$stop_probe" ]] || {
+  echo "could not extract the triage_stop_rows probe from work-issue/references/resume.md" >&2
+  exit 1
+}
+cap_run="$tmp/cap-run"
+mkdir -p "$cap_run/triage"
+cp tests/fixtures/work-issue/triage/round-2.md "$cap_run/triage/round-2.md"
+cap_stop="$(bash -c "${stop_probe//<RUN_DIR>/$cap_run}" </dev/null)"
+cap_blocking="$(bash -c "${blocking_probe//<RUN_DIR>/$cap_run}" </dev/null)"
+[[ "$cap_stop" == "1" && "$cap_blocking" == "2" ]] || {
+  echo "on the P0/P1/P2 round, triage_stop_rows should print 1 and triage_blocking_rows 2, got: $cap_stop and $cap_blocking (probe: $stop_probe)" >&2
+  exit 1
+}
+for tri_case in "triage:0" "triage-noseverity:null" "empty:0"; do
+  tri_dir="$tmp/stop-${tri_case%%:*}"
+  mkdir -p "$tri_dir/triage"
+  [[ "${tri_case%%:*}" == empty ]] || cp "tests/fixtures/work-issue/${tri_case%%:*}/round-1.md" "$tri_dir/triage/round-1.md"
+  tri_got="$(bash -c "${stop_probe//<RUN_DIR>/$tri_dir}" </dev/null)"
+  [[ "$tri_got" == "${tri_case##*:}" ]] || {
+    echo "triage_stop_rows on ${tri_case%%:*} should print ${tri_case##*:}, got: $tri_got" >&2
+    exit 1
+  }
+done
+
+# The max_review_rounds probe, run as resume.md writes it. A run started before
+# the flag existed has no file and is capped at the default rather than
+# stopped on a null.
+rounds_probe="$(sed -n 's/^| `max_review_rounds` | `\([^`]*\)`.*/\1/p' work-issue/references/resume.md \
+  | sed 's/\\|/|/g')"
+[[ -n "$rounds_probe" ]] || {
+  echo "could not extract the max_review_rounds probe from work-issue/references/resume.md" >&2
+  exit 1
+}
+rounds_run="$tmp/rounds-run"
+mkdir -p "$rounds_run"
+[[ "$(bash -c "${rounds_probe//<RUN_DIR>/$rounds_run}" </dev/null)" == "2" ]] || {
+  echo "max_review_rounds with no RUN_DIR/max_review_rounds should print the default 2" >&2
+  exit 1
+}
+echo 3 >"$rounds_run/max_review_rounds"
+[[ "$(bash -c "${rounds_probe//<RUN_DIR>/$rounds_run}" </dev/null)" == "3" ]] || {
+  echo "max_review_rounds should print the value Step 0 wrote to RUN_DIR/max_review_rounds" >&2
+  exit 1
+}
 
 # The repair_diff_triggers probe's scope (#162), run as resume.md writes it.
 # The branch changes billing.py's rounding and the repair touches README.md
