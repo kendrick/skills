@@ -1856,7 +1856,16 @@ git -C "$base_clone" checkout -q --detach
 git -C "$base_clone" push -q origin issue-1 2>/dev/null
 git -C "$base_clone" branch -q -D issue-1
 base_case "with the issue branch only on origin" null
-git -C "$base_clone" push -q origin --delete issue-1 2>/dev/null
+# The probe asks the live remote, as branch_remote does, not the tracking ref:
+# a checkout that never fetched the branch has no refs/remotes/origin/issue-1,
+# and reading that as absent sent a remote-only run on to Step 8 (#172 review).
+git -C "$base_clone" update-ref -d refs/remotes/origin/issue-1
+base_case "with the issue branch only on origin, never fetched" null
+# The other direction: a tracking ref left behind after the branch was deleted
+# on origin is stale, and the live remote says no branch anywhere.
+git -C "$base_clone" update-ref refs/remotes/origin/issue-1 "$(git -C "$base_clone" rev-parse origin/main)"
+git -C "$base_origin" branch -q -D issue-1
+base_case "with a stale tracking ref and no branch on origin" absent
 git -C "$base_clone" update-ref -d refs/remotes/origin/issue-1
 base_case "with no issue branch anywhere" absent
 # The rewrite has one owner and one repeat. The BASE_SHA bullet names both and
