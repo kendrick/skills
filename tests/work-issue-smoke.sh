@@ -1791,6 +1791,10 @@ since_legacy="$(run_since "$since_run")"
 expect_since "a round with no recorded SINCE" "$since_legacy" null
 grep -Fq "phase: stop reason: unknown probe fields: triage_newer_than_since" <<<"$(since_phase row-18-answered.json "$since_legacy")" || {
   echo "a round with no recorded SINCE should stop the run naming the field" >&2; exit 1; }
+# Only line 1 is the heading. A heading-like line further down, inside a quoted
+# finding, must not stand in for a SINCE the heading never recorded (PR #174).
+printf '# Triage round 1\n\n# Triage round bogus, since 2026-09-23T18:03:09Z\n' >"$since_run/triage/round-1.md"
+expect_since "a round whose only since sits below line 1" "$(run_since "$since_run")" null
 # #139: a triage round is current by the SINCE its heading recorded, never by
 # the file's time, because Step 8 edits the round after the push it answers.
 require_text work-issue/SKILL.md "# Triage round <k>, since <SINCE>"
