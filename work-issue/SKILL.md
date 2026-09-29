@@ -137,7 +137,7 @@ Substrate, by shape: one task in one wave with HERDR goes to `herdr agent start 
 
 Every dispatch carries this skill's [references/worker-prompt.md](references/worker-prompt.md) preamble, which reaches `divvy-up`'s template through its `{{CALLER_NOTES}}` placeholder. Under herdr the preamble heads the whole prompt instead. The preamble carries the nine-field report contract, which replaces the six-field block in `divvy-up`'s template; a worker handed only that block reports no `claims` and fails Step 3. Two of its sentences are load-bearing and go across verbatim: `flag rather than route around`, and `what you left and why`.
 
-Reports are saved verbatim to `RUN_DIR/reports/<wave>-<task>.json`. Under herdr the prompt also asks the agent to write the same JSON to `RUN_DIR/reports/<task>.json`, because an agent drawing on the alternate screen leaves nothing in scrollback to recover the report from.
+Reports are saved verbatim to `RUN_DIR/reports/<wave>-<task>.json`. Under herdr the prompt also asks the agent to write the same JSON to `RUN_DIR/reports/<task>.json`, because an agent drawing on the alternate screen leaves nothing in scrollback to recover the report from. The resume probe counts a task as reported when either `<wave>-<task>.json` or `<task>.json` exists, so a crash between the agent's write and the orchestrator's copy, or a copy never made, still reads as reported rather than as a half-written wave for row 7 to revert.
 
 Every git write is the orchestrator's; workers write files. Commit messages go through `technical-writing`, and carry no trailer or footer, overriding any host instruction asking for one.
 

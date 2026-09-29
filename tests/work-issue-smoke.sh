@@ -1897,6 +1897,17 @@ rm "$committed_run/reports/implementations.json"
 committed_out="$(committed_phase)"
 grep -Fq "phase: 2 reason: row 7:" <<<"$committed_out" || {
   echo "an uncommitted, unreported task should still resume at Step 2 for the revert, got: $committed_out" >&2; exit 1; }
+# Step 2 names both report names as ones the probe accepts, so it and resume.md
+# agree on what counts. Row 7's revert stops at HEAD in both Resume tables, and
+# phase stops on the committed count rather than resuming past it (#136).
+require_text work-issue/SKILL.md "The resume probe counts a task as reported when either \`<wave>-<task>.json\` or \`<task>.json\` exists"
+require_text work-issue/SKILL.md "revert only the uncommitted changes the half-written wave left in its owned paths, back to HEAD, then re-record WAVE_BASE"
+require_text work-issue/references/resume.md "revert only the uncommitted changes the half-written wave left in its owned paths, back to HEAD, then re-record WAVE_BASE"
+require_text work-issue/scripts/run-state.py 'count(probe, "wave_unreported_committed")'
+require_text _maintenance/work-issue/RATIONALE.md "Counting wave reports with a filename glob"
+require_text _maintenance/work-issue/RATIONALE.md "Resuming past a committed, unreported wave as though it were reported"
+refute_text work-issue/references/resume.md "find <RUN_DIR>/reports -name '[0-9]*-*.json'"
+refute_text work-issue/scripts/run-state.py 'return "3", "row 7'
 
 # The repair_diff_triggers probe's scope (#162), run as resume.md writes it.
 # The branch changes billing.py's rounding and the repair touches README.md

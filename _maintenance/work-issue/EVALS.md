@@ -64,7 +64,7 @@ python3 work-issue/scripts/run-state.py phase --probe PROBE.json
 > /work-issue <N>
 ```
 
-**Pass condition:** the script prints `phase: 2` with a reason naming the wave, and the re-invocation resumes at that wave: it re-records WAVE_BASE, reverts what the half-written wave left with no report, and re-dispatches only the tasks with no report on disk. Fails if it re-dispatches a task whose report is already in `RUN_DIR/reports/`, if it leaves the half-written wave's files in the tree, or if it restarts at Step 0.
+**Pass condition:** the script prints `phase: 2` with a reason naming the wave, and the re-invocation resumes at that wave: it reverts what the half-written wave left with no report, only the uncommitted changes in its owned paths and back to HEAD, then re-records WAVE_BASE, and re-dispatches only the tasks with no report on disk under either `<wave>-<task>.json` or `<task>.json`. Fails if it re-dispatches a task whose report is already in `RUN_DIR/reports/` under either name, if it leaves the half-written wave's files in the tree, if it re-records WAVE_BASE before the revert, if it resets or checks out any commit older than HEAD, if it reverts or re-dispatches a task whose owned paths a commit in `git log <base_sha>..HEAD` touched (that probe prints `phase: stop` naming the disagreement, and the run stops), or if it restarts at Step 0.
 
 ### 5. Resume at Row 10—Built But Never Red-Teamed
 
