@@ -255,6 +255,52 @@ for f in work-issue/SKILL.md work-issue/references/redteam.md; do
   refute_text "$f" "Re-derive the grep from"
   refute_text "$f" "build the grep"
 done
+# The match only nominates the diff; a reading of each matched line decides
+# (row 112, #120). The matcher is lexical, so prose "where" and "default" hit
+# authz and schema, and every lane from #157 to #171 fired on docs that way.
+# Both statements of the rule carry the same five sentences. The refutes pin
+# the two cuts: firing on any match, and excluding markdown from the diff
+# (SKILL.md is this repo's executable artifact).
+for f in work-issue/SKILL.md work-issue/references/redteam.md; do
+  require_text "$f" "Any output line makes the diff a candidate, and a candidate fires the trigger only where a reading confirms it."
+  require_text "$f" "git diff BASE_SHA..HEAD | adversarial-review/scripts/match-triggers.py lines --only 1,2,4"
+  require_text "$f" "A removed line counts as the change its removal makes."
+  require_text "$f" "A line the reading cannot settle reads \`implements\`."
+  require_text "$f" "\`--deep\` fires the trigger on its own, with no reading."
+  refute_text "$f" "any output line fires the trigger"
+  refute_text "$f" "Any output line fires the trigger"
+  refute_text "$f" "':!*.md'"
+  refute_text "$f" "':(exclude)*.md'"
+done
+# Candidacy through the real script. A real money, authz, and schema change
+# always reaches the reading, the removed tenant filter included, and a prose
+# diff is still a candidate: the reading, not the matcher, reads it away.
+trigger_fixtures=tests/fixtures/work-issue/trigger
+require_file "$trigger_fixtures/hazard-code.diff"
+require_file "$trigger_fixtures/prose-signal-words.diff"
+hazard_rows="$(python3 adversarial-review/scripts/match-triggers.py rows --only 1,2,4 < "$trigger_fixtures/hazard-code.diff")"
+[[ "$hazard_rows" == $'1 money\n2 authz\n4 schema' ]] || {
+  echo "hazard-code.diff should match rows 1, 2, and 4, got: $hazard_rows" >&2
+  exit 1
+}
+hazard_lines="$(python3 adversarial-review/scripts/match-triggers.py lines --only 1,2,4 < "$trigger_fixtures/hazard-code.diff")"
+expected_hazard_lines="$(printf '%s\t%s\t%s\t%s\n' \
+  "1 money" "app/billing.py" "round(" "+    total = round(order.price * order.qty, 2)" \
+  "2 authz" "app/views.py" "filter(" "-    return Order.objects.filter(tenant_id=request.user.tenant_id)" \
+  "4 schema" "db/0042_region.sql" "ALTER TABLE" "+ALTER TABLE orders ADD COLUMN region text NOT NULL DEFAULT 'us';")"
+[[ "$hazard_lines" == "$expected_hazard_lines" ]] || {
+  echo "hazard-code.diff lines output drifted, got: $hazard_lines" >&2
+  exit 1
+}
+prose_rows="$(python3 adversarial-review/scripts/match-triggers.py rows --only 1,2,4 < "$trigger_fixtures/prose-signal-words.diff")"
+[[ "$prose_rows" == $'2 authz\n4 schema' ]] || {
+  echo "prose-signal-words.diff should be a candidate on rows 2 and 4, got: $prose_rows" >&2
+  exit 1
+}
+require_text _maintenance/work-issue/RATIONALE.md "| 112 |"
+require_text _maintenance/work-issue/RATIONALE.md "Firing the trigger on any matched signal, with no reading"
+require_text _maintenance/work-issue/RATIONALE.md "Excluding markdown, prose, or fixture paths from the trigger diff"
+require_text _maintenance/work-issue/EVALS.md "Reads Past Prose Signal Words"
 
 # Step 0's yes answers `adversarial-review`'s own Step 2 question (row 93).
 # Without that, an unattended run stops mid-run on a prompt nobody is there to
@@ -1331,6 +1377,23 @@ grep -Fq "phase: 8 reason: row 17: the deferred-findings comment is owed" <<<"$q
 }
 grep -Fq "adversarial-review" <<<"$quiet_reason" && {
   echo "a P2-only repair with a quiet diff must not re-enter adversarial-review, got: $quiet_reason" >&2
+  exit 1
+}
+# A candidate repair diff the reading reads away (row 112). The probe still
+# flags the diff, and trigger-repair-<k>.txt holds `fired: no`, which settles
+# the review. The probe needed no change for this, and this guard shows it.
+python3 -c 'import json, sys
+probe = json.load(open(sys.argv[1]))
+assert probe["repair_diff_triggers"] is True
+probe["repair_ar_settled"] = True
+json.dump(probe, open(sys.argv[2], "w"))' "$probes_dir/row-17-repair-diff-trigger.json" "$tmp/repair-diff-read-away.json"
+read_away_reason="$(python3 "$run_state" phase --probe "$tmp/repair-diff-read-away.json")"
+grep -Fq "phase: 8 reason: row 17: the deferred-findings comment is owed" <<<"$read_away_reason" || {
+  echo "a candidate repair diff read away to fired: no should move on to row 17's push leg, got: $read_away_reason" >&2
+  exit 1
+}
+grep -Fq "adversarial-review" <<<"$read_away_reason" && {
+  echo "a candidate repair diff read away to fired: no must not re-enter adversarial-review, got: $read_away_reason" >&2
   exit 1
 }
 # The #158 budget gate covers the new condition too: it starts a review cycle.
