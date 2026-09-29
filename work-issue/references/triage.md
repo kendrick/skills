@@ -45,6 +45,12 @@ Ambiguous goes in scope where the reviewer marked it P0, and out otherwise. Eith
 
 Scope is not a judgment about whether the finding is right. An out-of-scope finding can be entirely correct and still belong in the queue; what puts it there is that fixing it here would make this pull request about something the issue did not ask for.
 
+## The round file
+
+Each round is `RUN_DIR/triage/round-<k>.md`, and its first line is its heading: `# Triage round <k>, since <SINCE>`. `<SINCE>` is the exact `--since` value the poll that returned `findings` ran with, which is the contents of `RUN_DIR/pushed_at`, copied verbatim. Write it once, when the round is created, and never rewrite it. The table of rows follows.
+
+The resume probe decides whether the newest round is current by comparing this recorded SINCE with `pushed_at` (`triage_newer_than_since` in `references/resume.md`). The file itself changes after the push that answers it, because Step 8 writes each reply URL into its row, so nothing but the heading can say which push a round was written against. A round with no `since` in its heading stops the run.
+
 ## The review round cap
 
 The review round cap is the one reason an in-scope row gets queued. Round k is capped once k reaches N, the value `--max-review-rounds` set and Step 0 wrote to `RUN_DIR/max_review_rounds` (`2` where the file is absent). In a capped round, each in-scope row's Scope cell reads `in scope; queued: review round cap reached (N)`, and the row is appended to `queue.md` with Outside-because `review round cap reached (N)`. The cell keeps `in scope` at its head because the finding was in scope and the record should say so. The resume probe's `triage_inscope_rows` still counts the row, and the Resume table's row 17 reads a capped round as all-queued anyway.
