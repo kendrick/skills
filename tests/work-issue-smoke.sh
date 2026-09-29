@@ -137,6 +137,11 @@ done
 for capped in row-16-under-cap row-17-review-cap row-16-cap-blocker row-17-cap-replies-owed; do
   require_file "tests/fixtures/work-issue/probes/$capped.json"
 done
+# A base_sha that drifted from the live merge-base (#137), each kind of drift,
+# and row 12's rebase, which moves the base on purpose and outranks the stop.
+for drifted in base-sha-not-merge-base base-sha-not-ancestor row-12-stale-base row-12-stale-base-rebasing; do
+  require_file "tests/fixtures/work-issue/probes/$drifted.json"
+done
 require_file tests/fixtures/work-issue/triage/round-2.md
 require_file tests/fixtures/work-issue/triage/round-3.md
 require_file tests/fixtures/work-issue/triage/round-noscope.md
@@ -1184,6 +1189,7 @@ declare -a probe_cases=(
   "row-17-repair-advisory-only:8" "row-17-repair-blocking:8" "row-17-repair-blocking-settled:8" "row-17-repair-diff-trigger:8"
   "row-10-over-budget:stop" "row-11-over-budget:stop" "row-16-over-budget:stop" "row-17-over-budget:stop"
   "row-16-under-cap:7" "row-17-review-cap:8" "row-16-cap-blocker:stop" "row-17-cap-replies-owed:8"
+  "row-12-stale-base:5" "row-12-stale-base-rebasing:5" "base-sha-not-merge-base:stop" "base-sha-not-ancestor:stop"
 )
 for case in "${probe_cases[@]}"; do
   fixture="${case%%:*}"
@@ -1215,6 +1221,48 @@ set -e
 }
 grep -Fq "phase: stop reason: unknown probe fields: branch_remote" <<<"$null_out" || {
   echo "a null branch_remote should stop the run naming the field, got: $null_out" >&2
+  exit 1
+}
+
+# A base_sha that drifted from the live merge-base (#137) stops naming which
+# drift, because the two have different causes: a rebase the run never
+# recorded, or a default branch rewritten under it. On cambium #78 every review
+# after the rebase diffed four other merged PRs as the issue's own change.
+for drift in not-merge-base not-ancestor; do
+  drift_out="$(python3 "$run_state" phase --probe "$probes_dir/base-sha-$drift.json")"
+  grep -Fq "phase: stop reason: base_sha mismatch ($drift):" <<<"$drift_out" || {
+    echo "base-sha-$drift.json should stop naming the $drift mismatch, got: $drift_out" >&2
+    exit 1
+  }
+done
+# The same probe with the base current is plain row 17, so the stop above is
+# the field's doing and not something else the fixture carries.
+python3 -c 'import json, sys
+probe = json.load(open(sys.argv[1]))
+assert probe["base_sha_state"] == "not-merge-base"
+probe["base_sha_state"] = "current"
+json.dump(probe, open(sys.argv[2], "w"))' "$probes_dir/base-sha-not-merge-base.json" "$tmp/base-sha-current.json"
+current_out="$(python3 "$run_state" phase --probe "$tmp/base-sha-current.json")"
+grep -Fq "phase: 8 reason: row 17:" <<<"$current_out" || {
+  echo "base-sha-not-merge-base.json with base_sha_state current should land on row 17, got: $current_out" >&2
+  exit 1
+}
+# git could not answer: the null-field stop, not a mismatch and not a pass.
+python3 -c 'import json, sys
+probe = json.load(open(sys.argv[1]))
+probe["base_sha_state"] = None
+json.dump(probe, open(sys.argv[2], "w"))' "$probes_dir/row-17.json" "$tmp/null-base-state.json"
+null_base_out="$(python3 "$run_state" phase --probe "$tmp/null-base-state.json")"
+grep -Fq "phase: stop reason: unknown probe fields: base_sha_state" <<<"$null_base_out" || {
+  echo "a null base_sha_state should stop the run naming the field, got: $null_base_out" >&2
+  exit 1
+}
+python3 -c 'import json, sys
+probe = json.load(open(sys.argv[1]))
+probe["base_sha_state"] = None
+json.dump(probe, open(sys.argv[2], "w"))' "$probes_dir/unknown-branch-remote.json" "$tmp/null-both.json"
+grep -Fq "phase: stop reason: unknown probe fields: branch_remote, base_sha_state" <<<"$(python3 "$run_state" phase --probe "$tmp/null-both.json")" || {
+  echo "unknown-branch-remote.json with base_sha_state null too should stop naming both fields" >&2
   exit 1
 }
 
@@ -1683,6 +1731,164 @@ scope_got="$(run_diff_probe 2>/dev/null)"
   echo "repair_diff_triggers with an unresolvable repair-base SHA should print null, got: $scope_got" >&2
   exit 1
 }
+# Step 8 item 2 rebases after item 1 has already evaluated the repair (#137).
+# The rebase orphans repair-base-<k>, and a two-dot diff from it reads every
+# upstream line the rebase brought in as the repair's own, here a money line,
+# sending a settled round back to adversarial-review.
+scope_git rev-parse issue-1~1 >"$scope_run/redteam/repair-base-1"
+scope_git checkout -q main
+printf 'total = round(price * qty)\n' >"$scope_repo/invoice.py"
+scope_git add invoice.py
+scope_git commit -q -m upstream
+scope_git checkout -q issue-1
+scope_git rebase -q main
+scope_got="$(run_diff_probe)"
+[[ "$scope_got" == "false" ]] || {
+  echo "repair_diff_triggers after a rebase should read the orphaned repair-base as false, got: $scope_got" >&2
+  exit 1
+}
+
+# The base_sha_state probe (#137), run as resume.md writes it, in a clone whose
+# origin moves under it. Upstream gaining a commit leaves the base current,
+# since the branch has not moved; the rebase is what orphans it, and writing
+# the new merge-base is what heals it. The upstream commit carries a money line
+# so a later rebase scenario can reuse this repo shape.
+base_probe="$(sed -n 's/^| `base_sha_state` | `\([^`]*\)`.*/\1/p' work-issue/references/resume.md \
+  | sed 's/\\|/|/g')"
+[[ -n "$base_probe" ]] || {
+  echo "could not extract the base_sha_state probe from work-issue/references/resume.md" >&2
+  exit 1
+}
+base_root="$tmp/base-run"
+base_origin="$base_root/origin.git"
+base_clone="$base_root/clone"
+base_upstream="$base_root/upstream"
+base_run="$base_root/run"
+mkdir -p "$base_run"
+git init -q -b main --bare "$base_origin"
+for base_repo in "$base_clone" "$base_upstream"; do
+  git clone -q "$base_origin" "$base_repo" 2>/dev/null
+  # Pinned identity, no signing, no hooks: the user's global git config must
+  # not decide whether a throwaway commit or rebase succeeds.
+  git -C "$base_repo" config user.email smoke@example.invalid
+  git -C "$base_repo" config user.name smoke
+  git -C "$base_repo" config commit.gpgsign false
+  git -C "$base_repo" config core.hooksPath /dev/null
+done
+printf 'a\n' >"$base_clone/a.txt"
+git -C "$base_clone" add a.txt
+git -C "$base_clone" commit -q -m base
+git -C "$base_clone" push -q origin main 2>/dev/null
+git -C "$base_clone" checkout -q -b issue-1
+printf 'x\n' >"$base_clone/x.txt"
+git -C "$base_clone" add x.txt
+git -C "$base_clone" commit -q -m branch
+git -C "$base_clone" merge-base origin/main issue-1 >"$base_run/base_sha"
+base_case() {
+  local label="$1" want="$2" cmd got
+  cmd="${base_probe//<RUN_DIR>/$base_run}"
+  cmd="${cmd//<N>/1}"
+  cmd="${cmd//<DEFAULT>/main}"
+  got="$(cd "$base_clone" && bash -c "$cmd" </dev/null 2>/dev/null)"
+  [[ "$got" == "$want" ]] || {
+    echo "base_sha_state $label: expected $want, got: $got (probe: $base_probe)" >&2
+    exit 1
+  }
+}
+base_case "on a fresh branch" current
+git -C "$base_upstream" pull -q origin main 2>/dev/null
+printf 'total = round(price * qty)\n' >"$base_upstream/billing.py"
+git -C "$base_upstream" add billing.py
+git -C "$base_upstream" commit -q -m upstream
+git -C "$base_upstream" push -q origin main 2>/dev/null
+git -C "$base_clone" fetch -q origin
+base_case "after upstream moved and the branch did not" current
+git -C "$base_clone" rebase -q origin/main
+base_case "after a rebase with base_sha untouched" not-merge-base
+# Step 5 item 2's rewrite, run as SKILL.md writes it, is what heals the drift
+# just probed (#137). The diff every later review takes from base_sha has to
+# shrink from the upstream billing.py plus the branch's x.txt to x.txt alone,
+# or code-review and adversarial-review read another PR's money line as ours.
+base_rewrite="$(grep -o 'm="$(git merge-base origin/DEFAULT issue-N)" && printf .%s\\n. "$m" > RUN_DIR/base_sha' work-issue/SKILL.md | head -1 || true)"
+[[ -n "$base_rewrite" ]] || {
+  echo "could not extract the Step 5 base_sha rewrite from work-issue/SKILL.md" >&2
+  exit 1
+}
+base_rewrite="${base_rewrite//DEFAULT/main}"
+base_rewrite="${base_rewrite//issue-N/issue-1}"
+base_rewrite="${base_rewrite//RUN_DIR/$base_run}"
+base_diff() { git -C "$base_clone" diff --name-only "$(cat "$base_run/base_sha")"..HEAD | tr '\n' ' '; }
+base_before="$(base_diff)"
+[[ "$base_before" == "billing.py x.txt " ]] || {
+  echo "before the Step 5 rewrite, a diff from the pre-rebase base_sha should list billing.py and x.txt, got: $base_before" >&2
+  exit 1
+}
+(cd "$base_clone" && bash -c "$base_rewrite" </dev/null)
+base_after="$(base_diff)"
+[[ "$base_after" == "x.txt " ]] || {
+  echo "after the Step 5 rewrite ($base_rewrite), a diff from base_sha should list only x.txt, got: $base_after" >&2
+  exit 1
+}
+base_case "after Step 5 item 2 rewrites base_sha" current
+# A merge-base that fails must leave the recorded base alone. A bare redirect
+# truncated the file before the command ran, and the probe then read an empty
+# file as absent, so no row stopped the run (#137 self-review).
+base_kept="$(cat "$base_run/base_sha")"
+(cd "$base_clone" && bash -c "${base_rewrite//origin\/main/origin/no-such-branch}" </dev/null 2>/dev/null) || true
+[[ "$(cat "$base_run/base_sha")" == "$base_kept" ]] || {
+  echo "a failed Step 5 merge-base should leave base_sha untouched, got: '$(cat "$base_run/base_sha")'" >&2
+  exit 1
+}
+: >"$base_run/base_sha"
+base_case "with an empty base_sha file" null
+git -C "$base_clone" merge-base origin/main issue-1 >"$base_run/base_sha"
+git -C "$base_clone" commit-tree -p origin/main~1 -m side 'origin/main~1^{tree}' >"$base_run/base_sha"
+base_case "holding a side-branch commit the branch never had" not-ancestor
+printf 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n' >"$base_run/base_sha"
+base_case "holding a SHA that does not resolve" null
+rm "$base_run/base_sha"
+base_case "with no base_sha file" absent
+git -C "$base_clone" merge-base origin/main issue-1 >"$base_run/base_sha"
+git -C "$base_clone" checkout -q --detach
+# A branch left only on origin is not a run rows 4 through 7 own: the branch
+# exists, so they pass it by, and absent there skipped the base check all the
+# way to Step 8 (#137 red-team). It stops naming the field instead.
+git -C "$base_clone" push -q origin issue-1 2>/dev/null
+git -C "$base_clone" branch -q -D issue-1
+base_case "with the issue branch only on origin" null
+# The probe asks the live remote, as branch_remote does, not the tracking ref:
+# a checkout that never fetched the branch has no refs/remotes/origin/issue-1,
+# and reading that as absent sent a remote-only run on to Step 8 (#172 review).
+git -C "$base_clone" update-ref -d refs/remotes/origin/issue-1
+base_case "with the issue branch only on origin, never fetched" null
+# The other direction: a tracking ref left behind after the branch was deleted
+# on origin is stale, and the live remote says no branch anywhere.
+git -C "$base_clone" update-ref refs/remotes/origin/issue-1 "$(git -C "$base_clone" rev-parse origin/main)"
+git -C "$base_origin" branch -q -D issue-1
+base_case "with a stale tracking ref and no branch on origin" absent
+git -C "$base_clone" update-ref -d refs/remotes/origin/issue-1
+base_case "with no issue branch anywhere" absent
+# The rewrite has one owner and one repeat. The BASE_SHA bullet names both and
+# claims nothing else writes the file, and Step 8 item 2 names the rewrite
+# outright, so an edit that inlines Step 8's steps cannot drop it silently.
+require_text work-issue/SKILL.md "Written to \`RUN_DIR/base_sha\` by Step 1, and rewritten by Step 5 item 2 after each proven rebase, which Step 8 item 2 repeats; nothing else writes the file."
+require_text work-issue/SKILL.md 'm="$(git merge-base origin/DEFAULT issue-N)" && printf '"'"'%s\n'"'"' "$m" > RUN_DIR/base_sha'
+# Step 8 item 1 reads the repair's diff with the same ancestor check the
+# repair_diff_triggers probe runs, or a resume after item 2's rebase re-fires
+# adversarial-review over upstream code the probe already ignores.
+require_text work-issue/SKILL.md "A \`repair-base-<k>\` that is no longer an ancestor of HEAD leaves this condition unmet too"
+require_text work-issue/SKILL.md "rebase, rewrite \`RUN_DIR/base_sha\`, verify, write \`pushed_at\`, push — Step 5 items 1 through 4, the \`base_sha\` rewrite in item 2 included."
+require_text work-issue/references/resume.md "answers \`stop\` naming the mismatch"
+require_text work-issue/SKILL.md "answers \`stop\` naming the mismatch"
+require_text _maintenance/work-issue/EVALS.md "A Rebase Mid-Run Moves the Fixed Point With It"
+# A mismatch stops for a human. A probe that healed the file itself would adopt
+# whatever base a manual rebase left, one taken before the red-team included.
+refute_text work-issue/references/resume.md "> <RUN_DIR>/base_sha"
+refute_text work-issue/references/resume.md ">\"<RUN_DIR>/base_sha"
+refute_text work-issue/references/resume.md "> \"<RUN_DIR>/base_sha"
+refute_text work-issue/references/resume.md ">><RUN_DIR>/base_sha"
+# The refute above needs its own Deliberately Not Built row.
+require_text _maintenance/work-issue/RATIONALE.md "The resume probe rewriting a stale \`base_sha\`"
 
 # A field the probe could not answer is written as null. A field that is absent
 # entirely must stop the run instead of defaulting, because a silent `false`

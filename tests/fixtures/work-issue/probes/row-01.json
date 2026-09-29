@@ -5,6 +5,7 @@
   "run_dir": true,
   "base_sha": false,
   "baseline": false,
+  "base_sha_state": "absent",
   "pr_state": "MERGED",
   "review_state": "cleared",
   "has_waves": true,
