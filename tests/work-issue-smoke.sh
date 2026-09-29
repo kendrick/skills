@@ -126,6 +126,10 @@ require_file tests/fixtures/work-issue/probes/row-07-isolation-incomplete.json
 require_file tests/fixtures/work-issue/probes/row-11-trigger-unrecorded.json
 # A P2-only round whose repair diff hits a money, authz, or schema row (#162).
 require_file tests/fixtures/work-issue/probes/row-17-repair-diff-trigger.json
+# Row 7 with committed, unreported waves, and the run dir whose reports carry
+# only the herdr agent's <task>.json names (cambium #78, #136).
+require_file tests/fixtures/work-issue/probes/row-07-committed-unreported.json
+require_file tests/fixtures/work-issue/reports-task-named/plan.md
 require_file tests/fixtures/work-issue/review/changes-requested.json
 # One over-budget probe per gated row, and the timing logs the budget reads.
 for gated in 10 11 16 17; do
@@ -1231,7 +1235,7 @@ set -e
 probes_dir=tests/fixtures/work-issue/probes
 declare -a probe_cases=(
   "row-01:done" "row-02:wait" "row-03:stop" "row-04:0" "row-05:0" "row-05-gated:0" "row-06:0"
-  "row-07:2" "row-07-isolation-incomplete:1" "row-08:3" "row-09:3" "row-10:4" "row-11:4" "row-11-trigger-unrecorded:4" "row-12:5" "row-13:5"
+  "row-07:2" "row-07-isolation-incomplete:1" "row-07-committed-unreported:stop" "row-08:3" "row-09:3" "row-10:4" "row-11:4" "row-11-trigger-unrecorded:4" "row-12:5" "row-13:5"
   "row-14:6" "row-15:6" "row-16:7" "row-17:8" "row-17-queued:8" "row-17-postpush:8"
   "row-10-repair-unverified:4" "row-10-repair-needed:4" "row-10-failed-twice:stop" "row-13-prepr-repair-clean:5" "row-16-earlier-queued:8" "row-17-review-repair-unpushed:8" "row-17-deferred-owed:8" "row-17-worker-queue:8" "row-18-answered:done" "row-18:done"
   "row-17-repair-advisory-only:8" "row-17-repair-blocking:8" "row-17-repair-blocking-settled:8" "row-17-repair-diff-trigger:8"
@@ -1805,6 +1809,94 @@ refute_text work-issue/references/resume.md "compare its mtime against"
 refute_text work-issue/SKILL.md "compare its mtime against"
 refute_text work-issue/references/resume.md "no \`triage/round-<k>.md\` newer than SINCE"
 refute_text work-issue/SKILL.md "no \`triage/round-<k>.md\` newer than SINCE"
+
+# The wave_reports and wave_unreported_committed probes (#136), run as
+# resume.md writes them. On cambium #78 every report was the herdr agent's
+# reports/<task>.json, a filename glob counted 0 of 5 for five gated, committed
+# waves, and row 7 said to revert them.
+reports_probe="$(sed -n 's/^| `wave_reports` | `\([^`]*\)`.*/\1/p' work-issue/references/resume.md \
+  | sed 's/\\|/|/g')"
+[[ -n "$reports_probe" ]] || {
+  echo "could not extract the wave_reports probe from work-issue/references/resume.md" >&2
+  exit 1
+}
+run_reports() { bash -c "${reports_probe//<RUN_DIR>/$1}" </dev/null; }
+expect_reports() {
+  [[ "$2" == "$3" ]] || { echo "wave_reports on $1 should print $3, got: $2 (probe: $reports_probe)" >&2; exit 1; }
+}
+reports_run="$tmp/reports-run"
+cp -R tests/fixtures/work-issue/reports-task-named "$reports_run"
+expect_reports "five <task>.json reports, a decoy, and a numbered row outside ## Waves" "$(run_reports "$reports_run")" 5
+mv "$reports_run/reports/fixtures.json" "$reports_run/reports/0-fixtures.json"
+expect_reports "one report under <wave>-<task>.json" "$(run_reports "$reports_run")" 5
+cp "$reports_run/reports/record-revision.json" "$reports_run/reports/0-record-revision.json"
+expect_reports "one task reported under both names" "$(run_reports "$reports_run")" 5
+rm "$reports_run/reports/0-fixtures.json"
+expect_reports "one task with no report" "$(run_reports "$reports_run")" 4
+
+committed_probe="$(sed -n 's/^| `wave_unreported_committed` | `\([^`]*\)`.*/\1/p' work-issue/references/resume.md \
+  | sed 's/\\|/|/g')"
+[[ -n "$committed_probe" ]] || {
+  echo "could not extract the wave_unreported_committed probe from work-issue/references/resume.md" >&2
+  exit 1
+}
+committed_tree="$tmp/committed-tree"
+committed_run="$tmp/committed-run"
+run_committed() {
+  local c="${committed_probe//<RUN_DIR>/$committed_run}"
+  bash -c "${c//<TREE>/$committed_tree}" </dev/null
+}
+expect_committed() {
+  [[ "$2" == "$3" ]] || { echo "wave_unreported_committed with $1 should print $3, got: $2 (probe: $committed_probe)" >&2; exit 1; }
+}
+# Feed both probes' output into row-07.json with the fixture's five tasks, and
+# print what phase makes of it.
+committed_phase() {
+  python3 -c 'import json,sys; p=json.load(open(sys.argv[1])); p["wave_tasks"]=5; p["wave_reports"]=json.loads(sys.argv[2]); p["wave_unreported_committed"]=json.loads(sys.argv[3]); json.dump(p,open(sys.argv[4],"w"))' \
+    "$probes_dir/row-07.json" "$(run_reports "$committed_run")" "$(run_committed)" "$tmp/committed-probe.json"
+  python3 "$run_state" phase --probe "$tmp/committed-probe.json"
+}
+# Pinned identity, no signing, no hooks, as in the repair_diff_triggers block.
+committed_git() {
+  git -C "$committed_tree" -c user.email=smoke@example -c user.name=smoke \
+    -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"
+}
+git init -q "$committed_tree"
+mkdir -p "$committed_run/reports"
+cp tests/fixtures/work-issue/reports-task-named/plan.md "$committed_run/plan.md"
+committed_git commit -q --allow-empty -m base
+committed_git rev-parse HEAD >"$committed_run/base_sha"
+mkdir -p "$committed_tree/fx"
+echo a >"$committed_tree/a.py"
+echo '{}' >"$committed_tree/fx/one.json"
+committed_git add a.py fx/one.json
+committed_git commit -q -m "wave 0"
+echo d >"$committed_tree/d.py"
+expect_committed "two committed tasks and no reports" "$(run_committed)" 2
+echo '{}' >"$committed_run/reports/record-revision.json"
+expect_committed "one committed task reported" "$(run_committed)" 1
+committed_base="$(cat "$committed_run/base_sha")"
+echo deadbeef >"$committed_run/base_sha"
+expect_committed "a base_sha that does not resolve" "$(run_committed)" null
+rm "$committed_run/base_sha"
+expect_committed "no base_sha" "$(run_committed)" null
+echo "$committed_base" >"$committed_run/base_sha"
+# End to end, the #78 shape.
+cp tests/fixtures/work-issue/reports-task-named/reports/*.json "$committed_run/reports/"
+committed_out="$(committed_phase)"
+grep -Fq "phase: 3 reason: row 8:" <<<"$committed_out" || {
+  echo "every <task>.json report on a committed run should resume at row 8, got: $committed_out" >&2; exit 1; }
+rm "$committed_run"/reports/*.json
+committed_out="$(committed_phase)"
+grep -Fq "phase: stop reason: row 7:" <<<"$committed_out" || {
+  echo "committed waves with no report should stop at row 7, never revert, got: $committed_out" >&2; exit 1; }
+grep -Fq "git log" <<<"$committed_out" || {
+  echo "row 7's stop should name the git log disagreement, got: $committed_out" >&2; exit 1; }
+cp tests/fixtures/work-issue/reports-task-named/reports/*.json "$committed_run/reports/"
+rm "$committed_run/reports/implementations.json"
+committed_out="$(committed_phase)"
+grep -Fq "phase: 2 reason: row 7:" <<<"$committed_out" || {
+  echo "an uncommitted, unreported task should still resume at Step 2 for the revert, got: $committed_out" >&2; exit 1; }
 
 # The repair_diff_triggers probe's scope (#162), run as resume.md writes it.
 # The branch changes billing.py's rounding and the repair touches README.md

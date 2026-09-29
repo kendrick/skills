@@ -11,6 +11,7 @@
   "has_waves": false,
   "wave_tasks": 0,
   "wave_reports": 0,
+  "wave_unreported_committed": 0,
   "self_reviews": 0,
   "build_final": false,
   "redteam_rounds": 0,

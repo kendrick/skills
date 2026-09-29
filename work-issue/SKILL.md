@@ -267,7 +267,7 @@ It prints `phase: <0-8|done|wait|stop> reason: <one line>` and exits 0, or exits
 | 4 | no `issue-N` branch locally or on origin, no RUN_DIR | Step 0 |
 | 5 | RUN_DIR exists, no branch anywhere | `plan.md` without `## Waves`: RUN_DIR → `closed/`, Step 0. With it: Step 0 redoes items 4, 6, and 7 (isolation, cross-run check, red-team mode) before the confirmation, then Step 1 |
 | 6 | branch exists; `plan.md` has no `## Waves` | Step 0 at the plan gate |
-| 7 | `## Waves` present; no `base_sha` or no `baseline.txt`, or `reports/` lacks a report for some task | Step 1 at the missing artifact; else Step 2 at that wave (re-record WAVE_BASE; revert a half-written wave with no report) |
+| 7 | `## Waves` present; no `base_sha` or no `baseline.txt`, or `reports/` lacks a report for some task (neither `<wave>-<task>.json` nor `<task>.json`) | Step 1 at the missing artifact; an unreported task whose owned paths a commit in `git log <base_sha>..HEAD` touched: stop, naming the disagreement, and revert nothing; else Step 2 at that wave (revert only the uncommitted changes the half-written wave left in its owned paths, back to HEAD, then re-record WAVE_BASE) |
 | 8 | all wave reports; no `review/self-*.md` | Step 3 at the `code-review` invocation |
 | 9 | `review/self-*` present; no `reports/build-final.json` | Step 3 at the fix dispatch |
 | 10 | `build-final.json`; no `redteam/round-*.json`, or newest round has NOT_REPRODUCED | Step 4: the repair dispatch, or round k+1 where a repair report followed the failed round; two failed rounds in a row stop with the evidence; review over budget: the budget stop |
