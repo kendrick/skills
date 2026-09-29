@@ -231,6 +231,10 @@ require_text adversarial-review/references/trigger-table.md "adversarial-review/
 refute_text adversarial-review/references/trigger-table.md "In practice, \`grep -Ei"
 refute_text adversarial-review/references/trigger-table.md "Grep the file's hunks"
 refute_text adversarial-review/SKILL.md "grep each changed file's hunks"
+# A prose or path skip inside the shared matcher would move every run's
+# territories to fix one caller's false positives; the caller reads `lines`
+# instead (Deliberately Not Built, row 48).
+refute_text adversarial-review/scripts/match-triggers.py 'endswith(".md"'
 require_text adversarial-review/SKILL.md 'no row above `general` matched'
 refute_text adversarial-review/SKILL.md "no row above 6 matched"
 refute_text adversarial-review/SKILL.md "no row above 7 matched"
@@ -900,6 +904,37 @@ expect_match "1 money
 4 schema
 6 representation" <"$diffs/colored-money-schema.diff"
 
+# `lines` prints the evidence behind `rows`: each matched changed line with its
+# path and the signal that hit, so a caller that has to read the matches
+# (work-issue #120) never rebuilds a grep from the table (row 48).
+expect_lines() {
+  local want="$1"
+  shift
+  local got status
+  set +e
+  got="$(python3 "$match_py" lines "$@")"
+  status=$?
+  set -e
+  [[ "$status" == "0" && "$got" == "$want" ]] || {
+    echo "match-triggers.py lines $*: want exit 0 and '$want', got exit $status and '$got'" >&2
+    exit 1
+  }
+}
+# A removed line keeps its `-`: deleting a tenant filter is the authz
+# regression row 2 exists for.
+expect_lines $'1 money\tapp/billing.py\tround(\t+    total = round(order.price * order.qty, 2)\n2 authz\tapp/views.py\tfilter(\t-    return Order.objects.filter(tenant_id=request.user.tenant_id)\n4 schema\tdb/0042_region.sql\tALTER TABLE\t+ALTER TABLE orders ADD COLUMN region text NOT NULL DEFAULT \'us\';' --only 1,2,4 <"$diffs/lines-hazard-code.diff"
+# Four prose hits from PR #171. The deleted file's path comes from its `--- `
+# header, because its `+++ ` header is /dev/null.
+expect_lines $'2 authz\twork-issue/README.md\tWHERE\t+Type the same invocation again to resume. The run probes the world, works out where it stopped, and picks up there.\n4 schema\twork-issue/scripts/run-state.py\tDEFAULT\t+    # The Nth round is the capped one, not the one after it: with the default\n4 schema\ttests/fixtures/work-issue/triage/round-2.md\tmigration\t+| 1 | https://github.com/o/r/pull/9#discussion_r6 | "The migration drops the column, and this is not a P2." | P0 | in scope | |\n2 authz\told_notes.md\tWHERE\t-Check the permission guard where the list endpoint runs.' --only 1,2,4 <"$diffs/lines-prose-signal-words.diff"
+# Input with no file header yet has no path to print.
+expect_lines $'1 money\t-\tround(\t+total = round(amount, 2)' --only 1 < <(printf '+total = round(amount, 2)\n')
+# `lines` must not move `rows`: adversarial-review derives territories from it.
+expect_match "1 money
+2 authz
+4 schema" --only 1,2,4 <"$diffs/lines-hazard-code.diff"
+expect_match "2 authz
+4 schema" --only 1,2,4 <"$diffs/lines-prose-signal-words.diff"
+
 # The recipe the script replaced, filled in for `round(`, is a regex error
 # rather than a match: exit 2 on the very line the script matches (#114).
 set +e
@@ -952,6 +987,17 @@ no_command_status=$?
 set -e
 [[ "$bogus_flag_status" == "3" && "$no_command_status" == "3" ]] || {
   echo "usage errors must exit 3: rows --bogus got $bogus_flag_status, no subcommand got $no_command_status" >&2
+  exit 1
+}
+# `lines` shares `rows`' table and `--only` loading, so it shares the exit codes.
+set +e
+python3 "$match_py" lines --only 9 </dev/null >/dev/null 2>&1
+lines_unknown_row_status=$?
+python3 "$match_py" lines --table "$tmp/no-such-table.md" </dev/null >/dev/null 2>&1
+lines_missing_table_status=$?
+set -e
+[[ "$lines_unknown_row_status" == "3" && "$lines_missing_table_status" == "3" ]] || {
+  echo "lines usage errors must exit 3: --only 9 got $lines_unknown_row_status, a missing --table got $lines_missing_table_status" >&2
   exit 1
 }
 
