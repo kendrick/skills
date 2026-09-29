@@ -1791,6 +1791,16 @@ since_legacy="$(run_since "$since_run")"
 expect_since "a round with no recorded SINCE" "$since_legacy" null
 grep -Fq "phase: stop reason: unknown probe fields: triage_newer_than_since" <<<"$(since_phase row-18-answered.json "$since_legacy")" || {
   echo "a round with no recorded SINCE should stop the run naming the field" >&2; exit 1; }
+# #139: a triage round is current by the SINCE its heading recorded, never by
+# the file's time, because Step 8 edits the round after the push it answers.
+require_text work-issue/SKILL.md "# Triage round <k>, since <SINCE>"
+require_text work-issue/references/triage.md "# Triage round <k>, since <SINCE>"
+require_text work-issue/references/resume.md "| 15 | PR open; \`findings\`; no triage round recorded against the current SINCE | Step 6 triage |"
+require_text _maintenance/work-issue/RATIONALE.md "Comparing a triage round's file time against \`pushed_at\`"
+refute_text work-issue/references/resume.md "compare its mtime against"
+refute_text work-issue/SKILL.md "compare its mtime against"
+refute_text work-issue/references/resume.md "no \`triage/round-<k>.md\` newer than SINCE"
+refute_text work-issue/SKILL.md "no \`triage/round-<k>.md\` newer than SINCE"
 
 # The repair_diff_triggers probe's scope (#162), run as resume.md writes it.
 # The branch changes billing.py's rounding and the repair touches README.md
