@@ -1731,6 +1731,81 @@ echo 3 >"$rounds_run/max_review_rounds"
   exit 1
 }
 
+# The triage_newer_than_since probe (#139), run as resume.md writes it. A
+# round is current when the SINCE it recorded is the SINCE in pushed_at now.
+# Step 8 writes reply URLs into a round after the push that answers it, so a
+# file-time check read every answered round as current, and on PR #134 a P0
+# posted after the replies resumed as done.
+since_probe="$(sed -n 's/^| `triage_newer_than_since` | `\([^`]*\)`.*/\1/p' work-issue/references/resume.md \
+  | sed 's/\\|/|/g')"
+[[ -n "$since_probe" ]] || {
+  echo "could not extract the triage_newer_than_since probe from work-issue/references/resume.md" >&2
+  exit 1
+}
+since_fixture=tests/fixtures/work-issue/triage-since/round-1.md
+run_since() { bash -c "${since_probe//<RUN_DIR>/$1}" </dev/null; }
+# Feed a probe value into a real fixture and print what phase makes of it.
+since_phase() {
+  python3 -c 'import json,sys; p=json.load(open(sys.argv[1])); p["triage_newer_than_since"]=json.loads(sys.argv[2]); json.dump(p,open(sys.argv[3],"w"))' \
+    "$probes_dir/$1" "$2" "$tmp/since-probe.json"
+  python3 "$run_state" phase --probe "$tmp/since-probe.json"
+}
+expect_since() {
+  [[ "$2" == "$3" ]] || { echo "triage_newer_than_since on $1 should print $3, got: $2 (probe: $since_probe)" >&2; exit 1; }
+}
+since_run="$tmp/since-run"
+mkdir -p "$since_run/triage"
+expect_since "no round" "$(run_since "$since_run")" false
+cp "$since_fixture" "$since_run/triage/round-1.md"
+echo 2026-09-23T13:55:25Z >"$since_run/pushed_at"
+since_now="$(run_since "$since_run")"
+expect_since "a round written against the current pushed_at" "$since_now" true
+grep -Fq "phase: done reason: row 18" <<<"$(since_phase row-18-answered.json "$since_now")" || {
+  echo "a current, answered round should still resume at row 18" >&2; exit 1; }
+grep -Fq "phase: 8 reason: row 17" <<<"$(since_phase row-17.json "$since_now")" || {
+  echo "a current round owing replies should still resume at row 17" >&2; exit 1; }
+# The PR #134 sequence: Step 8 pushes, then writes the reply URL into the round.
+echo 2026-09-23T18:03:09Z >"$since_run/pushed_at"
+sed 's#| in scope | |#| in scope | https://github.com/o/r/pull/134\#discussion_r10 |#' \
+  "$since_fixture" >"$since_run/triage/round-1.md"
+touch "$since_run/triage/round-1.md"
+since_replay="$(run_since "$since_run")"
+expect_since "the PR #134 replay" "$since_replay" false
+grep -Fq "phase: 6 reason: row 15" <<<"$(since_phase row-18-answered.json "$since_replay")" || {
+  echo "a finding after Step 8's replies should resume at row 15, not done" >&2; exit 1; }
+cp "$since_fixture" "$since_run/triage/round-1.md"
+expect_since "an unedited round after a later push" "$(run_since "$since_run")" false
+printf '# Triage round 1 — PR #134, since 2026-09-23T18:03:09Z\n' >"$since_run/triage/round-1.md"
+expect_since "the #124 heading" "$(run_since "$since_run")" true
+printf '# Triage round 2, since 2026-09-23T18:03:09Z\n' >"$since_run/triage/round-2.md"
+cp "$since_fixture" "$since_run/triage/round-1.md"
+touch "$since_run/triage/round-1.md"
+expect_since "round 2 current with round 1 edited later" "$(run_since "$since_run")" true
+rm "$since_run"/triage/round-*.md
+printf '# Triage round 9, since 2026-09-23T18:03:09Z\n' >"$since_run/triage/round-9.md"
+cp "$since_fixture" "$since_run/triage/round-10.md"
+expect_since "round 10 beside round 9" "$(run_since "$since_run")" false
+rm "$since_run"/triage/round-*.md
+printf '# Triage round 1\n' >"$since_run/triage/round-1.md"
+since_legacy="$(run_since "$since_run")"
+expect_since "a round with no recorded SINCE" "$since_legacy" null
+grep -Fq "phase: stop reason: unknown probe fields: triage_newer_than_since" <<<"$(since_phase row-18-answered.json "$since_legacy")" || {
+  echo "a round with no recorded SINCE should stop the run naming the field" >&2; exit 1; }
+# Only line 1 is the heading. A heading-like line further down, inside a quoted
+# finding, must not stand in for a SINCE the heading never recorded (PR #174).
+printf '# Triage round 1\n\n# Triage round bogus, since 2026-09-23T18:03:09Z\n' >"$since_run/triage/round-1.md"
+expect_since "a round whose only since sits below line 1" "$(run_since "$since_run")" null
+# #139: a triage round is current by the SINCE its heading recorded, never by
+# the file's time, because Step 8 edits the round after the push it answers.
+require_text work-issue/SKILL.md "# Triage round <k>, since <SINCE>"
+require_text work-issue/references/triage.md "# Triage round <k>, since <SINCE>"
+require_text work-issue/references/resume.md "| 15 | PR open; \`findings\`; no triage round recorded against the current SINCE | Step 6 triage |"
+require_text _maintenance/work-issue/RATIONALE.md "Comparing a triage round's file time against \`pushed_at\`"
+refute_text work-issue/references/resume.md "compare its mtime against"
+refute_text work-issue/SKILL.md "compare its mtime against"
+refute_text work-issue/references/resume.md "no \`triage/round-<k>.md\` newer than SINCE"
+refute_text work-issue/SKILL.md "no \`triage/round-<k>.md\` newer than SINCE"
+
 # The repair_diff_triggers probe's scope (#162), run as resume.md writes it.
 # The branch changes billing.py's rounding and the repair touches README.md
 # only. Diffing from repair-base-<k> reads the repair alone and prints false.
