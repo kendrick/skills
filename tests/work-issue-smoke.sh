@@ -1383,7 +1383,8 @@ grep -Fq "adversarial-review" <<<"$quiet_reason" && {
 }
 # A candidate repair diff the reading reads away (row 112). The probe still
 # flags the diff, and trigger-repair-<k>.txt holds `fired: no`, which settles
-# the review. The probe needed no change for this, and this guard shows it.
+# the review. The flag is set by hand here, so this guards phase_of's routing
+# of a settled candidate, not the resume.md command that sets the flag.
 python3 -c 'import json, sys
 probe = json.load(open(sys.argv[1]))
 assert probe["repair_diff_triggers"] is True

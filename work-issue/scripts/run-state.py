@@ -968,10 +968,12 @@ def phase_of(probe):
             return budget_stop(16)
         else:
             return "7", "row 16: the newest triage round has in-scope rows and no repair report of its own"
-    # Step 8 item 1's re-fire leg, ahead of the push. A repair re-enters
-    # adversarial-review when its triage round held a P0, P1, or blocking row,
-    # or when its own diff hits a money, authz, or schema trigger row: a
-    # reviewer can label a real blocker P2 (#162). One with neither gets the
+    # Step 8 item 1's re-fire leg, ahead of the push. A repair is a candidate
+    # for adversarial-review when its triage round held a P0, P1, or blocking
+    # row, or when its own diff hits a money, authz, or schema trigger row: a
+    # reviewer can label a real blocker P2 (#162). Step 8 item 1's reading
+    # then settles it, and a `fired: no` there sets repair_ar_settled (#120).
+    # One with neither gets the
     # reproducer and moves on. `repair_diff_triggers` reads the repair's diff
     # alone, since the whole branch already fired the trigger at Step 4.
     # The reason names the reproducer first: `repair_ar_settled` is false until
