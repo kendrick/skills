@@ -1879,7 +1879,15 @@ committed_base="$(cat "$committed_run/base_sha")"
 echo deadbeef >"$committed_run/base_sha"
 expect_committed "a base_sha that does not resolve" "$(run_committed)" null
 rm "$committed_run/base_sha"
-expect_committed "no base_sha" "$(run_committed)" null
+# Step 1 writes base_sha before any wave can commit, so its absence means no
+# committed wave: 0, which leaves row 7's Step 1 leg reachable. A null here
+# tripped the null-field stop ahead of every row and hid that leg.
+no_base="$(run_committed)"
+expect_committed "no base_sha" "$no_base" 0
+python3 -c 'import json,sys; p=json.load(open(sys.argv[1])); p["wave_unreported_committed"]=json.loads(sys.argv[2]); json.dump(p,open(sys.argv[3],"w"))' \
+  "$probes_dir/row-07-isolation-incomplete.json" "$no_base" "$tmp/no-base.json"
+grep -Fq "phase: 1 reason: row 7:" <<<"$(python3 "$run_state" phase --probe "$tmp/no-base.json")" || {
+  echo "a run with no base_sha should resume at Step 1 through row 7, not stop" >&2; exit 1; }
 echo "$committed_base" >"$committed_run/base_sha"
 # End to end, the #78 shape.
 cp tests/fixtures/work-issue/reports-task-named/reports/*.json "$committed_run/reports/"
