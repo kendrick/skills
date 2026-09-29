@@ -1,0 +1,28 @@
+diff --git a/work-issue/README.md b/work-issue/README.md
+index 1111111..2222222 100644
+--- a/work-issue/README.md
++++ b/work-issue/README.md
+@@ -1 +1 @@
+-Type the same invocation again to resume. The run probes the world and picks up there.
++Type the same invocation again to resume. The run probes the world, works out where it stopped, and picks up there.
+diff --git a/work-issue/scripts/run-state.py b/work-issue/scripts/run-state.py
+index 3333333..4444444 100644
+--- a/work-issue/scripts/run-state.py
++++ b/work-issue/scripts/run-state.py
+@@ -1,1 +1,2 @@
+ def phase_of(probe):
++    # The Nth round is the capped one, not the one after it: with the default
+diff --git a/tests/fixtures/work-issue/triage/round-2.md b/tests/fixtures/work-issue/triage/round-2.md
+new file mode 100644
+index 0000000..5555555
+--- /dev/null
++++ b/tests/fixtures/work-issue/triage/round-2.md
+@@ -0,0 +1 @@
++| 1 | https://github.com/o/r/pull/9#discussion_r6 | "The migration drops the column, and this is not a P2." | P0 | in scope | |
+diff --git a/old_notes.md b/old_notes.md
+deleted file mode 100644
+index 6666666..0000000
+--- a/old_notes.md
++++ /dev/null
+@@ -1 +0,0 @@
+-Check the permission guard where the list endpoint runs.

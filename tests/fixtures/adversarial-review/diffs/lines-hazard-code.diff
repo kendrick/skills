@@ -1,0 +1,23 @@
+diff --git a/app/billing.py b/app/billing.py
+index 1111111..2222222 100644
+--- a/app/billing.py
++++ b/app/billing.py
+@@ -1,2 +1,3 @@
+ def charge(order):
++    total = round(order.price * order.qty, 2)
+     return order
+diff --git a/app/views.py b/app/views.py
+index 3333333..4444444 100644
+--- a/app/views.py
++++ b/app/views.py
+@@ -1,2 +1,2 @@
+ def orders(request):
+-    return Order.objects.filter(tenant_id=request.user.tenant_id)
++    return Order.objects.all()
+diff --git a/db/0042_region.sql b/db/0042_region.sql
+new file mode 100644
+index 0000000..5555555
+--- /dev/null
++++ b/db/0042_region.sql
+@@ -0,0 +1 @@
++ALTER TABLE orders ADD COLUMN region text NOT NULL DEFAULT 'us';

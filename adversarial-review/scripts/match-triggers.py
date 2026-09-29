@@ -13,6 +13,11 @@ script parses the table once, so every run and every skill that shells out
 to it shares one matcher.
 
     match-triggers.py rows [--only 1,2,4] [--table PATH] < diff
+    match-triggers.py lines [--only 1,2,4] [--table PATH] < diff
+
+`rows` prints `<n> <name>` once per matched row. `lines` prints the evidence
+behind it, one `<n> <name>\t<path>\t<signal>\t<sign><body>` line per matched
+row per changed line, for a caller that has to read each match (#120).
 
 Exit codes: 0 with matches printed (possibly none), 1 on a table it can't
 parse, 3 on usage or unreadable input—the convention check-territories.py
@@ -98,7 +103,9 @@ def parse_units(text):
 
 
 def parse_table(text):
-    """Rows in table order, as {"number": int, "name": str, "patterns": [...]}.
+    """Rows in table order, as {"number": int, "name": str, "signals": [...],
+    "patterns": [...]}, where `signals[i]` is the table spelling `patterns[i]`
+    was compiled from.
     Raises TableError if the unit list or the row-table header is missing,
     or a row's own shape (number, name, signals cell) can't be read."""
     units = parse_units(text)
@@ -137,6 +144,7 @@ def parse_table(text):
                 # file" is prose, not a grep target — so it never matches
                 # here. adversarial-review adds it to every file by its own
                 # rule, not by anything this script prints.
+                "signals": signals,
                 "patterns": [compile_signal(s, units) for s in signals],
             }
         )
@@ -146,12 +154,24 @@ def parse_table(text):
     return rows
 
 
-def diff_content_lines(diff_text):
-    """Added and removed line bodies, without the one-character prefix.
-    Context lines and file headers are left out. Inside a counted hunk every
-    `+`/`-` line is content; outside one, `--- `/`+++ ` lines are file
-    headers and every other `+`/`-` line is content."""
-    lines = []
+def _header_path(raw, strip):
+    """The path in a `--- `/`+++ ` header, minus git's `a/` or `b/` prefix.
+    A quoted path stays quoted, and anything after a tab (git's marker on a
+    path with spaces, or a timestamp from plain diff) is dropped so it can't
+    add a column to `lines` output."""
+    path = raw[4:].split("\t", 1)[0]
+    return path[len(strip):] if path.startswith(strip) else path
+
+
+def diff_content_records(diff_text):
+    """Added and removed lines as (path, sign, body), sign being `+` or `-`
+    and body the line without it. Context lines and file headers are left
+    out. Inside a counted hunk every `+`/`-` line is content; outside one,
+    `--- `/`+++ ` lines are file headers and every other `+`/`-` line is
+    content. `path` comes from the `+++ ` header, or from the `--- ` header
+    when a deleted file's `+++ ` is /dev/null, and is `-` before any header."""
+    records = []
+    path = old_path = "-"
     old_left = new_left = 0
     for raw in diff_text.splitlines():
         raw = ANSI_CSI_RE.sub("", raw)
@@ -161,10 +181,10 @@ def diff_content_lines(diff_text):
         # which reads as a file header.
         if in_hunk and raw[:1] in ("+", "-", " ", "", "\\"):
             if raw.startswith("+"):
-                lines.append(raw[1:])
+                records.append((path, "+", raw[1:]))
                 new_left -= 1
             elif raw.startswith("-"):
-                lines.append(raw[1:])
+                records.append((path, "-", raw[1:]))
                 old_left -= 1
             elif raw[:1] in (" ", ""):
                 old_left -= 1
@@ -180,11 +200,23 @@ def diff_content_lines(diff_text):
             continue
         # Outside a counted hunk: a bare `@@`, or stdin with no `@@` at all,
         # like the `printf '+total = round(amount, 2)\n'` in #157's criteria.
-        if raw.startswith("+++ ") or raw.startswith("--- "):
+        if raw.startswith("--- "):
+            old_path = _header_path(raw, "a/")
+            continue
+        if raw.startswith("+++ "):
+            new_path = _header_path(raw, "b/")
+            path = old_path if new_path == "/dev/null" else new_path
             continue
         if raw.startswith("+") or raw.startswith("-"):
-            lines.append(raw[1:])
-    return lines
+            records.append((path, raw[0], raw[1:]))
+    return records
+
+
+def diff_content_lines(diff_text):
+    """Added and removed line bodies, without the one-character prefix.
+    Derived from diff_content_records so `rows` and `lines` can never parse
+    a diff two different ways."""
+    return [body for _, _, body in diff_content_records(diff_text)]
 
 
 def matched_rows(rows, content_lines):
@@ -195,19 +227,31 @@ def matched_rows(rows, content_lines):
     return hits
 
 
-def cmd_rows(args):
+def first_signal(row, body):
+    """The first of `row`'s signals, in table order and table spelling, whose
+    pattern matches `body`, or None."""
+    for signal, pattern in zip(row["signals"], row["patterns"]):
+        if pattern.search(body):
+            return signal
+    return None
+
+
+def load_rows_and_diff(args):
+    """The table's rows, narrowed by `--only`, and the diff text on stdin,
+    as (rows, diff_text, None); or (None, None, exit_code) after writing
+    the reason to stderr."""
     try:
         with open(args.table, encoding="utf-8") as f:
             table_text = f.read()
     except OSError as e:
         sys.stderr.write(f"match-triggers: {args.table}: {e}\n")
-        return 3
+        return None, None, 3
 
     try:
         rows = parse_table(table_text)
     except TableError as e:
         sys.stderr.write(f"match-triggers: {args.table}: {e}\n")
-        return 1
+        return None, None, 1
 
     if args.only is not None:
         try:
@@ -215,25 +259,44 @@ def cmd_rows(args):
         except ValueError:
             sys.stderr.write(f"match-triggers: --only: not a comma-separated "
                               f"list of integers: {args.only!r}\n")
-            return 3
+            return None, None, 3
         unknown = wanted - {row["number"] for row in rows}
         if unknown:
             sys.stderr.write(
                 f"match-triggers: --only: no such row number(s): "
                 f"{', '.join(str(n) for n in sorted(unknown))}\n"
             )
-            return 3
+            return None, None, 3
         rows = [row for row in rows if row["number"] in wanted]
 
     try:
         diff_text = sys.stdin.read()
     except OSError as e:
         sys.stderr.write(f"match-triggers: stdin: {e}\n")
-        return 3
+        return None, None, 3
+    return rows, diff_text, None
 
+
+def cmd_rows(args):
+    rows, diff_text, code = load_rows_and_diff(args)
+    if code is not None:
+        return code
     content_lines = diff_content_lines(diff_text)
     for row in matched_rows(rows, content_lines):
         print(f"{row['number']} {row['name']}")
+    return 0
+
+
+def cmd_lines(args):
+    rows, diff_text, code = load_rows_and_diff(args)
+    if code is not None:
+        return code
+    for path, sign, body in diff_content_records(diff_text):
+        for row in rows:
+            signal = first_signal(row, body)
+            if signal is not None:
+                print(f"{row['number']} {row['name']}\t{path}\t{signal}"
+                      f"\t{sign}{body}")
     return 0
 
 
@@ -254,19 +317,24 @@ def parse_args(argv=None):
     )
     sub = ap.add_subparsers(dest="command", required=True)
 
-    rows = sub.add_parser("rows", help="print rows a diff on stdin matches")
-    rows.add_argument(
-        "--only",
-        metavar="N,N,...",
-        help="restrict to these row numbers, comma-separated",
-    )
-    rows.add_argument(
-        "--table",
-        metavar="PATH",
-        default=DEFAULT_TABLE_PATH,
-        help=f"trigger table to read (default: {DEFAULT_TABLE_PATH})",
-    )
-    rows.set_defaults(func=cmd_rows)
+    for name, func, help_text in (
+        ("rows", cmd_rows, "print rows a diff on stdin matches"),
+        ("lines", cmd_lines,
+         "print each matched changed line with its path and signal"),
+    ):
+        cmd = sub.add_parser(name, help=help_text)
+        cmd.add_argument(
+            "--only",
+            metavar="N,N,...",
+            help="restrict to these row numbers, comma-separated",
+        )
+        cmd.add_argument(
+            "--table",
+            metavar="PATH",
+            default=DEFAULT_TABLE_PATH,
+            help=f"trigger table to read (default: {DEFAULT_TABLE_PATH})",
+        )
+        cmd.set_defaults(func=func)
 
     return ap.parse_args(argv)
 
