@@ -267,6 +267,8 @@ for f in work-issue/SKILL.md work-issue/references/redteam.md; do
   require_text "$f" "A removed line counts as the change its removal makes."
   require_text "$f" "A line the reading cannot settle reads \`implements\`."
   require_text "$f" "\`--deep\` fires the trigger on its own, with no reading."
+  require_text "$f" "an example prompt or sample session that names the hazard"
+  require_text "$f" "\`reading: skipped, --deep\`"
   refute_text "$f" "any output line fires the trigger"
   refute_text "$f" "Any output line fires the trigger"
   refute_text "$f" "':!*.md'"
