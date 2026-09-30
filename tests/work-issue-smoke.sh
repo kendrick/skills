@@ -2353,6 +2353,694 @@ refute_text work-issue/references/resume.md ">><RUN_DIR>/base_sha"
 # The refute above needs its own Deliberately Not Built row.
 require_text _maintenance/work-issue/RATIONALE.md "The resume probe rewriting a stale \`base_sha\`"
 
+# --- probe ---
+# `run-state.py probe` gathers every field phase reads (#146). Every case below
+# runs the real script and reads the field out of its JSON, and the whole-run
+# cases hand that JSON to the real phase, so a gatherer is judged by what phase
+# makes of it rather than by a copy of its logic. The fake gh and herdr lead
+# PATH for the whole section: probe must never call either, because herdr's
+# CLI is a cache and GitHub's answer arrives as --pr-bundle.
+probe_bin="$tmp/fakebin"
+mkdir -p "$probe_bin"
+for fake in gh herdr; do
+  printf '#!/bin/sh\ntouch "%s/called-$(basename "$0")"\nexit 99\n' "$tmp" >"$probe_bin/$fake"
+  chmod +x "$probe_bin/$fake"
+done
+bundles_dir=tests/fixtures/work-issue/pr-bundles
+probe_asserted="$tmp/probe-asserted"
+: >"$probe_asserted"
+# Pinned identity, no signing, no hooks, as scope_git: the user's global git
+# config must not decide whether a throwaway commit succeeds.
+probe_git() {
+  git -C "$1" -c user.name=smoke -c user.email=smoke@example.invalid \
+    -c commit.gpgsign=false -c core.hooksPath=/dev/null "${@:2}"
+}
+# DIR on main with one commit, pushed to a bare DIR.origin whose HEAD names main.
+make_repo() {
+  git init -q -b main "$1"
+  git init -q --bare -b main "$1.origin"
+  printf 'seed\n' >"$1/seed.txt"
+  probe_git "$1" add seed.txt
+  probe_git "$1" commit -q -m seed
+  probe_git "$1" remote add origin "$1.origin"
+  probe_git "$1" push -q origin main 2>/dev/null
+}
+# RUN REPO [ARGS...]: probe's stdout. Stderr lands in $tmp/probe-stderr, since
+# a gatherer that answers null says why there.
+run_probe() {
+  PATH="$probe_bin:$PATH" env -u HERDR_ENV python3 "$run_state" probe \
+    --run-dir "$1" --root "$2" --issue 1 "${@:3}" 2>"$tmp/probe-stderr"
+}
+# FIELD RUN REPO [ARGS...]: that field as JSON, recorded for the coverage check.
+probe_field() {
+  local out
+  out="$(run_probe "${@:2}")" || { echo "probe exited non-zero: $(cat "$tmp/probe-stderr")"; return 0; }
+  echo "$1" >>"$probe_asserted"
+  python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin)[sys.argv[1]]))' "$1" <<<"$out"
+}
+# LABEL FIELD WANT RUN REPO [ARGS...]
+expect_field() {
+  local got
+  got="$(probe_field "$2" "${@:4}")"
+  [[ "$got" == "$3" ]] || { echo "probe $2 $1: expected $3, got: $got" >&2; exit 1; }
+}
+# LABEL ARGS...: probe must exit 3 with nothing on stdout and a run-state: line.
+expect_probe_usage() {
+  local label="$1" out status
+  shift
+  set +e
+  out="$(PATH="$probe_bin:$PATH" env -u HERDR_ENV python3 "$run_state" probe "$@" 2>"$tmp/probe-stderr")"
+  status=$?
+  set -e
+  [[ "$status" == 3 && -z "$out" ]] || {
+    echo "probe $label should exit 3 with nothing on stdout, got $status: $out $(cat "$tmp/probe-stderr")" >&2; exit 1; }
+  # argparse's own complaint for a flag it rejects, a run-state: line for the rest.
+  grep -qE '^run-state: |: error: ' "$tmp/probe-stderr" || {
+    echo "probe $label should say why on stderr, got: $(cat "$tmp/probe-stderr")" >&2; exit 1; }
+}
+# The names phase checks, read from run-state.py itself rather than typed here,
+# so a field added to PROBE_FIELDS without a case below fails the coverage check.
+probe_names="$(python3 - "$run_state" <<'PY'
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("run_state", sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+print("\n".join(name for name, _, _ in module.PROBE_FIELDS))
+PY
+)"
+
+# Five whole run dirs, each holding only what its row needs. Each one's phase
+# line has to equal the line phase prints for the hand-written probe of the
+# same row, read from phase at test time so a reworded reason stays matched.
+write_waves() {
+  printf '# Plan\n\n## Waves\n\n| Wave | Task | Files owned | Model | Done when | Constraints |\n|---|---|---|---|---|---|\n' >"$1/plan.md"
+  local t
+  for t in 0 1 2 3 4 5; do
+    printf '| %s | task-%s | t%s.py | sonnet | x | |\n' "$((t / 2))" "$t" "$t" >>"$1/plan.md"
+  done
+}
+make_run() {
+  local kind="$1" run="$tmp/whole-$1/run" repo="$tmp/whole-$1/repo" t
+  mkdir -p "$tmp/whole-$kind"
+  make_repo "$repo"
+  [[ "$kind" == fresh ]] && return 0
+  probe_git "$repo" checkout -q -b issue-1
+  mkdir -p "$run/reports" "$run/gated"
+  write_waves "$run"
+  probe_git "$repo" rev-parse HEAD >"$run/base_sha"
+  echo "verify: ok" >"$run/baseline.txt"
+  if [[ "$kind" == midbuild || "$kind" == merged ]]; then
+    # Three of six tasks reported and gated, under both names Step 2 writes.
+    echo '{}' >"$run/reports/0-task-0.json"
+    echo '{}' >"$run/reports/task-1.json"
+    echo '{}' >"$run/reports/1-task-2.json"
+    echo '{}' >"$run/reports/task-2.json"
+    : >"$run/gated/0-task-0"
+    : >"$run/gated/0-task-1"
+    : >"$run/gated/1-task-2"
+    return 0
+  fi
+  for t in 0 1 2 3 4 5; do
+    echo '{}' >"$run/reports/task-$t.json"
+    : >"$run/gated/$((t / 2))-task-$t"
+  done
+  mkdir -p "$run/review" "$run/redteam"
+  echo "# Self-review" >"$run/review/self-1.md"
+  echo '{}' >"$run/reports/build-final.json"
+  echo '{"claims": [{"id": 1, "verdict": "REPRODUCED"}]}' >"$run/redteam/round-1.json"
+  echo "fired: no" >"$run/redteam/trigger.txt"
+  probe_git "$repo" push -q origin issue-1 2>/dev/null
+  if [[ "$kind" == propen ]]; then echo 2026-09-20T11:00:00Z >"$run/pushed_at"; fi
+  return 0
+}
+# KIND FIXTURE [ARGS...]
+whole_case() {
+  local kind="$1" fixture="$2" want got
+  run_probe "$tmp/whole-$kind/run" "$tmp/whole-$kind/repo" "${@:3}" >"$tmp/whole-$kind.json" || {
+    echo "probe on the $kind run dir should exit 0, got: $(cat "$tmp/probe-stderr")" >&2; exit 1; }
+  got="$(python3 -c 'import json,sys; print("\n".join(json.load(open(sys.argv[1]))))' "$tmp/whole-$kind.json")"
+  [[ "$got" == "$probe_names" ]] || {
+    echo "probe on the $kind run dir should print exactly the PROBE_FIELDS names, got: $got" >&2; exit 1; }
+  want="$(python3 "$run_state" phase --probe "$probes_dir/$fixture")"
+  got="$(python3 "$run_state" phase --probe "$tmp/whole-$kind.json")"
+  [[ -n "$want" && "$got" == "$want" ]] || {
+    echo "phase on the $kind probe should print $fixture's line: $want, got: $got ($(cat "$tmp/whole-$kind.json"))" >&2; exit 1; }
+}
+for kind in fresh midbuild redteam propen merged; do make_run "$kind"; done
+whole_case fresh row-04.json
+whole_case midbuild row-07.json
+whole_case redteam row-13.json
+whole_case propen row-15.json --pr-bundle "$bundles_dir/open-findings.json"
+whole_case merged row-01.json --pr-bundle "$bundles_dir/merged.json"
+# A fresh issue's RUN_DIR does not exist yet, and a probe that made it would
+# turn the next resume into row 5's dead run.
+[[ ! -e "$tmp/whole-fresh/run" ]] || { echo "probe created the run dir it was only asked to read" >&2; exit 1; }
+
+# One field at a time. The lab repo sits on issue-1, unpushed, and each case
+# gets a run dir of its own.
+lab_repo="$tmp/lab/repo"
+mkdir -p "$tmp/lab"
+make_repo "$lab_repo"
+probe_git "$lab_repo" checkout -q -b issue-1
+new_run() { rm -rf "$tmp/lab/$1"; mkdir -p "$tmp/lab/$1"; printf '%s' "$tmp/lab/$1"; }
+
+# herdr's answer comes in by flag. Under HERDR a defaulted `absent` would skip
+# row 2's wait and dispatch a second agent into a tree one is still working in.
+r="$(new_run herdr)"
+expect_field "with no --herdr-state" herdr_agent_state '"absent"' "$r" "$lab_repo"
+expect_field "with --herdr-state working" herdr_agent_state '"working"' "$r" "$lab_repo" --herdr-state working
+run_probe "$r" "$lab_repo" --herdr-state working >"$tmp/herdr-working.json"
+grep -Fq "phase: wait reason: row 2:" <<<"$(python3 "$run_state" phase --probe "$tmp/herdr-working.json")" || {
+  echo "a probe taken with --herdr-state working should answer wait" >&2; exit 1; }
+set +e
+herdr_out="$(PATH="$probe_bin:$PATH" HERDR_ENV=1 python3 "$run_state" probe --run-dir "$r" --root "$lab_repo" --issue 1 2>"$tmp/probe-stderr")"
+herdr_status=$?
+set -e
+[[ "$herdr_status" == 3 && -z "$herdr_out" ]] || {
+  echo "probe under HERDR_ENV=1 with no --herdr-state should exit 3, got $herdr_status: $herdr_out" >&2; exit 1; }
+
+expect_field "on a repo with issue-1" branch_local true "$r" "$lab_repo"
+expect_field "on a repo with no issue-1" branch_local false "$r" "$tmp/whole-fresh/repo"
+expect_field "on an existing run dir" run_dir true "$r" "$lab_repo"
+expect_field "on a missing run dir" run_dir false "$tmp/lab/nope" "$lab_repo"
+[[ ! -e "$tmp/lab/nope" ]] || { echo "probe created a missing run dir" >&2; exit 1; }
+expect_field "with no base_sha" base_sha false "$r" "$lab_repo"
+expect_field "with no baseline.txt" baseline false "$r" "$lab_repo"
+probe_git "$lab_repo" rev-parse HEAD >"$r/base_sha"
+echo ok >"$r/baseline.txt"
+expect_field "with base_sha" base_sha true "$r" "$lab_repo"
+expect_field "with baseline.txt" baseline true "$r" "$lab_repo"
+
+# branch_remote asks the live remote: false where origin lacks the branch, true
+# once pushed, and null where there is no origin to ask.
+remote_repo="$tmp/lab/remote-repo"
+make_repo "$remote_repo"
+probe_git "$remote_repo" checkout -q -b issue-1
+expect_field "before the push" branch_remote false "$r" "$remote_repo"
+probe_git "$remote_repo" push -q origin issue-1 2>/dev/null
+expect_field "after the push" branch_remote true "$r" "$remote_repo"
+bare_repo="$tmp/lab/no-origin"
+git init -q -b main "$bare_repo"
+expect_field "with no origin remote" branch_remote null "$r" "$bare_repo"
+
+# ahead_of_origin: a local commit past origin/issue-1; with no remote branch, a
+# commit past base_sha.
+ahead_repo="$tmp/lab/ahead-repo"
+make_repo "$ahead_repo"
+probe_git "$ahead_repo" checkout -q -b issue-1
+a="$(new_run ahead)"
+probe_git "$ahead_repo" rev-parse HEAD >"$a/base_sha"
+expect_field "with no remote branch and nothing past base_sha" ahead_of_origin false "$a" "$ahead_repo"
+probe_git "$ahead_repo" commit -q --allow-empty -m work
+expect_field "with no remote branch and a commit past base_sha" ahead_of_origin true "$a" "$ahead_repo"
+probe_git "$ahead_repo" push -q origin issue-1 2>/dev/null
+expect_field "level with origin/issue-1" ahead_of_origin false "$a" "$ahead_repo"
+probe_git "$ahead_repo" commit -q --allow-empty -m repair
+expect_field "with a local commit past origin/issue-1" ahead_of_origin true "$a" "$ahead_repo"
+
+# base_sha_state (#137), the same moves as the block above, through probe.
+bs_root="$tmp/bs"
+bs_origin="$bs_root/origin.git"
+bs_clone="$bs_root/clone"
+bs_upstream="$bs_root/upstream"
+bs_run="$bs_root/run"
+mkdir -p "$bs_run"
+git init -q -b main --bare "$bs_origin"
+for bs_repo in "$bs_clone" "$bs_upstream"; do
+  git clone -q "$bs_origin" "$bs_repo" 2>/dev/null
+  git -C "$bs_repo" config user.email smoke@example.invalid
+  git -C "$bs_repo" config user.name smoke
+  git -C "$bs_repo" config commit.gpgsign false
+  git -C "$bs_repo" config core.hooksPath /dev/null
+done
+printf 'a\n' >"$bs_clone/a.txt"
+git -C "$bs_clone" add a.txt
+git -C "$bs_clone" commit -q -m base
+git -C "$bs_clone" push -q origin main 2>/dev/null
+git -C "$bs_clone" checkout -q -b issue-1
+printf 'x\n' >"$bs_clone/x.txt"
+git -C "$bs_clone" add x.txt
+git -C "$bs_clone" commit -q -m branch
+git -C "$bs_clone" merge-base origin/main issue-1 >"$bs_run/base_sha"
+expect_field "on a fresh branch" base_sha_state '"current"' "$bs_run" "$bs_clone"
+git -C "$bs_upstream" pull -q origin main 2>/dev/null
+printf 'total = round(price * qty)\n' >"$bs_upstream/billing.py"
+git -C "$bs_upstream" add billing.py
+git -C "$bs_upstream" commit -q -m upstream
+git -C "$bs_upstream" push -q origin main 2>/dev/null
+git -C "$bs_clone" fetch -q origin
+expect_field "after upstream moved and the branch did not" base_sha_state '"current"' "$bs_run" "$bs_clone"
+git -C "$bs_clone" rebase -q origin/main
+expect_field "after a rebase with base_sha untouched" base_sha_state '"not-merge-base"' "$bs_run" "$bs_clone"
+git -C "$bs_clone" merge-base origin/main issue-1 >"$bs_run/base_sha"
+expect_field "after base_sha is rewritten" base_sha_state '"current"' "$bs_run" "$bs_clone"
+: >"$bs_run/base_sha"
+expect_field "with an empty base_sha file" base_sha_state null "$bs_run" "$bs_clone"
+git -C "$bs_clone" commit-tree -p origin/main~1 -m side 'origin/main~1^{tree}' >"$bs_run/base_sha"
+expect_field "holding a side-branch commit the branch never had" base_sha_state '"not-ancestor"' "$bs_run" "$bs_clone"
+printf 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n' >"$bs_run/base_sha"
+expect_field "holding a SHA that does not resolve" base_sha_state null "$bs_run" "$bs_clone"
+rm "$bs_run/base_sha"
+expect_field "with no base_sha file" base_sha_state '"absent"' "$bs_run" "$bs_clone"
+git -C "$bs_clone" merge-base origin/main issue-1 >"$bs_run/base_sha"
+git -C "$bs_clone" checkout -q --detach
+git -C "$bs_clone" push -q origin issue-1 2>/dev/null
+git -C "$bs_clone" branch -q -D issue-1
+expect_field "with the issue branch only on origin" base_sha_state null "$bs_run" "$bs_clone"
+git -C "$bs_clone" update-ref -d refs/remotes/origin/issue-1
+expect_field "with the issue branch only on origin, never fetched" base_sha_state null "$bs_run" "$bs_clone"
+git -C "$bs_clone" update-ref refs/remotes/origin/issue-1 "$(git -C "$bs_clone" rev-parse origin/main)"
+git -C "$bs_origin" branch -q -D issue-1
+expect_field "with a stale tracking ref and no branch on origin" base_sha_state '"absent"' "$bs_run" "$bs_clone"
+git -C "$bs_clone" update-ref -d refs/remotes/origin/issue-1
+expect_field "with no issue branch anywhere" base_sha_state '"absent"' "$bs_run" "$bs_clone"
+
+# pr_state and review_state come off the bundle. SINCE is pushed_at, else the
+# branch head's committer date, as SKILL.md defines it.
+p="$(new_run pr)"
+expect_field "with no bundle" pr_state null "$p" "$lab_repo"
+expect_field "with no bundle" review_state null "$p" "$lab_repo"
+expect_field "on a merged bundle" pr_state '"MERGED"' "$p" "$lab_repo" --pr-bundle "$bundles_dir/merged.json"
+echo 2026-09-20T11:00:00Z >"$p/pushed_at"
+expect_field "on an open bundle" pr_state '"OPEN"' "$p" "$lab_repo" --pr-bundle "$bundles_dir/open-findings.json"
+expect_field "with a thread after pushed_at" review_state '"findings"' "$p" "$lab_repo" --pr-bundle "$bundles_dir/open-findings.json"
+echo 2026-09-20T13:00:00Z >"$p/pushed_at"
+expect_field "with the thread before pushed_at" review_state '"pending"' "$p" "$lab_repo" --pr-bundle "$bundles_dir/open-findings.json"
+rm "$p/pushed_at"
+since_repo="$tmp/lab/since-repo"
+make_repo "$since_repo"
+probe_git "$since_repo" checkout -q -b issue-1
+GIT_COMMITTER_DATE=2026-09-20T11:30:00Z probe_git "$since_repo" commit -q --allow-empty -m work
+expect_field "with no pushed_at and a head committed before the thread" review_state '"findings"' "$p" "$since_repo" --pr-bundle "$bundles_dir/open-findings.json"
+GIT_COMMITTER_DATE=2026-09-20T12:30:00Z probe_git "$since_repo" commit -q --allow-empty -m more
+expect_field "with no pushed_at and a head committed after the thread" review_state '"pending"' "$p" "$since_repo" --pr-bundle "$bundles_dir/open-findings.json"
+
+# has_waves and wave_tasks read the table the way the vendored parser does:
+# stripped lines, compact rows, and a table that ends at its first non-table line.
+w="$(new_run waves)"
+expect_field "with no plan.md" has_waves false "$w" "$lab_repo"
+printf '# Plan\n\n## Tasks\n' >"$w/plan.md"
+expect_field "with no Waves heading" has_waves false "$w" "$lab_repo"
+printf '# Plan\n\n  ## Waves  \n\n  | Wave | Task | Files owned |\n  |---|---|---|\n  | 0 | one | a.py |\n' >"$w/plan.md"
+expect_field "on an indented heading" has_waves true "$w" "$lab_repo"
+expect_field "on an indented table" wave_tasks 1 "$w" "$lab_repo"
+cp tests/fixtures/work-issue/reports-task-named/plan.md "$w/plan.md"
+expect_field "with a compact row and a numbered row under a later heading" wave_tasks 5 "$w" "$lab_repo"
+printf '# Plan\n\n## Waves\n\n| Wave | Task | Files owned |\n|---|---|---|\n|0|one|a.py|sonnet|done||\n\n### Notes\n\n| 1 | two | b.py |\n' >"$w/plan.md"
+expect_field "with a numbered row under a ### heading after the table" wave_tasks 1 "$w" "$lab_repo"
+
+# wave_reports and wave_unreported_committed (#136), the cases the extraction
+# blocks above run, through probe. A report counts only beside clean owned
+# paths and gate evidence, under either name, once.
+rp_run="$tmp/probe-reports-run"
+rp_tree="$tmp/probe-reports-tree"
+git init -q "$rp_tree"
+cp -R tests/fixtures/work-issue/reports-task-named "$rp_run"
+mkdir -p "$rp_run/gated"
+for g in 0-record-revision 0-fixtures 1-contract-rule 2-implementations 3-commit-revision; do
+  : >"$rp_run/gated/$g"
+done
+expect_field "on five <task>.json reports and a decoy" wave_reports 5 "$rp_run" "$rp_tree"
+mv "$rp_run/reports/fixtures.json" "$rp_run/reports/0-fixtures.json"
+expect_field "with one report under <wave>-<task>.json" wave_reports 5 "$rp_run" "$rp_tree"
+cp "$rp_run/reports/record-revision.json" "$rp_run/reports/0-record-revision.json"
+expect_field "with one task reported under both names" wave_reports 5 "$rp_run" "$rp_tree"
+rm "$rp_run/reports/0-fixtures.json"
+expect_field "with one task unreported" wave_reports 4 "$rp_run" "$rp_tree"
+rp_broken="$tmp/probe-reports-broken"
+git init -q "$rp_broken"
+printf 'garbage' >"$rp_broken/.git/index"
+expect_field "on a tree whose git status fails" wave_reports null "$rp_run" "$rp_broken"
+rm "$rp_run/gated/0-record-revision"
+expect_field "with record-revision unmarked and no base_sha" wave_reports 3 "$rp_run" "$rp_tree"
+: >"$rp_run/base_sha"
+expect_field "with record-revision unmarked and an empty base_sha" wave_reports 3 "$rp_run" "$rp_tree"
+rm -r "$rp_run/gated"
+echo deadbeef >"$rp_run/base_sha"
+expect_field "with no gated/ and a base_sha git log cannot resolve" wave_reports null "$rp_run" "$rp_tree"
+
+cm_tree="$tmp/probe-committed-tree"
+cm_run="$tmp/probe-committed-run"
+git init -q "$cm_tree"
+mkdir -p "$cm_run/reports"
+cp tests/fixtures/work-issue/reports-task-named/plan.md "$cm_run/plan.md"
+probe_git "$cm_tree" commit -q --allow-empty -m base
+probe_git "$cm_tree" rev-parse HEAD >"$cm_run/base_sha"
+mkdir -p "$cm_tree/fx"
+echo a >"$cm_tree/a.py"
+echo '{}' >"$cm_tree/fx/one.json"
+probe_git "$cm_tree" add a.py fx/one.json
+probe_git "$cm_tree" commit -q -m "wave 0"
+echo d >"$cm_tree/d.py"
+expect_field "with two committed tasks and no reports" wave_unreported_committed 2 "$cm_run" "$cm_tree"
+echo '{}' >"$cm_run/reports/record-revision.json"
+expect_field "with one committed task reported" wave_unreported_committed 1 "$cm_run" "$cm_tree"
+cm_base="$(cat "$cm_run/base_sha")"
+echo deadbeef >"$cm_run/base_sha"
+expect_field "with a base_sha that does not resolve" wave_unreported_committed null "$cm_run" "$cm_tree"
+rm "$cm_run/base_sha"
+expect_field "with no base_sha" wave_unreported_committed 0 "$cm_run" "$cm_tree"
+echo "$cm_base" >"$cm_run/base_sha"
+echo b >"$cm_tree/b.py"
+echo c >"$cm_tree/c.py"
+probe_git "$cm_tree" add b.py c.py
+probe_git "$cm_tree" commit -q -m "wave 1"
+echo e >"$cm_tree/e.py"
+probe_git "$cm_tree" add e.py
+probe_git "$cm_tree" commit -q -m "wave 3"
+cp tests/fixtures/work-issue/reports-task-named/reports/*.json "$cm_run/reports/"
+expect_field "with every report in and d.py dirty" wave_reports 4 "$cm_run" "$cm_tree"
+expect_field "with a reported, dirty task and no commit" wave_unreported_committed 0 "$cm_run" "$cm_tree"
+echo more >>"$cm_tree/a.py"
+expect_field "with a reported task dirty on a committed path" wave_unreported_committed 1 "$cm_run" "$cm_tree"
+probe_git "$cm_tree" checkout -q -- a.py
+rm "$cm_tree/d.py"
+expect_field "with implementations reported, clean, and ungated" wave_reports 4 "$cm_run" "$cm_tree"
+expect_field "with a reported, clean, ungated task" wave_unreported_committed 0 "$cm_run" "$cm_tree"
+echo d >"$cm_tree/d.py"
+probe_git "$cm_tree" add d.py
+probe_git "$cm_tree" commit -q -m "wave 2"
+expect_field "on the #78 shape: five committed tasks, <task>.json only, no markers" wave_reports 5 "$cm_run" "$cm_tree"
+rm "$cm_run"/reports/*.json
+expect_field "with five committed waves and no report" wave_unreported_committed 5 "$cm_run" "$cm_tree"
+
+# A failed task.json beside clean owned paths and an unowned b.py: no gate
+# evidence, so it does not count until its marker exists (PR #176 review).
+gt_tree="$tmp/probe-gate-tree"
+gt_run="$tmp/probe-gate-run"
+git init -q "$gt_tree"
+mkdir -p "$gt_run/reports"
+printf '# Plan\n\n## Waves\n\n| Wave | Task | Files owned | Model | Done when | Constraints |\n|---|---|---|---|---|---|\n| 0 | task | a.py | sonnet | x | |\n' >"$gt_run/plan.md"
+probe_git "$gt_tree" commit -q --allow-empty -m base
+probe_git "$gt_tree" rev-parse HEAD >"$gt_run/base_sha"
+echo '{"status":"failed"}' >"$gt_run/reports/task.json"
+echo b >"$gt_tree/b.py"
+expect_field "on an ungated failed report" wave_reports 0 "$gt_run" "$gt_tree"
+mkdir -p "$gt_run/gated"
+: >"$gt_run/gated/0-task"
+expect_field "once the gate marker exists" wave_reports 1 "$gt_run" "$gt_tree"
+rm "$gt_tree/b.py" "$gt_run/reports/task.json"
+echo '{"status":"done"}' >"$gt_run/reports/0-task.json"
+expect_field "on a no-change task with a report and a marker" wave_reports 1 "$gt_run" "$gt_tree"
+expect_field "on a counted no-change task" wave_unreported_committed 0 "$gt_run" "$gt_tree"
+rm "$gt_run/reports/0-task.json"
+expect_field "on a marker with no report" wave_reports 0 "$gt_run" "$gt_tree"
+# Two tasks sharing a path in different waves: create's commit must not stand
+# in for extend's gate (PR #176 code-review).
+sh_tree="$tmp/probe-shared-tree"
+sh_run="$tmp/probe-shared-run"
+git init -q "$sh_tree"
+mkdir -p "$sh_run/reports" "$sh_run/gated"
+printf '# Plan\n\n## Waves\n\n| Wave | Task | Files owned | Model | Done when | Constraints |\n|---|---|---|---|---|---|\n| 0 | create | a.py | sonnet | x | |\n| 1 | extend | a.py | sonnet | x | |\n' >"$sh_run/plan.md"
+probe_git "$sh_tree" commit -q --allow-empty -m base
+probe_git "$sh_tree" rev-parse HEAD >"$sh_run/base_sha"
+echo a >"$sh_tree/a.py"
+probe_git "$sh_tree" add a.py
+probe_git "$sh_tree" commit -q -m "wave 0"
+: >"$sh_run/gated/0-create"
+echo '{"status":"done"}' >"$sh_run/reports/0-create.json"
+echo '{"status":"failed"}' >"$sh_run/reports/extend.json"
+expect_field "with an ungated extend sharing create's committed a.py" wave_reports 1 "$sh_run" "$sh_tree"
+expect_field "with an ungated, reported, clean extend" wave_unreported_committed 0 "$sh_run" "$sh_tree"
+: >"$sh_run/gated/1-extend"
+expect_field "with extend's own marker" wave_reports 2 "$sh_run" "$sh_tree"
+# Cells keep their inner spaces (PR #176 review).
+sp_tree="$tmp/probe-space-tree"
+sp_run="$tmp/probe-space-run"
+git init -q "$sp_tree"
+mkdir -p "$sp_run/reports" "$sp_tree/docs"
+printf '# Plan\n\n## Waves\n\n| Wave | Task | Files owned | Model | Done when | Constraints |\n|---|---|---|---|---|---|\n| 0 | my task | docs/my notes.md | sonnet | x | |\n' >"$sp_run/plan.md"
+probe_git "$sp_tree" commit -q --allow-empty -m base
+probe_git "$sp_tree" rev-parse HEAD >"$sp_run/base_sha"
+echo notes >"$sp_tree/docs/my notes.md"
+probe_git "$sp_tree" add "docs/my notes.md"
+probe_git "$sp_tree" commit -q -m "wave 0"
+expect_field "on an unreported task owning committed docs/my notes.md" wave_unreported_committed 1 "$sp_run" "$sp_tree"
+echo '{}' >"$sp_run/reports/0-my task.json"
+expect_field "on reports/0-my task.json with clean paths" wave_reports 1 "$sp_run" "$sp_tree"
+expect_field "on a reported, clean task with an inner space" wave_unreported_committed 0 "$sp_run" "$sp_tree"
+
+# Counts under review/, reports/, redteam/, and triage/.
+c="$(new_run counts)"
+mkdir -p "$c/review" "$c/reports" "$c/redteam" "$c/triage"
+expect_field "with an empty review/" self_reviews 0 "$c" "$lab_repo"
+expect_field "with no build-final.json" build_final false "$c" "$lab_repo"
+echo x >"$c/review/self-1.md"
+echo x >"$c/review/self-2.md"
+echo x >"$c/review/notes.md"
+echo '{}' >"$c/reports/build-final.json"
+echo '{}' >"$c/reports/repair-1.json"
+echo '{}' >"$c/reports/redteam-repair-1.json"
+expect_field "with two self-reviews and a note" self_reviews 2 "$c" "$lab_repo"
+expect_field "with build-final.json" build_final true "$c" "$lab_repo"
+# Step 4's red-team repairs are redteam-repair-<k>.json and never count as a
+# triage round's repair.
+expect_field "beside a redteam-repair-1.json" repair_reports 1 "$c" "$lab_repo"
+cp tests/fixtures/work-issue/triage/round-1.md "$c/triage/round-1.md"
+cp tests/fixtures/work-issue/triage/round-2.md "$c/triage/round-2.md"
+expect_field "with two rounds" triage_rounds 2 "$c" "$lab_repo"
+
+# The red-team round fields read order, not counts. mtimes are set by hand so
+# the newest round is the one the case says it is.
+rt="$(new_run redteam)"
+mkdir -p "$rt/redteam" "$rt/reports"
+echo '{"left_checks": [{"holds": false}]}' >"$rt/redteam/round-1.json"
+echo '{"claims": [{"verdict": "REPRODUCED"}]}' >"$rt/redteam/round-2.json"
+touch -t 202609200100 "$rt/redteam/round-1.json"
+touch -t 202609200200 "$rt/redteam/round-2.json"
+expect_field "with two rounds" redteam_rounds 2 "$rt" "$lab_repo"
+expect_field "with a failed round older than a clean one" redteam_last_failed false "$rt" "$lab_repo"
+expect_field "with one failed round of two" redteam_failed_twice false "$rt" "$lab_repo"
+touch -t 202609200300 "$rt/redteam/round-1.json"
+expect_field "with a newest round holding only \"holds\": false" redteam_last_failed true "$rt" "$lab_repo"
+echo '{"claims": [{"verdict": "NOT_REPRODUCED"}]}' >"$rt/redteam/round-2.json"
+touch -t 202609200200 "$rt/redteam/round-2.json"
+expect_field "with two failed rounds" redteam_failed_twice true "$rt" "$lab_repo"
+echo '{}' >"$rt/reports/redteam-repair-1.json"
+touch -t 202609200400 "$rt/reports/redteam-repair-1.json"
+expect_field "with a repair newer than the failed round" repair_after_last_round true "$rt" "$lab_repo"
+touch -t 202609200000 "$rt/reports/redteam-repair-1.json"
+expect_field "with a repair older than the failed round" repair_after_last_round false "$rt" "$lab_repo"
+
+# trigger_fired is three-valued, and the trigger reads line 1 exactly.
+tg="$(new_run trigger)"
+mkdir -p "$tg/redteam"
+expect_field "with no trigger.txt" trigger_fired '"absent"' "$tg" "$lab_repo"
+for tg_case in "fired: yes:yes" "fired: no:no" "not fired: yes:absent"; do
+  printf '%s\nrows: 1\n' "${tg_case%:*}" >"$tg/redteam/trigger.txt"
+  expect_field "on first line '${tg_case%:*}'" trigger_fired "\"${tg_case##*:}\"" "$tg" "$lab_repo"
+done
+# ar_complete reads Step 4's record, never the run directory preflight leaves.
+mkdir -p "$lab_repo/.adversarial-review/runs/x"
+expect_field "with an adversarial-review run dir and no ar-state.txt" ar_complete false "$tg" "$lab_repo"
+echo "UNVERIFIED: 0" >"$tg/redteam/ar-state.txt"
+expect_field "with UNVERIFIED: 0 in ar-state.txt" ar_complete true "$tg" "$lab_repo"
+rm -r "$lab_repo/.adversarial-review"
+expect_field "with no conflict.txt" conflict false "$tg" "$lab_repo"
+echo "a.py" >"$tg/conflict.txt"
+expect_field "with conflict.txt" conflict true "$tg" "$lab_repo"
+
+# rebase_in_progress resolves through --git-path in the linked worktree that
+# holds issue-1, which probe finds from --root rather than taking a second flag.
+rb_repo="$tmp/lab/rebase-repo"
+rb_tree="$tmp/lab/rebase-tree"
+make_repo "$rb_repo"
+probe_git "$rb_repo" worktree add -q -b issue-1 "$rb_tree"
+expect_field "with no rebase" rebase_in_progress false "$tg" "$rb_repo"
+mkdir -p "$(git -C "$rb_tree" rev-parse --path-format=absolute --git-path rebase-merge)"
+expect_field "with rebase-merge in the linked worktree" rebase_in_progress true "$tg" "$rb_repo"
+
+# The triage fields read a round's table by header name, and each newest round
+# is the one its resume.md row names.
+tr="$(new_run triage)"
+mkdir -p "$tr/triage" "$tr/reports" "$tr/redteam"
+expect_field "with no round" triage_rounds 0 "$tr" "$lab_repo"
+expect_field "with no round" triage_inscope_rows 0 "$tr" "$lab_repo"
+expect_field "with no round" triage_rows_unanswered 0 "$tr" "$lab_repo"
+expect_field "with no round" newest_repair_report false "$tr" "$lab_repo"
+expect_field "with no round" repair_ar_settled false "$tr" "$lab_repo"
+cp tests/fixtures/work-issue/triage/round-1.md "$tr/triage/round-1.md"
+expect_field "on round-1.md" triage_inscope_rows 2 "$tr" "$lab_repo"
+expect_field "on round-1.md's three unanswered rows" triage_rows_unanswered 3 "$tr" "$lab_repo"
+sed 's#| in scope | |$#| in scope | https://github.com/o/r/pull/9\#discussion_r20 |#' tests/fixtures/work-issue/triage/round-1.md >"$tr/triage/round-1.md"
+expect_field "with two rows carrying a reply URL" triage_rows_unanswered 1 "$tr" "$lab_repo"
+cp tests/fixtures/work-issue/triage/round-2.md "$tr/triage/round-2.md"
+expect_field "across two rounds" triage_rows_unanswered 4 "$tr" "$lab_repo"
+echo '{}' >"$tr/reports/repair-1.json"
+expect_field "with repair-1.json and a newer round 2" newest_repair_report false "$tr" "$lab_repo"
+echo '{}' >"$tr/reports/repair-2.json"
+expect_field "with repair-2.json" newest_repair_report true "$tr" "$lab_repo"
+expect_field "with neither repair file" repair_ar_settled false "$tr" "$lab_repo"
+echo "fired: no" >"$tr/redteam/trigger-repair-2.txt"
+expect_field "with fired: no in trigger-repair-2.txt" repair_ar_settled true "$tr" "$lab_repo"
+rm "$tr/redteam/trigger-repair-2.txt"
+echo "UNVERIFIED: 0" >"$tr/redteam/ar-state-repair-2.txt"
+expect_field "with UNVERIFIED: 0 in ar-state-repair-2.txt" repair_ar_settled true "$tr" "$lab_repo"
+printf '# Triage round 3\n\n| # | Source | Finding | Severity | Scope | Reply |\n|---|---|---|---|---|---|\n| 1 | https://github.com/o/r/pull/9#discussion_r30 | "Name it." | P2 | in scope; queued: review round cap reached (2) | |\n| 2 | https://github.com/o/r/pull/9#discussion_r31 | "Later." | P2 | out of scope: not in the diff | |\n' >"$tr/triage/round-3.md"
+expect_field "on a capped round's queued in-scope cell" triage_inscope_rows 1 "$tr" "$lab_repo"
+cp tests/fixtures/work-issue/triage/round-noscope.md "$tr/triage/round-3.md"
+expect_field "on a round with no Scope column" triage_inscope_rows null "$tr" "$lab_repo"
+sed 's/| Reply |$/|/; s/|---|---|---|---|---|$/|---|---|---|---|/; s/| in scope | |$/| in scope |/' tests/fixtures/work-issue/triage-noseverity/round-1.md >"$tr/triage/round-3.md"
+expect_field "with a round that has no Reply column" triage_rows_unanswered null "$tr" "$lab_repo"
+
+# triage_newer_than_since (#139): the newest round by number, compared by the
+# SINCE its heading recorded, never by the file's time.
+ts="$(new_run since)"
+mkdir -p "$ts/triage"
+since_fixture=tests/fixtures/work-issue/triage-since/round-1.md
+expect_field "with no round" triage_newer_than_since false "$ts" "$lab_repo"
+cp "$since_fixture" "$ts/triage/round-1.md"
+echo 2026-09-23T13:55:25Z >"$ts/pushed_at"
+expect_field "on a round written against the current pushed_at" triage_newer_than_since true "$ts" "$lab_repo"
+echo 2026-09-23T18:03:09Z >"$ts/pushed_at"
+sed 's#| in scope | |#| in scope | https://github.com/o/r/pull/134\#discussion_r10 |#' "$since_fixture" >"$ts/triage/round-1.md"
+touch "$ts/triage/round-1.md"
+expect_field "on the PR #134 replay" triage_newer_than_since false "$ts" "$lab_repo"
+cp "$since_fixture" "$ts/triage/round-1.md"
+expect_field "on an unedited round after a later push" triage_newer_than_since false "$ts" "$lab_repo"
+printf '# Triage round 1 — PR #134, since 2026-09-23T18:03:09Z\n' >"$ts/triage/round-1.md"
+expect_field "on the #124 heading" triage_newer_than_since true "$ts" "$lab_repo"
+printf '# Triage round 2, since 2026-09-23T18:03:09Z\n' >"$ts/triage/round-2.md"
+cp "$since_fixture" "$ts/triage/round-1.md"
+touch "$ts/triage/round-1.md"
+expect_field "with round 2 current and round 1 edited later" triage_newer_than_since true "$ts" "$lab_repo"
+rm "$ts"/triage/round-*.md
+printf '# Triage round 9, since 2026-09-23T18:03:09Z\n' >"$ts/triage/round-9.md"
+cp "$since_fixture" "$ts/triage/round-10.md"
+expect_field "with round 10 beside round 9" triage_newer_than_since false "$ts" "$lab_repo"
+rm "$ts"/triage/round-*.md
+printf '# Triage round 1\n' >"$ts/triage/round-1.md"
+expect_field "on a round with no recorded SINCE" triage_newer_than_since null "$ts" "$lab_repo"
+printf '# Triage round 1\n\n# Triage round bogus, since 2026-09-23T18:03:09Z\n' >"$ts/triage/round-1.md"
+expect_field "on a round whose only since sits below line 1" triage_newer_than_since null "$ts" "$lab_repo"
+printf '# Triage round 1, since 2026-09-23T18:03:09Z\n' >"$ts/triage/round-1.md"
+rm "$ts/pushed_at"
+expect_field "with no pushed_at" triage_newer_than_since null "$ts" "$lab_repo"
+
+# triage_blocking_rows and triage_stop_rows, the cases the extraction blocks
+# above run, through probe.
+for tri_case in "triage:1:0" "triage-pipe:1:0" "triage-noseverity:null:null" "empty:0:0"; do
+  IFS=: read -r tri_name tri_blocking tri_stop <<<"$tri_case"
+  tri_dir="$(new_run "blocking-$tri_name")"
+  mkdir -p "$tri_dir/triage"
+  [[ "$tri_name" == empty ]] || cp "tests/fixtures/work-issue/$tri_name/round-1.md" "$tri_dir/triage/round-1.md"
+  expect_field "on $tri_name" triage_blocking_rows "$tri_blocking" "$tri_dir" "$lab_repo"
+  expect_field "on $tri_name" triage_stop_rows "$tri_stop" "$tri_dir" "$lab_repo"
+done
+tri_dir="$(new_run blocking-cap)"
+mkdir -p "$tri_dir/triage"
+cp tests/fixtures/work-issue/triage/round-2.md "$tri_dir/triage/round-2.md"
+expect_field "on the P0/P1/P2 round" triage_stop_rows 1 "$tri_dir" "$lab_repo"
+expect_field "on the P0/P1/P2 round" triage_blocking_rows 2 "$tri_dir" "$lab_repo"
+for stop_case in "round-3:0" "round-noscope:null"; do
+  tri_dir="$(new_run "stop-${stop_case%%:*}")"
+  mkdir -p "$tri_dir/triage"
+  cp "tests/fixtures/work-issue/triage/${stop_case%%:*}.md" "$tri_dir/triage/round-1.md"
+  expect_field "on triage/${stop_case%%:*}.md" triage_stop_rows "${stop_case##*:}" "$tri_dir" "$lab_repo"
+done
+
+m="$(new_run rounds)"
+expect_field "with no max_review_rounds file" max_review_rounds 2 "$m" "$lab_repo"
+echo 3 >"$m/max_review_rounds"
+expect_field "with 3 written" max_review_rounds 3 "$m" "$lab_repo"
+
+for budget_case in "build30-review61:true" "build30-review59:false" "bad-label:null" "missing:false"; do
+  b="$(new_run "budget-${budget_case%%:*}")"
+  [[ "${budget_case%%:*}" == missing ]] || cp "$timing_dir/${budget_case%%:*}.txt" "$b/timing.log"
+  expect_field "on ${budget_case%%:*}" review_over_budget "${budget_case##*:}" "$b" "$lab_repo"
+done
+
+# deferred_comment_needed compares every queue row, whole, with the author's
+# Deferred findings comment in the bundle.
+d="$(new_run deferred)"
+deferred_row='| 1 | https://github.com/o/r/pull/9#discussion_r3 | "Consider a retry." | not in the diff | `file-issue` — retry | queued |'
+expect_field "with no queue.md" deferred_comment_needed false "$d" "$lab_repo" --pr-bundle "$bundles_dir/open-deferred.json"
+printf '| # | Source | Finding | Outside because | Recommendation | Status |\n|---|---|---|---|---|---|\n%s\n' "$deferred_row" >"$d/queue.md"
+expect_field "with the queue row carried byte for byte" deferred_comment_needed false "$d" "$lab_repo" --pr-bundle "$bundles_dir/open-deferred.json"
+expect_field "with no bundle" deferred_comment_needed false "$d" "$lab_repo"
+# The comment counts only from the PR author, whom --author overrides.
+expect_field "with --author naming someone else" deferred_comment_needed true "$d" "$lab_repo" --pr-bundle "$bundles_dir/open-deferred.json" --author someone-else
+printf '| # | Source | Finding | Outside because | Recommendation | Status |\n|---|---|---|---|---|---|\n%s\n' "${deferred_row/queued |/filed #9 |}" >"$d/queue.md"
+expect_field "with a queue row whose Status moved to filed #9" deferred_comment_needed true "$d" "$lab_repo" --pr-bundle "$bundles_dir/open-deferred.json"
+printf '| # | Source | Finding | Outside because | Recommendation | Status |\n|---|---|---|---|---|---|\n%s\n| 2 | https://github.com/o/r/pull/9#discussion_r4 | "Log the retry." | not in the diff | `file-issue` — log | queued |\n' "$deferred_row" >"$d/queue.md"
+expect_field "with round 2's row missing from the comment" deferred_comment_needed true "$d" "$lab_repo" --pr-bundle "$bundles_dir/open-deferred.json"
+
+# repair_diff_triggers (#162, #137) reads the repair's own diff from
+# repair-base-<k> for the newest round k: the billing/README repo the block
+# above builds, rebuilt here.
+dt_repo="$tmp/probe-scope-repo"
+dt_run="$tmp/probe-scope-run"
+mkdir -p "$dt_run/redteam" "$dt_run/triage"
+cp tests/fixtures/work-issue/triage/round-1.md "$dt_run/triage/round-1.md"
+git init -q -b main "$dt_repo"
+printf 'amount = round(price * qty, 2)\n' >"$dt_repo/billing.py"
+probe_git "$dt_repo" add billing.py
+probe_git "$dt_repo" commit -q -m base
+probe_git "$dt_repo" checkout -q -b issue-1
+printf 'amount = round(price * qty * (1 - discount), 2)\n' >"$dt_repo/billing.py"
+probe_git "$dt_repo" commit -q -am branch
+probe_git "$dt_repo" rev-parse HEAD >"$dt_run/redteam/repair-base-1"
+printf 'Run the tests before you push.\n' >"$dt_repo/README.md"
+probe_git "$dt_repo" add README.md
+probe_git "$dt_repo" commit -q -m repair
+expect_field "with the base at the branch tip" repair_diff_triggers false "$dt_run" "$dt_repo"
+probe_git "$dt_repo" merge-base main issue-1 >"$dt_run/redteam/repair-base-1"
+expect_field "with the base at the merge-base" repair_diff_triggers true "$dt_run" "$dt_repo"
+rm "$dt_run/redteam/repair-base-1"
+expect_field "with no repair-base file" repair_diff_triggers false "$dt_run" "$dt_repo"
+printf 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n' >"$dt_run/redteam/repair-base-1"
+expect_field "with a base SHA that does not resolve" repair_diff_triggers null "$dt_run" "$dt_repo"
+probe_git "$dt_repo" rev-parse issue-1~1 >"$dt_run/redteam/repair-base-1"
+probe_git "$dt_repo" checkout -q main
+printf 'total = round(price * qty)\n' >"$dt_repo/invoice.py"
+probe_git "$dt_repo" add invoice.py
+probe_git "$dt_repo" commit -q -m upstream
+probe_git "$dt_repo" checkout -q issue-1
+probe_git "$dt_repo" rebase -q main
+expect_field "after a rebase orphans the base" repair_diff_triggers false "$dt_run" "$dt_repo"
+
+# Exit 3 with nothing on stdout. A field probe cannot answer is a null; input it
+# cannot read is a usage error, and pr_state or review_state read as null would
+# say no pull request exists.
+u="$(new_run usage)"
+expect_probe_usage "with no --run-dir" --root "$lab_repo" --issue 1
+expect_probe_usage "with --issue 0" --run-dir "$u" --root "$lab_repo" --issue 0
+expect_probe_usage "with --issue abc" --run-dir "$u" --root "$lab_repo" --issue abc
+expect_probe_usage "with a --root that is not a git work tree" --run-dir "$u" --root "$u" --issue 1
+expect_probe_usage "with an unreadable --pr-bundle" --run-dir "$u" --root "$lab_repo" --issue 1 --pr-bundle "$tmp/no-such-bundle.json"
+echo 'not json' >"$tmp/bundle-notjson.json"
+expect_probe_usage "with a bundle that is not JSON" --run-dir "$u" --root "$lab_repo" --issue 1 --pr-bundle "$tmp/bundle-notjson.json"
+python3 - "$bundles_dir/open-findings.json" "$tmp" <<'PY'
+import json, sys
+bundle = json.load(open(sys.argv[1]))
+for name, edit in (
+    ("nothreads", lambda b: b.pop("threads")),
+    ("nostate", lambda b: b.pop("state")),
+    ("draft", lambda b: b.update(state="DRAFT")),
+):
+    copy = json.loads(json.dumps(bundle))
+    edit(copy)
+    json.dump(copy, open(f"{sys.argv[2]}/bundle-{name}.json", "w"))
+PY
+expect_probe_usage "with a bundle missing threads" --run-dir "$u" --root "$lab_repo" --issue 1 --pr-bundle "$tmp/bundle-nothreads.json"
+expect_probe_usage "with a bundle missing state" --run-dir "$u" --root "$lab_repo" --issue 1 --pr-bundle "$tmp/bundle-nostate.json"
+grep -Fq "state" "$tmp/probe-stderr" || { echo "a bundle missing state should be named on stderr" >&2; exit 1; }
+expect_probe_usage "with a bundle whose state is DRAFT" --run-dir "$u" --root "$lab_repo" --issue 1 --pr-bundle "$tmp/bundle-draft.json"
+expect_probe_usage "with --herdr-state sleeping" --run-dir "$u" --root "$lab_repo" --issue 1 --herdr-state sleeping
+echo yesterday >"$u/pushed_at"
+expect_probe_usage "with pushed_at 'yesterday' and no issue-1 branch" --run-dir "$u" --root "$tmp/whole-fresh/repo" --issue 1 --pr-bundle "$bundles_dir/open-findings.json"
+
+# Neither fake was ever called, across every probe above.
+for fake in gh herdr; do
+  [[ ! -e "$tmp/called-$fake" ]] || { echo "probe called $fake" >&2; exit 1; }
+done
+# Every PROBE_FIELDS name has a case above.
+unasserted=""
+while IFS= read -r name; do
+  grep -qx -- "$name" "$probe_asserted" || unasserted="$unasserted $name"
+done <<<"$probe_names"
+[[ -z "$unasserted" ]] || { echo "probe fields with no behavior case:$unasserted" >&2; exit 1; }
+
 # A field the probe could not answer is written as null. A field that is absent
 # entirely must stop the run instead of defaulting, because a silent `false`
 # reads as "no branch yet" and sends a run three steps in back to Step 0.
