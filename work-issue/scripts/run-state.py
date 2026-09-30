@@ -1221,7 +1221,7 @@ def _round_number(name):
 def newest_by_mtime(directory, pattern):
     """Entries of DIR matching PATTERN, newest first, as `ls -t` orders them,
     with a tie going to the higher round number. For the fields whose
-    resume.md row still names `ls -t`."""
+    resume.md row reads the newest round by file time."""
     try:
         names = [n for n in os.listdir(directory) if fnmatch.fnmatchcase(n, pattern)]
     except FileNotFoundError:
