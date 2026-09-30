@@ -2890,6 +2890,15 @@ grep -Fq "OK: plan cites #101, 3 tasks with files, 0 open markers, 4/4 criteria 
   exit 1
 }
 
+# #135's ledger and its live scenario. The suite can pin the sentences that
+# say a run keeps going; only the scenario can watch one do it.
+require_text _maintenance/work-issue/RATIONALE.md "A committed wave with a later wave pending is not a stop"
+require_text _maintenance/work-issue/RATIONALE.md "\`divvy-up\`'s per-wave gate and Step 3's \`code-review\` are checks, not stops"
+require_text _maintenance/work-issue/RATIONALE.md "only an EVALS scenario can show a run keeps going"
+require_text _maintenance/work-issue/RATIONALE.md "Ending an invocation at a committed wave for the user to re-invoke"
+require_text _maintenance/work-issue/EVALS.md "A Two-Wave Plan Runs Both Waves in One Invocation"
+require_text _maintenance/work-issue/EVALS.md "fails as well if it ends there with a message"
+
 # The root README carries this skill's own install flag, in the map
 # table's third column. The command form around it is pinned once, in
 # repo-docs-smoke.sh, so this does not re-pin it twelve times.
