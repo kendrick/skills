@@ -664,9 +664,9 @@ for doc in "${work_issue_docs[@]}"; do
   # `--force-with-lease` out of this refute's reach.
   refute_text "$doc" "push --force "
 
-  # A fourth verdict value. Step 4's routing, references/resume.md's
-  # `redteam_last_failed` grep, and run-state.py's row 10 all split on the
-  # same three values, and that grep's alternation is unanchored:
+  # A fourth verdict value. Step 4's routing, the probe's `redteam_last_failed`
+  # regex in run-state.py, and that script's row 10 all split on the
+  # same three values, and that regex's alternation is unanchored:
   # REPRODUCED_AT_CALLER scores as nothing to it, and
   # NOT_REPRODUCED_AT_CALLER scores as a plain failure. `reproduced_at`
   # carries the distinction past all three readers instead. The substring
@@ -1388,7 +1388,7 @@ grep -Fq "adversarial-review" <<<"$quiet_reason" && {
 # A candidate repair diff the reading reads away (row 112). The probe still
 # flags the diff, and trigger-repair-<k>.txt holds `fired: no`, which settles
 # the review. The flag is set by hand here, so this guards phase_of's routing
-# of a settled candidate, not the resume.md command that sets the flag.
+# of a settled candidate, not the probe gatherer that sets the flag.
 python3 -c 'import json, sys
 probe = json.load(open(sys.argv[1]))
 assert probe["repair_diff_triggers"] is True
@@ -1604,22 +1604,6 @@ for unreadable in "$timing_dir/bad-label.txt" "$timing_dir/end-with-no-start.txt
   }
 done
 
-# The review_over_budget probe, run as resume.md writes it.
-budget_probe="$(sed -n 's/^| `review_over_budget` | `\([^`]*\)`.*/\1/p' work-issue/references/resume.md)"
-[[ -n "$budget_probe" ]] || {
-  echo "could not extract the review_over_budget probe from work-issue/references/resume.md" >&2
-  exit 1
-}
-for budget_case in "build30-review61:true" "build30-review59:false" "bad-label:null" "missing:false"; do
-  budget_run="$tmp/budget-${budget_case%%:*}"
-  mkdir -p "$budget_run"
-  [[ "${budget_case%%:*}" == missing ]] || cp "$timing_dir/${budget_case%%:*}.txt" "$budget_run/timing.log"
-  budget_got="$(bash -c "${budget_probe//<RUN_DIR>/$budget_run}" 2>/dev/null)"
-  [[ "$budget_got" == "${budget_case##*:}" ]] || {
-    echo "review_over_budget on ${budget_case%%:*} should print ${budget_case##*:}, got: $budget_got" >&2
-    exit 1
-  }
-done
 # The log's writers. Without them the budget reads an empty log as under
 # budget forever.
 require_text work-issue/SKILL.md 'echo "<n> start $(date -u +%FT%TZ)" >> RUN_DIR/timing.log'
@@ -1635,170 +1619,6 @@ require_text work-issue/SKILL.md "awk 'NF == 3 { print \$3 }' RUN_DIR/timing.log
 require_text work-issue/references/resume.md "Passing \`--ratio <r>\` to one \`budget\` command outranks every \`budget-raised\` line"
 require_text work-issue/SKILL.md "the queue, the \`budget\` line,"
 
-# The triage_blocking_rows probe, run as resume.md writes it against a round
-# whose finding text says "P1" on a row the reviewer marked none. Reading the
-# Severity cell rather than the row is what keeps that row from counting.
-# The command is the row's first code span, and a table cell escapes its
-# pipes as `\|`, so unescape them the way the markdown renderer would.
-blocking_probe="$(sed -n 's/^| `triage_blocking_rows` | `\([^`]*\)`.*/\1/p' work-issue/references/resume.md \
-  | sed 's/\\|/|/g')"
-[[ -n "$blocking_probe" ]] || {
-  echo "could not extract the triage_blocking_rows probe from work-issue/references/resume.md" >&2
-  exit 1
-}
-tri_run="$tmp/tri-run"
-mkdir -p "$tri_run/triage"
-cp tests/fixtures/work-issue/triage/round-1.md "$tri_run/triage/round-1.md"
-blocking_count="$(bash -c "${blocking_probe//<RUN_DIR>/$tri_run}")"
-[[ "$blocking_count" == "1" ]] || {
-  echo "triage_blocking_rows should count the one P1 row in the fixture round, got: $blocking_count (probe: $blocking_probe)" >&2
-  exit 1
-}
-# A Finding cell quoting a shell pipe escapes it as `\|`, which must not
-# shift the Severity column. A round with no Severity column can't answer, so
-# the probe prints null, which phase's null-field stop (checked below) turns
-# into a stop naming the field rather than reading
-# 0. No round yet prints 0 without reading stdin, where it once hung.
-for tri_case in "triage-pipe:1" "triage-noseverity:null" "empty:0"; do
-  tri_dir="$tmp/tri-${tri_case%%:*}"
-  mkdir -p "$tri_dir/triage"
-  [[ "${tri_case%%:*}" == empty ]] || cp "tests/fixtures/work-issue/${tri_case%%:*}/round-1.md" "$tri_dir/triage/round-1.md"
-  tri_got="$(bash -c "${blocking_probe//<RUN_DIR>/$tri_dir}" </dev/null)"
-  [[ "$tri_got" == "${tri_case##*:}" ]] || {
-    echo "triage_blocking_rows on ${tri_case%%:*} should print ${tri_case##*:}, got: $tri_got" >&2
-    exit 1
-  }
-done
-
-# The triage_stop_rows probe (#159), run as resume.md writes it. The cap stops
-# only on P0 or blocking, narrower than triage_blocking_rows' P0, P1, or
-# blocking, because a capped round holding P1 rows has to reach Step 8. The
-# fixture's P1 row quotes "P0" in its finding, so a row grep would count 2.
-stop_probe="$(sed -n 's/^| `triage_stop_rows` | `\([^`]*\)`.*/\1/p' work-issue/references/resume.md \
-  | sed 's/\\|/|/g')"
-[[ -n "$stop_probe" ]] || {
-  echo "could not extract the triage_stop_rows probe from work-issue/references/resume.md" >&2
-  exit 1
-}
-cap_run="$tmp/cap-run"
-mkdir -p "$cap_run/triage"
-cp tests/fixtures/work-issue/triage/round-2.md "$cap_run/triage/round-2.md"
-cap_stop="$(bash -c "${stop_probe//<RUN_DIR>/$cap_run}" </dev/null)"
-cap_blocking="$(bash -c "${blocking_probe//<RUN_DIR>/$cap_run}" </dev/null)"
-[[ "$cap_stop" == "1" && "$cap_blocking" == "2" ]] || {
-  echo "on the P0/P1/P2 round, triage_stop_rows should print 1 and triage_blocking_rows 2, got: $cap_stop and $cap_blocking (probe: $stop_probe)" >&2
-  exit 1
-}
-for tri_case in "triage:0" "triage-noseverity:null" "empty:0"; do
-  tri_dir="$tmp/stop-${tri_case%%:*}"
-  mkdir -p "$tri_dir/triage"
-  [[ "${tri_case%%:*}" == empty ]] || cp "tests/fixtures/work-issue/${tri_case%%:*}/round-1.md" "$tri_dir/triage/round-1.md"
-  tri_got="$(bash -c "${stop_probe//<RUN_DIR>/$tri_dir}" </dev/null)"
-  [[ "$tri_got" == "${tri_case##*:}" ]] || {
-    echo "triage_stop_rows on ${tri_case%%:*} should print ${tri_case##*:}, got: $tri_got" >&2
-    exit 1
-  }
-done
-# The cap queues in-scope rows, so only an in-scope P0 is a blocker it would
-# ship. An out-of-scope P0 is queued anyway and must not stop a capped round
-# whose in-scope rows are all P2. A round with no Scope column can't tell the
-# two apart, so it prints null, the way a round with no Severity column does.
-for stop_case in "round-3:0" "round-noscope:null"; do
-  tri_dir="$tmp/stop-scope-${stop_case%%:*}"
-  mkdir -p "$tri_dir/triage"
-  cp "tests/fixtures/work-issue/triage/${stop_case%%:*}.md" "$tri_dir/triage/round-1.md"
-  tri_got="$(bash -c "${stop_probe//<RUN_DIR>/$tri_dir}" </dev/null)"
-  [[ "$tri_got" == "${stop_case##*:}" ]] || {
-    echo "triage_stop_rows on triage/${stop_case%%:*}.md should print ${stop_case##*:}, got: $tri_got (probe: $stop_probe)" >&2
-    exit 1
-  }
-done
-
-# The max_review_rounds probe, run as resume.md writes it. A run started before
-# the flag existed has no file and is capped at the default rather than
-# stopped on a null.
-rounds_probe="$(sed -n 's/^| `max_review_rounds` | `\([^`]*\)`.*/\1/p' work-issue/references/resume.md \
-  | sed 's/\\|/|/g')"
-[[ -n "$rounds_probe" ]] || {
-  echo "could not extract the max_review_rounds probe from work-issue/references/resume.md" >&2
-  exit 1
-}
-rounds_run="$tmp/rounds-run"
-mkdir -p "$rounds_run"
-[[ "$(bash -c "${rounds_probe//<RUN_DIR>/$rounds_run}" </dev/null)" == "2" ]] || {
-  echo "max_review_rounds with no RUN_DIR/max_review_rounds should print the default 2" >&2
-  exit 1
-}
-echo 3 >"$rounds_run/max_review_rounds"
-[[ "$(bash -c "${rounds_probe//<RUN_DIR>/$rounds_run}" </dev/null)" == "3" ]] || {
-  echo "max_review_rounds should print the value Step 0 wrote to RUN_DIR/max_review_rounds" >&2
-  exit 1
-}
-
-# The triage_newer_than_since probe (#139), run as resume.md writes it. A
-# round is current when the SINCE it recorded is the SINCE in pushed_at now.
-# Step 8 writes reply URLs into a round after the push that answers it, so a
-# file-time check read every answered round as current, and on PR #134 a P0
-# posted after the replies resumed as done.
-since_probe="$(sed -n 's/^| `triage_newer_than_since` | `\([^`]*\)`.*/\1/p' work-issue/references/resume.md \
-  | sed 's/\\|/|/g')"
-[[ -n "$since_probe" ]] || {
-  echo "could not extract the triage_newer_than_since probe from work-issue/references/resume.md" >&2
-  exit 1
-}
-since_fixture=tests/fixtures/work-issue/triage-since/round-1.md
-run_since() { bash -c "${since_probe//<RUN_DIR>/$1}" </dev/null; }
-# Feed a probe value into a real fixture and print what phase makes of it.
-since_phase() {
-  python3 -c 'import json,sys; p=json.load(open(sys.argv[1])); p["triage_newer_than_since"]=json.loads(sys.argv[2]); json.dump(p,open(sys.argv[3],"w"))' \
-    "$probes_dir/$1" "$2" "$tmp/since-probe.json"
-  python3 "$run_state" phase --probe "$tmp/since-probe.json"
-}
-expect_since() {
-  [[ "$2" == "$3" ]] || { echo "triage_newer_than_since on $1 should print $3, got: $2 (probe: $since_probe)" >&2; exit 1; }
-}
-since_run="$tmp/since-run"
-mkdir -p "$since_run/triage"
-expect_since "no round" "$(run_since "$since_run")" false
-cp "$since_fixture" "$since_run/triage/round-1.md"
-echo 2026-09-23T13:55:25Z >"$since_run/pushed_at"
-since_now="$(run_since "$since_run")"
-expect_since "a round written against the current pushed_at" "$since_now" true
-grep -Fq "phase: done reason: row 18" <<<"$(since_phase row-18-answered.json "$since_now")" || {
-  echo "a current, answered round should still resume at row 18" >&2; exit 1; }
-grep -Fq "phase: 8 reason: row 17" <<<"$(since_phase row-17.json "$since_now")" || {
-  echo "a current round owing replies should still resume at row 17" >&2; exit 1; }
-# The PR #134 sequence: Step 8 pushes, then writes the reply URL into the round.
-echo 2026-09-23T18:03:09Z >"$since_run/pushed_at"
-sed 's#| in scope | |#| in scope | https://github.com/o/r/pull/134\#discussion_r10 |#' \
-  "$since_fixture" >"$since_run/triage/round-1.md"
-touch "$since_run/triage/round-1.md"
-since_replay="$(run_since "$since_run")"
-expect_since "the PR #134 replay" "$since_replay" false
-grep -Fq "phase: 6 reason: row 15" <<<"$(since_phase row-18-answered.json "$since_replay")" || {
-  echo "a finding after Step 8's replies should resume at row 15, not done" >&2; exit 1; }
-cp "$since_fixture" "$since_run/triage/round-1.md"
-expect_since "an unedited round after a later push" "$(run_since "$since_run")" false
-printf '# Triage round 1 — PR #134, since 2026-09-23T18:03:09Z\n' >"$since_run/triage/round-1.md"
-expect_since "the #124 heading" "$(run_since "$since_run")" true
-printf '# Triage round 2, since 2026-09-23T18:03:09Z\n' >"$since_run/triage/round-2.md"
-cp "$since_fixture" "$since_run/triage/round-1.md"
-touch "$since_run/triage/round-1.md"
-expect_since "round 2 current with round 1 edited later" "$(run_since "$since_run")" true
-rm "$since_run"/triage/round-*.md
-printf '# Triage round 9, since 2026-09-23T18:03:09Z\n' >"$since_run/triage/round-9.md"
-cp "$since_fixture" "$since_run/triage/round-10.md"
-expect_since "round 10 beside round 9" "$(run_since "$since_run")" false
-rm "$since_run"/triage/round-*.md
-printf '# Triage round 1\n' >"$since_run/triage/round-1.md"
-since_legacy="$(run_since "$since_run")"
-expect_since "a round with no recorded SINCE" "$since_legacy" null
-grep -Fq "phase: stop reason: unknown probe fields: triage_newer_than_since" <<<"$(since_phase row-18-answered.json "$since_legacy")" || {
-  echo "a round with no recorded SINCE should stop the run naming the field" >&2; exit 1; }
-# Only line 1 is the heading. A heading-like line further down, inside a quoted
-# finding, must not stand in for a SINCE the heading never recorded (PR #174).
-printf '# Triage round 1\n\n# Triage round bogus, since 2026-09-23T18:03:09Z\n' >"$since_run/triage/round-1.md"
-expect_since "a round whose only since sits below line 1" "$(run_since "$since_run")" null
 # #139: a triage round is current by the SINCE its heading recorded, never by
 # the file's time, because Step 8 edits the round after the push it answers.
 require_text work-issue/SKILL.md "# Triage round <k>, since <SINCE>"
@@ -1809,290 +1629,6 @@ refute_text work-issue/references/resume.md "compare its mtime against"
 refute_text work-issue/SKILL.md "compare its mtime against"
 refute_text work-issue/references/resume.md "no \`triage/round-<k>.md\` newer than SINCE"
 refute_text work-issue/SKILL.md "no \`triage/round-<k>.md\` newer than SINCE"
-
-# The wave_reports and wave_unreported_committed probes (#136), run as
-# resume.md writes them. On cambium #78 every report was the herdr agent's
-# reports/<task>.json, a filename glob counted 0 of 5 for five gated, committed
-# waves, and row 7 said to revert them.
-reports_probe="$(sed -n 's/^| `wave_reports` | `\([^`]*\)`.*/\1/p' work-issue/references/resume.md \
-  | sed 's/\\|/|/g')"
-[[ -n "$reports_probe" ]] || {
-  echo "could not extract the wave_reports probe from work-issue/references/resume.md" >&2
-  exit 1
-}
-# $1 is the run dir, $2 the worktree whose owned paths the probe reads. A
-# report beside dirty owned paths is a worker's copy no gate has read yet.
-run_reports() {
-  local c="${reports_probe//<RUN_DIR>/$1}"
-  bash -c "${c//<TREE>/$2}" </dev/null
-}
-expect_reports() {
-  [[ "$2" == "$3" ]] || { echo "wave_reports on $1 should print $3, got: $2 (probe: $reports_probe)" >&2; exit 1; }
-}
-reports_run="$tmp/reports-run"
-reports_tree="$tmp/reports-tree"
-git init -q "$reports_tree"
-cp -R tests/fixtures/work-issue/reports-task-named "$reports_run"
-# This tree has no commits, so a gate marker is each task's only gate evidence.
-# The name checks below need all five gated to isolate the naming rule.
-mkdir -p "$reports_run/gated"
-for g in 0-record-revision 0-fixtures 1-contract-rule 2-implementations 3-commit-revision; do
-  : >"$reports_run/gated/$g"
-done
-expect_reports "five <task>.json reports, a decoy, and a numbered row outside ## Waves" "$(run_reports "$reports_run" "$reports_tree")" 5
-mv "$reports_run/reports/fixtures.json" "$reports_run/reports/0-fixtures.json"
-expect_reports "one report under <wave>-<task>.json" "$(run_reports "$reports_run" "$reports_tree")" 5
-cp "$reports_run/reports/record-revision.json" "$reports_run/reports/0-record-revision.json"
-expect_reports "one task reported under both names" "$(run_reports "$reports_run" "$reports_tree")" 5
-rm "$reports_run/reports/0-fixtures.json"
-expect_reports "one task with no report" "$(run_reports "$reports_run" "$reports_tree")" 4
-# A git status that fails can't say whether a reported task's paths are clean.
-expect_reports "a worktree git cannot read" "$(run_reports "$reports_run" "$tmp/not-a-repo")" null
-# A report beside clean paths proves no gate ran: with no base_sha, no commit can
-# be gate evidence, so an unmarked task drops out (PR #176 review).
-rm "$reports_run/gated/0-record-revision"
-expect_reports "record-revision reported, clean, and unmarked with no base_sha" "$(run_reports "$reports_run" "$reports_tree")" 3
-: >"$reports_run/base_sha"
-expect_reports "record-revision unmarked with an empty base_sha" "$(run_reports "$reports_run" "$reports_tree")" 3
-# A git log that fails can't say whether a commit gated the task. Only a run
-# with no gated/ directory reads commits at all, so drop the markers first.
-rm -r "$reports_run/gated"
-echo deadbeef >"$reports_run/base_sha"
-expect_reports "record-revision unmarked with a base_sha git log cannot resolve" "$(run_reports "$reports_run" "$reports_tree")" null
-
-committed_probe="$(sed -n 's/^| `wave_unreported_committed` | `\([^`]*\)`.*/\1/p' work-issue/references/resume.md \
-  | sed 's/\\|/|/g')"
-[[ -n "$committed_probe" ]] || {
-  echo "could not extract the wave_unreported_committed probe from work-issue/references/resume.md" >&2
-  exit 1
-}
-committed_tree="$tmp/committed-tree"
-committed_run="$tmp/committed-run"
-run_committed() {
-  local c="${committed_probe//<RUN_DIR>/$committed_run}"
-  bash -c "${c//<TREE>/$committed_tree}" </dev/null
-}
-expect_committed() {
-  [[ "$2" == "$3" ]] || { echo "wave_unreported_committed with $1 should print $3, got: $2 (probe: $committed_probe)" >&2; exit 1; }
-}
-# Feed both probes' output into row-07.json with the fixture's five tasks, and
-# print what phase makes of it.
-committed_phase() {
-  python3 -c 'import json,sys; p=json.load(open(sys.argv[1])); p["wave_tasks"]=5; p["wave_reports"]=json.loads(sys.argv[2]); p["wave_unreported_committed"]=json.loads(sys.argv[3]); json.dump(p,open(sys.argv[4],"w"))' \
-    "$probes_dir/row-07.json" "$(run_reports "$committed_run" "$committed_tree")" "$(run_committed)" "$tmp/committed-probe.json"
-  python3 "$run_state" phase --probe "$tmp/committed-probe.json"
-}
-# Pinned identity, no signing, no hooks, as in the repair_diff_triggers block.
-committed_git() {
-  git -C "$committed_tree" -c user.email=smoke@example -c user.name=smoke \
-    -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"
-}
-git init -q "$committed_tree"
-mkdir -p "$committed_run/reports"
-cp tests/fixtures/work-issue/reports-task-named/plan.md "$committed_run/plan.md"
-committed_git commit -q --allow-empty -m base
-committed_git rev-parse HEAD >"$committed_run/base_sha"
-mkdir -p "$committed_tree/fx"
-echo a >"$committed_tree/a.py"
-echo '{}' >"$committed_tree/fx/one.json"
-committed_git add a.py fx/one.json
-committed_git commit -q -m "wave 0"
-echo d >"$committed_tree/d.py"
-expect_committed "two committed tasks and no reports" "$(run_committed)" 2
-echo '{}' >"$committed_run/reports/record-revision.json"
-expect_committed "one committed task reported" "$(run_committed)" 1
-committed_base="$(cat "$committed_run/base_sha")"
-echo deadbeef >"$committed_run/base_sha"
-expect_committed "a base_sha that does not resolve" "$(run_committed)" null
-rm "$committed_run/base_sha"
-# Step 1 writes base_sha before any wave can commit, so its absence means no
-# committed wave: 0, which leaves row 7's Step 1 leg reachable. A null here
-# tripped the null-field stop ahead of every row and hid that leg.
-no_base="$(run_committed)"
-expect_committed "no base_sha" "$no_base" 0
-python3 -c 'import json,sys; p=json.load(open(sys.argv[1])); p["wave_unreported_committed"]=json.loads(sys.argv[2]); json.dump(p,open(sys.argv[3],"w"))' \
-  "$probes_dir/row-07-isolation-incomplete.json" "$no_base" "$tmp/no-base.json"
-grep -Fq "phase: 1 reason: row 7:" <<<"$(python3 "$run_state" phase --probe "$tmp/no-base.json")" || {
-  echo "a run with no base_sha should resume at Step 1 through row 7, not stop" >&2; exit 1; }
-echo "$committed_base" >"$committed_run/base_sha"
-# Waves 1 and 3 committed too, as on #78. Wave 2, implementations, is the one
-# left mid-flight below.
-echo b >"$committed_tree/b.py"
-echo c >"$committed_tree/c.py"
-committed_git add b.py c.py
-committed_git commit -q -m "wave 1"
-echo e >"$committed_tree/e.py"
-committed_git add e.py
-committed_git commit -q -m "wave 3"
-# End to end, the #78 shape. Every task has its <task>.json, but d.py is
-# still untracked: implementations' worker wrote its report and the session
-# died before the Step 3 gate. That task is unbuilt, so row 7 reverts and
-# re-dispatches it rather than row 8 skipping its gate (PR #176 review).
-cp tests/fixtures/work-issue/reports-task-named/reports/*.json "$committed_run/reports/"
-expect_reports "every report in and d.py dirty" "$(run_reports "$committed_run" "$committed_tree")" 4
-expect_committed "a reported, dirty task with no commit" "$(run_committed)" 0
-committed_out="$(committed_phase)"
-grep -Fq "phase: 2 reason: row 7:" <<<"$committed_out" || {
-  echo "a reported task with dirty owned paths should resume at row 7's revert, got: $committed_out" >&2; exit 1; }
-# Dirt on a path a commit past base_sha already touched is not a half-written
-# wave: stop rather than revert.
-echo more >>"$committed_tree/a.py"
-expect_committed "a reported task dirty on a committed path" "$(run_committed)" 1
-committed_out="$(committed_phase)"
-grep -Fq "phase: stop reason: row 7:" <<<"$committed_out" || {
-  echo "a reported task dirty on a committed path should stop at row 7, got: $committed_out" >&2; exit 1; }
-committed_git checkout -q -- a.py
-# The worker's early report beside paths it never changed: clean, but neither
-# a commit nor a gate marker says the gate ran, so row 7 re-dispatches it.
-rm "$committed_tree/d.py"
-expect_reports "implementations reported and clean with no commit or marker" "$(run_reports "$committed_run" "$committed_tree")" 4
-expect_committed "a reported, clean, ungated task" "$(run_committed)" 0
-committed_out="$(committed_phase)"
-grep -Fq "phase: 2 reason: row 7:" <<<"$committed_out" || {
-  echo "a reported, clean task with no gate evidence should resume at row 7's revert, got: $committed_out" >&2; exit 1; }
-rm "$committed_run/reports/implementations.json"
-echo d >"$committed_tree/d.py"
-committed_out="$(committed_phase)"
-grep -Fq "phase: 2 reason: row 7:" <<<"$committed_out" || {
-  echo "an uncommitted, unreported task should still resume at Step 2 for the revert, got: $committed_out" >&2; exit 1; }
-# Wave 2 gated and committed: now all five waves are, reported under
-# <task>.json alone with no gate markers, which is #78 exactly. The commits are
-# the gate evidence, so it reaches row 8.
-cp tests/fixtures/work-issue/reports-task-named/reports/implementations.json "$committed_run/reports/"
-committed_git add d.py
-committed_git commit -q -m "wave 2"
-[[ ! -e "$committed_run/gated" ]] || { echo "the #78 case must carry no gate markers" >&2; exit 1; }
-expect_reports "the #78 shape: five committed tasks, <task>.json only, no markers" "$(run_reports "$committed_run" "$committed_tree")" 5
-committed_out="$(committed_phase)"
-grep -Fq "phase: 3 reason: row 8:" <<<"$committed_out" || {
-  echo "every <task>.json report on a committed, clean run should resume at row 8, got: $committed_out" >&2; exit 1; }
-rm "$committed_run"/reports/*.json
-committed_out="$(committed_phase)"
-grep -Fq "phase: stop reason: row 7:" <<<"$committed_out" || {
-  echo "committed waves with no report should stop at row 7, never revert, got: $committed_out" >&2; exit 1; }
-grep -Fq "git log" <<<"$committed_out" || {
-  echo "row 7's stop should name the git log disagreement, got: $committed_out" >&2; exit 1; }
-# The reviewer's case on PR #176: a herdr worker wrote reports/task.json saying
-# it failed, changed none of its owned a.py, and left only an unowned b.py. The
-# owned paths are clean, but no marker and no commit say the gate ran.
-# The gate_* helpers read $gate_run and $gate_tree, so the shared-path case
-# below reuses them by pointing both at a fresh fixture.
-gate_tree="$tmp/gate-tree"
-gate_run="$tmp/gate-run"
-gate_git() {
-  git -C "$gate_tree" -c user.email=smoke@example -c user.name=smoke \
-    -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"
-}
-run_gate() {
-  local c="${1//<RUN_DIR>/$gate_run}"
-  bash -c "${c//<TREE>/$gate_tree}" </dev/null
-}
-# $1 is the plan's task count, 1 when omitted.
-gate_phase() {
-  python3 -c 'import json,sys; p=json.load(open(sys.argv[1])); p["wave_tasks"]=int(sys.argv[5]); p["wave_reports"]=json.loads(sys.argv[2]); p["wave_unreported_committed"]=json.loads(sys.argv[3]); json.dump(p,open(sys.argv[4],"w"))' \
-    "$probes_dir/row-07.json" "$(run_gate "$reports_probe")" "$(run_gate "$committed_probe")" "$tmp/gate-probe.json" "${1:-1}"
-  python3 "$run_state" phase --probe "$tmp/gate-probe.json"
-}
-git init -q "$gate_tree"
-mkdir -p "$gate_run/reports"
-printf '# Plan\n\n## Waves\n\n| Wave | Task | Files owned | Model | Done when | Constraints |\n|---|---|---|---|---|---|\n| 0 | task | a.py | sonnet | x | |\n' >"$gate_run/plan.md"
-gate_git commit -q --allow-empty -m base
-gate_git rev-parse HEAD >"$gate_run/base_sha"
-echo '{"status":"failed"}' >"$gate_run/reports/task.json"
-echo b >"$gate_tree/b.py"
-gate_out="$(run_gate "$reports_probe")"
-[[ "$gate_out" == 0 ]] || {
-  echo "a failed task.json beside clean owned paths, an unowned b.py, and no gate evidence should not count in wave_reports, got: $gate_out" >&2; exit 1; }
-gate_out="$(gate_phase)"
-grep -Fq "phase: 2 reason: row 7:" <<<"$gate_out" || {
-  echo "the ungated failed report should resume at row 7's revert, not row 8, got: $gate_out" >&2; exit 1; }
-# Once the orchestrator records the gate's pass, the same task counts.
-mkdir -p "$gate_run/gated"
-: >"$gate_run/gated/0-task"
-gate_out="$(run_gate "$reports_probe")"
-[[ "$gate_out" == 1 ]] || {
-  echo "a report with a gate marker and clean owned paths should count in wave_reports, got: $gate_out" >&2; exit 1; }
-gate_out="$(gate_phase)"
-grep -Fq "phase: 3 reason: row 8:" <<<"$gate_out" || {
-  echo "a gated, reported task should resume at row 8, got: $gate_out" >&2; exit 1; }
-# A task that legitimately changed nothing has no commit to find, so its marker
-# is what keeps it from re-dispatching forever.
-rm "$gate_tree/b.py" "$gate_run/reports/task.json"
-echo '{"status":"done"}' >"$gate_run/reports/0-task.json"
-gate_out="$(run_gate "$reports_probe")"
-[[ "$gate_out" == 1 ]] || {
-  echo "a no-change task with a report and a gate marker should count in wave_reports, got: $gate_out" >&2; exit 1; }
-gate_out="$(run_gate "$committed_probe")"
-[[ "$gate_out" == 0 ]] || {
-  echo "a counted no-change task should not count in wave_unreported_committed, got: $gate_out" >&2; exit 1; }
-# A marker without a report is still unreported.
-rm "$gate_run/reports/0-task.json"
-gate_out="$(run_gate "$reports_probe")"
-[[ "$gate_out" == 0 ]] || {
-  echo "a gate marker with no report should not count in wave_reports, got: $gate_out" >&2; exit 1; }
-# divvy-up places two tasks sharing a path in different waves, so a shared path
-# is ordinary. Wave 0's create owns a.py and is committed and marked; wave 1's
-# extend owns a.py too, reports failed, changes nothing, and has no marker.
-# Create's commit must not stand in for extend's gate (PR #176 code-review).
-gate_tree="$tmp/shared-tree"
-gate_run="$tmp/shared-run"
-git init -q "$gate_tree"
-mkdir -p "$gate_run/reports" "$gate_run/gated"
-printf '# Plan\n\n## Waves\n\n| Wave | Task | Files owned | Model | Done when | Constraints |\n|---|---|---|---|---|---|\n| 0 | create | a.py | sonnet | x | |\n| 1 | extend | a.py | sonnet | x | |\n' >"$gate_run/plan.md"
-gate_git commit -q --allow-empty -m base
-gate_git rev-parse HEAD >"$gate_run/base_sha"
-echo a >"$gate_tree/a.py"
-gate_git add a.py
-gate_git commit -q -m "wave 0"
-: >"$gate_run/gated/0-create"
-echo '{"status":"done"}' >"$gate_run/reports/0-create.json"
-echo '{"status":"failed"}' >"$gate_run/reports/extend.json"
-gate_out="$(run_gate "$reports_probe")"
-[[ "$gate_out" == 1 ]] || {
-  echo "an ungated extend sharing create's committed a.py should not count in wave_reports, got: $gate_out" >&2; exit 1; }
-# Extend is reported and clean, so wave_unreported_committed skips it: row 7
-# re-dispatches it rather than stopping on create's commit.
-gate_out="$(run_gate "$committed_probe")"
-[[ "$gate_out" == 0 ]] || {
-  echo "an ungated extend sharing create's committed a.py should not count in wave_unreported_committed, got: $gate_out" >&2; exit 1; }
-gate_out="$(gate_phase 2)"
-grep -Fq "phase: 2 reason: row 7:" <<<"$gate_out" || {
-  echo "an ungated task on a path an earlier wave committed should resume at row 7, not row 8, got: $gate_out" >&2; exit 1; }
-: >"$gate_run/gated/1-extend"
-gate_out="$(gate_phase 2)"
-grep -Fq "phase: 3 reason: row 8:" <<<"$gate_out" || {
-  echo "extend with its own gate marker should resume at row 8, got: $gate_out" >&2; exit 1; }
-# A task name or owned path with an internal space keeps it: `check-waves.py
-# validate` accepts `my task`, and stripping every space made the probes look
-# for reports/0-mytask.json and docs/mynotes.md (PR #176 review).
-space_tree="$tmp/space-tree"
-space_run="$tmp/space-run"
-space_git() {
-  git -C "$space_tree" -c user.email=smoke@example -c user.name=smoke \
-    -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"
-}
-run_space() {
-  local c="${1//<RUN_DIR>/$space_run}"
-  bash -c "${c//<TREE>/$space_tree}" </dev/null
-}
-git init -q "$space_tree"
-mkdir -p "$space_run/reports" "$space_tree/docs"
-printf '# Plan\n\n## Waves\n\n| Wave | Task | Files owned | Model | Done when | Constraints |\n|---|---|---|---|---|---|\n| 0 | my task | docs/my notes.md | sonnet | x | |\n' >"$space_run/plan.md"
-space_git commit -q --allow-empty -m base
-space_git rev-parse HEAD >"$space_run/base_sha"
-echo notes >"$space_tree/docs/my notes.md"
-space_git add "docs/my notes.md"
-space_git commit -q -m "wave 0"
-space_out="$(run_space "$committed_probe")"
-[[ "$space_out" == 1 ]] || {
-  echo "an unreported task owning committed docs/my notes.md should count in wave_unreported_committed, got: $space_out" >&2; exit 1; }
-echo '{}' >"$space_run/reports/0-my task.json"
-space_out="$(run_space "$reports_probe")"
-[[ "$space_out" == 1 ]] || {
-  echo "reports/0-my task.json with clean owned paths should count in wave_reports, got: $space_out" >&2; exit 1; }
-space_out="$(run_space "$committed_probe")"
-[[ "$space_out" == 0 ]] || {
-  echo "a reported, clean task should not count in wave_unreported_committed, got: $space_out" >&2; exit 1; }
 
 # Step 2 names both report names as ones the probe accepts, so it and resume.md
 # agree on what counts. Row 7's revert stops at HEAD in both Resume tables, and
@@ -2124,213 +1660,9 @@ refute_text work-issue/references/resume.md "A reported task whose paths are cle
 refute_text work-issue/references/resume.md 'gated/$w-$k" ]; then echo 1; fi'
 # A commit is gate evidence only on a run with no gated/ directory; on every
 # run it let an earlier wave's commit pass a later task's gate (row 119).
-require_text work-issue/references/resume.md '\|\| [ -d "<RUN_DIR>/gated" ]; then continue;'
 require_text _maintenance/work-issue/RATIONALE.md "The commit leg on every run"
 refute_text work-issue/references/resume.md '[ -z "$p" ]; then continue; elif ! o='
 
-# The repair_diff_triggers probe's scope (#162), run as resume.md writes it.
-# The branch changes billing.py's rounding and the repair touches README.md
-# only. Diffing from repair-base-<k> reads the repair alone and prints false.
-# Diffing from the merge-base, the nearest wrong rule, re-reads the branch's
-# money change on every repair and prints true: that is the every-repair loop
-# #151 removed from cambium #23/#26.
-diff_probe="$(sed -n 's/^| `repair_diff_triggers` | `\([^`]*\)`.*/\1/p' work-issue/references/resume.md \
-  | sed 's/\\|/|/g')"
-[[ -n "$diff_probe" ]] || {
-  echo "could not extract the repair_diff_triggers probe from work-issue/references/resume.md" >&2
-  exit 1
-}
-scope_repo="$tmp/scope-repo"
-scope_run="$tmp/scope-run"
-mkdir -p "$scope_run/redteam"
-# Pinned identity, no signing, no hooks: the user's global git config must not
-# decide whether a throwaway commit succeeds.
-scope_git() {
-  git -C "$scope_repo" -c user.name=smoke -c user.email=smoke@example.invalid \
-    -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"
-}
-git init -q -b main "$scope_repo"
-printf 'amount = round(price * qty, 2)\n' >"$scope_repo/billing.py"
-scope_git add billing.py
-scope_git commit -q -m base
-scope_git checkout -q -b issue-1
-printf 'amount = round(price * qty * (1 - discount), 2)\n' >"$scope_repo/billing.py"
-scope_git commit -q -am branch
-scope_git rev-parse HEAD >"$scope_run/redteam/repair-base-1"
-printf 'Run the tests before you push.\n' >"$scope_repo/README.md"
-scope_git add README.md
-scope_git commit -q -m repair
-run_diff_probe() {
-  local cmd="${diff_probe//<RUN_DIR>/$scope_run}"
-  cmd="${cmd//<TREE>/$scope_repo}"
-  cmd="${cmd//<newest triage round>/1}"
-  bash -c "$cmd" </dev/null
-}
-scope_got="$(run_diff_probe)"
-[[ "$scope_got" == "false" ]] || {
-  echo "repair_diff_triggers should read the repair's own README.md diff and print false, got: $scope_got (probe: $diff_probe)" >&2
-  exit 1
-}
-scope_git merge-base main issue-1 >"$scope_run/redteam/repair-base-1"
-scope_got="$(run_diff_probe)"
-[[ "$scope_got" == "true" ]] || {
-  echo "the same probe from the merge-base should see billing.py's round( and print true, got: $scope_got" >&2
-  exit 1
-}
-# A repair from before #162 has no base file, and falls back to the severity
-# condition rather than stopping the run on a null.
-rm "$scope_run/redteam/repair-base-1"
-scope_got="$(run_diff_probe)"
-[[ "$scope_got" == "false" ]] || {
-  echo "repair_diff_triggers with no repair-base file should print false, got: $scope_got" >&2
-  exit 1
-}
-# A base SHA that no longer resolves makes `git diff` fail. Piped straight into
-# the matcher, that failure was masked and the probe printed false, dropping
-# the re-fire in silence; the probe has to print null so the run stops.
-printf 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n' >"$scope_run/redteam/repair-base-1"
-scope_got="$(run_diff_probe 2>/dev/null)"
-[[ "$scope_got" == "null" ]] || {
-  echo "repair_diff_triggers with an unresolvable repair-base SHA should print null, got: $scope_got" >&2
-  exit 1
-}
-# Step 8 item 2 rebases after item 1 has already evaluated the repair (#137).
-# The rebase orphans repair-base-<k>, and a two-dot diff from it reads every
-# upstream line the rebase brought in as the repair's own, here a money line,
-# sending a settled round back to adversarial-review.
-scope_git rev-parse issue-1~1 >"$scope_run/redteam/repair-base-1"
-scope_git checkout -q main
-printf 'total = round(price * qty)\n' >"$scope_repo/invoice.py"
-scope_git add invoice.py
-scope_git commit -q -m upstream
-scope_git checkout -q issue-1
-scope_git rebase -q main
-scope_got="$(run_diff_probe)"
-[[ "$scope_got" == "false" ]] || {
-  echo "repair_diff_triggers after a rebase should read the orphaned repair-base as false, got: $scope_got" >&2
-  exit 1
-}
-
-# The base_sha_state probe (#137), run as resume.md writes it, in a clone whose
-# origin moves under it. Upstream gaining a commit leaves the base current,
-# since the branch has not moved; the rebase is what orphans it, and writing
-# the new merge-base is what heals it. The upstream commit carries a money line
-# so a later rebase scenario can reuse this repo shape.
-base_probe="$(sed -n 's/^| `base_sha_state` | `\([^`]*\)`.*/\1/p' work-issue/references/resume.md \
-  | sed 's/\\|/|/g')"
-[[ -n "$base_probe" ]] || {
-  echo "could not extract the base_sha_state probe from work-issue/references/resume.md" >&2
-  exit 1
-}
-base_root="$tmp/base-run"
-base_origin="$base_root/origin.git"
-base_clone="$base_root/clone"
-base_upstream="$base_root/upstream"
-base_run="$base_root/run"
-mkdir -p "$base_run"
-git init -q -b main --bare "$base_origin"
-for base_repo in "$base_clone" "$base_upstream"; do
-  git clone -q "$base_origin" "$base_repo" 2>/dev/null
-  # Pinned identity, no signing, no hooks: the user's global git config must
-  # not decide whether a throwaway commit or rebase succeeds.
-  git -C "$base_repo" config user.email smoke@example.invalid
-  git -C "$base_repo" config user.name smoke
-  git -C "$base_repo" config commit.gpgsign false
-  git -C "$base_repo" config core.hooksPath /dev/null
-done
-printf 'a\n' >"$base_clone/a.txt"
-git -C "$base_clone" add a.txt
-git -C "$base_clone" commit -q -m base
-git -C "$base_clone" push -q origin main 2>/dev/null
-git -C "$base_clone" checkout -q -b issue-1
-printf 'x\n' >"$base_clone/x.txt"
-git -C "$base_clone" add x.txt
-git -C "$base_clone" commit -q -m branch
-git -C "$base_clone" merge-base origin/main issue-1 >"$base_run/base_sha"
-base_case() {
-  local label="$1" want="$2" cmd got
-  cmd="${base_probe//<RUN_DIR>/$base_run}"
-  cmd="${cmd//<N>/1}"
-  cmd="${cmd//<DEFAULT>/main}"
-  got="$(cd "$base_clone" && bash -c "$cmd" </dev/null 2>/dev/null)"
-  [[ "$got" == "$want" ]] || {
-    echo "base_sha_state $label: expected $want, got: $got (probe: $base_probe)" >&2
-    exit 1
-  }
-}
-base_case "on a fresh branch" current
-git -C "$base_upstream" pull -q origin main 2>/dev/null
-printf 'total = round(price * qty)\n' >"$base_upstream/billing.py"
-git -C "$base_upstream" add billing.py
-git -C "$base_upstream" commit -q -m upstream
-git -C "$base_upstream" push -q origin main 2>/dev/null
-git -C "$base_clone" fetch -q origin
-base_case "after upstream moved and the branch did not" current
-git -C "$base_clone" rebase -q origin/main
-base_case "after a rebase with base_sha untouched" not-merge-base
-# Step 5 item 2's rewrite, run as SKILL.md writes it, is what heals the drift
-# just probed (#137). The diff every later review takes from base_sha has to
-# shrink from the upstream billing.py plus the branch's x.txt to x.txt alone,
-# or code-review and adversarial-review read another PR's money line as ours.
-base_rewrite="$(grep -o 'm="$(git merge-base origin/DEFAULT issue-N)" && printf .%s\\n. "$m" > RUN_DIR/base_sha' work-issue/SKILL.md | head -1 || true)"
-[[ -n "$base_rewrite" ]] || {
-  echo "could not extract the Step 5 base_sha rewrite from work-issue/SKILL.md" >&2
-  exit 1
-}
-base_rewrite="${base_rewrite//DEFAULT/main}"
-base_rewrite="${base_rewrite//issue-N/issue-1}"
-base_rewrite="${base_rewrite//RUN_DIR/$base_run}"
-base_diff() { git -C "$base_clone" diff --name-only "$(cat "$base_run/base_sha")"..HEAD | tr '\n' ' '; }
-base_before="$(base_diff)"
-[[ "$base_before" == "billing.py x.txt " ]] || {
-  echo "before the Step 5 rewrite, a diff from the pre-rebase base_sha should list billing.py and x.txt, got: $base_before" >&2
-  exit 1
-}
-(cd "$base_clone" && bash -c "$base_rewrite" </dev/null)
-base_after="$(base_diff)"
-[[ "$base_after" == "x.txt " ]] || {
-  echo "after the Step 5 rewrite ($base_rewrite), a diff from base_sha should list only x.txt, got: $base_after" >&2
-  exit 1
-}
-base_case "after Step 5 item 2 rewrites base_sha" current
-# A merge-base that fails must leave the recorded base alone. A bare redirect
-# truncated the file before the command ran, and the probe then read an empty
-# file as absent, so no row stopped the run (#137 self-review).
-base_kept="$(cat "$base_run/base_sha")"
-(cd "$base_clone" && bash -c "${base_rewrite//origin\/main/origin/no-such-branch}" </dev/null 2>/dev/null) || true
-[[ "$(cat "$base_run/base_sha")" == "$base_kept" ]] || {
-  echo "a failed Step 5 merge-base should leave base_sha untouched, got: '$(cat "$base_run/base_sha")'" >&2
-  exit 1
-}
-: >"$base_run/base_sha"
-base_case "with an empty base_sha file" null
-git -C "$base_clone" merge-base origin/main issue-1 >"$base_run/base_sha"
-git -C "$base_clone" commit-tree -p origin/main~1 -m side 'origin/main~1^{tree}' >"$base_run/base_sha"
-base_case "holding a side-branch commit the branch never had" not-ancestor
-printf 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n' >"$base_run/base_sha"
-base_case "holding a SHA that does not resolve" null
-rm "$base_run/base_sha"
-base_case "with no base_sha file" absent
-git -C "$base_clone" merge-base origin/main issue-1 >"$base_run/base_sha"
-git -C "$base_clone" checkout -q --detach
-# A branch left only on origin is not a run rows 4 through 7 own: the branch
-# exists, so they pass it by, and absent there skipped the base check all the
-# way to Step 8 (#137 red-team). It stops naming the field instead.
-git -C "$base_clone" push -q origin issue-1 2>/dev/null
-git -C "$base_clone" branch -q -D issue-1
-base_case "with the issue branch only on origin" null
-# The probe asks the live remote, as branch_remote does, not the tracking ref:
-# a checkout that never fetched the branch has no refs/remotes/origin/issue-1,
-# and reading that as absent sent a remote-only run on to Step 8 (#172 review).
-git -C "$base_clone" update-ref -d refs/remotes/origin/issue-1
-base_case "with the issue branch only on origin, never fetched" null
-# The other direction: a tracking ref left behind after the branch was deleted
-# on origin is stale, and the live remote says no branch anywhere.
-git -C "$base_clone" update-ref refs/remotes/origin/issue-1 "$(git -C "$base_clone" rev-parse origin/main)"
-git -C "$base_origin" branch -q -D issue-1
-base_case "with a stale tracking ref and no branch on origin" absent
-git -C "$base_clone" update-ref -d refs/remotes/origin/issue-1
-base_case "with no issue branch anywhere" absent
 # The rewrite has one owner and one repeat. The BASE_SHA bullet names both and
 # claims nothing else writes the file, and Step 8 item 2 names the rewrite
 # outright, so an edit that inlines Step 8's steps cannot drop it silently.
@@ -2398,11 +1730,32 @@ probe_field() {
   echo "$1" >>"$probe_asserted"
   python3 -c 'import json,sys; print(json.dumps(json.load(sys.stdin)[sys.argv[1]]))' "$1" <<<"$out"
 }
-# LABEL FIELD WANT RUN REPO [ARGS...]
+# LABEL FIELD WANT RUN REPO [ARGS...]. The value stays in $probe_got for a
+# case that goes on to hand it to phase.
 expect_field() {
-  local got
-  got="$(probe_field "$2" "${@:4}")"
-  [[ "$got" == "$3" ]] || { echo "probe $2 $1: expected $3, got: $got" >&2; exit 1; }
+  probe_got="$(probe_field "$2" "${@:4}")"
+  [[ "$probe_got" == "$3" ]] || { echo "probe $2 $1: expected $3, got: $probe_got" >&2; exit 1; }
+}
+# FIXTURE FIELD VALUE: phase's line for a hand-written probe with one field
+# replaced by the value probe gathered.
+field_phase() {
+  python3 -c 'import json,sys; p=json.load(open(sys.argv[1])); p[sys.argv[2]]=json.loads(sys.argv[3]); json.dump(p,open(sys.argv[4],"w"))' \
+    "$probes_dir/$1" "$2" "$3" "$tmp/field-phase.json"
+  python3 "$run_state" phase --probe "$tmp/field-phase.json"
+}
+# FIXTURE RUN TREE: phase's line for a hand-written probe whose three wave
+# fields come from probe on RUN and TREE, so row 7's routing is judged on
+# gathered values rather than typed ones.
+wave_phase() {
+  run_probe "$2" "$3" >"$tmp/wave-gathered.json" || {
+    echo "probe on $2 should exit 0, got: $(cat "$tmp/probe-stderr")" >&2; exit 1; }
+  python3 -c 'import json,sys; p=json.load(open(sys.argv[1])); g=json.load(open(sys.argv[2])); p.update({k: g[k] for k in ("wave_tasks", "wave_reports", "wave_unreported_committed")}); json.dump(p,open(sys.argv[3],"w"))' \
+    "$probes_dir/$1" "$tmp/wave-gathered.json" "$tmp/wave-phase.json"
+  python3 "$run_state" phase --probe "$tmp/wave-phase.json"
+}
+# LABEL WANT OUT: phase's line OUT carries WANT.
+expect_phase() {
+  grep -Fq -- "$2" <<<"$3" || { echo "$1 should give '$2', got: $3" >&2; exit 1; }
 }
 # LABEL ARGS...: probe must exit 3 with nothing on stdout and a run-state: line.
 expect_probe_usage() {
@@ -2590,10 +1943,48 @@ git -C "$bs_upstream" commit -q -m upstream
 git -C "$bs_upstream" push -q origin main 2>/dev/null
 git -C "$bs_clone" fetch -q origin
 expect_field "after upstream moved and the branch did not" base_sha_state '"current"' "$bs_run" "$bs_clone"
+bs_kept="$(cat "$bs_run/base_sha")"
 git -C "$bs_clone" rebase -q origin/main
 expect_field "after a rebase with base_sha untouched" base_sha_state '"not-merge-base"' "$bs_run" "$bs_clone"
-git -C "$bs_clone" merge-base origin/main issue-1 >"$bs_run/base_sha"
-expect_field "after base_sha is rewritten" base_sha_state '"current"' "$bs_run" "$bs_clone"
+# A mismatch stops for a human. A probe that healed the file itself would
+# adopt whatever base a manual rebase left, one taken before the red-team
+# included.
+[[ "$(cat "$bs_run/base_sha")" == "$bs_kept" ]] || {
+  echo "probe rewrote a stale base_sha: $bs_kept became $(cat "$bs_run/base_sha")" >&2; exit 1; }
+# Step 5 item 2's rewrite, run as SKILL.md writes it, is what heals the drift
+# just probed (#137). The diff every later review takes from base_sha has to
+# shrink from the upstream billing.py plus the branch's x.txt to x.txt alone,
+# or code-review and adversarial-review read another PR's money line as ours.
+base_rewrite="$(grep -o 'm="$(git merge-base origin/DEFAULT issue-N)" && printf .%s\\n. "$m" > RUN_DIR/base_sha' work-issue/SKILL.md | head -1 || true)"
+[[ -n "$base_rewrite" ]] || {
+  echo "could not extract the Step 5 base_sha rewrite from work-issue/SKILL.md" >&2
+  exit 1
+}
+base_rewrite="${base_rewrite//DEFAULT/main}"
+base_rewrite="${base_rewrite//issue-N/issue-1}"
+base_rewrite="${base_rewrite//RUN_DIR/$bs_run}"
+bs_diff() { git -C "$bs_clone" diff --name-only "$(cat "$bs_run/base_sha")"..HEAD | tr '\n' ' '; }
+bs_before="$(bs_diff)"
+[[ "$bs_before" == "billing.py x.txt " ]] || {
+  echo "before the Step 5 rewrite, a diff from the pre-rebase base_sha should list billing.py and x.txt, got: $bs_before" >&2
+  exit 1
+}
+(cd "$bs_clone" && bash -c "$base_rewrite" </dev/null)
+bs_after="$(bs_diff)"
+[[ "$bs_after" == "x.txt " ]] || {
+  echo "after the Step 5 rewrite ($base_rewrite), a diff from base_sha should list only x.txt, got: $bs_after" >&2
+  exit 1
+}
+expect_field "after Step 5 item 2 rewrites base_sha" base_sha_state '"current"' "$bs_run" "$bs_clone"
+# A merge-base that fails must leave the recorded base alone. A bare redirect
+# truncated the file before the command ran, and the probe then read an empty
+# file as absent, so no row stopped the run (#137 self-review).
+bs_kept="$(cat "$bs_run/base_sha")"
+(cd "$bs_clone" && bash -c "${base_rewrite//origin\/main/origin/no-such-branch}" </dev/null 2>/dev/null) || true
+[[ "$(cat "$bs_run/base_sha")" == "$bs_kept" ]] || {
+  echo "a failed Step 5 merge-base should leave base_sha untouched, got: '$(cat "$bs_run/base_sha")'" >&2
+  exit 1
+}
 : >"$bs_run/base_sha"
 expect_field "with an empty base_sha file" base_sha_state null "$bs_run" "$bs_clone"
 git -C "$bs_clone" commit-tree -p origin/main~1 -m side 'origin/main~1^{tree}' >"$bs_run/base_sha"
@@ -2700,6 +2091,11 @@ echo deadbeef >"$cm_run/base_sha"
 expect_field "with a base_sha that does not resolve" wave_unreported_committed null "$cm_run" "$cm_tree"
 rm "$cm_run/base_sha"
 expect_field "with no base_sha" wave_unreported_committed 0 "$cm_run" "$cm_tree"
+# Step 1 writes base_sha before any wave can commit, so its absence means no
+# committed wave: 0, which leaves row 7's Step 1 leg reachable. A null here
+# tripped the null-field stop ahead of every row and hid that leg.
+expect_phase "a run with no base_sha" "phase: 1 reason: row 7:" \
+  "$(field_phase row-07-isolation-incomplete.json wave_unreported_committed "$probe_got")"
 echo "$cm_base" >"$cm_run/base_sha"
 echo b >"$cm_tree/b.py"
 echo c >"$cm_tree/c.py"
@@ -2711,18 +2107,37 @@ probe_git "$cm_tree" commit -q -m "wave 3"
 cp tests/fixtures/work-issue/reports-task-named/reports/*.json "$cm_run/reports/"
 expect_field "with every report in and d.py dirty" wave_reports 4 "$cm_run" "$cm_tree"
 expect_field "with a reported, dirty task and no commit" wave_unreported_committed 0 "$cm_run" "$cm_tree"
+# The #78 shape mid-flight: every task has its <task>.json, but d.py is still
+# untracked, because implementations' worker wrote its report and the session
+# died before the Step 3 gate. That task is unbuilt, so row 7 reverts and
+# re-dispatches it rather than row 8 skipping its gate (PR #176 review).
+expect_phase "a reported task with dirty owned paths" "phase: 2 reason: row 7:" "$(wave_phase row-07.json "$cm_run" "$cm_tree")"
 echo more >>"$cm_tree/a.py"
 expect_field "with a reported task dirty on a committed path" wave_unreported_committed 1 "$cm_run" "$cm_tree"
+# Dirt on a path a commit past base_sha already touched is not a half-written
+# wave: stop rather than revert.
+expect_phase "a reported task dirty on a committed path" "phase: stop reason: row 7:" "$(wave_phase row-07.json "$cm_run" "$cm_tree")"
 probe_git "$cm_tree" checkout -q -- a.py
 rm "$cm_tree/d.py"
 expect_field "with implementations reported, clean, and ungated" wave_reports 4 "$cm_run" "$cm_tree"
 expect_field "with a reported, clean, ungated task" wave_unreported_committed 0 "$cm_run" "$cm_tree"
+# The worker's early report beside paths it never changed: clean, but neither
+# a commit nor a gate marker says the gate ran, so row 7 re-dispatches it.
+expect_phase "a reported, clean task with no gate evidence" "phase: 2 reason: row 7:" "$(wave_phase row-07.json "$cm_run" "$cm_tree")"
+rm "$cm_run/reports/implementations.json"
 echo d >"$cm_tree/d.py"
+expect_phase "an uncommitted, unreported task" "phase: 2 reason: row 7:" "$(wave_phase row-07.json "$cm_run" "$cm_tree")"
+cp tests/fixtures/work-issue/reports-task-named/reports/implementations.json "$cm_run/reports/"
 probe_git "$cm_tree" add d.py
 probe_git "$cm_tree" commit -q -m "wave 2"
 expect_field "on the #78 shape: five committed tasks, <task>.json only, no markers" wave_reports 5 "$cm_run" "$cm_tree"
+# #78 exactly: the commits are the gate evidence, so it reaches row 8.
+expect_phase "every <task>.json report on a committed, clean run" "phase: 3 reason: row 8:" "$(wave_phase row-07.json "$cm_run" "$cm_tree")"
 rm "$cm_run"/reports/*.json
 expect_field "with five committed waves and no report" wave_unreported_committed 5 "$cm_run" "$cm_tree"
+wave_out="$(wave_phase row-07.json "$cm_run" "$cm_tree")"
+expect_phase "committed waves with no report" "phase: stop reason: row 7:" "$wave_out"
+expect_phase "row 7's stop on committed waves with no report" "git log" "$wave_out"
 
 # A failed task.json beside clean owned paths and an unowned b.py: no gate
 # evidence, so it does not count until its marker exists (PR #176 review).
@@ -2736,9 +2151,11 @@ probe_git "$gt_tree" rev-parse HEAD >"$gt_run/base_sha"
 echo '{"status":"failed"}' >"$gt_run/reports/task.json"
 echo b >"$gt_tree/b.py"
 expect_field "on an ungated failed report" wave_reports 0 "$gt_run" "$gt_tree"
+expect_phase "the ungated failed report" "phase: 2 reason: row 7:" "$(wave_phase row-07.json "$gt_run" "$gt_tree")"
 mkdir -p "$gt_run/gated"
 : >"$gt_run/gated/0-task"
 expect_field "once the gate marker exists" wave_reports 1 "$gt_run" "$gt_tree"
+expect_phase "a gated, reported task" "phase: 3 reason: row 8:" "$(wave_phase row-07.json "$gt_run" "$gt_tree")"
 rm "$gt_tree/b.py" "$gt_run/reports/task.json"
 echo '{"status":"done"}' >"$gt_run/reports/0-task.json"
 expect_field "on a no-change task with a report and a marker" wave_reports 1 "$gt_run" "$gt_tree"
@@ -2762,8 +2179,10 @@ echo '{"status":"done"}' >"$sh_run/reports/0-create.json"
 echo '{"status":"failed"}' >"$sh_run/reports/extend.json"
 expect_field "with an ungated extend sharing create's committed a.py" wave_reports 1 "$sh_run" "$sh_tree"
 expect_field "with an ungated, reported, clean extend" wave_unreported_committed 0 "$sh_run" "$sh_tree"
+expect_phase "an ungated task on a path an earlier wave committed" "phase: 2 reason: row 7:" "$(wave_phase row-07.json "$sh_run" "$sh_tree")"
 : >"$sh_run/gated/1-extend"
 expect_field "with extend's own marker" wave_reports 2 "$sh_run" "$sh_tree"
+expect_phase "extend with its own gate marker" "phase: 3 reason: row 8:" "$(wave_phase row-07.json "$sh_run" "$sh_tree")"
 # Cells keep their inner spaces (PR #176 review).
 sp_tree="$tmp/probe-space-tree"
 sp_run="$tmp/probe-space-run"
@@ -2812,6 +2231,7 @@ expect_field "with two rounds" redteam_rounds 2 "$rt" "$lab_repo"
 expect_field "with a failed round older than a clean one" redteam_last_failed false "$rt" "$lab_repo"
 expect_field "with one failed round of two" redteam_failed_twice false "$rt" "$lab_repo"
 touch -t 202609200300 "$rt/redteam/round-1.json"
+# A false left check is a red-team failure, and the probe has to read it.
 expect_field "with a newest round holding only \"holds\": false" redteam_last_failed true "$rt" "$lab_repo"
 echo '{"claims": [{"verdict": "NOT_REPRODUCED"}]}' >"$rt/redteam/round-2.json"
 touch -t 202609200200 "$rt/redteam/round-2.json"
@@ -2892,10 +2312,13 @@ expect_field "with no round" triage_newer_than_since false "$ts" "$lab_repo"
 cp "$since_fixture" "$ts/triage/round-1.md"
 echo 2026-09-23T13:55:25Z >"$ts/pushed_at"
 expect_field "on a round written against the current pushed_at" triage_newer_than_since true "$ts" "$lab_repo"
+expect_phase "a current, answered round" "phase: done reason: row 18" "$(field_phase row-18-answered.json triage_newer_than_since "$probe_got")"
+expect_phase "a current round owing replies" "phase: 8 reason: row 17" "$(field_phase row-17.json triage_newer_than_since "$probe_got")"
 echo 2026-09-23T18:03:09Z >"$ts/pushed_at"
 sed 's#| in scope | |#| in scope | https://github.com/o/r/pull/134\#discussion_r10 |#' "$since_fixture" >"$ts/triage/round-1.md"
 touch "$ts/triage/round-1.md"
 expect_field "on the PR #134 replay" triage_newer_than_since false "$ts" "$lab_repo"
+expect_phase "a finding after Step 8's replies" "phase: 6 reason: row 15" "$(field_phase row-18-answered.json triage_newer_than_since "$probe_got")"
 cp "$since_fixture" "$ts/triage/round-1.md"
 expect_field "on an unedited round after a later push" triage_newer_than_since false "$ts" "$lab_repo"
 printf '# Triage round 1 — PR #134, since 2026-09-23T18:03:09Z\n' >"$ts/triage/round-1.md"
@@ -2911,6 +2334,8 @@ expect_field "with round 10 beside round 9" triage_newer_than_since false "$ts" 
 rm "$ts"/triage/round-*.md
 printf '# Triage round 1\n' >"$ts/triage/round-1.md"
 expect_field "on a round with no recorded SINCE" triage_newer_than_since null "$ts" "$lab_repo"
+expect_phase "a round with no recorded SINCE" "phase: stop reason: unknown probe fields: triage_newer_than_since" \
+  "$(field_phase row-18-answered.json triage_newer_than_since "$probe_got")"
 printf '# Triage round 1\n\n# Triage round bogus, since 2026-09-23T18:03:09Z\n' >"$ts/triage/round-1.md"
 expect_field "on a round whose only since sits below line 1" triage_newer_than_since null "$ts" "$lab_repo"
 printf '# Triage round 1, since 2026-09-23T18:03:09Z\n' >"$ts/triage/round-1.md"
@@ -2944,7 +2369,11 @@ expect_field "with no max_review_rounds file" max_review_rounds 2 "$m" "$lab_rep
 echo 3 >"$m/max_review_rounds"
 expect_field "with 3 written" max_review_rounds 3 "$m" "$lab_repo"
 
-for budget_case in "build30-review61:true" "build30-review59:false" "bad-label:null" "missing:false"; do
+# open-review.txt ends on an open Step 4 start. With no --now it closes at
+# that start and reads 0 min of review; a --now at resume time would charge
+# every hour since to review and read over (#146 keeps the resume probe off
+# --now).
+for budget_case in "build30-review61:true" "build30-review59:false" "bad-label:null" "missing:false" "open-review:false"; do
   b="$(new_run "budget-${budget_case%%:*}")"
   [[ "${budget_case%%:*}" == missing ]] || cp "$timing_dir/${budget_case%%:*}.txt" "$b/timing.log"
   expect_field "on ${budget_case%%:*}" review_over_budget "${budget_case##*:}" "$b" "$lab_repo"
@@ -3085,7 +2514,6 @@ require_text work-issue/references/redteam.md "\`claim\`, \`path\`, \`command\`,
 # Step 4's repairs and Step 7's carry different names, or a build repair
 # reads as the repair for triage round 1 and Step 7 is skipped.
 require_text work-issue/SKILL.md "lands at \`RUN_DIR/reports/redteam-repair-<k>.json\`"
-require_text work-issue/references/resume.md "reports/redteam-repair-*.json <RUN_DIR>/reports/repair-*.json"
 # Step 8's repair and push items run only where there is a repair and where
 # there is something to push; a queue-only entry goes straight to its replies.
 require_text work-issue/SKILL.md "Where the newest triage round has a repair report, red-team it"
@@ -3119,7 +2547,6 @@ require_text work-issue/references/resume.md "| 13 | red-team clean; trigger rec
 # The trigger record has an exact first line; a substring grep read `not
 # fired` as fired and sent a docs diff to adversarial-review.
 require_text work-issue/references/redteam.md "exactly \`fired: yes\` or \`fired: no\`"
-require_text work-issue/references/resume.md "'fired: yes') echo yes"
 # A missing trigger.txt is `absent`, never `no`; both copies of row 11 and
 # row 13 say so.
 require_text work-issue/SKILL.md "| 11 | red-team clean; \`trigger.txt\` absent, or its first line"
@@ -3130,10 +2557,6 @@ require_text work-issue/references/resume.md "| 13 | red-team clean; trigger rec
 # back to Step 1 in both copies of the table.
 require_text work-issue/SKILL.md "no \`base_sha\` or no \`baseline.txt\`, or some task is not counted as reported"
 require_text work-issue/references/resume.md "no \`base_sha\` or no \`baseline.txt\`, or some task is not counted as reported"
-# The wave count reads the Waves section and nothing after it.
-require_text work-issue/references/resume.md "awk '/^[[:space:]]*## Waves[[:space:]]*$/{f=1;next} f&&/^[[:space:]]*\\|/{t=1;print;next} f&&t{exit}"
-# has_waves reads the heading the way the parser does, whitespace stripped.
-require_text work-issue/references/resume.md "grep -qE '^[[:space:]]*## Waves[[:space:]]*$'"
 # Row 81: a worker's queue can reach Step 8 and publish its comment before any
 # review lands, and that state is deliberately routed back to Step 6's poll
 # rather than to a special-cased final report—RUN_DIR has no note of which
@@ -3143,8 +2566,6 @@ require_text work-issue/references/resume.md "grep -qE '^[[:space:]]*## Waves[[:
 # and it names the pull request so a run that never printed its final report
 # still leaves the user the URL.
 require_text work-issue/SKILL.md "no review yet on <PR URL>"
-# A false left check is a red-team failure, and the probe has to read it.
-require_text work-issue/references/resume.md "\"holds\": *false"
 # A reviewer's reply inside an old thread is the finding; its body has to
 # reach the saved poll file, or the repair worker is handed the stale root.
 set +e
@@ -3260,8 +2681,22 @@ require_text work-issue/SKILL.md "no \`redteam/ar-state.txt\` showing \`UNVERIFI
 refute_text work-issue/references/resume.md "ar_run_dir"
 # Step 5 item 2 clears the conflict marker, or row 12 re-runs item 1 forever.
 require_text work-issue/SKILL.md "remove \`RUN_DIR/conflict.txt\`"
-# The wave_tasks count reads compact rows, since the vendored parser does.
-require_text work-issue/references/resume.md "grep -cE '^\\s*\\|\\s*[0-9]+\\s*\\|'"
+
+# The probe is gathered by `run-state.py probe`, never assembled by hand from
+# per-field commands (#146): a hand-gathered field reached phase unchecked in
+# #136 and #139. Every command in resume.md spelled its run dir <RUN_DIR>, so
+# that placeholder coming back is a command coming back.
+require_text work-issue/references/resume.md "work-issue/scripts/run-state.py probe --run-dir"
+require_text work-issue/SKILL.md "work-issue/scripts/run-state.py probe --run-dir"
+refute_text work-issue/references/resume.md "<RUN_DIR>"
+refute_text work-issue/SKILL.md "one command per field"
+# The refutes above, and the fake gh and herdr in the probe section, each need
+# their own Deliberately Not Built row.
+require_text _maintenance/work-issue/RATIONALE.md "| Per-field shell commands in \`references/resume.md\` |"
+require_text _maintenance/work-issue/RATIONALE.md "| Calling \`gh\` or \`herdr\` inside \`probe\` |"
+# The bundle goes outside RUN_DIR, or saving it creates the RUN_DIR a fresh
+# issue must not have yet, and row 5 archives the issue as a dead run.
+require_text work-issue/references/resume.md 'bundle="$(mktemp)"'
 
 # `--save` writes gather()'s output, before classify() ever runs on it. Ledger
 # row 34 called it the "classified" bundle until a code-review pass on this

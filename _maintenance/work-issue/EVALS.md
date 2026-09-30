@@ -1,6 +1,6 @@
 # work-issue—evals
 
-The smoke test (`bash tests/work-issue-smoke.sh`) pins the documents and the scripts: `check-plan.py` and `check-inflight.py` against the hand-authored plans under `tests/fixtures/work-issue/plans/`, `run-state.py review` against eleven review bundles, `run-state.py phase` against one probe per Resume row, and every load-bearing phrase in `SKILL.md` and the references. It proves the gates score a fixture the way the contract says and that the documents still carry the rules they were built around. It says nothing about whether a real issue reaches a real pull request, whether a reproducer actually refutes a claim it was handed, whether `gh` and herdr behave the way the steps assume, or whether one confirmation really is the only question a run asks. Those need a live run, and this file is the procedure.
+The smoke test (`bash tests/work-issue-smoke.sh`) pins the documents and the scripts: `check-plan.py` and `check-inflight.py` against the hand-authored plans under `tests/fixtures/work-issue/plans/`, `run-state.py review` against eleven review bundles, `run-state.py phase` against one probe per Resume row, `run-state.py probe` against scratch run directories whose gathered probe `phase` must place on the same row as the hand-written one, and every load-bearing phrase in `SKILL.md` and the references. It proves the gates score a fixture the way the contract says and that the documents still carry the rules they were built around. It says nothing about whether a real issue reaches a real pull request, whether a reproducer actually refutes a claim it was handed, whether `gh` and herdr behave the way the steps assume, or whether one confirmation really is the only question a run asks. Those need a live run, and this file is the procedure.
 
 **Scenarios are unrun until somebody runs them.** This file names the setup and the pass condition; it records no result until a human has actually executed one.
 
@@ -57,9 +57,10 @@ Answer the one confirmation with yes. Afterwards, read the full transcript and c
 
 **Setup:** a live run interrupted mid-wave. Kill the session after `divvy-up`'s table is written and at least one task has reported, while at least one task in that wave has not. Leave whatever the killed wave wrote in the tree.
 
-**Commands:** gather the probe fields per `work-issue/references/resume.md`, then:
+**Commands:** run the gather block in `work-issue/references/resume.md`. Mid-wave there is no pull request yet, so the block ends with the first two lines below. Then re-invoke:
 
 ```
+python3 work-issue/scripts/run-state.py probe --run-dir RUN_DIR --root ROOT --issue <N> [--herdr-state STATE] > PROBE.json
 python3 work-issue/scripts/run-state.py phase --probe PROBE.json
 > /work-issue <N>
 ```
