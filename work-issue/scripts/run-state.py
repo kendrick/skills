@@ -1904,20 +1904,37 @@ def g_repair_diff_triggers(ctx):
     return bool(chomp(matched.stdout))
 
 
-def find_tree(root, branch):
-    """The worktree holding `branch`, else ROOT. resume.md runs its tree reads
-    against a TREE that SKILL.md never defines, and a second flag would be
-    one more value an agent could pass wrong on a resume."""
+def find_tree(root, branch, terminal=False):
+    """`(tree, problem)`: the worktree holding `branch`, else ROOT where no
+    local `branch` exists, since rows 1 and 4 through 7 own those runs.
+    `terminal` (a MERGED or CLOSED bundle) takes ROOT for a `branch` in no
+    worktree too: row 1 answers from `pr_state` alone, and a merge usually
+    leaves ROOT back on main with the branch still local.
+
+    A local `branch` that no worktree has checked out is a problem, not
+    ROOT: ROOT's HEAD is another branch, and reading its status and log
+    counted a committed, reported task as unreported, so row 7 re-dispatched
+    it (PR #177 review). A second flag naming TREE would be one more value an
+    agent could pass wrong on a resume."""
     done = run_git(root, "worktree", "list", "--porcelain")
     if done.returncode != 0:
-        return root
+        return None, git_failure(("worktree", "list"), done)
     current = None
     for line in done.stdout.split("\n"):
         if line.startswith("worktree "):
             current = line[len("worktree "):]
         elif line == f"branch refs/heads/{branch}" and current:
-            return Path(current)
-    return root
+            return Path(current), None
+    local = run_git(root, "show-ref", "--verify", "--quiet", f"refs/heads/{branch}")
+    if local.returncode == 0 and not terminal:
+        return None, (
+            f"{branch} exists locally but is not checked out in any worktree, so "
+            f"no tree shows its work; check it out (or git worktree add a tree "
+            f"for it) and re-run"
+        )
+    if local.returncode not in (0, 1):
+        return None, git_failure(("show-ref",), local)
+    return root, None
 
 
 def probe_since(run_dir, root, branch):
@@ -2012,8 +2029,13 @@ def cmd_probe(args):
         except InputError as e:
             return usage(e.problems)
 
+    tree, problem = find_tree(
+        root, branch, terminal=bundle is not None and bundle["state"] in ("MERGED", "CLOSED")
+    )
+    if tree is None:
+        return usage([problem])
     ctx = ProbeContext(
-        run_dir, find_tree(root, branch), args.issue, bundle, author, herdr_state, review_state
+        run_dir, tree, args.issue, bundle, author, herdr_state, review_state
     )
     probe = {}
     for name, kind, allowed in PROBE_FIELDS:

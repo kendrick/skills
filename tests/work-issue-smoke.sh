@@ -2465,6 +2465,62 @@ probe_git "$dt_repo" checkout -q issue-1
 probe_git "$dt_repo" rebase -q main
 expect_field "after a rebase orphans the base" repair_diff_triggers false "$dt_run" "$dt_repo"
 
+# TREE is the worktree holding issue-1. A local issue-1 that no worktree has
+# checked out has no TREE: ROOT's HEAD is some other branch, and reading it
+# counted a committed, reported task as unreported and sent row 7 to redo it
+# (PR #177 review). probe stops there instead.
+wt_repo="$tmp/lab/wt-repo"
+wt_tree="$tmp/lab/wt-tree"
+wt_run="$(new_run worktree)"
+make_repo "$wt_repo"
+probe_git "$wt_repo" checkout -q -b issue-1
+mkdir -p "$wt_run/reports"
+printf '# Plan\n\n## Waves\n\n| Wave | Task | Files owned | Model | Done when | Constraints |\n|---|---|---|---|---|---|\n| 0 | task | owned.txt | sonnet | x | |\n' >"$wt_run/plan.md"
+probe_git "$wt_repo" rev-parse HEAD >"$wt_run/base_sha"
+echo "verify: ok" >"$wt_run/baseline.txt"
+echo work >"$wt_repo/owned.txt"
+probe_git "$wt_repo" add owned.txt
+probe_git "$wt_repo" commit -q -m "wave 0"
+echo '{}' >"$wt_run/reports/task.json"
+wt_want="$(python3 "$run_state" phase --probe "$probes_dir/row-08.json")"
+# $1 labels the case; probe must exit 0 and phase must print row 8's line.
+wt_phase() {
+  run_probe "$wt_run" "$wt_repo" >"$tmp/wt-probe.json" || {
+    echo "probe $1 should exit 0, got: $(cat "$tmp/probe-stderr")" >&2; exit 1; }
+  local got
+  got="$(python3 "$run_state" phase --probe "$tmp/wt-probe.json")"
+  [[ -n "$wt_want" && "$got" == "$wt_want" ]] || {
+    echo "phase $1 should print row-08.json's line, $wt_want, got: $got" >&2; exit 1; }
+}
+expect_field "with issue-1 checked out in ROOT" wave_reports 1 "$wt_run" "$wt_repo"
+wt_phase "with issue-1 checked out in ROOT"
+probe_git "$wt_repo" checkout -q main
+expect_probe_usage "with issue-1 local but in no worktree" --run-dir "$wt_run" --root "$wt_repo" --issue 1
+grep -Fq "issue-1" "$tmp/probe-stderr" || {
+  echo "a local issue-1 in no worktree should be named on stderr, got: $(cat "$tmp/probe-stderr")" >&2; exit 1; }
+# A merged or closed PR is row 1 from pr_state alone, and the usual shape after
+# a merge is ROOT back on main with issue-1 left in no worktree, so that stop
+# is skipped there. An open PR still stops.
+wt_row1="$(python3 "$run_state" phase --probe "$probes_dir/row-01.json")"
+for wt_bundle in "$bundles_dir/merged.json" "$tmp/bundle-closed.json"; do
+  wt_state="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["state"])' "$wt_bundle")"
+  run_probe "$wt_run" "$wt_repo" --pr-bundle "$wt_bundle" >"$tmp/wt-terminal.json" || {
+    echo "probe on a $wt_state bundle with issue-1 in no worktree should exit 0, got: $(cat "$tmp/probe-stderr")" >&2; exit 1; }
+  wt_got="$(python3 "$run_state" phase --probe "$tmp/wt-terminal.json")"
+  [[ "$wt_got" == "${wt_row1/MERGED/$wt_state}" ]] || {
+    echo "phase on a $wt_state bundle with issue-1 in no worktree should print ${wt_row1/MERGED/$wt_state}, got: $wt_got" >&2; exit 1; }
+done
+require_text work-issue/references/resume.md "A \`MERGED\` or \`CLOSED\` bundle takes ROOT there instead"
+require_text _maintenance/work-issue/RATIONALE.md "except on a \`MERGED\` or \`CLOSED\` bundle, which takes ROOT"
+expect_probe_usage "on an OPEN bundle with issue-1 in no worktree" --run-dir "$wt_run" --root "$wt_repo" --issue 1 --pr-bundle "$bundles_dir/open-findings.json"
+grep -Fq "issue-1" "$tmp/probe-stderr" || {
+  echo "an OPEN bundle with issue-1 in no worktree should name issue-1 on stderr, got: $(cat "$tmp/probe-stderr")" >&2; exit 1; }
+require_text work-issue/references/resume.md "A local \`issue-N\` that no worktree has checked out exits 3"
+require_text _maintenance/work-issue/RATIONALE.md "a local \`issue-<N>\` that no worktree has checked out exits 3"
+probe_git "$wt_repo" worktree add -q "$wt_tree" issue-1
+expect_field "with issue-1 in a linked worktree and ROOT on main" wave_reports 1 "$wt_run" "$wt_repo"
+wt_phase "with issue-1 in a linked worktree and ROOT on main"
+
 # Exit 3 with nothing on stdout. A field probe cannot answer is a null; input it
 # cannot read is a usage error, and pr_state or review_state read as null would
 # say no pull request exists.
