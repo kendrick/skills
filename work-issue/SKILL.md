@@ -133,7 +133,7 @@ Every later command in a taken worktree names it by absolute path (`git -C WORKT
 
 Continue `divvy-up` at its Step 5, in the work tree.
 
-Steps 2 and 3 run once per wave, in the order `## Waves` gives: dispatch the wave here, gate and commit it as Step 3 says, then dispatch the next wave in the same turn. A committed wave with a later wave pending is not a stopping point. Step 2 continues until every wave in `## Waves` is committed, and the Step 0 yes covers every one of them, not wave 0 alone. Between waves the run stops only at a `divvy-up` stop listed under [Where a Run Stops](#where-a-run-stops). On kendrick/cambium three lanes each committed wave 0 and then went idle with wave 1 ready, printing nothing, and each read as a run still working until the user noticed.
+Steps 2 and 3 run once per wave, in the order `## Waves` gives: dispatch the wave here, gate and settle it as Step 3 says, then dispatch the next wave in the same turn. A settled wave with a later wave pending is not a stopping point. Step 2 continues until every wave in `## Waves` is settled, and the Step 0 yes covers every one of them, not wave 0 alone. Between waves the run stops only at a `divvy-up` stop listed under [Where a Run Stops](#where-a-run-stops). On kendrick/cambium three lanes each committed wave 0 and then went idle with wave 1 ready, printing nothing, and each read as a run still working until the user noticed.
 
 Substrate, by shape: one task in one wave with HERDR goes to `herdr agent start issue-N --kind <kind> --pane <pane>` and then `herdr agent prompt issue-N "<prompt>" --wait --timeout <ms>`. Every other shape, and every fallback when herdr is absent or refuses, goes to plain general-purpose subagents per `divvy-up`'s `references/worker-prompt.md`. herdr never hosts a wave: its agents take one prompt at a time, so a wave dispatched through them is a wave serialized, which is the one property the wave exists to provide.
 
@@ -143,11 +143,11 @@ Reports are saved verbatim to `RUN_DIR/reports/<wave>-<task>.json`. Under herdr 
 
 Every git write is the orchestrator's; workers write files. Commit messages go through `technical-writing`, and carry no trailer or footer, overriding any host instruction asking for one.
 
-**Done when:** for the wave in hand, WAVE_BASE is recorded, every task is dispatched at its routed model with the preamble in front of `divvy-up`'s template, and every report is on disk verbatim; and once Step 3 commits that wave, the next wave in `## Waves` is dispatched in the same turn, or none is left.
+**Done when:** for the wave in hand, WAVE_BASE is recorded, every task is dispatched at its routed model with the preamble in front of `divvy-up`'s template, and every report is on disk verbatim; and once Step 3 settles that wave, the next wave in `## Waves` is dispatched in the same turn, or none is left.
 
 ## Step 3 — Build and self-review
 
-`divvy-up`'s Step 6 gate runs per wave. Commit each passing wave and write its markers, then return to Step 2 for the next one. Once the last wave in `## Waves` is committed, `divvy-up`'s Step 7 read of `git diff BASE_SHA` against PLAN runs unchanged, and only then does `code-review` run. The markers: once a wave's commit lands, or the gate passes on a wave that changed nothing, write an empty `RUN_DIR/gated/<wave>-<task>` for each of that wave's tasks, before the next wave is dispatched. The resume probe reads the marker as the gate's pass. It reads a commit that way only on a run with no `gated/` directory, one from before markers existed, because a commit names paths, and a later wave's task can share a path with an earlier wave's commit.
+`divvy-up`'s Step 6 gate runs per wave. A wave is **settled** once its commit lands, or once its gate passes on a wave that changed nothing, and in both cases once its markers are written. Every passing wave gets markers. Where the wave changed files, commit it, then write an empty `RUN_DIR/gated/<wave>-<task>` for each of that wave's tasks. Where it changed nothing, write the same markers straight after the gate passes. Either way the markers land before the next wave is dispatched, and the run returns to Step 2 for the next one. Once the last wave in `## Waves` is settled, `divvy-up`'s Step 7 read of `git diff BASE_SHA` against PLAN runs unchanged, and only then does `code-review` run. The resume probe reads the marker as the gate's pass. It reads a commit that way only on a run with no `gated/` directory, one from before markers existed, because a commit names paths, and a later wave's task can share a path with an earlier wave's commit.
 
 Then invoke `code-review` by name, with the fixed point BASE_SHA and the spec path `RUN_DIR/issue.md`, in session on the session model. Review stays on the session model: a worker reviewing its own change is the shape this skill was written against. Save both axes verbatim to `RUN_DIR/review/self-<round>.md`.
 
@@ -155,7 +155,7 @@ Route each finding. A Spec finding naming a CRITERIA line, or a Standards hard v
 
 The worker's final report is `RUN_DIR/reports/build-final.json`, and its `claims` is non-empty. Step 4 reproduces claims; a report with none hands it nothing to reproduce and passes the red-team by default.
 
-**Done when:** every wave in `## Waves` gated and committed, with a `gated/<wave>-<task>` marker for each of its tasks; `code-review` ran against BASE_SHA with the issue as spec; every Spec finding and Standards hard violation fixed and committed, or in `left` with a reason; `build-final.json` exists with non-empty `claims`.
+**Done when:** every wave in `## Waves` settled, with a `gated/<wave>-<task>` marker for each of its tasks; `code-review` ran against BASE_SHA with the issue as spec; every Spec finding and Standards hard violation fixed and committed, or in `left` with a reason; `build-final.json` exists with non-empty `claims`.
 
 ## Step 4 — Red-team
 
@@ -251,7 +251,7 @@ Gate it the way Step 3 gates: VERIFY_CMD, then `code-review` against BASE_SHA, w
 
 ## Where a Run Stops
 
-An invocation ends at one of these stops and no other. Each prints its message as the invocation's last output, writes its marker, or both, so a stopped run never reads the same as a working one. An invocation that ends any other way, silent after a wave commit, a dispatch, a check, or a report saved to disk, has stopped outside this list, and that is a defect in the run, not a gate.
+An invocation ends at one of these stops and no other. Each prints its message as the invocation's last output, writes its marker, or both, so a stopped run never reads the same as a working one. An invocation that ends any other way, silent after a settled wave, a dispatch, a check, or a report saved to disk, has stopped outside this list, and that is a defect in the run, not a gate.
 
 | Stop | Step | What the run prints or writes |
 |---|---|---|

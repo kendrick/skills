@@ -628,14 +628,26 @@ require_text work-issue/SKILL.md "Answer, never resolve"
 # the next wave" both held at a committed wave, so the opening now defines a
 # gate as a listed stop and Step 2 says the wave loop runs to the last wave.
 require_text work-issue/SKILL.md "A gate here means one of the stops listed under [Where a Run Stops](#where-a-run-stops)"
-require_text work-issue/SKILL.md "A committed wave with a later wave pending is not a stopping point."
-require_text work-issue/SKILL.md "Step 2 continues until every wave in \`## Waves\` is committed"
+require_text work-issue/SKILL.md "A settled wave with a later wave pending is not a stopping point."
+require_text work-issue/SKILL.md "Step 2 continues until every wave in \`## Waves\` is settled"
 require_text work-issue/SKILL.md "the Step 0 yes covers every one of them, not wave 0 alone"
 require_text work-issue/SKILL.md "the next wave in \`## Waves\` is dispatched in the same turn, or none is left"
 require_text work-issue/SKILL.md "has stopped outside this list, and that is a defect in the run"
 require_text work-issue/README.md "dispatches the next one in the same turn"
 refute_text work-issue/SKILL.md "next gate and stops."
 refute_text work-issue/README.md "next gate and stops."
+
+# PR #178 review: a wave that changed nothing passes its gate with no
+# commit, so a loop that waits on "committed" stalls there. The loop advances
+# on "settled", which covers both.
+require_text work-issue/SKILL.md "A wave is **settled** once its commit lands, or once its gate passes on a wave that changed nothing"
+require_text work-issue/SKILL.md "Once the last wave in \`## Waves\` is settled"
+require_text work-issue/SKILL.md "once Step 3 settles that wave"
+require_text work-issue/SKILL.md "**Done when:** every wave in \`## Waves\` settled"
+require_text work-issue/README.md "so its markers alone move the run on"
+refute_text work-issue/SKILL.md "Step 2 continues until every wave in \`## Waves\` is committed"
+refute_text work-issue/SKILL.md "Once the last wave in \`## Waves\` is committed"
+refute_text work-issue/README.md "Once the last wave is committed"
 
 # Where a Run Stops is the closed list of places an invocation may end
 # (#135). A row with no message is a silent stop written into the contract,
@@ -2895,6 +2907,9 @@ grep -Fq "OK: plan cites #101, 3 tasks with files, 0 open markers, 4/4 criteria 
 require_text _maintenance/work-issue/RATIONALE.md "A committed wave with a later wave pending is not a stop"
 require_text _maintenance/work-issue/RATIONALE.md "\`divvy-up\`'s per-wave gate and Step 3's \`code-review\` are checks, not stops"
 require_text _maintenance/work-issue/RATIONALE.md "only an EVALS scenario can show a run keeps going"
+require_text _maintenance/work-issue/RATIONALE.md "| 135 | The per-wave alternation adds no timing rule"
+require_text _maintenance/work-issue/RATIONALE.md "| 136 | The per-wave loop advances on a settled wave, not only a committed one"
+require_text _maintenance/work-issue/RATIONALE.md "| Advancing the wave loop only on a committed wave | Row 136."
 require_text _maintenance/work-issue/RATIONALE.md "Ending an invocation at a committed wave for the user to re-invoke"
 require_text _maintenance/work-issue/EVALS.md "A Two-Wave Plan Runs Both Waves in One Invocation"
 require_text _maintenance/work-issue/EVALS.md "fails as well if it ends there with a message"
