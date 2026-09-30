@@ -881,7 +881,7 @@ def phase_of(probe):
                 "base_sha..HEAD touched; the reports and git log disagree, so stop "
                 "rather than revert committed work",
             )
-        return "2", f"row 7: {wave_reports} of {wave_tasks} wave tasks count as reported (a report and clean owned paths); resume at that wave"
+        return "2", f"row 7: {wave_reports} of {wave_tasks} wave tasks count as reported (a report, clean owned paths, and a gate marker, or a commit where no gated/ exists); resume at that wave"
     if every_wave_report and count(probe, "self_reviews") == 0:
         return "3", "row 8: every wave report is in and no self-review; resume at the code-review invocation"
     if count(probe, "self_reviews") > 0 and not flag(probe, "build_final"):
