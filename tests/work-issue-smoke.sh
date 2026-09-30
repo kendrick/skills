@@ -2025,6 +2025,43 @@ GIT_COMMITTER_DATE=2026-09-20T11:30:00Z probe_git "$since_repo" commit -q --allo
 expect_field "with no pushed_at and a head committed before the thread" review_state '"findings"' "$p" "$since_repo" --pr-bundle "$bundles_dir/open-findings.json"
 GIT_COMMITTER_DATE=2026-09-20T12:30:00Z probe_git "$since_repo" commit -q --allow-empty -m more
 expect_field "with no pushed_at and a head committed after the thread" review_state '"pending"' "$p" "$since_repo" --pr-bundle "$bundles_dir/open-findings.json"
+# An existing pushed_at is SINCE, damaged or not. Falling back to the branch's
+# committer date read a garbage marker as a 12:30 cutoff and hid the 12:00
+# finding as pending (PR #177 review), so only an absent file falls back.
+for since_bad in garbage empty blank; do
+  case "$since_bad" in
+    garbage) echo garbage >"$p/pushed_at" ;;
+    empty) : >"$p/pushed_at" ;;
+    blank) printf '  \n' >"$p/pushed_at" ;;
+  esac
+  expect_probe_usage "with a $since_bad pushed_at and a branch to fall back on" --run-dir "$p" --root "$since_repo" --issue 1 --pr-bundle "$bundles_dir/open-findings.json"
+  grep -Fq "pushed_at" "$tmp/probe-stderr" || {
+    echo "a $since_bad pushed_at should be named on stderr, got: $(cat "$tmp/probe-stderr")" >&2; exit 1; }
+done
+rm "$p/pushed_at"
+require_text work-issue/references/resume.md "A \`pushed_at\` that exists is the cutoff even when damaged"
+require_text _maintenance/work-issue/RATIONALE.md "An existing \`RUN_DIR/pushed_at\` is SINCE for \`review_state\`"
+# A merged or closed pull request ends the run at row 1 whatever else is gone,
+# SINCE included: after cleanup there may be no pushed_at and no branch. The
+# probe skips scoring the review there, and phase answers row 1 (PR #177 review).
+python3 - "$bundles_dir/merged.json" "$tmp/bundle-closed.json" <<'PY2'
+import json, sys
+bundle = json.load(open(sys.argv[1]))
+bundle["state"] = "CLOSED"
+json.dump(bundle, open(sys.argv[2], "w"))
+PY2
+require_text work-issue/references/resume.md "A \`MERGED\` or \`CLOSED\` bundle is \`null\` too and is never scored"
+require_text _maintenance/work-issue/RATIONALE.md "A \`MERGED\` or \`CLOSED\` bundle gives its state as \`pr_state\` and a null \`review_state\`"
+terminal_want="$(python3 "$run_state" phase --probe "$probes_dir/row-01.json")"
+for terminal_bundle in "$bundles_dir/merged.json" "$tmp/bundle-closed.json"; do
+  terminal_state="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["state"])' "$terminal_bundle")"
+  expect_field "on a $terminal_state bundle with no pushed_at and no issue-1 branch" review_state null "$p" "$tmp/whole-fresh/repo" --pr-bundle "$terminal_bundle"
+  run_probe "$p" "$tmp/whole-fresh/repo" --pr-bundle "$terminal_bundle" >"$tmp/terminal.json" || {
+    echo "probe on a $terminal_state bundle with no SINCE should exit 0, got: $(cat "$tmp/probe-stderr")" >&2; exit 1; }
+  terminal_got="$(python3 "$run_state" phase --probe "$tmp/terminal.json")"
+  [[ "$terminal_got" == "${terminal_want/MERGED/$terminal_state}" ]] || {
+    echo "phase on a $terminal_state bundle with no SINCE should print row 1's line, ${terminal_want/MERGED/$terminal_state}, got: $terminal_got" >&2; exit 1; }
+done
 
 # has_waves and wave_tasks read the table the way the vendored parser does:
 # stripped lines, compact rows, and a table that ends at its first non-table line.

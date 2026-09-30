@@ -1442,9 +1442,10 @@ def g_pr_state(ctx):
 
 @gatherer("review_state")
 def g_review_state(ctx):
-    """`review`'s answer on the bundle against SINCE; null with no bundle.
-    Scored before any gatherer runs, since a bundle that can't be scored
-    exits 3 rather than reading as no pull request."""
+    """`review`'s answer on an OPEN bundle against SINCE; null with no bundle,
+    and null on a MERGED or CLOSED one, which row 1 ends before any row reads
+    this. Scored before any gatherer runs, since an OPEN bundle that can't be
+    scored exits 3 rather than reading as no pull request."""
     return ctx.review_state
 
 
@@ -1921,19 +1922,21 @@ def find_tree(root, branch):
 
 def probe_since(run_dir, root, branch):
     """SINCE as SKILL.md defines it: `pushed_at`, else the committer date of
-    the branch head. `(moment, problems)`; a None moment is no SINCE at all."""
+    the branch head. `(moment, problems)`; a None moment is no SINCE at all.
+
+    Only an absent `pushed_at` falls back. One that exists but is empty,
+    unreadable, or not a timestamp is a damaged cutoff: falling back to the
+    commit date read a `garbage` marker beside a 13:00 commit as a 13:00
+    cutoff, and a 12:00 finding scored `pending` (PR #177 review)."""
     problems = []
     try:
         pushed = read_or_none(run_dir / "pushed_at")
     except OSError as e:
-        pushed = None
-        problems.append(f"pushed_at: {e.strerror or e}")
+        return None, [f"pushed_at: {e.strerror or e}"]
     if pushed is not None:
         moment = parse_ts(chomp(pushed), "pushed_at", problems)
-        if moment is not None:
-            return moment, []
-    else:
-        problems.append("no pushed_at")
+        return (moment, []) if moment is not None else (None, problems)
+    problems.append("no pushed_at")
     done = run_git(root, "log", "-1", "--format=%cI", f"refs/heads/{branch}")
     if done.returncode == 0 and chomp(done.stdout):
         moment = parse_ts(chomp(done.stdout), f"{branch} committer date", problems)
@@ -1997,7 +2000,10 @@ def cmd_probe(args):
         if "state" not in bundle:
             return usage(["bundle: missing state; save it with this script's review --save"])
     author = args.author or (bundle or {}).get("author")
-    if bundle is not None:
+    # A merged or closed PR is row 1 whatever else is missing, and cleanup can
+    # leave no pushed_at and no branch, so its review is never scored: `phase`
+    # reads row 1 before anything reads review_state (PR #177 review).
+    if bundle is not None and bundle["state"] == "OPEN":
         since, problems = probe_since(run_dir, root, branch)
         if since is None:
             return usage([f"review_state: no SINCE to score the bundle against: {'; '.join(problems)}"])
