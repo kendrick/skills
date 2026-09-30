@@ -30,7 +30,7 @@ Then it reads what came back. `run-state.py review` polls the pull request and s
 
 Every thread then gets a reply saying what changed and at which commit, and nothing gets resolved. Marking a thread resolved is the reviewer's act, and taking it from them destroys the only signal they have that anyone read the finding. The final report ends "a human merges" once the review clears — or "waiting on the reviewer" once every finding is answered and the queue published but nothing has cleared the round yet.
 
-An invocation can stop anywhere because the next one works out where it is from scratch. The world outranks the run directory, and the run directory outranks memory. It asks git, `gh`, and herdr first, since a run's own notes are exactly what the crash that stranded it leaves stale. The run directory holds phase outputs—reports, verdicts, triage rows—and never a note saying which phase the run believes it reached, because that note outlives the crash that invalidates it. `run-state.py phase` reads a probe of the world and prints where to pick up.
+An invocation can stop anywhere because the next one works out where it is from scratch. The world outranks the run directory, and the run directory outranks memory. It asks git, `gh`, and herdr first, since a run's own notes are exactly what the crash that stranded it leaves stale. The run directory holds phase outputs—reports, verdicts, triage rows—and never a note saying which phase the run believes it reached, because that note outlives the crash that invalidates it. `run-state.py probe` gathers a probe of the world from git, the run directory, and a saved copy of the pull request's reviews. `run-state.py phase` reads it and prints where to pick up.
 
 ## Install
 
@@ -68,14 +68,14 @@ Type the same invocation again to resume, plan path included if you passed one. 
 work-issue/
 ├── SKILL.md                  # the skill — gate, isolate, dispatch, build, red-team, publish, triage, repair, close
 ├── references/
-│   ├── resume.md               # the probe fields and the phase table that places a half-finished run
+│   ├── resume.md               # how to gather the probe, what each field means, and the phase table
 │   ├── worker-prompt.md        # the preamble every dispatch carries, and the report contract
 │   ├── redteam.md              # the reproducer's instructions and the adversarial-review trigger
 │   └── triage.md               # scoring review signal, queueing what's out of scope, answering threads
 └── scripts/
     ├── check-plan.py           # the mechanical half of the plan gate
     ├── check-inflight.py       # proves no run in flight owns a path this plan owns
-    └── run-state.py            # places a run on the phase table; scores a pull request's review; weighs review time against build time
+    └── run-state.py            # gathers the resume probe and places a run on the phase table; scores a pull request's review; weighs review time against build time
 ```
 
 ## Gotchas

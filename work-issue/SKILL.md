@@ -50,7 +50,7 @@ Resolve once per invocation:
 - **PR** — `gh pr list --head <BRANCH> --state all --json number,state,url --jq '.[0]'`
 - **VERIFY_CMD**, **INSTALL_CMD** — harvested off disk the way `file-issue` harvests, and quoted: manifest scripts first (`package.json`, `Makefile`, `pyproject.toml`, `Cargo.toml`); with no manifest, runnable scripts under `tests/` or `scripts/`, then what `.github/workflows/` runs, then `absent`. INSTALL_CMD is the manifest's install (`pnpm install --frozen-lockfile`, `npm ci`, `uv sync`, …), else `absent`.
 - **HERDR** — `test "${HERDR_ENV:-}" = 1 && command -v herdr`
-- **SINCE** — the contents of `RUN_DIR/pushed_at` (UTC ISO 8601, written immediately before every push, so an event stamped the same second still counts), else the head commit's committer date
+- **SINCE** — the contents of `RUN_DIR/pushed_at` (UTC ISO 8601, written immediately before every push, so an event stamped the same second still counts). Only where that file is absent, the head commit's committer date: a `pushed_at` that exists but is empty or unparseable is a damaged cutoff, and `probe` stops on it rather than falling back
 - **FLAGS** — `--isolate` / `--no-isolate` pin the Step 1 row; `--deep` forces `adversarial-review` at Step 4; `--max-review-rounds N` caps the post-PR review loop at N triage rounds, default 2, and Step 0 writes it to `RUN_DIR/max_review_rounds` (see Step 6), where a resume keeps it: to change the cap mid-run, write another positive integer to that file before the round it would cap is triaged, because `phase_of` reads an already-triaged round against the file as it now stands and would repair rows that round queued and answered as deferred; `--dry-run` runs every gate and every derivation, renders the confirmation, and dispatches nothing and pushes nothing.
 
 `gh auth status` is a Step 0 preflight, the way `file-issue` runs one. Unauthenticated at Step 0 stops the run, because the issue cannot be read and CRITERIA would be invented. Unauthenticated at Step 5 or later renders the pull-request body to `RUN_DIR/pr-body.md`, pushes nothing, and stops with "resume after `gh auth login`". A rendered body says on its face that it is rendered: a draft that reads like an opened pull request is a draft somebody goes looking for on GitHub.
@@ -67,7 +67,7 @@ It prints `build: <m>m review: <m>m ratio: <r> over: yes|no`, build being Steps 
 
 ## Step 0 — Gate and confirm
 
-1. Run the resume probe (see [Resume](#resume)) before anything is written under RUN_DIR. A run dir with no branch is row 5's mark of a dead run, so an `issue.md` written first would make every fresh issue look dead and send it to `closed/`. Any phase past 0 jumps there; the rest of this step is for a fresh issue.
+1. Run the resume probe before anything is written under RUN_DIR: the gather block in [references/resume.md](references/resume.md), which ends with `run-state.py probe` and then `run-state.py phase` (see [Resume](#resume)). A run dir with no branch is row 5's mark of a dead run, so an `issue.md` written first would make every fresh issue look dead and send it to `closed/`. Any phase past 0 jumps there; the rest of this step is for a fresh issue.
 2. Where `--max-review-rounds` is given a value that is not a positive integer, `0` included, refuse the run naming that value, before anything is written under RUN_DIR. Read the issue into `RUN_DIR/issue.md` and extract CRITERIA. Write the `--max-review-rounds` value, `2` where the flag is absent, to `RUN_DIR/max_review_rounds`.
 3. The plan gate, mechanical half:
 
@@ -251,13 +251,14 @@ Gate it the way Step 3 gates: VERIFY_CMD, then `code-review` against BASE_SHA, w
 
 The world outranks RUN_DIR, and RUN_DIR outranks memory. git, gh, and herdr are asked first, because a run's own notes are exactly what the crash that stranded it leaves stale.
 
-Gather the probe fields per [references/resume.md](references/resume.md) — one command per field, every field present and `null` where unknown — write them to a JSON file, and map them. A `null` in any field but `pr_state` and `review_state` answers `stop` naming the field, so gather it again rather than guessing. A `base_sha_state` of `not-merge-base` or `not-ancestor` answers `stop` naming the mismatch, unless a conflict or a rebase is in progress, which row 12 owns:
+Run the gather block in [references/resume.md](references/resume.md). It asks `gh` for the pull request and saves its bundle outside RUN_DIR, reads herdr's state for the issue agent under HERDR, and ends with:
 
 ```
-work-issue/scripts/run-state.py phase --probe PROBE.json
+work-issue/scripts/run-state.py probe --run-dir RUN_DIR --root ROOT --issue N [--pr-bundle "$bundle"] [--herdr-state STATE] > "$probe"
+work-issue/scripts/run-state.py phase --probe "$probe"
 ```
 
-It prints `phase: <0-8|done|wait|stop> reason: <one line>` and exits 0, or exits 3 on a malformed probe. First match wins:
+`probe` prints every field, `null` where it could not answer with a stderr line saying why, and exits 3 on input it cannot read, which stops the run. A `null` in any field but `pr_state` and `review_state` answers `stop` naming the field: fix what the stderr line names and run the block again, rather than guessing the value. A `base_sha_state` of `not-merge-base` or `not-ancestor` answers `stop` naming the mismatch, unless a conflict or a rebase is in progress, which row 12 owns. `phase` prints `phase: <0-8|done|wait|stop> reason: <one line>` and exits 0, or exits 3 on a malformed probe. First match wins:
 
 | # | Probe | Resume at |
 |---|---|---|
@@ -282,10 +283,10 @@ It prints `phase: <0-8|done|wait|stop> reason: <one line>` and exits 0, or exits
 
 ## Further Reading
 
-- [references/resume.md](references/resume.md) — read at Step 0 to gather every probe field and place the run on the phase table
+- [references/resume.md](references/resume.md) — read at Step 0 for the gather block, what each probe field means, and the phase table
 - [references/worker-prompt.md](references/worker-prompt.md) — read at Steps 2 and 7 to build the preamble and the report contract every dispatch carries
 - [references/redteam.md](references/redteam.md) — read at Step 4 to instantiate the reproducer and run the `adversarial-review` trigger
 - [references/triage.md](references/triage.md) — read at Steps 6 and 8 to score review signal, queue what is out of scope, and answer every thread
 - [scripts/check-plan.py](scripts/check-plan.py) — run at Step 0 as the mechanical half of the plan gate: `work-issue/scripts/check-plan.py PLAN.md --issue N [--criteria ISSUE.md]`
 - [scripts/check-inflight.py](scripts/check-inflight.py) — run at Step 0 to prove no in-flight run owns a path this plan owns: `work-issue/scripts/check-inflight.py PLAN.md --runs DIR [--self issue-N]`
-- [scripts/run-state.py](scripts/run-state.py) — run at Step 0 to place the run, at Steps 6 and 8 to score the review, and ahead of each review cycle to read the budget: `work-issue/scripts/run-state.py phase --probe PROBE.json`, `work-issue/scripts/run-state.py review <PR> [--since ISO8601] [--author LOGIN] [--input BUNDLE.json] [--save PATH]`, and `work-issue/scripts/run-state.py budget --timing RUN_DIR/timing.log [--ratio R]`
+- [scripts/run-state.py](scripts/run-state.py) — run at Step 0 to gather the probe and place the run, at Steps 6 and 8 to score the review, and ahead of each review cycle to read the budget: `work-issue/scripts/run-state.py probe --run-dir DIR --root ROOT --issue N [--pr-bundle FILE] [--herdr-state STATE] [--author LOGIN]`, `work-issue/scripts/run-state.py phase --probe PROBE.json`, `work-issue/scripts/run-state.py review <PR> [--since ISO8601] [--author LOGIN] [--input BUNDLE.json] [--save PATH]`, and `work-issue/scripts/run-state.py budget --timing RUN_DIR/timing.log [--ratio R]`

@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Read a pull request's review state, and map a resume probe to a phase.
+"""Read a pull request's review state, gather a resume probe, and map it to a phase.
 
     work-issue/scripts/run-state.py review PR [--since ISO8601] [--author LOGIN] [--save PATH]
     work-issue/scripts/run-state.py review PR --input BUNDLE.json [--save PATH]
+    work-issue/scripts/run-state.py probe --run-dir DIR --root ROOT --issue N [--pr-bundle FILE] [--herdr-state STATE] [--author LOGIN]
     work-issue/scripts/run-state.py phase --probe PROBE.json
 
 Neither subcommand is a gate. `review` answers `findings`, `cleared`, or
@@ -29,19 +30,28 @@ URL, and (for a review) a state and timestamp — never the body a reply has to
 quote. The skill reads the saved file for that body instead of asking `gh`
 again.
 
+`probe` reads git, RUN_DIR, and a bundle `review --save` wrote, and prints the
+JSON `phase --probe` reads, every field present. It never calls `gh` or
+`herdr`: the bundle carries GitHub's answer and `--herdr-state` carries
+herdr's. A field it cannot answer is null, with one stderr line saying why.
+
 Exit codes: 0 with an answer on stdout; 3 usage, a `gh` failure, an unwritable
 `--save` path, or input this script cannot read (an unparseable bundle, a
 bundle missing a top-level key, a probe missing a field). Argparse supplies 2
-for a mistyped flag.
+for a mistyped flag, except under `probe`, where it is 3 too, because the
+issue that asked for `probe` asked for the validator convention.
 
 Stdlib only, so the skill stays copy-in portable.
 """
 import argparse
+import fnmatch
 import json
+import os
 import re
 import subprocess
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
 
 GH_TIMEOUT = 60
 
@@ -119,6 +129,10 @@ PROBE_FIELDS = (
     ("review_over_budget", "bool", ()),
     ("repair_diff_triggers", "bool", ()),
 )
+
+# A bundle's `state` is optional to `check_bundle`, so every review fixture
+# written before it existed still reads, and required by `probe`.
+PR_STATES = ("OPEN", "MERGED", "CLOSED")
 
 BUNDLE_KEYS = (
     ("author", (str, type(None))),
@@ -233,6 +247,7 @@ query($owner: String!, $name: String!, $pr: Int!, $pageSize: Int!, $after: Strin
   repository(owner: $owner, name: $name) {
     pullRequest(number: $pr) {
       author { login }
+      state
       reviews(first: $pageSize, after: $after) {
         nodes { state author { login } submittedAt databaseId body url }
         pageInfo { hasNextPage endCursor }
@@ -395,6 +410,7 @@ def gather(pr):
         )
 
     return {
+        "state": reviews_pull.get("state"),
         "author": _login(reviews_pull.get("author")),
         "reactions": [
             {
@@ -524,6 +540,10 @@ def check_bundle(bundle):
             problems.append(
                 f"bundle: {key} is {type(bundle[key]).__name__}, expected {wanted}"
             )
+    if "state" in bundle and bundle["state"] not in PR_STATES:
+        problems.append(
+            f"bundle: state is {bundle['state']!r}, expected one of {', '.join(PR_STATES)}"
+        )
     if problems:
         raise InputError(problems)
     for index, thread in enumerate(bundle["threads"]):
@@ -1054,6 +1074,984 @@ def phase_of(probe):
     )
 
 
+HERDR_STATES = ("working", "blocked", "idle", "done", "absent")
+
+GIT_TIMEOUT = 60
+
+# The installed sibling Step 0 already refuses to run without, found beside
+# this skill rather than on PATH or relative to the caller's cwd.
+MATCH_TRIGGERS = (
+    Path(__file__).resolve().parents[2] / "adversarial-review" / "scripts" / "match-triggers.py"
+)
+
+# grep's [[:space:]] and \s, spelled out: Python's \s also matches Unicode
+# spaces, which neither the vendored parser nor the old grep did.
+_WS = "[ \t\r\f\v]"
+WAVES_HEADING = re.compile(rf"^{_WS}*## Waves{_WS}*$")
+TABLE_LINE = re.compile(rf"^{_WS}*\|")
+NUMBERED_ROW = re.compile(rf"^{_WS}*\|{_WS}*[0-9]+{_WS}*\|")
+FAILED_ROUND = re.compile(r'NOT_REPRODUCED|"holds": *false')
+TRIAGE_ROUND = re.compile(r"round-([0-9]+)\.md")
+SINCE_HEADING = re.compile(r"# Triage round .* since ([^ ]*)")
+QUEUE_ROW = re.compile(r"^\| [0-9]+ \|")
+SEPARATOR_CELL = re.compile(r":?-+:?")
+
+GATHERERS = {}
+
+
+class ProbeError(Exception):
+    """One field could not be answered. `probe` prints it and writes null."""
+
+
+class ProbeContext:
+    """What every gatherer reads: RUN_DIR, the work tree, the issue, and the
+    bundle. The tree is the worktree holding `issue-<N>`, found from ROOT."""
+
+    def __init__(self, run_dir, tree, issue, bundle, author, herdr_state, review_state):
+        self.run_dir = run_dir
+        self.tree = tree
+        self.issue = issue
+        self.branch = f"issue-{issue}"
+        self.bundle = bundle
+        self.author = author
+        self.herdr_state = herdr_state
+        self.review_state = review_state
+        self._remote = None
+
+    def git(self, *args):
+        return run_git(self.tree, *args)
+
+    def path(self, *parts):
+        return self.run_dir.joinpath(*parts)
+
+    def git_ok(self, *args):
+        """stdout of a git call that has to succeed, else ProbeError."""
+        done = self.git(*args)
+        if done.returncode != 0:
+            raise ProbeError(git_failure(args, done))
+        return done.stdout
+
+    def branch_local(self):
+        done = self.git("show-ref", "--verify", "--quiet", f"refs/heads/{self.branch}")
+        if done.returncode in (0, 1):
+            return done.returncode == 0
+        raise ProbeError(git_failure(("show-ref",), done))
+
+    def branch_remote(self):
+        """The live remote's answer, asked once per probe. `ls-remote` exit 2
+        is no such branch; any other failure, no network included, raises."""
+        if self._remote is None:
+            done = self.git("ls-remote", "--exit-code", "--heads", "origin", self.branch)
+            if done.returncode == 0:
+                self._remote = True
+            elif done.returncode == 2:
+                self._remote = False
+            else:
+                self._remote = ProbeError(git_failure(("ls-remote", "origin"), done))
+        if isinstance(self._remote, ProbeError):
+            raise self._remote
+        return self._remote
+
+
+def run_git(tree, *args):
+    # No prompt: a credential helper waiting on a terminal would hang the
+    # probe past its timeout instead of answering null.
+    env = dict(os.environ, GIT_TERMINAL_PROMPT="0")
+    return subprocess.run(
+        ["git", "-C", str(tree), *args],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="surrogateescape",
+        timeout=GIT_TIMEOUT,
+        env=env,
+    )
+
+
+def git_failure(args, done):
+    why = " ".join((done.stderr or "").split())[:200]
+    return f"git {' '.join(args)}: exit {done.returncode}" + (f": {why}" if why else "")
+
+
+def gatherer(name):
+    def register(fn):
+        GATHERERS[name] = fn
+        return fn
+
+    return register
+
+
+def read_text(path):
+    with open(path, encoding="utf-8", errors="surrogateescape") as handle:
+        return handle.read()
+
+
+def read_or_none(path):
+    """The file's text, or None where it does not exist. Any other read
+    failure raises: a file that exists and can't be read is not an absent one."""
+    try:
+        return read_text(path)
+    except FileNotFoundError:
+        return None
+
+
+def first_line(path):
+    text = read_or_none(path)
+    return None if text is None else text.split("\n", 1)[0]
+
+
+def chomp(text):
+    """What `$(cat FILE)` gives: trailing newlines gone, nothing else."""
+    return text.rstrip("\n")
+
+
+def find_count(directory, pattern):
+    """`find DIR -name PATTERN | wc -l`: entries at any depth, 0 with no DIR."""
+    total = 0
+    for _, dirs, files in os.walk(directory):
+        total += sum(1 for name in dirs + files if fnmatch.fnmatchcase(name, pattern))
+    return total
+
+
+def _round_number(name):
+    digits = re.findall(r"[0-9]+", name)
+    return int(digits[-1]) if digits else -1
+
+
+def newest_by_mtime(directory, pattern):
+    """Entries of DIR matching PATTERN, newest first, as `ls -t` orders them,
+    with a tie going to the higher round number. For the fields whose
+    resume.md row reads the newest round by file time."""
+    try:
+        names = [n for n in os.listdir(directory) if fnmatch.fnmatchcase(n, pattern)]
+    except FileNotFoundError:
+        return []
+    paths = [directory / n for n in names]
+    return sorted(
+        paths, key=lambda p: (p.stat().st_mtime_ns, _round_number(p.name)), reverse=True
+    )
+
+
+def newest_round_by_k(directory):
+    """`(k, path)` of the highest-numbered `round-<k>.md`, or None.
+
+    By number, never by file time: Step 8 writes reply URLs into a round
+    after the push that answers it, so an answered earlier round can be the
+    newest file on disk (#139)."""
+    try:
+        names = os.listdir(directory)
+    except FileNotFoundError:
+        return None
+    rounds = []
+    for name in names:
+        match = TRIAGE_ROUND.fullmatch(name)
+        if match:
+            rounds.append((int(match.group(1)), match.group(1), directory / name))
+    if not rounds:
+        return None
+    _, k, path = max(rounds)
+    return k, path
+
+
+def triage_table(path):
+    """`(columns, rows)` of a triage round's table: header names to field
+    index, and each body row's fields split on `|`.
+
+    Escaped `\\|` pipes drop before the split so a quoted `\\|\\|` can't shift a
+    column. The first pipe-table line is the header, the separator row is
+    skipped, and the table ends at the first non-table line after it."""
+    columns = None
+    rows = []
+    for line in read_text(path).split("\n"):
+        line = line.replace("\\|", "")
+        if not TABLE_LINE.match(line):
+            if columns is not None:
+                break
+            continue
+        fields = line.split("|")
+        if columns is None:
+            columns = {}
+            for index, field in enumerate(fields):
+                columns.setdefault(squeeze(field), index)
+            continue
+        cells = [squeeze(f) for f in fields[1:]]
+        if cells and all(not c or SEPARATOR_CELL.fullmatch(c) for c in cells):
+            continue
+        rows.append(fields)
+    return columns or {}, rows
+
+
+def squeeze(text):
+    """A cell with its spaces and tabs dropped, as the old awk compared it:
+    `in scope` reads `inscope`, and a padded `P0` reads `P0`."""
+    return re.sub(r"[ \t]", "", text)
+
+
+def cell(fields, index):
+    return squeeze(fields[index]) if index < len(fields) else ""
+
+
+def waves_rows(ctx):
+    """The `## Waves` table's lines and no others. The table ends at its first
+    non-table line, where the vendored parser ends it."""
+    text = read_or_none(ctx.path("plan.md"))
+    if text is None:
+        return []
+    rows = []
+    in_section = False
+    started = False
+    for line in text.split("\n"):
+        if WAVES_HEADING.match(line):
+            in_section = True
+            continue
+        if not in_section:
+            continue
+        if TABLE_LINE.match(line):
+            started = True
+            rows.append(line)
+        elif started:
+            break
+    return rows
+
+
+def wave_tasks_rows(ctx):
+    """`(wave, task, owned paths)` per task row, as the vendored parser reads
+    the first three cells: each loses only its outer spaces and tabs, so
+    `my task` and `docs/my notes.md` keep theirs, and paths split on commas."""
+    tasks = []
+    for line in waves_rows(ctx):
+        cells = [c.strip(" \t") for c in line.split("|")]
+        wave = cells[1] if len(cells) > 1 else ""
+        task = cells[2] if len(cells) > 2 else ""
+        owned = re.sub(r"[ \t]*,[ \t]*", ",", cells[3] if len(cells) > 3 else "")
+        if re.fullmatch(r"[0-9]+", wave) and task:
+            tasks.append((wave, task, owned))
+    return tasks
+
+
+def owned_paths(owned):
+    # Bash's IFS=, split: a trailing comma ends the list rather than naming an
+    # empty path.
+    parts = owned.split(",")
+    if parts and parts[-1] == "":
+        parts.pop()
+    return parts
+
+
+def reported(ctx, wave, task):
+    return (
+        ctx.path("reports", f"{wave}-{task}.json").is_file()
+        or ctx.path("reports", f"{task}.json").is_file()
+    )
+
+
+@gatherer("herdr_agent_state")
+def g_herdr_agent_state(ctx):
+    """herdr's answer for the issue agent, passed in by `--herdr-state`.
+    Rows 2 and 3 outrank every RUN_DIR row: an agent still `working` is
+    waited on rather than duplicated by a second dispatch into its tree."""
+    return ctx.herdr_state
+
+
+@gatherer("branch_local")
+def g_branch_local(ctx):
+    """`refs/heads/issue-<N>` exists in the repo."""
+    return ctx.branch_local()
+
+
+@gatherer("branch_remote")
+def g_branch_remote(ctx):
+    """origin has `issue-<N>`, asked of the live remote. No origin, or no
+    answer from it, is null rather than a no."""
+    return ctx.branch_remote()
+
+
+@gatherer("run_dir")
+def g_run_dir(ctx):
+    """RUN_DIR exists. Read, never created: a probe that made it would turn a
+    fresh issue into row 5's dead run."""
+    return ctx.run_dir.is_dir()
+
+
+@gatherer("base_sha")
+def g_base_sha(ctx):
+    """Step 1's last write, with `baseline`. Row 7 sends a run missing either
+    back to Step 1 rather than dispatching workers against no fixed point."""
+    return ctx.path("base_sha").is_file()
+
+
+@gatherer("baseline")
+def g_baseline(ctx):
+    """`baseline.txt` exists; see `base_sha`."""
+    return ctx.path("baseline.txt").is_file()
+
+
+def default_branch(ctx):
+    """origin's default branch, from the live remote's HEAD symref.
+
+    SKILL.md resolves DEFAULT with `gh repo view`, which `probe` never calls;
+    a GitHub remote's HEAD names the same branch."""
+    out = ctx.git_ok("ls-remote", "--symref", "origin", "HEAD")
+    for line in out.split("\n"):
+        match = re.match(r"ref: refs/heads/(\S+)\tHEAD$", line)
+        if match:
+            return match.group(1)
+    raise ProbeError("git ls-remote --symref origin HEAD: origin names no default branch")
+
+
+@gatherer("base_sha_state")
+def g_base_sha_state(ctx):
+    """`current` where the file holds the live merge-base of origin/<DEFAULT>
+    and the branch; `not-merge-base` where it is an ancestor but not that
+    merge-base, which an unrecorded rebase leaves; `not-ancestor` where the
+    branch never had it; `absent` with no file, or no issue branch locally or
+    on origin, which rows 4 through 7 own. Null where the branch survives only
+    on origin, since no row owns that run, and where git can't answer. An empty
+    file is null too: Step 5 item 2 writes only once `git merge-base`
+    resolves, so an empty file is a write that went wrong (#137). It reads
+    refs rather than HEAD, so a rebase stopped mid-way still reads `current`."""
+    base_file = ctx.path("base_sha")
+    if not base_file.is_file():
+        return "absent"
+    if not ctx.branch_local():
+        # ls-remote exit 2 is no such branch; the branch on origin alone, or
+        # an origin that can't answer, is a run no row owns.
+        try:
+            return "absent" if ctx.branch_remote() is False else None
+        except ProbeError:
+            return None
+    base = chomp(read_text(base_file))
+    if not base:
+        return None
+    done = ctx.git("merge-base", "--is-ancestor", base, ctx.branch)
+    if done.returncode == 1:
+        return "not-ancestor"
+    if done.returncode != 0:
+        raise ProbeError(git_failure(("merge-base", "--is-ancestor"), done))
+    default = default_branch(ctx)
+    merge_base = chomp(ctx.git_ok("merge-base", f"origin/{default}", ctx.branch))
+    return "current" if merge_base == base else "not-merge-base"
+
+
+@gatherer("pr_state")
+def g_pr_state(ctx):
+    """The bundle's `state`; null with no bundle, which phase reads as no
+    pull request yet."""
+    return None if ctx.bundle is None else ctx.bundle["state"]
+
+
+@gatherer("review_state")
+def g_review_state(ctx):
+    """`review`'s answer on an OPEN bundle against SINCE; null with no bundle,
+    and null on a MERGED or CLOSED one, which row 1 ends before any row reads
+    this. Scored before any gatherer runs, since an OPEN bundle that can't be
+    scored exits 3 rather than reading as no pull request."""
+    return ctx.review_state
+
+
+@gatherer("has_waves")
+def g_has_waves(ctx):
+    """plan.md has a `## Waves` heading, whitespace allowed on either side,
+    because the vendored parser strips the line before comparing, and a
+    column-1 match sent an indented table back to row 6's plan gate on every
+    invocation."""
+    text = read_or_none(ctx.path("plan.md"))
+    return text is not None and any(WAVES_HEADING.match(l) for l in text.split("\n"))
+
+
+@gatherer("wave_tasks")
+def g_wave_tasks(ctx):
+    """Numbered rows of the Waves table and no other. A cut that ran to the
+    next `## ` heading counted a numbered row under a `### ` heading inside the
+    section. Whitespace-tolerant inside the row, for a compact
+    `|0|one|a.py|sonnet|done||`, and ahead of it, for an indented table."""
+    return sum(1 for line in waves_rows(ctx) if NUMBERED_ROW.match(line))
+
+
+@gatherer("wave_reports")
+def g_wave_reports(ctx):
+    """Tasks, not files, that count as reported: a report under either name
+    Step 2 writes, clean owned paths, and gate evidence, which is Step 3's
+    `gated/<wave>-<task>` marker, or, on a run with no `gated/` directory, a
+    commit in `git log <base_sha>..HEAD` on its owned paths. A report is the
+    worker's word and never says the gate ran; dirty owned paths say it did
+    not. A run that writes markers counts only markers, since an earlier
+    wave's commit on a shared path would pass a later task whose gate never
+    ran. A filename glob read five committed waves on cambium #78 as 0 of 5.
+    A git status or log that fails is null."""
+    base = chomp(read_or_none(ctx.path("base_sha")) or "")
+    has_gated = ctx.path("gated").is_dir()
+    counted = 0
+    failures = []
+    for wave, task, owned in wave_tasks_rows(ctx):
+        if not reported(ctx, wave, task):
+            continue
+        paths = owned_paths(owned)
+        if owned:
+            done = ctx.git("status", "--porcelain", "--untracked-files=all", "--", *paths)
+            if done.returncode != 0:
+                failures.append(git_failure(("status",), done))
+                continue
+            if chomp(done.stdout):
+                continue
+        if ctx.path("gated", f"{wave}-{task}").is_file():
+            counted += 1
+            continue
+        # With no range or no paths there is nothing for git log to read, and
+        # git log with no paths reads the whole tree.
+        if not base or not owned or has_gated:
+            continue
+        done = ctx.git("log", "--format=%H", f"{base}..HEAD", "--", *paths)
+        if done.returncode != 0:
+            failures.append(git_failure(("log",), done))
+        elif chomp(done.stdout):
+            counted += 1
+    if failures:
+        raise ProbeError(failures[0])
+    return counted
+
+
+@gatherer("wave_unreported_committed")
+def g_wave_unreported_committed(ctx):
+    """Tasks `wave_reports` does not count, with no report or a report beside
+    dirty owned paths, whose owned paths a commit in `git log
+    <base_sha>..HEAD` touched. Only the orchestrator commits, so that is
+    committed work whose report is missing, and row 7 stops on it rather than
+    reverting. A reported task with clean paths is skipped: with no gate
+    evidence it has no commit either. A missing or empty `base_sha` is 0, since
+    Step 1 writes it before any wave can commit, which keeps row 7's Step 1
+    leg reachable. A base that doesn't resolve is null."""
+    base_file = ctx.path("base_sha")
+    if not (base_file.exists() and base_file.stat().st_size > 0):
+        return 0
+    base = chomp(read_text(base_file))
+    counted = 0
+    failures = []
+    for wave, task, owned in wave_tasks_rows(ctx):
+        if not owned:
+            continue
+        paths = owned_paths(owned)
+        if reported(ctx, wave, task):
+            done = ctx.git("status", "--porcelain", "--untracked-files=all", "--", *paths)
+            if done.returncode != 0:
+                failures.append(git_failure(("status",), done))
+                continue
+            if not chomp(done.stdout):
+                continue
+        if not base:
+            failures.append("base_sha holds only newlines")
+            continue
+        done = ctx.git("log", "--format=%H", f"{base}..HEAD", "--", *paths)
+        if done.returncode != 0:
+            failures.append(git_failure(("log",), done))
+        elif chomp(done.stdout):
+            counted += 1
+    if failures:
+        raise ProbeError(failures[0])
+    return counted
+
+
+@gatherer("self_reviews")
+def g_self_reviews(ctx):
+    """`review/self-*.md` files."""
+    return find_count(ctx.path("review"), "self-*.md")
+
+
+@gatherer("build_final")
+def g_build_final(ctx):
+    """`reports/build-final.json` exists."""
+    return ctx.path("reports", "build-final.json").is_file()
+
+
+@gatherer("redteam_rounds")
+def g_redteam_rounds(ctx):
+    """`redteam/round-*.json` files."""
+    return find_count(ctx.path("redteam"), "round-*.json")
+
+
+def round_failed(path):
+    return bool(FAILED_ROUND.search(read_text(path)))
+
+
+@gatherer("redteam_last_failed")
+def g_redteam_last_failed(ctx):
+    """The newest round, by file time, holds a NOT_REPRODUCED claim or a
+    `left_checks` entry with `holds` false, which routes the same way. The
+    newest only: an earlier round's failures are why a later round exists."""
+    rounds = newest_by_mtime(ctx.path("redteam"), "round-*.json")
+    return bool(rounds) and round_failed(rounds[0])
+
+
+@gatherer("redteam_failed_twice")
+def g_redteam_failed_twice(ctx):
+    """The two newest rounds both failed. Step 4 stops after two failed rounds,
+    and row 10 has to honor that stop rather than start a third cycle."""
+    rounds = newest_by_mtime(ctx.path("redteam"), "round-*.json")[:2]
+    return sum(1 for path in rounds if round_failed(path)) == 2
+
+
+@gatherer("repair_after_last_round")
+def g_repair_after_last_round(ctx):
+    """The newest repair report of either kind is newer than the newest
+    red-team round. Order, not count: a repair older than the failed round is
+    the code that round refuted. A tie goes to the round, as `ls -t` sorts it
+    ahead of the reports on equal times."""
+    candidates = [
+        (p.stat().st_mtime_ns, 0, p)
+        for p in newest_by_mtime(ctx.path("reports"), "redteam-repair-*.json")
+        + newest_by_mtime(ctx.path("reports"), "repair-*.json")
+    ] + [(p.stat().st_mtime_ns, 1, p) for p in newest_by_mtime(ctx.path("redteam"), "round-*.json")]
+    if not candidates:
+        return False
+    return max(candidates, key=lambda c: (c[0], c[1]))[1] == 0
+
+
+@gatherer("trigger_fired")
+def g_trigger_fired(ctx):
+    """`yes`, `no`, or `absent` from `redteam/trigger.txt`'s first line, exactly.
+    Three values, because a missing file is not a `no`: a run that stopped
+    between its clean round and the trigger never evaluated it, and row 13
+    must not publish it."""
+    line = first_line(ctx.path("redteam", "trigger.txt"))
+    return {"fired: yes": "yes", "fired: no": "no"}.get(line, "absent")
+
+
+@gatherer("ar_complete")
+def g_ar_complete(ctx):
+    """`redteam/ar-state.txt` holds `UNVERIFIED: 0`. Step 4 writes it from
+    `ledger.py state` after reading the report, so it exists only for a review
+    that finished. The run directory under `.adversarial-review/runs/` is not
+    the signal: it exists from preflight onward."""
+    text = read_or_none(ctx.path("redteam", "ar-state.txt"))
+    return text is not None and "UNVERIFIED: 0" in text
+
+
+@gatherer("conflict")
+def g_conflict(ctx):
+    """`conflict.txt` exists. Step 5 item 2 removes it once the rebase is
+    proven, so a marker with no rebase in progress is a run that stopped
+    between items 1 and 2."""
+    return ctx.path("conflict.txt").is_file()
+
+
+@gatherer("rebase_in_progress")
+def g_rebase_in_progress(ctx):
+    """A rebase-merge or rebase-apply directory exists in the tree's git dir,
+    resolved through `--git-path`, because in a linked worktree the
+    hardcoded spelling under `.git/` does not exist. A relative answer is
+    relative to the tree, not to the caller's cwd."""
+    for name in ("rebase-merge", "rebase-apply"):
+        where = Path(chomp(ctx.git_ok("rev-parse", "--git-path", name)))
+        if not where.is_absolute():
+            where = ctx.tree / where
+        if where.is_dir():
+            return True
+    return False
+
+
+@gatherer("ahead_of_origin")
+def g_ahead_of_origin(ctx):
+    """The branch has commits `origin/issue-<N>` lacks; where origin has no
+    such branch, commits past BASE_SHA. No local branch has nothing ahead,
+    and no base_sha has no fixed point to count from, so both are false."""
+    if not ctx.branch_local():
+        return False
+    if ctx.branch_remote():
+        spec = f"origin/{ctx.branch}..{ctx.branch}"
+    else:
+        base = chomp(read_or_none(ctx.path("base_sha")) or "")
+        if not base:
+            return False
+        spec = f"{base}..{ctx.branch}"
+    return int(chomp(ctx.git_ok("rev-list", "--count", spec))) > 0
+
+
+@gatherer("triage_rounds")
+def g_triage_rounds(ctx):
+    """`triage/round-*.md` files."""
+    return find_count(ctx.path("triage"), "round-*.md")
+
+
+@gatherer("triage_newer_than_since")
+def g_triage_newer_than_since(ctx):
+    """The newest round, by its number k, was triaged against the SINCE now in
+    `pushed_at`: its first line's recorded `since` equals `pushed_at` as a
+    string. Never the file time: Step 8 writes reply URLs into a round after
+    the push, so a file-time check read every answered round as current, and
+    on PR #134 a P0 posted after the replies resumed as done (#139). Line 1
+    alone, since a quoted finding further down can look like a heading. No
+    round is false; a heading with no `since`, or no `pushed_at`, is null,
+    because that round can't say which push it answered."""
+    newest = newest_round_by_k(ctx.path("triage"))
+    if newest is None:
+        return False
+    match = SINCE_HEADING.fullmatch(first_line(newest[1]) or "")
+    recorded = match.group(1) if match else ""
+    pushed = chomp(read_or_none(ctx.path("pushed_at")) or "")
+    if not recorded or not pushed:
+        return None
+    return recorded == pushed
+
+
+def newest_round_table(ctx, by_k):
+    """The newest triage round's table, or None with no round."""
+    if by_k:
+        newest = newest_round_by_k(ctx.path("triage"))
+        return None if newest is None else triage_table(newest[1])
+    rounds = newest_by_mtime(ctx.path("triage"), "round-*.md")
+    return triage_table(rounds[0]) if rounds else None
+
+
+@gatherer("triage_inscope_rows")
+def g_triage_inscope_rows(ctx):
+    """Rows of the newest round, by number, whose Scope cell begins `in scope`.
+    A capped round's `in scope; queued: review round cap reached (N)` counts,
+    and row 17 reads that round as all-queued anyway. No Scope column is null."""
+    table = newest_round_table(ctx, by_k=True)
+    if table is None:
+        return 0
+    columns, rows = table
+    if "Scope" not in columns:
+        return None
+    return sum(1 for r in rows if cell(r, columns["Scope"]).startswith("inscope"))
+
+
+@gatherer("repair_reports")
+def g_repair_reports(ctx):
+    """`reports/repair-*.json`: Step 7's triage repairs only. Step 4's are
+    `redteam-repair-<k>.json` and don't match, which keeps a build repair from
+    reading as a triage round's."""
+    return find_count(ctx.path("reports"), "repair-*.json")
+
+
+@gatherer("newest_repair_report")
+def g_newest_repair_report(ctx):
+    """`reports/repair-<k>.json` exists for the newest round k. Row 16 reads
+    this rather than comparing counts, because an all-queued round writes no
+    repair report and the counts drift apart."""
+    newest = newest_round_by_k(ctx.path("triage"))
+    return newest is not None and ctx.path("reports", f"repair-{newest[0]}.json").is_file()
+
+
+URL = re.compile(r"https?://")
+
+
+@gatherer("triage_rows_unanswered")
+def g_triage_rows_unanswered(ctx):
+    """Rows, across every round, whose Reply cell holds no URL. Not cut off at
+    SINCE: Step 8 pushes before it replies, so the rows it owes are always
+    older than the push that answered them. A round with no Reply column is
+    null, since it can't say which rows were answered."""
+    try:
+        names = sorted(n for n in os.listdir(ctx.path("triage")) if fnmatch.fnmatchcase(n, "round-*.md"))
+    except FileNotFoundError:
+        return 0
+    total = 0
+    for name in names:
+        columns, rows = triage_table(ctx.path("triage", name))
+        if "Reply" not in columns:
+            return None
+        index = columns["Reply"]
+        total += sum(1 for r in rows if not (index < len(r) and URL.search(r[index])))
+    return total
+
+
+@gatherer("deferred_comment_needed")
+def g_deferred_comment_needed(ctx):
+    """Some `queue.md` row is missing, whole, from the author's `## Deferred
+    findings` comment. The whole row, because a Status moved from `queued` to
+    `filed #M` is a row the comment no longer carries: comparing Sources alone
+    missed that, and testing for the heading alone missed a later round's
+    rows. True with no comment, false with no queue rows, and false with no
+    bundle, where there is no pull request; null there would stop every
+    pre-PR resume, a fresh issue included."""
+    if ctx.bundle is None:
+        return False
+    queue = read_or_none(ctx.path("queue.md"))
+    rows = [l for l in (queue or "").split("\n") if QUEUE_ROW.match(l)]
+    if not rows:
+        return False
+    author = normalize_login(ctx.author)
+    carried = []
+    seen_heading = False
+    # The heading opens the section for good, across later comments too, as
+    # the awk over the concatenated bodies read it.
+    for comment in ctx.bundle["comments"]:
+        if normalize_login(comment.get("author")) != author:
+            continue
+        body = comment.get("body") if isinstance(comment.get("body"), str) else ""
+        for line in body.split("\n"):
+            if line.startswith("## Deferred findings"):
+                seen_heading = True
+            if seen_heading:
+                carried.append(line)
+    return any(not any(row in line for line in carried) for row in rows)
+
+
+def count_rows(table, severities, need_scope):
+    if table is None:
+        return 0
+    columns, rows = table
+    if "Severity" not in columns or (need_scope and "Scope" not in columns):
+        return None
+    total = 0
+    for r in rows:
+        if cell(r, columns["Severity"]) not in severities:
+            continue
+        if need_scope and not cell(r, columns["Scope"]).startswith("inscope"):
+            continue
+        total += 1
+    return total
+
+
+@gatherer("triage_blocking_rows")
+def g_triage_blocking_rows(ctx):
+    """Rows of the newest round, by file time, whose Severity cell is P0, P1,
+    or blocking. The cell and nothing else, because a quoted finding can say
+    "P1" on a row the reviewer marked lower. No Severity column is null
+    rather than 0; no round is 0."""
+    return count_rows(newest_round_table(ctx, by_k=False), ("P0", "P1", "blocking"), False)
+
+
+@gatherer("max_review_rounds")
+def g_max_review_rounds(ctx):
+    """The `--max-review-rounds` value Step 0 wrote, and 2 with no file, so a
+    run started before the flag existed is capped at the default rather than
+    stopped on a field nobody could have written."""
+    text = read_or_none(ctx.path("max_review_rounds"))
+    if text is None:
+        return 2
+    try:
+        return int(text.strip())
+    except ValueError:
+        raise ProbeError(f"max_review_rounds holds {text.strip()!r}, not a number")
+
+
+@gatherer("triage_stop_rows")
+def g_triage_stop_rows(ctx):
+    """In-scope rows of the newest round, by file time, whose Severity is P0
+    or blocking. Narrower than `triage_blocking_rows` because a capped round
+    holding P1 rows has to reach Step 8, and in-scope only because the cap
+    queues only in-scope rows. No Severity or no Scope column is null."""
+    return count_rows(newest_round_table(ctx, by_k=False), ("P0", "blocking"), True)
+
+
+@gatherer("repair_ar_settled")
+def g_repair_ar_settled(ctx):
+    """For the newest round k, `redteam/trigger-repair-<k>.txt` starts
+    `fired: no` or `redteam/ar-state-repair-<k>.txt` holds `UNVERIFIED: 0`.
+    The repair's own files, apart from Step 4's, which record the build's
+    review. False with neither."""
+    newest = newest_round_by_k(ctx.path("triage"))
+    if newest is None:
+        return False
+    k = newest[0]
+    if first_line(ctx.path("redteam", f"trigger-repair-{k}.txt")) == "fired: no":
+        return True
+    text = read_or_none(ctx.path("redteam", f"ar-state-repair-{k}.txt"))
+    return text is not None and "UNVERIFIED: 0" in text
+
+
+@gatherer("review_over_budget")
+def g_review_over_budget(ctx):
+    """`budget`'s verdict on `timing.log`, with no `--now`: a crashed step's
+    open start closes at the last stamp the run recorded, so the hours it sat
+    dead stay out. No log is false; a malformed log is null rather than under
+    budget."""
+    try:
+        text = read_text(ctx.path("timing.log"))
+    except FileNotFoundError:
+        text = ""
+    try:
+        return budget_over(text)[2]
+    except InputError as e:
+        raise ProbeError("; ".join(e.problems))
+
+
+@gatherer("repair_diff_triggers")
+def g_repair_diff_triggers(ctx):
+    """The repair's own diff, from the `repair-base-<k>` SHA Step 7 recorded to
+    HEAD, hits trigger row 1, 2, or 4 (money, authz, schema), since a reviewer
+    can label a real blocker P2. The repair's diff and never the branch's:
+    re-reading the branch after every repair re-fired every repair, the loop
+    #151 removed. No base file is false. A base no longer an ancestor of HEAD
+    is false too, since a rebase after Step 8 item 1 orphans it and a diff from
+    it reads upstream lines as the repair's (#137). A diff or matcher failure
+    is null, never a quiet false."""
+    newest = newest_round_by_k(ctx.path("triage"))
+    base_file = ctx.path("redteam", f"repair-base-{newest[0] if newest else ''}")
+    if not base_file.is_file():
+        return False
+    base = chomp(read_text(base_file))
+    if ctx.git("merge-base", "--is-ancestor", base, "HEAD").returncode == 1:
+        return False
+    diff = ctx.git("diff", f"{base}..HEAD")
+    if diff.returncode != 0:
+        raise ProbeError(git_failure(("diff",), diff))
+    if not MATCH_TRIGGERS.is_file():
+        raise ProbeError(f"no matcher at {MATCH_TRIGGERS}")
+    matched = subprocess.run(
+        [sys.executable, str(MATCH_TRIGGERS), "rows", "--only", "1,2,4"],
+        input=chomp(diff.stdout) + "\n",
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="surrogateescape",
+        timeout=GIT_TIMEOUT,
+    )
+    if matched.returncode != 0:
+        raise ProbeError(f"match-triggers.py: exit {matched.returncode}")
+    return bool(chomp(matched.stdout))
+
+
+def find_tree(root, branch, terminal=False):
+    """`(tree, problem)`: the worktree holding `branch`, else ROOT where no
+    local `branch` exists, since rows 1 and 4 through 7 own those runs.
+    `terminal` (a MERGED or CLOSED bundle) takes ROOT for a `branch` in no
+    worktree too: row 1 answers from `pr_state` alone, and a merge usually
+    leaves ROOT back on main with the branch still local.
+
+    A local `branch` that no worktree has checked out is a problem, not
+    ROOT: ROOT's HEAD is another branch, and reading its status and log
+    counted a committed, reported task as unreported, so row 7 re-dispatched
+    it (PR #177 review). A second flag naming TREE would be one more value an
+    agent could pass wrong on a resume."""
+    done = run_git(root, "worktree", "list", "--porcelain")
+    if done.returncode != 0:
+        return None, git_failure(("worktree", "list"), done)
+    current = None
+    for line in done.stdout.split("\n"):
+        if line.startswith("worktree "):
+            current = line[len("worktree "):]
+        elif line == f"branch refs/heads/{branch}" and current:
+            return Path(current), None
+    local = run_git(root, "show-ref", "--verify", "--quiet", f"refs/heads/{branch}")
+    if local.returncode == 0 and not terminal:
+        return None, (
+            f"{branch} exists locally but is not checked out in any worktree, so "
+            f"no tree shows its work; check it out (or git worktree add a tree "
+            f"for it) and re-run"
+        )
+    if local.returncode not in (0, 1):
+        return None, git_failure(("show-ref",), local)
+    return root, None
+
+
+def probe_since(run_dir, root, branch):
+    """SINCE as SKILL.md defines it: `pushed_at`, else the committer date of
+    the branch head. `(moment, problems)`; a None moment is no SINCE at all.
+
+    Only an absent `pushed_at` falls back. One that exists but is empty,
+    unreadable, or not a timestamp is a damaged cutoff: falling back to the
+    commit date read a `garbage` marker beside a 13:00 commit as a 13:00
+    cutoff, and a 12:00 finding scored `pending` (PR #177 review)."""
+    problems = []
+    try:
+        pushed = read_or_none(run_dir / "pushed_at")
+    except OSError as e:
+        return None, [f"pushed_at: {e.strerror or e}"]
+    if pushed is not None:
+        moment = parse_ts(chomp(pushed), "pushed_at", problems)
+        return (moment, []) if moment is not None else (None, problems)
+    problems.append("no pushed_at")
+    done = run_git(root, "log", "-1", "--format=%cI", f"refs/heads/{branch}")
+    if done.returncode == 0 and chomp(done.stdout):
+        moment = parse_ts(chomp(done.stdout), f"{branch} committer date", problems)
+        if moment is not None:
+            return moment, []
+    problems.append(f"no {branch} branch to read a committer date from")
+    return None, problems
+
+
+def probe_field_ok(kind, allowed, value):
+    if value is None:
+        return True
+    if kind == "bool":
+        return isinstance(value, bool)
+    if kind == "int":
+        return isinstance(value, int) and not isinstance(value, bool)
+    return value in allowed
+
+
+def cmd_probe(args):
+    def usage(problems):
+        for problem in problems:
+            sys.stderr.write(f"run-state: probe: {problem}\n")
+        return 3
+
+    names = [name for name, _, _ in PROBE_FIELDS]
+    missing = [n for n in names if n not in GATHERERS]
+    extra = [n for n in GATHERERS if n not in names]
+    if missing or extra:
+        return usage(
+            [f"no gatherer for {n}" for n in missing]
+            + [f"a gatherer for {n}, which PROBE_FIELDS does not name" for n in extra]
+        )
+    if not re.fullmatch(r"[1-9][0-9]*", args.issue):
+        return usage([f"--issue must be a number, got {args.issue!r}"])
+    herdr_state = args.herdr_state
+    if herdr_state is None:
+        # Under HERDR a defaulted `absent` skips row 2's wait and dispatches a
+        # second agent into a tree one is still working in.
+        if os.environ.get("HERDR_ENV") == "1":
+            return usage(["HERDR_ENV=1 but no --herdr-state; read the issue agent's state from herdr and pass it"])
+        herdr_state = "absent"
+    root = Path(args.root).absolute()
+    try:
+        inside = run_git(root, "rev-parse", "--is-inside-work-tree")
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return usage([f"--root {args.root}: {e}"])
+    if inside.returncode != 0 or chomp(inside.stdout) != "true":
+        return usage([f"--root {args.root} is not a git work tree"])
+    run_dir = Path(args.run_dir).absolute()
+    branch = f"issue-{args.issue}"
+
+    bundle = None
+    review_state = None
+    if args.pr_bundle:
+        try:
+            bundle = load_json(args.pr_bundle, "bundle")
+            check_bundle(bundle)
+        except InputError as e:
+            return usage(e.problems)
+        if "state" not in bundle:
+            return usage(["bundle: missing state; save it with this script's review --save"])
+    author = args.author or (bundle or {}).get("author")
+    # A merged or closed PR is row 1 whatever else is missing, and cleanup can
+    # leave no pushed_at and no branch, so its review is never scored: `phase`
+    # reads row 1 before anything reads review_state (PR #177 review).
+    if bundle is not None and bundle["state"] == "OPEN":
+        since, problems = probe_since(run_dir, root, branch)
+        if since is None:
+            return usage([f"review_state: no SINCE to score the bundle against: {'; '.join(problems)}"])
+        try:
+            review_state, _ = classify(bundle, since, author)
+        except InputError as e:
+            return usage(e.problems)
+
+    tree, problem = find_tree(
+        root, branch, terminal=bundle is not None and bundle["state"] in ("MERGED", "CLOSED")
+    )
+    if tree is None:
+        return usage([problem])
+    ctx = ProbeContext(
+        run_dir, tree, args.issue, bundle, author, herdr_state, review_state
+    )
+    probe = {}
+    for name, kind, allowed in PROBE_FIELDS:
+        try:
+            value = GATHERERS[name](ctx)
+        except Exception as e:  # one field's failure is that field's null
+            sys.stderr.write(f"run-state: probe: {name}: {e}\n")
+            value = None
+        if not probe_field_ok(kind, allowed, value):
+            sys.stderr.write(f"run-state: probe: {name}: gathered {value!r}, not a {kind}\n")
+            value = None
+        probe[name] = value
+    print(json.dumps(probe, indent=2))
+    return 0
+
+
 def _overlap_seconds(start, end, spans):
     """Seconds of [start, end) that any of `spans` covers. `spans` is sorted
     and non-overlapping, so no second is subtracted twice."""
@@ -1212,17 +2210,32 @@ def cmd_budget(args):
         return 3
 
     try:
-        build_seconds, review_seconds, raised = parse_timing_log(text, "timing.log", now)
+        build_seconds, review_seconds, over = budget_over(text, args.ratio, now)
     except InputError as e:
         for problem in e.problems:
             sys.stderr.write(f"run-state: {problem}\n")
         return 3
 
+    ratio_text = "n/a" if build_seconds == 0 else f"{review_seconds / build_seconds:.2f}"
+    print(
+        f"build: {round(build_seconds / 60)}m review: {round(review_seconds / 60)}m "
+        f"ratio: {ratio_text} over: {'yes' if over else 'no'}"
+    )
+    return 0
+
+
+def budget_over(text, ratio=None, now=None):
+    """`(build_seconds, review_seconds, over)` for a timing.log's text.
+
+    One threshold rule for `budget` and the probe's `review_over_budget`, so
+    the stop the probe reports is the one `budget` prints. Raises InputError
+    on a malformed log."""
+    build_seconds, review_seconds, raised = parse_timing_log(text, "timing.log", now)
     # A flag typed for this one check outranks the log, and the log's last
     # raise outranks the 2.0 the issue set. `--ratio` has no preset value
     # so an explicit `--ratio 2.0` still counts as explicit.
-    if args.ratio is not None:
-        threshold = args.ratio
+    if ratio is not None:
+        threshold = ratio
     elif raised is not None:
         threshold = raised
     else:
@@ -1230,15 +2243,8 @@ def cmd_budget(args):
     # Zero seconds, not zero rounded minutes: a 25 s build rounds to 0m, and
     # gating on that read 5 h of review as under budget.
     if build_seconds == 0:
-        ratio_text, over = "n/a", "no"
-    else:
-        ratio = review_seconds / build_seconds
-        ratio_text, over = f"{ratio:.2f}", "yes" if ratio > threshold else "no"
-    print(
-        f"build: {round(build_seconds / 60)}m review: {round(review_seconds / 60)}m "
-        f"ratio: {ratio_text} over: {over}"
-    )
-    return 0
+        return build_seconds, review_seconds, False
+    return build_seconds, review_seconds, review_seconds / build_seconds > threshold
 
 
 def cmd_phase(args):
@@ -1286,11 +2292,28 @@ def parse_args(argv=None):
     b.add_argument("--now", metavar="ISO8601", help="close open starts at this UTC moment rather than the log's latest stamp")
     b.set_defaults(func=cmd_budget)
 
+    g = sub.add_parser("probe", help="gather the resume probe that phase reads")
+    g.add_argument("--run-dir", metavar="DIR", required=True, help="RUN_DIR; read, never created")
+    g.add_argument("--root", metavar="ROOT", required=True, help="the repo's work tree; the issue branch's worktree is found from it")
+    g.add_argument("--issue", metavar="N", required=True, help="the issue number")
+    g.add_argument("--pr-bundle", metavar="FILE", help="a bundle `review PR --save FILE` wrote; omit where there is no pull request")
+    g.add_argument("--herdr-state", metavar="STATE", choices=HERDR_STATES, help="the issue agent's state from herdr: " + ", ".join(HERDR_STATES))
+    g.add_argument("--author", metavar="LOGIN", help="the PR author; defaults to the bundle's author")
+    g.set_defaults(func=cmd_probe)
+
     return ap.parse_args(argv)
 
 
 def main(argv=None):
-    args = parse_args(argv)
+    argv = sys.argv[1:] if argv is None else list(argv)
+    try:
+        args = parse_args(argv)
+    except SystemExit as e:
+        # probe follows the validator convention's 3 for usage; the other
+        # subcommands keep argparse's 2, which this docstring has always said.
+        if e.code == 2 and argv[:1] == ["probe"]:
+            return 3
+        raise
     return args.func(args)
 
 

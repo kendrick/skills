@@ -1,0 +1,16 @@
+{
+  "state": "OPEN",
+  "author": "kendrick",
+  "reactions": [],
+  "reviews": [],
+  "threads": [],
+  "comments": [
+    {
+      "author": "kendrick",
+      "created_at": "2026-09-20T12:30:00Z",
+      "body": "## Deferred findings\n\n| # | Source | Finding | Outside because | Recommendation | Status |\n|---|---|---|---|---|---|\n| 1 | https://github.com/o/r/pull/9#discussion_r3 | \"Consider a retry.\" | not in the diff | `file-issue` — retry | queued |\n",
+      "id": 301,
+      "url": "https://github.com/o/r/pull/9#issuecomment-301"
+    }
+  ]
+}

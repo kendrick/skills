@@ -47,7 +47,13 @@ Scope is not a judgment about whether the finding is right. An out-of-scope find
 
 ## The round file
 
-Each round is `RUN_DIR/triage/round-<k>.md`, and its first line is its heading: `# Triage round <k>, since <SINCE>`. `<SINCE>` is the exact `--since` value the poll that returned `findings` ran with, which is the contents of `RUN_DIR/pushed_at`, copied verbatim. Write it once, when the round is created, and never rewrite it. The table of rows follows.
+Each round is `RUN_DIR/triage/round-<k>.md`, and its first line is its heading: `# Triage round <k>, since <SINCE>`. `<SINCE>` is the exact `--since` value the poll that returned `findings` ran with, which is the contents of `RUN_DIR/pushed_at`, copied verbatim. Write it once, when the round is created, and never rewrite it. The table of rows follows, under this header:
+
+```
+| # | Source | Finding | Severity | Scope | Reply |
+```
+
+The resume probe reads the Severity, Scope, and Reply cells by their header names, so keep those three names as written. A round missing one of those columns reads `null` for every probe field that needs it, and the run stops naming that field. The Reply cell stays empty until Step 8 posts the reply, then holds that reply's URL.
 
 The resume probe decides whether the newest round is current by comparing this recorded SINCE with `pushed_at` (`triage_newer_than_since` in `references/resume.md`). The file itself changes after the push that answers it, because Step 8 writes each reply URL into its row, so nothing but the heading can say which push a round was written against. A round with no `since` in its heading stops the run.
 
