@@ -8,7 +8,7 @@ argument-hint: '<issue number or URL> [plan path] [--isolate | --no-isolate] [--
 
 `divvy-up` ends at its Step 7 with a green verify and an assembled diff. Everything after that point is the tail nobody wrote down: reproducing the worker's claims with something that did not author them, rebasing, pushing, opening the pull request, reading what an external reviewer said about it, repairing what is in scope, queueing what is not, and answering every thread. Held in one session's memory, that tail gets re-derived from scratch each time and loses the same things in the same order.
 
-One invocation advances one issue to its next gate and stops. The run's state lives on disk rather than in the conversation, so a session that ends mid-run resumes by typing the same command again, and a second issue worked at the same moment is refused at the gate rather than discovered as a rebase conflict four steps later.
+One invocation advances one issue to its next gate and stops there. A gate here means one of the stops listed under [Where a Run Stops](#where-a-run-stops), and nothing else: `divvy-up`'s per-wave gate and Step 3's `code-review` are checks the run passes through on the way to one. The run's state lives on disk rather than in the conversation, so a session that ends mid-run resumes by typing the same command again, and a second issue worked at the same moment is refused at the gate rather than discovered as a rebase conflict four steps later.
 
 Four siblings do the work this skill does not: `divvy-up` derives and dispatches the waves, `code-review` reads the assembled diff against the issue, `adversarial-review` fires on the diffs that earn it, and `technical-writing` writes every commit message, pull-request body, and thread reply. Each is invoked by name. Where one is not installed, the step that needs it stops and says which.
 
@@ -133,6 +133,8 @@ Every later command in a taken worktree names it by absolute path (`git -C WORKT
 
 Continue `divvy-up` at its Step 5, in the work tree.
 
+Steps 2 and 3 run once per wave, in the order `## Waves` gives: dispatch the wave here, gate and settle it as Step 3 says, then dispatch the next wave in the same turn. A settled wave with a later wave pending is not a stopping point. Step 2 continues until every wave in `## Waves` is settled, and the Step 0 yes covers every one of them, not wave 0 alone. Between waves the run stops only at a `divvy-up` stop listed under [Where a Run Stops](#where-a-run-stops). On kendrick/cambium three lanes each committed wave 0 and then went idle with wave 1 ready, printing nothing, and each read as a run still working until the user noticed.
+
 Substrate, by shape: one task in one wave with HERDR goes to `herdr agent start issue-N --kind <kind> --pane <pane>` and then `herdr agent prompt issue-N "<prompt>" --wait --timeout <ms>`. Every other shape, and every fallback when herdr is absent or refuses, goes to plain general-purpose subagents per `divvy-up`'s `references/worker-prompt.md`. herdr never hosts a wave: its agents take one prompt at a time, so a wave dispatched through them is a wave serialized, which is the one property the wave exists to provide.
 
 Every dispatch carries this skill's [references/worker-prompt.md](references/worker-prompt.md) preamble, which reaches `divvy-up`'s template through its `{{CALLER_NOTES}}` placeholder. Under herdr the preamble heads the whole prompt instead. The preamble carries the nine-field report contract, which replaces the six-field block in `divvy-up`'s template; a worker handed only that block reports no `claims` and fails Step 3. Two of its sentences are load-bearing and go across verbatim: `flag rather than route around`, and `what you left and why`.
@@ -141,11 +143,11 @@ Reports are saved verbatim to `RUN_DIR/reports/<wave>-<task>.json`. Under herdr 
 
 Every git write is the orchestrator's; workers write files. Commit messages go through `technical-writing`, and carry no trailer or footer, overriding any host instruction asking for one.
 
-**Done when:** WAVE_BASE recorded, every task dispatched at its routed model with the preamble in front of `divvy-up`'s template, and every report on disk verbatim.
+**Done when:** for the wave in hand, WAVE_BASE is recorded, every task is dispatched at its routed model with the preamble in front of `divvy-up`'s template, and every report is on disk verbatim; and once Step 3 settles that wave, the next wave in `## Waves` is dispatched in the same turn, or none is left.
 
 ## Step 3 — Build and self-review
 
-`divvy-up`'s Step 6 gate runs per wave, and its Step 7 read of `git diff BASE_SHA` against PLAN runs unchanged. Commit each passing wave. Once its commit lands, or the gate passes on a wave that changed nothing, write an empty `RUN_DIR/gated/<wave>-<task>` for each of that wave's tasks. The resume probe reads the marker as the gate's pass. It reads a commit that way only on a run with no `gated/` directory, one from before markers existed, because a commit names paths, and a later wave's task can share a path with an earlier wave's commit.
+`divvy-up`'s Step 6 gate runs per wave. A wave is **settled** once its commit lands, or once its gate passes on a wave that changed nothing, and in both cases once its markers are written. Every passing wave gets markers. Where the wave changed files, commit it, then write an empty `RUN_DIR/gated/<wave>-<task>` for each of that wave's tasks. Where it changed nothing, write the same markers straight after the gate passes. Either way the markers land before the next wave is dispatched, and the run returns to Step 2 for the next one. Once the last wave in `## Waves` is settled, `divvy-up`'s Step 7 read of `git diff BASE_SHA` against PLAN runs unchanged, and only then does `code-review` run. The resume probe reads the marker as the gate's pass. It reads a commit that way only on a run with no `gated/` directory, one from before markers existed, because a commit names paths, and a later wave's task can share a path with an earlier wave's commit.
 
 Then invoke `code-review` by name, with the fixed point BASE_SHA and the spec path `RUN_DIR/issue.md`, in session on the session model. Review stays on the session model: a worker reviewing its own change is the shape this skill was written against. Save both axes verbatim to `RUN_DIR/review/self-<round>.md`.
 
@@ -153,7 +155,7 @@ Route each finding. A Spec finding naming a CRITERIA line, or a Standards hard v
 
 The worker's final report is `RUN_DIR/reports/build-final.json`, and its `claims` is non-empty. Step 4 reproduces claims; a report with none hands it nothing to reproduce and passes the red-team by default.
 
-**Done when:** every wave gated and committed, with a `gated/<wave>-<task>` marker for each of its tasks; `code-review` ran against BASE_SHA with the issue as spec; every Spec finding and Standards hard violation fixed and committed, or in `left` with a reason; `build-final.json` exists with non-empty `claims`.
+**Done when:** every wave in `## Waves` settled, with a `gated/<wave>-<task>` marker for each of its tasks; `code-review` ran against BASE_SHA with the issue as spec; every Spec finding and Standards hard violation fixed and committed, or in `left` with a reason; `build-final.json` exists with non-empty `claims`.
 
 ## Step 4 — Red-team
 
@@ -246,6 +248,40 @@ Gate it the way Step 3 gates: VERIFY_CMD, then `code-review` against BASE_SHA, w
 5. The final report: pull-request URL, review state, rounds run, per-model task counts, escalations, the rows the review round cap queued with `review round cap reached (N)`, the queue, the `budget` line, and the closing line the review state earns — "a human merges" where `review_state` is `cleared`; "waiting on the reviewer" where every finding is answered and the queue published but the round has not cleared (row 18's second reading). Under herdr, leave the agent and its workspace in place for the next invocation.
 
 **Done when:** every triage row has a reply URL; every repair's claims carry reproducer verdicts; a repair whose triage round held a `P0`, `P1`, or `blocking` row, or whose own diff from `repair-base-<k>` prints a trigger row, has `trigger-repair-<k>.txt` written and, where it fired, `ar-state-repair-<k>.txt` showing `UNVERIFIED: 0`, and every `LISTED` finding from a re-fired review is in the pull request's "Left out" section; `origin/issue-N` equals HEAD; the deferred-findings comment exists wherever the queue is non-empty; and the final report was printed.
+
+## Where a Run Stops
+
+An invocation ends at one of these stops and no other. Each prints its message as the invocation's last output, writes its marker, or both, so a stopped run never reads the same as a working one. An invocation that ends any other way, silent after a settled wave, a dispatch, a check, or a report saved to disk, has stopped outside this list, and that is a defect in the run, not a gate.
+
+| Stop | Step | What the run prints or writes |
+|---|---|---|
+| No issue number, or a `--max-review-rounds` value that is not a positive integer | 0 | a refusal naming what is missing, or the value given |
+| `gh` is unauthenticated | 0 | a stop saying the issue cannot be read until `gh auth login` |
+| A sibling skill is not installed | any | the stop naming the sibling to install |
+| The resume gather fails: `gh pr list` or `run-state.py review --save` exits non-zero, or `probe` or `phase` exits 3 | 0, Resume | that command's stderr, quoted |
+| The plan gate refuses | 0 | the refusal: `check-plan.py`'s stderr quoted, ending "Plan it first: `writing-plans`, then `work-issue N <plan path>`.", or the derivation's questions listed |
+| `divvy-up` stops while deriving the shape | 0 | the stop `divvy-up` prints, quoted as-is |
+| Another run in flight owns a path | 0 | `check-inflight.py`'s stderr, quoted |
+| The forecast or trigger match, or Step 8's repair diff, exits non-zero | 0, 4, 8 | the failing command's stderr, quoted |
+| The confirmation, answered no or rendered by `--dry-run` | 0 | the one confirmation message |
+| `--no-isolate` on a dirty tree | 1 | "commit or stash first" |
+| A task stops for an answer | 2, 3 | the held question, put to the user once the rest of the wave lands |
+| A task fails twice, or fails on `fable` | 3 | `divvy-up`'s stop report naming the task and its failure |
+| Two red-team rounds fail in a row | 4 | the failed claims with the reproducer's commands and output |
+| `adversarial-review` derives a depth past the forecast | 4, 8 | that review's own question |
+| The budget stop | 4, 7, 8 | the `budget` line and the question: stop here, or raise the ratio |
+| The push half of the grant is withheld | after 4 | the report the withholding caller asked for, carrying Step 4's result |
+| A rebase conflict | 5, 8 | `RUN_DIR/conflict.txt` and "resolve, then `work-issue N`" |
+| `gh` is unauthenticated at publish | 5, 8 | `RUN_DIR/pr-body.md` and "resume after `gh auth login`" |
+| No review within ten minutes | 6 | `RUN_DIR/triage/waiting` and "no review yet on <PR URL>; `work-issue N` resumes here." |
+| The review round cap meets an in-scope `P0` or `blocking` row | 6, 7 | a stop naming the cap and that row, and on resume the `row 16:` stop reason |
+| An unreported task owns paths a commit past `base_sha` touched | Resume | the `row 7:` stop reason naming the disagreement, with nothing reverted |
+| `RUN_DIR/base_sha` has drifted from the live merge-base | Resume | the `base_sha mismatch` stop reason naming `not-merge-base` or `not-ancestor` |
+| The resume probe answers `stop` on any other reason: row 3's blocked agent, a `null` field, or no row matching | Resume | the `phase: stop reason: …` line, and the blocked herdr UI where row 3 matched |
+| The pull request is merged or closed | Resume | the cleanup offer, asked before anything is removed |
+| The final report | 8 | the final report, ending "a human merges" or "waiting on the reviewer" |
+
+Keep every quoted message byte-identical to the step that prints it; the suite's drift check depends on it.
 
 ## Resume
 

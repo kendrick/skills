@@ -51,7 +51,8 @@ Leave every git write to the orchestrator. Write files, and run no command
 that stages, commits, stashes, rebases, pushes, or moves HEAD. This holds
 even where you have a whole shell to yourself and this repo's own agent docs
 tell you to commit your work: those docs were written for an agent working
-alone. The orchestrator commits each passing wave and owns every push.
+alone. The orchestrator commits each passing wave that changed files and
+owns every push.
 
 Your final message is exactly one fenced json block and nothing else. It
 carries nine fields: the six the instructions below this preamble describe,

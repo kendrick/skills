@@ -1,6 +1,6 @@
 # work-issue—evals
 
-The smoke test (`bash tests/work-issue-smoke.sh`) pins the documents and the scripts: `check-plan.py` and `check-inflight.py` against the hand-authored plans under `tests/fixtures/work-issue/plans/`, `run-state.py review` against eleven review bundles, `run-state.py phase` against one probe per Resume row, `run-state.py probe` against scratch run directories whose gathered probe `phase` must place on the same row as the hand-written one, and every load-bearing phrase in `SKILL.md` and the references. It proves the gates score a fixture the way the contract says and that the documents still carry the rules they were built around. It says nothing about whether a real issue reaches a real pull request, whether a reproducer actually refutes a claim it was handed, whether `gh` and herdr behave the way the steps assume, or whether one confirmation really is the only question a run asks. Those need a live run, and this file is the procedure.
+The smoke test (`bash tests/work-issue-smoke.sh`) pins the documents and the scripts: `check-plan.py` and `check-inflight.py` against the hand-authored plans under `tests/fixtures/work-issue/plans/`, `run-state.py review` against eleven review bundles, `run-state.py phase` against one probe per Resume row, `run-state.py probe` against scratch run directories whose gathered probe `phase` must place on the same row as the hand-written one, and every load-bearing phrase in `SKILL.md` and the references. It proves the gates score a fixture the way the contract says and that the documents still carry the rules they were built around. It says nothing about whether a real issue reaches a real pull request, whether a reproducer actually refutes a claim it was handed, whether `gh` and herdr behave the way the steps assume, whether one confirmation really is the only question a run asks, or whether a run keeps dispatching past a committed wave. Those need a live run, and this file is the procedure.
 
 **Scenarios are unrun until somebody runs them.** This file names the setup and the pass condition; it records no result until a human has actually executed one.
 
@@ -202,6 +202,22 @@ python3 work-issue/scripts/run-state.py review <PR> --since "$(cat RUN_DIR/pushe
 **Commands:** re-invoke `/work-issue <N>` so Step 5 rebases. Then post one in-scope review finding so Steps 6 through 8 run, merge a second upstream pull request of the same shape, and let Step 8 item 2 rebase again. After each rebase, run `cat RUN_DIR/base_sha`, `git merge-base origin/<DEFAULT> issue-<N>`, and `git diff --name-only "$(cat RUN_DIR/base_sha)"..HEAD`. Last, write the pre-rebase SHA back into `RUN_DIR/base_sha` and re-invoke.
 
 **Pass condition:** after each rebase, `RUN_DIR/base_sha` equals `git merge-base origin/<DEFAULT> issue-<N>`, and the diff from it lists only files the plan owns. Step 7's `code-review` output, the reproducer's prompt, and any `adversarial-review` FIXED_POINT name the rewritten SHA, and none of them mentions either upstream file. With the pre-rebase SHA written back, the `base_sha_state` probe prints `not-merge-base` and `run-state.py phase` stops with `base_sha mismatch (not-merge-base)`. Fails if any review after a rebase diffs against the pre-rebase base or names an upstream file, or if the hand-reverted file resumes instead of stopping.
+
+### 20. A Two-Wave Plan Runs Both Waves in One Invocation
+
+**Setup:** a sandbox issue whose approved plan derives to exactly two waves: wave 0 one contract task (a types or schema file), wave 1 one task that consumes it, so `divvy-up`'s Step 3 cannot put them in one wave. Clean tree, `gh` authenticated. A second sandbox issue with a plan of the same shape for the resumed run.
+
+**Commands:** for the first issue, answer the one confirmation yes and leave the session alone until it reports. Then read the transcript, the log since the base, and the reports directory:
+
+```
+> /work-issue <N> PLAN.md
+git log --oneline "$(cat RUN_DIR/base_sha)"..HEAD
+ls RUN_DIR/reports/
+```
+
+For the second issue, start it the same way, kill the session as soon as the wave-0 commit lands, re-invoke `/work-issue <N2>`, and read the same three things.
+
+**Pass condition:** in both runs the wave-1 dispatch follows the wave-0 commit in the same turn, with no message to the user and no invocation boundary between them. Both waves' commits are in the log and both waves' reports are on disk. The resumed run places itself at row 7, dispatches wave 1 without re-dispatching wave 0, and carries on past it the same way. Each invocation's last output is the message or marker a row of `Where a Run Stops` names, normally `RUN_DIR/triage/waiting` with "no review yet on <PR URL>; `work-issue N` resumes here." Fails if an invocation ends between the waves with no message and no marker, which is the stall #135 recorded, and fails as well if it ends there with a message, since a committed wave with a later wave pending is not a stop.
 
 ## What These Evals Do Not Cover
 
