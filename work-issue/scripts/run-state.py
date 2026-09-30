@@ -93,6 +93,7 @@ PROBE_FIELDS = (
     ("has_waves", "bool", ()),
     ("wave_tasks", "int", ()),
     ("wave_reports", "int", ()),
+    ("wave_unreported_committed", "int", ()),
     ("self_reviews", "int", ()),
     ("build_final", "bool", ()),
     ("redteam_rounds", "int", ()),
@@ -867,7 +868,20 @@ def phase_of(probe):
     if flag(probe, "has_waves") and not (flag(probe, "base_sha") and flag(probe, "baseline")):
         return "1", "row 7: the Waves table is written but Step 1 left no base_sha or baseline.txt; resume at Step 1"
     if flag(probe, "has_waves") and wave_reports < wave_tasks:
-        return "2", f"row 7: {wave_reports} of {wave_tasks} wave reports on disk; resume at that wave"
+        # A commit past base_sha on an unreported task's owned paths is a
+        # gated wave whose report is missing, not a half-written one. On
+        # cambium #78 a filename glob read five committed waves as 0 of 5,
+        # and this row's revert would have thrown them away.
+        committed = count(probe, "wave_unreported_committed")
+        if committed > 0:
+            return (
+                "stop",
+                f"row 7: {wave_reports} of {wave_tasks} wave tasks count as reported, but "
+                f"{committed} unreported task(s) own paths a commit in git log "
+                "base_sha..HEAD touched; the reports and git log disagree, so stop "
+                "rather than revert committed work",
+            )
+        return "2", f"row 7: {wave_reports} of {wave_tasks} wave tasks count as reported (a report, clean owned paths, and a gate marker, or a commit where no gated/ exists); resume at that wave"
     if every_wave_report and count(probe, "self_reviews") == 0:
         return "3", "row 8: every wave report is in and no self-review; resume at the code-review invocation"
     if count(probe, "self_reviews") > 0 and not flag(probe, "build_final"):

@@ -32,7 +32,7 @@ Resolve once per invocation:
 - **BRANCH** — `issue-<N>`
 - **WORKTREE** — `<ROOT>/../<PROJECT>-issue-<N>/`
 - **WORKER** — `issue-<N>`: the herdr agent name, and the label for a plain subagent
-- **RUN_DIR** — `<COMMON>/work-issue/issue-<N>/`. Subpaths: `issue.md`, `plan.md`, `base_sha`, `baseline.txt`, `max_review_rounds`, `pushed_at`, `timing.log`, `conflict.txt`, `reports/`, `review/`, `redteam/`, `triage/`, `queue.md`, `pr-body.md`. A finished run moves to `<COMMON>/work-issue/closed/issue-<N>/`. Under the common dir it is one location visible from every worktree, invisible to `git status` without an exclude entry, and it survives `git worktree remove`. It holds phase *outputs* — reports, verdicts, triage rows — and the resume probe reads those outputs. Nothing in it records which phase the run believes it reached: a note saying "phase 4" outlives the crash that stranded the run at 3.
+- **RUN_DIR** — `<COMMON>/work-issue/issue-<N>/`. Subpaths: `issue.md`, `plan.md`, `base_sha`, `baseline.txt`, `max_review_rounds`, `pushed_at`, `timing.log`, `conflict.txt`, `reports/`, `gated/`, `review/`, `redteam/`, `triage/`, `queue.md`, `pr-body.md`. A finished run moves to `<COMMON>/work-issue/closed/issue-<N>/`. Under the common dir it is one location visible from every worktree, invisible to `git status` without an exclude entry, and it survives `git worktree remove`. It holds phase *outputs* — reports, verdicts, triage rows — and the resume probe reads those outputs. Nothing in it records which phase the run believes it reached: a note saying "phase 4" outlives the crash that stranded the run at 3.
 - **PLAN** — first hit wins:
 
   1. the path in the arguments
@@ -137,7 +137,7 @@ Substrate, by shape: one task in one wave with HERDR goes to `herdr agent start 
 
 Every dispatch carries this skill's [references/worker-prompt.md](references/worker-prompt.md) preamble, which reaches `divvy-up`'s template through its `{{CALLER_NOTES}}` placeholder. Under herdr the preamble heads the whole prompt instead. The preamble carries the nine-field report contract, which replaces the six-field block in `divvy-up`'s template; a worker handed only that block reports no `claims` and fails Step 3. Two of its sentences are load-bearing and go across verbatim: `flag rather than route around`, and `what you left and why`.
 
-Reports are saved verbatim to `RUN_DIR/reports/<wave>-<task>.json`. Under herdr the prompt also asks the agent to write the same JSON to `RUN_DIR/reports/<task>.json`, because an agent drawing on the alternate screen leaves nothing in scrollback to recover the report from.
+Reports are saved verbatim to `RUN_DIR/reports/<wave>-<task>.json`. Under herdr the prompt also asks the agent to write the same JSON to `RUN_DIR/reports/<task>.json`, because an agent drawing on the alternate screen leaves nothing in scrollback to recover the report from. The resume probe counts a task as reported when either `<wave>-<task>.json` or `<task>.json` exists, so a copy never made still reads as reported. A report is the agent's own write, made before Step 3's gate runs, so the probe also wants its `Files owned` paths clean, untracked files included, and gate evidence from Step 3: the task's `gated/<wave>-<task>` marker, or, on a run with no `gated/` directory, a commit past BASE_SHA on its owned paths. A task missing any of the three goes back through row 7, which reverts it and re-dispatches it, and the re-dispatch runs the gate.
 
 Every git write is the orchestrator's; workers write files. Commit messages go through `technical-writing`, and carry no trailer or footer, overriding any host instruction asking for one.
 
@@ -145,7 +145,7 @@ Every git write is the orchestrator's; workers write files. Commit messages go t
 
 ## Step 3 — Build and self-review
 
-`divvy-up`'s Step 6 gate runs per wave, and its Step 7 read of `git diff BASE_SHA` against PLAN runs unchanged. Commit each passing wave.
+`divvy-up`'s Step 6 gate runs per wave, and its Step 7 read of `git diff BASE_SHA` against PLAN runs unchanged. Commit each passing wave. Once its commit lands, or the gate passes on a wave that changed nothing, write an empty `RUN_DIR/gated/<wave>-<task>` for each of that wave's tasks. The resume probe reads the marker as the gate's pass. It reads a commit that way only on a run with no `gated/` directory, one from before markers existed, because a commit names paths, and a later wave's task can share a path with an earlier wave's commit.
 
 Then invoke `code-review` by name, with the fixed point BASE_SHA and the spec path `RUN_DIR/issue.md`, in session on the session model. Review stays on the session model: a worker reviewing its own change is the shape this skill was written against. Save both axes verbatim to `RUN_DIR/review/self-<round>.md`.
 
@@ -153,7 +153,7 @@ Route each finding. A Spec finding naming a CRITERIA line, or a Standards hard v
 
 The worker's final report is `RUN_DIR/reports/build-final.json`, and its `claims` is non-empty. Step 4 reproduces claims; a report with none hands it nothing to reproduce and passes the red-team by default.
 
-**Done when:** every wave gated and committed; `code-review` ran against BASE_SHA with the issue as spec; every Spec finding and Standards hard violation fixed and committed, or in `left` with a reason; `build-final.json` exists with non-empty `claims`.
+**Done when:** every wave gated and committed, with a `gated/<wave>-<task>` marker for each of its tasks; `code-review` ran against BASE_SHA with the issue as spec; every Spec finding and Standards hard violation fixed and committed, or in `left` with a reason; `build-final.json` exists with non-empty `claims`.
 
 ## Step 4 — Red-team
 
@@ -267,8 +267,8 @@ It prints `phase: <0-8|done|wait|stop> reason: <one line>` and exits 0, or exits
 | 4 | no `issue-N` branch locally or on origin, no RUN_DIR | Step 0 |
 | 5 | RUN_DIR exists, no branch anywhere | `plan.md` without `## Waves`: RUN_DIR → `closed/`, Step 0. With it: Step 0 redoes items 4, 6, and 7 (isolation, cross-run check, red-team mode) before the confirmation, then Step 1 |
 | 6 | branch exists; `plan.md` has no `## Waves` | Step 0 at the plan gate |
-| 7 | `## Waves` present; no `base_sha` or no `baseline.txt`, or `reports/` lacks a report for some task | Step 1 at the missing artifact; else Step 2 at that wave (re-record WAVE_BASE; revert a half-written wave with no report) |
-| 8 | all wave reports; no `review/self-*.md` | Step 3 at the `code-review` invocation |
+| 7 | `## Waves` present; no `base_sha` or no `baseline.txt`, or some task is not counted as reported (no `<wave>-<task>.json` or `<task>.json`, a report beside uncommitted changes in its owned paths, or no `gated/<wave>-<task>` marker and, on a run with no `gated/` directory, no commit on its owned paths) | Step 1 at the missing artifact; an unreported task whose owned paths a commit in `git log <base_sha>..HEAD` touched: stop, naming the disagreement, and revert nothing; else Step 2 at that wave (delete each unreported task's reports under both names and its `gated/<wave>-<task>` marker, then revert only the uncommitted changes the half-written wave left in its owned paths, back to HEAD, then re-record WAVE_BASE) |
+| 8 | every wave task counted as reported; no `review/self-*.md` | Step 3 at the `code-review` invocation |
 | 9 | `review/self-*` present; no `reports/build-final.json` | Step 3 at the fix dispatch |
 | 10 | `build-final.json`; no `redteam/round-*.json`, or newest round has NOT_REPRODUCED | Step 4: the repair dispatch, or round k+1 where a repair report followed the failed round; two failed rounds in a row stop with the evidence; review over budget: the budget stop |
 | 11 | red-team clean; `trigger.txt` absent, or its first line `fired: yes` with no `redteam/ar-state.txt` showing `UNVERIFIED: 0`. Build diff only: a repair's re-fire reads its own files at row 17 | Step 4 at the trigger, or at the adversarial-review invocation; review over budget: the budget stop |

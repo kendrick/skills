@@ -126,6 +126,10 @@ require_file tests/fixtures/work-issue/probes/row-07-isolation-incomplete.json
 require_file tests/fixtures/work-issue/probes/row-11-trigger-unrecorded.json
 # A P2-only round whose repair diff hits a money, authz, or schema row (#162).
 require_file tests/fixtures/work-issue/probes/row-17-repair-diff-trigger.json
+# Row 7 with committed, unreported waves, and the run dir whose reports carry
+# only the herdr agent's <task>.json names (cambium #78, #136).
+require_file tests/fixtures/work-issue/probes/row-07-committed-unreported.json
+require_file tests/fixtures/work-issue/reports-task-named/plan.md
 require_file tests/fixtures/work-issue/review/changes-requested.json
 # One over-budget probe per gated row, and the timing logs the budget reads.
 for gated in 10 11 16 17; do
@@ -1231,7 +1235,7 @@ set -e
 probes_dir=tests/fixtures/work-issue/probes
 declare -a probe_cases=(
   "row-01:done" "row-02:wait" "row-03:stop" "row-04:0" "row-05:0" "row-05-gated:0" "row-06:0"
-  "row-07:2" "row-07-isolation-incomplete:1" "row-08:3" "row-09:3" "row-10:4" "row-11:4" "row-11-trigger-unrecorded:4" "row-12:5" "row-13:5"
+  "row-07:2" "row-07-isolation-incomplete:1" "row-07-committed-unreported:stop" "row-08:3" "row-09:3" "row-10:4" "row-11:4" "row-11-trigger-unrecorded:4" "row-12:5" "row-13:5"
   "row-14:6" "row-15:6" "row-16:7" "row-17:8" "row-17-queued:8" "row-17-postpush:8"
   "row-10-repair-unverified:4" "row-10-repair-needed:4" "row-10-failed-twice:stop" "row-13-prepr-repair-clean:5" "row-16-earlier-queued:8" "row-17-review-repair-unpushed:8" "row-17-deferred-owed:8" "row-17-worker-queue:8" "row-18-answered:done" "row-18:done"
   "row-17-repair-advisory-only:8" "row-17-repair-blocking:8" "row-17-repair-blocking-settled:8" "row-17-repair-diff-trigger:8"
@@ -1806,6 +1810,324 @@ refute_text work-issue/SKILL.md "compare its mtime against"
 refute_text work-issue/references/resume.md "no \`triage/round-<k>.md\` newer than SINCE"
 refute_text work-issue/SKILL.md "no \`triage/round-<k>.md\` newer than SINCE"
 
+# The wave_reports and wave_unreported_committed probes (#136), run as
+# resume.md writes them. On cambium #78 every report was the herdr agent's
+# reports/<task>.json, a filename glob counted 0 of 5 for five gated, committed
+# waves, and row 7 said to revert them.
+reports_probe="$(sed -n 's/^| `wave_reports` | `\([^`]*\)`.*/\1/p' work-issue/references/resume.md \
+  | sed 's/\\|/|/g')"
+[[ -n "$reports_probe" ]] || {
+  echo "could not extract the wave_reports probe from work-issue/references/resume.md" >&2
+  exit 1
+}
+# $1 is the run dir, $2 the worktree whose owned paths the probe reads. A
+# report beside dirty owned paths is a worker's copy no gate has read yet.
+run_reports() {
+  local c="${reports_probe//<RUN_DIR>/$1}"
+  bash -c "${c//<TREE>/$2}" </dev/null
+}
+expect_reports() {
+  [[ "$2" == "$3" ]] || { echo "wave_reports on $1 should print $3, got: $2 (probe: $reports_probe)" >&2; exit 1; }
+}
+reports_run="$tmp/reports-run"
+reports_tree="$tmp/reports-tree"
+git init -q "$reports_tree"
+cp -R tests/fixtures/work-issue/reports-task-named "$reports_run"
+# This tree has no commits, so a gate marker is each task's only gate evidence.
+# The name checks below need all five gated to isolate the naming rule.
+mkdir -p "$reports_run/gated"
+for g in 0-record-revision 0-fixtures 1-contract-rule 2-implementations 3-commit-revision; do
+  : >"$reports_run/gated/$g"
+done
+expect_reports "five <task>.json reports, a decoy, and a numbered row outside ## Waves" "$(run_reports "$reports_run" "$reports_tree")" 5
+mv "$reports_run/reports/fixtures.json" "$reports_run/reports/0-fixtures.json"
+expect_reports "one report under <wave>-<task>.json" "$(run_reports "$reports_run" "$reports_tree")" 5
+cp "$reports_run/reports/record-revision.json" "$reports_run/reports/0-record-revision.json"
+expect_reports "one task reported under both names" "$(run_reports "$reports_run" "$reports_tree")" 5
+rm "$reports_run/reports/0-fixtures.json"
+expect_reports "one task with no report" "$(run_reports "$reports_run" "$reports_tree")" 4
+# A git status that fails can't say whether a reported task's paths are clean.
+expect_reports "a worktree git cannot read" "$(run_reports "$reports_run" "$tmp/not-a-repo")" null
+# A report beside clean paths proves no gate ran: with no base_sha, no commit can
+# be gate evidence, so an unmarked task drops out (PR #176 review).
+rm "$reports_run/gated/0-record-revision"
+expect_reports "record-revision reported, clean, and unmarked with no base_sha" "$(run_reports "$reports_run" "$reports_tree")" 3
+: >"$reports_run/base_sha"
+expect_reports "record-revision unmarked with an empty base_sha" "$(run_reports "$reports_run" "$reports_tree")" 3
+# A git log that fails can't say whether a commit gated the task. Only a run
+# with no gated/ directory reads commits at all, so drop the markers first.
+rm -r "$reports_run/gated"
+echo deadbeef >"$reports_run/base_sha"
+expect_reports "record-revision unmarked with a base_sha git log cannot resolve" "$(run_reports "$reports_run" "$reports_tree")" null
+
+committed_probe="$(sed -n 's/^| `wave_unreported_committed` | `\([^`]*\)`.*/\1/p' work-issue/references/resume.md \
+  | sed 's/\\|/|/g')"
+[[ -n "$committed_probe" ]] || {
+  echo "could not extract the wave_unreported_committed probe from work-issue/references/resume.md" >&2
+  exit 1
+}
+committed_tree="$tmp/committed-tree"
+committed_run="$tmp/committed-run"
+run_committed() {
+  local c="${committed_probe//<RUN_DIR>/$committed_run}"
+  bash -c "${c//<TREE>/$committed_tree}" </dev/null
+}
+expect_committed() {
+  [[ "$2" == "$3" ]] || { echo "wave_unreported_committed with $1 should print $3, got: $2 (probe: $committed_probe)" >&2; exit 1; }
+}
+# Feed both probes' output into row-07.json with the fixture's five tasks, and
+# print what phase makes of it.
+committed_phase() {
+  python3 -c 'import json,sys; p=json.load(open(sys.argv[1])); p["wave_tasks"]=5; p["wave_reports"]=json.loads(sys.argv[2]); p["wave_unreported_committed"]=json.loads(sys.argv[3]); json.dump(p,open(sys.argv[4],"w"))' \
+    "$probes_dir/row-07.json" "$(run_reports "$committed_run" "$committed_tree")" "$(run_committed)" "$tmp/committed-probe.json"
+  python3 "$run_state" phase --probe "$tmp/committed-probe.json"
+}
+# Pinned identity, no signing, no hooks, as in the repair_diff_triggers block.
+committed_git() {
+  git -C "$committed_tree" -c user.email=smoke@example -c user.name=smoke \
+    -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"
+}
+git init -q "$committed_tree"
+mkdir -p "$committed_run/reports"
+cp tests/fixtures/work-issue/reports-task-named/plan.md "$committed_run/plan.md"
+committed_git commit -q --allow-empty -m base
+committed_git rev-parse HEAD >"$committed_run/base_sha"
+mkdir -p "$committed_tree/fx"
+echo a >"$committed_tree/a.py"
+echo '{}' >"$committed_tree/fx/one.json"
+committed_git add a.py fx/one.json
+committed_git commit -q -m "wave 0"
+echo d >"$committed_tree/d.py"
+expect_committed "two committed tasks and no reports" "$(run_committed)" 2
+echo '{}' >"$committed_run/reports/record-revision.json"
+expect_committed "one committed task reported" "$(run_committed)" 1
+committed_base="$(cat "$committed_run/base_sha")"
+echo deadbeef >"$committed_run/base_sha"
+expect_committed "a base_sha that does not resolve" "$(run_committed)" null
+rm "$committed_run/base_sha"
+# Step 1 writes base_sha before any wave can commit, so its absence means no
+# committed wave: 0, which leaves row 7's Step 1 leg reachable. A null here
+# tripped the null-field stop ahead of every row and hid that leg.
+no_base="$(run_committed)"
+expect_committed "no base_sha" "$no_base" 0
+python3 -c 'import json,sys; p=json.load(open(sys.argv[1])); p["wave_unreported_committed"]=json.loads(sys.argv[2]); json.dump(p,open(sys.argv[3],"w"))' \
+  "$probes_dir/row-07-isolation-incomplete.json" "$no_base" "$tmp/no-base.json"
+grep -Fq "phase: 1 reason: row 7:" <<<"$(python3 "$run_state" phase --probe "$tmp/no-base.json")" || {
+  echo "a run with no base_sha should resume at Step 1 through row 7, not stop" >&2; exit 1; }
+echo "$committed_base" >"$committed_run/base_sha"
+# Waves 1 and 3 committed too, as on #78. Wave 2, implementations, is the one
+# left mid-flight below.
+echo b >"$committed_tree/b.py"
+echo c >"$committed_tree/c.py"
+committed_git add b.py c.py
+committed_git commit -q -m "wave 1"
+echo e >"$committed_tree/e.py"
+committed_git add e.py
+committed_git commit -q -m "wave 3"
+# End to end, the #78 shape. Every task has its <task>.json, but d.py is
+# still untracked: implementations' worker wrote its report and the session
+# died before the Step 3 gate. That task is unbuilt, so row 7 reverts and
+# re-dispatches it rather than row 8 skipping its gate (PR #176 review).
+cp tests/fixtures/work-issue/reports-task-named/reports/*.json "$committed_run/reports/"
+expect_reports "every report in and d.py dirty" "$(run_reports "$committed_run" "$committed_tree")" 4
+expect_committed "a reported, dirty task with no commit" "$(run_committed)" 0
+committed_out="$(committed_phase)"
+grep -Fq "phase: 2 reason: row 7:" <<<"$committed_out" || {
+  echo "a reported task with dirty owned paths should resume at row 7's revert, got: $committed_out" >&2; exit 1; }
+# Dirt on a path a commit past base_sha already touched is not a half-written
+# wave: stop rather than revert.
+echo more >>"$committed_tree/a.py"
+expect_committed "a reported task dirty on a committed path" "$(run_committed)" 1
+committed_out="$(committed_phase)"
+grep -Fq "phase: stop reason: row 7:" <<<"$committed_out" || {
+  echo "a reported task dirty on a committed path should stop at row 7, got: $committed_out" >&2; exit 1; }
+committed_git checkout -q -- a.py
+# The worker's early report beside paths it never changed: clean, but neither
+# a commit nor a gate marker says the gate ran, so row 7 re-dispatches it.
+rm "$committed_tree/d.py"
+expect_reports "implementations reported and clean with no commit or marker" "$(run_reports "$committed_run" "$committed_tree")" 4
+expect_committed "a reported, clean, ungated task" "$(run_committed)" 0
+committed_out="$(committed_phase)"
+grep -Fq "phase: 2 reason: row 7:" <<<"$committed_out" || {
+  echo "a reported, clean task with no gate evidence should resume at row 7's revert, got: $committed_out" >&2; exit 1; }
+rm "$committed_run/reports/implementations.json"
+echo d >"$committed_tree/d.py"
+committed_out="$(committed_phase)"
+grep -Fq "phase: 2 reason: row 7:" <<<"$committed_out" || {
+  echo "an uncommitted, unreported task should still resume at Step 2 for the revert, got: $committed_out" >&2; exit 1; }
+# Wave 2 gated and committed: now all five waves are, reported under
+# <task>.json alone with no gate markers, which is #78 exactly. The commits are
+# the gate evidence, so it reaches row 8.
+cp tests/fixtures/work-issue/reports-task-named/reports/implementations.json "$committed_run/reports/"
+committed_git add d.py
+committed_git commit -q -m "wave 2"
+[[ ! -e "$committed_run/gated" ]] || { echo "the #78 case must carry no gate markers" >&2; exit 1; }
+expect_reports "the #78 shape: five committed tasks, <task>.json only, no markers" "$(run_reports "$committed_run" "$committed_tree")" 5
+committed_out="$(committed_phase)"
+grep -Fq "phase: 3 reason: row 8:" <<<"$committed_out" || {
+  echo "every <task>.json report on a committed, clean run should resume at row 8, got: $committed_out" >&2; exit 1; }
+rm "$committed_run"/reports/*.json
+committed_out="$(committed_phase)"
+grep -Fq "phase: stop reason: row 7:" <<<"$committed_out" || {
+  echo "committed waves with no report should stop at row 7, never revert, got: $committed_out" >&2; exit 1; }
+grep -Fq "git log" <<<"$committed_out" || {
+  echo "row 7's stop should name the git log disagreement, got: $committed_out" >&2; exit 1; }
+# The reviewer's case on PR #176: a herdr worker wrote reports/task.json saying
+# it failed, changed none of its owned a.py, and left only an unowned b.py. The
+# owned paths are clean, but no marker and no commit say the gate ran.
+# The gate_* helpers read $gate_run and $gate_tree, so the shared-path case
+# below reuses them by pointing both at a fresh fixture.
+gate_tree="$tmp/gate-tree"
+gate_run="$tmp/gate-run"
+gate_git() {
+  git -C "$gate_tree" -c user.email=smoke@example -c user.name=smoke \
+    -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"
+}
+run_gate() {
+  local c="${1//<RUN_DIR>/$gate_run}"
+  bash -c "${c//<TREE>/$gate_tree}" </dev/null
+}
+# $1 is the plan's task count, 1 when omitted.
+gate_phase() {
+  python3 -c 'import json,sys; p=json.load(open(sys.argv[1])); p["wave_tasks"]=int(sys.argv[5]); p["wave_reports"]=json.loads(sys.argv[2]); p["wave_unreported_committed"]=json.loads(sys.argv[3]); json.dump(p,open(sys.argv[4],"w"))' \
+    "$probes_dir/row-07.json" "$(run_gate "$reports_probe")" "$(run_gate "$committed_probe")" "$tmp/gate-probe.json" "${1:-1}"
+  python3 "$run_state" phase --probe "$tmp/gate-probe.json"
+}
+git init -q "$gate_tree"
+mkdir -p "$gate_run/reports"
+printf '# Plan\n\n## Waves\n\n| Wave | Task | Files owned | Model | Done when | Constraints |\n|---|---|---|---|---|---|\n| 0 | task | a.py | sonnet | x | |\n' >"$gate_run/plan.md"
+gate_git commit -q --allow-empty -m base
+gate_git rev-parse HEAD >"$gate_run/base_sha"
+echo '{"status":"failed"}' >"$gate_run/reports/task.json"
+echo b >"$gate_tree/b.py"
+gate_out="$(run_gate "$reports_probe")"
+[[ "$gate_out" == 0 ]] || {
+  echo "a failed task.json beside clean owned paths, an unowned b.py, and no gate evidence should not count in wave_reports, got: $gate_out" >&2; exit 1; }
+gate_out="$(gate_phase)"
+grep -Fq "phase: 2 reason: row 7:" <<<"$gate_out" || {
+  echo "the ungated failed report should resume at row 7's revert, not row 8, got: $gate_out" >&2; exit 1; }
+# Once the orchestrator records the gate's pass, the same task counts.
+mkdir -p "$gate_run/gated"
+: >"$gate_run/gated/0-task"
+gate_out="$(run_gate "$reports_probe")"
+[[ "$gate_out" == 1 ]] || {
+  echo "a report with a gate marker and clean owned paths should count in wave_reports, got: $gate_out" >&2; exit 1; }
+gate_out="$(gate_phase)"
+grep -Fq "phase: 3 reason: row 8:" <<<"$gate_out" || {
+  echo "a gated, reported task should resume at row 8, got: $gate_out" >&2; exit 1; }
+# A task that legitimately changed nothing has no commit to find, so its marker
+# is what keeps it from re-dispatching forever.
+rm "$gate_tree/b.py" "$gate_run/reports/task.json"
+echo '{"status":"done"}' >"$gate_run/reports/0-task.json"
+gate_out="$(run_gate "$reports_probe")"
+[[ "$gate_out" == 1 ]] || {
+  echo "a no-change task with a report and a gate marker should count in wave_reports, got: $gate_out" >&2; exit 1; }
+gate_out="$(run_gate "$committed_probe")"
+[[ "$gate_out" == 0 ]] || {
+  echo "a counted no-change task should not count in wave_unreported_committed, got: $gate_out" >&2; exit 1; }
+# A marker without a report is still unreported.
+rm "$gate_run/reports/0-task.json"
+gate_out="$(run_gate "$reports_probe")"
+[[ "$gate_out" == 0 ]] || {
+  echo "a gate marker with no report should not count in wave_reports, got: $gate_out" >&2; exit 1; }
+# divvy-up places two tasks sharing a path in different waves, so a shared path
+# is ordinary. Wave 0's create owns a.py and is committed and marked; wave 1's
+# extend owns a.py too, reports failed, changes nothing, and has no marker.
+# Create's commit must not stand in for extend's gate (PR #176 code-review).
+gate_tree="$tmp/shared-tree"
+gate_run="$tmp/shared-run"
+git init -q "$gate_tree"
+mkdir -p "$gate_run/reports" "$gate_run/gated"
+printf '# Plan\n\n## Waves\n\n| Wave | Task | Files owned | Model | Done when | Constraints |\n|---|---|---|---|---|---|\n| 0 | create | a.py | sonnet | x | |\n| 1 | extend | a.py | sonnet | x | |\n' >"$gate_run/plan.md"
+gate_git commit -q --allow-empty -m base
+gate_git rev-parse HEAD >"$gate_run/base_sha"
+echo a >"$gate_tree/a.py"
+gate_git add a.py
+gate_git commit -q -m "wave 0"
+: >"$gate_run/gated/0-create"
+echo '{"status":"done"}' >"$gate_run/reports/0-create.json"
+echo '{"status":"failed"}' >"$gate_run/reports/extend.json"
+gate_out="$(run_gate "$reports_probe")"
+[[ "$gate_out" == 1 ]] || {
+  echo "an ungated extend sharing create's committed a.py should not count in wave_reports, got: $gate_out" >&2; exit 1; }
+# Extend is reported and clean, so wave_unreported_committed skips it: row 7
+# re-dispatches it rather than stopping on create's commit.
+gate_out="$(run_gate "$committed_probe")"
+[[ "$gate_out" == 0 ]] || {
+  echo "an ungated extend sharing create's committed a.py should not count in wave_unreported_committed, got: $gate_out" >&2; exit 1; }
+gate_out="$(gate_phase 2)"
+grep -Fq "phase: 2 reason: row 7:" <<<"$gate_out" || {
+  echo "an ungated task on a path an earlier wave committed should resume at row 7, not row 8, got: $gate_out" >&2; exit 1; }
+: >"$gate_run/gated/1-extend"
+gate_out="$(gate_phase 2)"
+grep -Fq "phase: 3 reason: row 8:" <<<"$gate_out" || {
+  echo "extend with its own gate marker should resume at row 8, got: $gate_out" >&2; exit 1; }
+# A task name or owned path with an internal space keeps it: `check-waves.py
+# validate` accepts `my task`, and stripping every space made the probes look
+# for reports/0-mytask.json and docs/mynotes.md (PR #176 review).
+space_tree="$tmp/space-tree"
+space_run="$tmp/space-run"
+space_git() {
+  git -C "$space_tree" -c user.email=smoke@example -c user.name=smoke \
+    -c commit.gpgsign=false -c core.hooksPath=/dev/null "$@"
+}
+run_space() {
+  local c="${1//<RUN_DIR>/$space_run}"
+  bash -c "${c//<TREE>/$space_tree}" </dev/null
+}
+git init -q "$space_tree"
+mkdir -p "$space_run/reports" "$space_tree/docs"
+printf '# Plan\n\n## Waves\n\n| Wave | Task | Files owned | Model | Done when | Constraints |\n|---|---|---|---|---|---|\n| 0 | my task | docs/my notes.md | sonnet | x | |\n' >"$space_run/plan.md"
+space_git commit -q --allow-empty -m base
+space_git rev-parse HEAD >"$space_run/base_sha"
+echo notes >"$space_tree/docs/my notes.md"
+space_git add "docs/my notes.md"
+space_git commit -q -m "wave 0"
+space_out="$(run_space "$committed_probe")"
+[[ "$space_out" == 1 ]] || {
+  echo "an unreported task owning committed docs/my notes.md should count in wave_unreported_committed, got: $space_out" >&2; exit 1; }
+echo '{}' >"$space_run/reports/0-my task.json"
+space_out="$(run_space "$reports_probe")"
+[[ "$space_out" == 1 ]] || {
+  echo "reports/0-my task.json with clean owned paths should count in wave_reports, got: $space_out" >&2; exit 1; }
+space_out="$(run_space "$committed_probe")"
+[[ "$space_out" == 0 ]] || {
+  echo "a reported, clean task should not count in wave_unreported_committed, got: $space_out" >&2; exit 1; }
+
+# Step 2 names both report names as ones the probe accepts, so it and resume.md
+# agree on what counts. Row 7's revert stops at HEAD in both Resume tables, and
+# phase stops on the committed count rather than resuming past it (#136).
+require_text work-issue/SKILL.md "The resume probe counts a task as reported when either \`<wave>-<task>.json\` or \`<task>.json\` exists"
+require_text work-issue/SKILL.md "revert only the uncommitted changes the half-written wave left in its owned paths, back to HEAD, then re-record WAVE_BASE"
+require_text work-issue/references/resume.md "revert only the uncommitted changes the half-written wave left in its owned paths, back to HEAD, then re-record WAVE_BASE"
+require_text work-issue/scripts/run-state.py 'count(probe, "wave_unreported_committed")'
+require_text _maintenance/work-issue/RATIONALE.md "Counting wave reports with a filename glob"
+require_text _maintenance/work-issue/RATIONALE.md "Resuming past a committed, unreported wave as though it were reported"
+refute_text work-issue/references/resume.md "find <RUN_DIR>/reports -name '[0-9]*-*.json'"
+refute_text work-issue/scripts/run-state.py 'return "3", "row 7'
+# A report counts only beside clean owned paths, and cells keep inner spaces
+# (PR #176 review; rows 117 and 118).
+require_text work-issue/SKILL.md "and gate evidence from Step 3: the task's \`gated/<wave>-<task>\` marker, or, on a run with no \`gated/\` directory, a commit past BASE_SHA on its owned paths"
+require_text work-issue/references/resume.md "delete each unreported task's reports under both names and its \`gated/<wave>-<task>\` marker, then revert only"
+require_text work-issue/SKILL.md "delete each unreported task's reports under both names and its \`gated/<wave>-<task>\` marker, then revert only"
+require_text _maintenance/work-issue/RATIONALE.md "Counting a report on disk as a gated task"
+require_text _maintenance/work-issue/RATIONALE.md "Stripping every space from a \`## Waves\` cell"
+refute_text work-issue/SKILL.md "still reads as reported rather than as a half-written wave"
+refute_text work-issue/references/resume.md 'gsub(/[ \t]/,"",k)'
+# Clean owned paths don't prove the gate ran: a count needs a gate marker or a
+# commit too, and Step 3 writes the marker (PR #176 review; row 119).
+require_text work-issue/SKILL.md "write an empty \`RUN_DIR/gated/<wave>-<task>\` for each of that wave's tasks"
+require_text _maintenance/work-issue/RATIONALE.md "Clean owned paths as proof the gate ran"
+require_text _maintenance/work-issue/RATIONALE.md "A gate marker as the only gate evidence"
+refute_text work-issue/references/resume.md 'elif [ -z "$s" ]; then echo 1; fi'
+refute_text work-issue/references/resume.md "A reported task whose paths are clean counts"
+refute_text work-issue/references/resume.md 'gated/$w-$k" ]; then echo 1; fi'
+# A commit is gate evidence only on a run with no gated/ directory; on every
+# run it let an earlier wave's commit pass a later task's gate (row 119).
+require_text work-issue/references/resume.md '\|\| [ -d "<RUN_DIR>/gated" ]; then continue;'
+require_text _maintenance/work-issue/RATIONALE.md "The commit leg on every run"
+refute_text work-issue/references/resume.md '[ -z "$p" ]; then continue; elif ! o='
+
 # The repair_diff_triggers probe's scope (#162), run as resume.md writes it.
 # The branch changes billing.py's rounding and the repair touches README.md
 # only. Diffing from repair-base-<k> reads the repair alone and prints false.
@@ -2118,8 +2440,8 @@ require_text work-issue/SKILL.md "| 13 | red-team clean; trigger recorded;"
 require_text work-issue/references/resume.md "| 13 | red-team clean; trigger recorded;"
 # Step 1's two closing writes are probed, and row 7 sends a run missing either
 # back to Step 1 in both copies of the table.
-require_text work-issue/SKILL.md "no \`base_sha\` or no \`baseline.txt\`, or \`reports/\` lacks a report"
-require_text work-issue/references/resume.md "no \`base_sha\` or no \`baseline.txt\`, or \`reports/\` lacks a report"
+require_text work-issue/SKILL.md "no \`base_sha\` or no \`baseline.txt\`, or some task is not counted as reported"
+require_text work-issue/references/resume.md "no \`base_sha\` or no \`baseline.txt\`, or some task is not counted as reported"
 # The wave count reads the Waves section and nothing after it.
 require_text work-issue/references/resume.md "awk '/^[[:space:]]*## Waves[[:space:]]*$/{f=1;next} f&&/^[[:space:]]*\\|/{t=1;print;next} f&&t{exit}"
 # has_waves reads the heading the way the parser does, whitespace stripped.
