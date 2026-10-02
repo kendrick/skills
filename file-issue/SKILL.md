@@ -1,6 +1,6 @@
 ---
 name: file-issue
-description: "File one GitHub issue: a bug report, feature request, task, or spike, created with `gh`. Use when the user wants to file or open an issue, report a bug, request a feature, write up a chore or a spike, turn a half-formed complaint into something tracked, or write an issue a coding agent can pick up cold. Files exactly one issue: to slice a spec or plan into many linked tickets, use to-tickets instead. Never edits, closes, triages, or ranks existing issues. Its one write beyond creation links the new issue to its parent and blockers."
+description: "File one GitHub issue: a bug report, feature request, task, or spike, created with `gh`. Use when the user wants to file or open an issue, report a bug, request a feature, write up a chore or a spike, turn a half-formed complaint into something tracked, or write an issue a coding agent can pick up cold. Files exactly one issue: to slice a spec or plan into many linked tickets, use to-tickets instead. Never edits, closes, triages, or ranks existing issues. Beyond creation it only links the new issue to its parent and blockers."
 argument-hint: '[what the issue is about | --deep | --fast | --dry-run]'
 ---
 
@@ -176,7 +176,7 @@ Then render the full issue as markdown, show it with the links it will set besid
 python3 <skill-path>/scripts/link-issues.py link --issue <URL> --plan <resolved.json>
 ```
 
-Exit 0 means every link was set. Exit 1 means at least one failed: report the issue URL, each `FAILED` line, and the `retry:` command under it. The issue body stays exactly as created; the retry command is the whole remedy. Exit 3 means the new issue could not be resolved, so report the URL and that no links were set.
+Exit 0 means every link was set. Exit 1 means at least one failed: report the issue URL, each `FAILED` line, and the `retry:` command under it. The issue body stays exactly as created; the retry command is the whole remedy. Exit 3 means a usage error, an unreadable plan, or a new issue that could not be resolved, and no link was sent: report the URL and that no links were set.
 
 Creation only. The rule admits exactly two writes beyond `gh issue create`: the mutations `addSubIssue` and `addBlockedBy`, each naming the new issue. It makes no other write to an existing issue, and never edits, closes, relabels, or reassigns one; when that is what the user wants, say that this skill does not do it.
 

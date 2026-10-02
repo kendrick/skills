@@ -58,7 +58,8 @@ The research also killed one feature and one statistic before either reached the
 
 | Cut | Why |
 | --- | --- |
-| Editing the issue body after creation to add a failed link back as text | The body is final at creation, and a body edit is the write the creation-only rule exists to forbid. The retry command `link-issues.py` prints under each failed link is the remedy. Pinned by a `refute_text` in `tests/file-issue-smoke.sh`. |
+| Editing the issue body after creation to add a failed link back as text | The body is final at creation, and a body edit is the write the creation-only rule exists to forbid. The retry command `link-issues.py` prints under each failed link is the remedy. Pinned by `refute_text` on `edit the body to add`, `gh issue edit`, and `updateIssue` in `tests/file-issue-smoke.sh`, since a body edit needs one of those two commands however the step is worded. |
+| Text-only Parent and Blocked by for entries that name an issue | GitHub never reads a `#N` in a body as a relationship, so nothing that queries `subIssues` or `blockedBy` finds a text-only link. #142–#144 had to be linked by hand after filing (#175). The `refute_text` in `tests/file-issue-smoke.sh` pins the old Decision Ledger row's wording, so that row can't return. Quoting it here would trip the same refute. |
 
 ## Known Limitations
 
