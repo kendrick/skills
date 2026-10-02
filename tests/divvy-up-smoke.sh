@@ -261,6 +261,15 @@ require_text divvy-up/SKILL.md "**format pass**"
 require_text divvy-up/SKILL.md "after the ownership check, because its writes are yours"
 require_text divvy-up/SKILL.md "only scoped to its own paths"
 require_text divvy-up/README.md "leave any tree-wide format"
+# A format-pass write outside the derived set never matches WAVE_BASE again,
+# so a retry gated against that base fails `owners` on the orchestrator's
+# own write. Reproduced by adversarial-review of #116 (F-r1-authz-01).
+require_text divvy-up/SKILL.md "record WAVE_BASE and its untracked manifest again"
+require_text divvy-up/SKILL.md "each revert uses the base recorded before the dispatch it undoes"
+# The derived set includes deleted paths, and a `--fix` linter exits non-zero
+# on what it cannot fix; neither is a task's failure (F-r1-authz-02).
+require_text divvy-up/SKILL.md "derived paths that still exist"
+require_text divvy-up/SKILL.md "A non-zero exit from the pass is no task's failure"
 
 # Deliberately Not Built: detecting a tree-wide write at the gate by
 # modification time. Workers' own verification touches files they do not
