@@ -1,0 +1,69 @@
+#!/bin/sh
+# Stand-in for gh in tests/file-issue-smoke.sh. It answers only the canned
+# nodes below and fails every other lookup, so a script that links whatever
+# number it was handed can't pass by luck. Every call is logged one line per
+# invocation, which is how the suite asserts which mutations went out.
+printf '%s\n' "$*" >> "${FAKE_GH_LOG:?FAKE_GH_LOG must name the call log}"
+
+if [ "$1" = "repo" ] && [ "$2" = "view" ]; then
+  printf '{"nameWithOwner":"o/r"}\n'
+  exit 0
+fi
+
+if [ "$1" != "api" ] || [ "$2" != "graphql" ]; then
+  echo "fake-gh: unhandled call: $*" >&2
+  exit 2
+fi
+
+call="$*"
+
+case "$call" in
+  *mutation*)
+    case "$call" in
+      *'addBlockedBy(input:{issueId:"'*'",blockingIssueId:"I_FAIL"})'*)
+        # Real gh puts the error JSON on stdout and a summary on stderr.
+        printf '{"data":{"addBlockedBy":null},"errors":[{"type":"NOT_FOUND","message":"Could not resolve to a node with the global id of '"'"'I_FAIL'"'"'"}]}\n'
+        echo "GraphQL: Could not resolve to a node with the global id of 'I_FAIL' (addBlockedBy)" >&2
+        exit 1
+        ;;
+      *'addSubIssue(input:{issueId:"'*'",subIssueId:"'*)
+        printf '{"data":{"addSubIssue":{"issue":{"number":40}}}}\n'
+        exit 0
+        ;;
+      *'addBlockedBy(input:{issueId:"'*'",blockingIssueId:"'*)
+        printf '{"data":{"addBlockedBy":{"issue":{"number":40}}}}\n'
+        exit 0
+        ;;
+    esac
+    echo "fake-gh: unhandled mutation: $*" >&2
+    exit 2
+    ;;
+esac
+
+case "$call" in
+  *'repository(owner:"o",name:"r")'*) ;;
+  *)
+    echo "GraphQL: Could not resolve to a Repository with the name requested." >&2
+    exit 1
+    ;;
+esac
+
+case "$call" in
+  *'issue(number:12)'*) node='"I_12"' ;;
+  *'issue(number:7)'*) node='"I_7"' ;;
+  *'issue(number:40)'*) node='"I_40"' ;;
+  # #99 has no issue and #5 is a pull request; GitHub answers both with a
+  # null issue.
+  *'issue(number:99)'*) node='' ;;
+  *'issue(number:5)'*) node='' ;;
+  *)
+    echo "fake-gh: no canned node for: $*" >&2
+    exit 1
+    ;;
+esac
+
+if [ -n "$node" ]; then
+  printf '{"data":{"repository":{"issue":{"id":%s}}}}\n' "$node"
+else
+  printf '{"data":{"repository":{"issue":null}}}\n'
+fi

@@ -35,6 +35,44 @@ refute_text() {
   return 0
 }
 
+expect_rc() {
+  local want="$1"
+  local got="$2"
+  local what="$3"
+  [[ "$got" == "$want" ]] || {
+    echo "$what: expected exit $want, got $got" >&2
+    exit 1
+  }
+}
+
+# Counts lines, so "exactly one mutation" catches a duplicate send that a
+# plain require_text would wave through.
+require_count() {
+  local file="$1"
+  local text="$2"
+  local want="$3"
+  local got
+  got="$(grep -Fc -- "$text" "$file" || true)"
+  [[ "$got" == "$want" ]] || {
+    echo "expected $want line(s) in $file containing: $text (got $got)" >&2
+    exit 1
+  }
+}
+
+# Reads the field the way link-issues.py's own consumer does, as parsed JSON,
+# so a formatting change in the output can't fake or break the check.
+require_json() {
+  local file="$1"
+  local expr="$2"
+  local want="$3"
+  local got
+  got="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(json.dumps(eval(sys.argv[2])))' "$file" "$expr")"
+  [[ "$got" == "$want" ]] || {
+    echo "$file: $expr is $got, expected $want" >&2
+    exit 1
+  }
+}
+
 require_file file-issue/SKILL.md
 require_file file-issue/README.md
 require_file file-issue/references/issue-forms.md
@@ -218,6 +256,109 @@ for f in file-issue/assets/bug.template.md file-issue/assets/feature.template.md
   require_text "$f" "drop the line"
 done
 require_text file-issue/SKILL.md "fails unless that artifact is declared on the Blocked by line"
+
+# Native links (#175), pinned at the wire. A fake gh answers only canned
+# nodes and logs every call, so these check the mutations that actually went
+# out, not what the script meant to send.
+link_tmp="$(mktemp -d)"
+trap 'rm -rf "$link_tmp"' EXIT
+cp tests/fixtures/file-issue/fake-gh "$link_tmp/gh"
+chmod +x "$link_tmp/gh"
+export FAKE_GH_LOG="$link_tmp/gh.log"
+run_link() {
+  PATH="$link_tmp:$PATH" python3 file-issue/scripts/link-issues.py "$@"
+}
+new_issue=https://github.com/o/r/issues/40
+
+# An existing issue in each slot resolves to its node and is linked by exactly
+# one mutation each, in the direction GitHub expects (criteria 1-2).
+: > "$FAKE_GH_LOG"
+rc=0; run_link resolve --repo o/r --parent '#12' --blocked-by '#7' > "$link_tmp/plan.json" || rc=$?
+expect_rc 0 "$rc" "resolve #12 / #7"
+require_json "$link_tmp/plan.json" 'd["parent"]["node"]' '"I_12"'
+require_json "$link_tmp/plan.json" '[b["node"] for b in d["blocked_by"]]' '["I_7"]'
+: > "$FAKE_GH_LOG"
+rc=0; run_link link --issue "$new_issue" --plan "$link_tmp/plan.json" > "$link_tmp/out" || rc=$?
+expect_rc 0 "$rc" "link #12 / #7"
+require_count "$FAKE_GH_LOG" "addSubIssue" 1
+require_count "$FAKE_GH_LOG" 'addSubIssue(input:{issueId:"I_12",subIssueId:"I_40"})' 1
+require_count "$FAKE_GH_LOG" "addBlockedBy" 1
+require_count "$FAKE_GH_LOG" 'addBlockedBy(input:{issueId:"I_40",blockingIssueId:"I_7"})' 1
+require_text "$link_tmp/out" "linked parent #12"
+require_text "$link_tmp/out" "linked blocked-by #7"
+
+# The other two parse forms reach the same nodes.
+rc=0; run_link resolve --repo o/r --parent 'o/r#12' --blocked-by https://github.com/o/r/issues/7 > "$link_tmp/forms.json" || rc=$?
+expect_rc 0 "$rc" "resolve owner/repo#N and issue URL"
+require_json "$link_tmp/forms.json" 'd["parent"]["node"]' '"I_12"'
+require_json "$link_tmp/forms.json" '[b["node"] for b in d["blocked_by"]]' '["I_7"]'
+
+# A path, a discussion URL, a pull request, and a missing number all stay
+# text: no node, a reason, and no mutation (criteria 3-4).
+rc=0; run_link resolve --repo o/r --parent https://github.com/o/r/discussions/3 --blocked-by docs/new-spec.md --blocked-by '#99' > "$link_tmp/text.json" || rc=$?
+expect_rc 0 "$rc" "resolve non-issue entries"
+require_json "$link_tmp/text.json" 'd["parent"]["node"]' 'null'
+require_json "$link_tmp/text.json" '[b["node"] for b in d["blocked_by"]]' '[null, null]'
+require_json "$link_tmp/text.json" 'all(e["reason"] for e in [d["parent"]] + d["blocked_by"])' 'true'
+rc=0; run_link resolve --repo o/r --parent '#5' > "$link_tmp/pr.json" || rc=$?
+expect_rc 0 "$rc" "resolve a pull request number"
+require_json "$link_tmp/pr.json" 'd["parent"]["node"]' 'null'
+for plan in text pr; do
+  : > "$FAKE_GH_LOG"
+  rc=0; run_link link --issue "$new_issue" --plan "$link_tmp/$plan.json" > "$link_tmp/out" || rc=$?
+  expect_rc 0 "$rc" "link $plan plan"
+  require_count "$FAKE_GH_LOG" "mutation" 0
+done
+
+# --dry-run names each link and sends nothing (criterion 6).
+: > "$FAKE_GH_LOG"
+rc=0; run_link link --issue "$new_issue" --plan "$link_tmp/plan.json" --dry-run > "$link_tmp/out" || rc=$?
+expect_rc 0 "$rc" "link --dry-run"
+require_text "$link_tmp/out" "would link parent #12"
+require_text "$link_tmp/out" "would link blocked-by #7"
+require_count "$FAKE_GH_LOG" "addSubIssue" 0
+require_count "$FAKE_GH_LOG" "addBlockedBy" 0
+# Before creation there's no new issue to look up, so --dry-run without
+# --issue prints a <new> placeholder and sends nothing at all, lookups included.
+: > "$FAKE_GH_LOG"
+rc=0; run_link link --plan "$link_tmp/plan.json" --dry-run > "$link_tmp/out" || rc=$?
+expect_rc 0 "$rc" "link --dry-run without --issue"
+require_text "$link_tmp/out" "would link parent #12"
+require_text "$link_tmp/out" 'subIssueId:"<new>"'
+require_count "$FAKE_GH_LOG" "mutation" 0
+require_count "$FAKE_GH_LOG" "issue(number:40)" 0
+# Outside a dry run the new issue is required.
+rc=0; run_link link --plan "$link_tmp/plan.json" > /dev/null 2>&1 || rc=$?
+expect_rc 3 "$rc" "link without --issue or --dry-run"
+
+# A failed link is named with its error and a retry command, and the links
+# around it still go out (criterion 7).
+cat > "$link_tmp/fail.json" <<'JSON'
+{"repo": "o/r",
+ "parent": {"entry": "#12", "number": 12, "repo": "o/r", "node": "I_12"},
+ "blocked_by": [{"entry": "#66", "number": 66, "repo": "o/r", "node": "I_FAIL"},
+                {"entry": "#7", "number": 7, "repo": "o/r", "node": "I_7"}]}
+JSON
+: > "$FAKE_GH_LOG"
+rc=0; run_link link --issue "$new_issue" --plan "$link_tmp/fail.json" > "$link_tmp/out" || rc=$?
+expect_rc 1 "$rc" "link with a failing blocker"
+require_text "$link_tmp/out" "FAILED blocked-by #66: GraphQL: Could not resolve to a node"
+require_text "$link_tmp/out" "  retry: gh api graphql -f query='mutation{addBlockedBy(input:{issueId:\"I_40\",blockingIssueId:\"I_FAIL\"}){issue{number}}}'"
+require_text "$link_tmp/out" "linked parent #12"
+require_text "$link_tmp/out" "linked blocked-by #7"
+require_count "$FAKE_GH_LOG" 'addBlockedBy(input:{issueId:"I_40",blockingIssueId:"I_7"})' 1
+
+# Usage errors and an unresolvable new issue exit 3, not argparse's 2.
+rc=0; run_link > /dev/null 2>&1 || rc=$?
+expect_rc 3 "$rc" "no subcommand"
+rc=0; run_link resolve --bogus > /dev/null 2>&1 || rc=$?
+expect_rc 3 "$rc" "unknown flag"
+rc=0; run_link link --issue "$new_issue" > /dev/null 2>&1 || rc=$?
+expect_rc 3 "$rc" "link without --plan"
+rc=0; run_link link --issue "$new_issue" --plan "$link_tmp/missing.json" > /dev/null 2>&1 || rc=$?
+expect_rc 3 "$rc" "unreadable plan"
+rc=0; run_link link --issue https://github.com/o/r/issues/41 --plan "$link_tmp/plan.json" > /dev/null 2>&1 || rc=$?
+expect_rc 3 "$rc" "new issue with no node"
 
 # Every gate in the self-check needs a row in the evidence map, or the tiering
 # claim in the README is false.
