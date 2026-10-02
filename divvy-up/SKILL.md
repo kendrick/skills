@@ -95,7 +95,7 @@ Ask once, in one question: execute wave 0, and commit after each passing wave. D
 
 Read `references/worker-prompt.md` and instantiate it once per task in the wave. Dispatch every one of them in a SINGLE message so they run concurrently—one dispatch per message is exactly the serialization the wave exists to remove, and it looks identical in the transcript. `{{CALLER_NOTES}}` is the seam through which a wrapping skill's own preamble reaches every dispatch; empty on a direct run.
 
-Every git write belongs to you, not to a worker. Workers write files; you stage, commit, and branch. A worker that commits stages its peers' half-written changes along with its own and moves HEAD out from under Step 6's revert, so a failed task survives its own rollback. Say so in the dispatch: a repo's own agent docs are usually written for an agent working alone, and this one is not.
+Every git write belongs to you, not to a worker. Workers write files; you stage, commit, and branch. A worker that commits stages its peers' half-written changes along with its own and moves HEAD out from under Step 6's revert, so a failed task survives its own rollback. Say so in the dispatch: a repo's own agent docs are usually written for an agent working alone, and this one is not. The same goes for a formatter or a linter's `--fix`: a worker runs one only scoped to its own paths, and you run the tree-wide pass at Step 6.
 
 Name each dispatch's model explicitly. An omitted model inherits the session's, which is usually the most expensive one available, and the routing silently evaporates while the run still looks correct.
 
@@ -113,7 +113,7 @@ A commit object rather than a status snapshot, because status text cannot see a 
 
 ## Step 6 — Gate
 
-Three checks, then a route.
+Three checks with a format pass between the first two, then a route.
 
 1. **Ownership.** Work out what this wave wrote, then pipe those paths through the plan:
 
@@ -126,6 +126,8 @@ Three checks, then a route.
    A path no task in the wave owns fails the run. That is a write into territory nobody claimed, and it is invisible in a passing test suite.
 
    Then check each report's `files_changed` against that task's own `owns`, and fail any task claiming a path it does not own. `owners` answers which task owns a path, never which agent wrote it, so a worker that writes a peer's owned file leaves a path the gate happily attributes to its rightful owner. The report cross-check is what catches that case, and it rests on the worker's own account of what it touched—see Known Limitations for what stays uncovered.
+
+   Then the **format pass**. With every worker finished, run the repo's own format or fix command once, if it has one: found where verification is found below, or named as a pre-commit step in the repo's agent docs. Scope it to the paths just derived where the command takes paths, and run it tree-wide where it cannot be scoped, since nothing else is writing now. It runs after the ownership check, because its writes are yours rather than any task's, and before verification, because the workers were told to leave it to you and a verification that checks formatting would otherwise fail them for obeying. Name to the user every path it changed outside the derived set before the wave is committed. A retried task comes back through this step, so the pass runs again on its paths.
 
 2. **Verification.** Find the repo's own command on disk rather than asking for it: manifest scripts first (`package.json`, `Makefile`, `pyproject.toml`, `Cargo.toml`), then runnable scripts under `tests/` or `scripts/`, then whatever `.github/workflows/` runs.
 
@@ -145,7 +147,7 @@ Revert before the retry. A re-dispatch onto a half-written tree hands the second
 
 Reverting a task means, for each path it owns: a tracked path goes back with `git checkout <WAVE_BASE> -- <path>`; an untracked path the wave created is deleted; an untracked path in the wave's manifest is restored with `git cat-file -p <its blob> > <path>`, whether the task rewrote it or removed it.
 
-**Done when:** every report has been read against its task's done-when and its constraints, and every task in the wave is passing; or was reverted and retried one rung up; or was reverted, answered, and re-dispatched at its own rung; or the run stopped after a second failure or on a `fable` task. The wave is committed when COMMIT is set, and no worker has committed anything.
+**Done when:** every report has been read against its task's done-when and its constraints, the format pass ran after the ownership check or the repo has none, and every task in the wave is passing; or was reverted and retried one rung up; or was reverted, answered, and re-dispatched at its own rung; or the run stopped after a second failure or on a `fable` task. The wave is committed when COMMIT is set, and no worker has committed anything.
 
 ## Step 7 — Review
 

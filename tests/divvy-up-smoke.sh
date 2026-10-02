@@ -253,6 +253,15 @@ require_text divvy-up/references/worker-prompt.md "Run no command that writes fi
 require_text divvy-up/references/worker-prompt.md "skipping it here drops no step"
 require_text divvy-up/references/worker-prompt.md "the rule against writing outside your own files wins"
 require_text divvy-up/SKILL.md "Every git write belongs to you"
+require_text divvy-up/SKILL.md "**format pass**"
+require_text divvy-up/SKILL.md "after the ownership check, because its writes are yours"
+require_text divvy-up/SKILL.md "only scoped to its own paths"
+require_text divvy-up/README.md "leave any tree-wide format"
+
+# Deliberately Not Built: detecting a tree-wide write at the gate by
+# modification time. Workers' own verification touches files they do not
+# own, and a timestamp cannot say which concurrent agent wrote a path.
+refute_text divvy-up/SKILL.md "mtime"
 
 # `stopped` had no rollback and no resume, so a stopped task satisfied no branch
 # of Step 6's completion rule.
