@@ -52,8 +52,10 @@ case "$call" in
   *'issue(number:12)'*) node='"I_12"' ;;
   *'issue(number:7)'*) node='"I_7"' ;;
   *'issue(number:40)'*) node='"I_40"' ;;
-  # #99 has no issue and #5 is a pull request; GitHub answers both with a
-  # null issue.
+  # #99 has no issue and #5 is a pull request. The fake answers both with a
+  # null issue; whether real GitHub answers a PR number with null or with a
+  # GraphQL error is unverified live (EVALS scenario 10), and the script maps
+  # either to node: null.
   *'issue(number:99)'*) node='' ;;
   *'issue(number:5)'*) node='' ;;
   *)
