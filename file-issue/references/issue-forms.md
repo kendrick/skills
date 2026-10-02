@@ -60,6 +60,8 @@ gh issue create --template <filename> --title <title> --body <body>
 
 For a repo with no template, plain `--title` and `--body` with a body assembled from `assets/`.
 
+`gh issue create` prints the new issue's URL on stdout; capture it for `link-issues.py link`, which needs the new issue to set its Parent and Blocked by links.
+
 ## Known Quirks
 
 - The form schema is officially beta and subject to change. If a form fails to parse, fall back to reading it as prose and filling what you can identify rather than erroring out.
