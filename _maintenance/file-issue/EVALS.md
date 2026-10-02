@@ -2,7 +2,7 @@
 
 Scenario suite for the skill. Method follows `skill-creator`: for each scenario, run the same prompt twice in one turn — once with the skill loaded, once without — and grade the delta. The no-skill baseline is the step that tells you whether the skill taught anything.
 
-Run everything with `--dry-run`. Nothing gets posted during evaluation.
+Run everything with `--dry-run` except scenario 10, which has to create issues to observe native links and runs live against a throwaway sandbox repo, never `kendrick/skills`. Nothing else gets posted during evaluation.
 
 ## Fixtures
 
@@ -159,6 +159,43 @@ Fails if the missing skill blocks the run, or if the transcript claims a prose p
 | Control | Rerun with a prompt carrying no derived rule; the gate does not fire and nothing is added to the draft |
 
 Fails if the skill rewrites the rule instead of asking, if it demands the test rather than the falsifier, or if it extends the property demand to every acceptance criterion.
+
+### 10. Native links
+
+**Repo:** a throwaway sandbox repo you own (never `kendrick/skills`), holding open issues `#P` and `#N` and no issue numbered `#999`. Run live, without `--dry-run`.
+
+**Prompt A:** "file a task: add a retry to the upload client. Parent is #P, blocked by #N. Problem section quotes the log line `see #N for the old trace`."
+
+| Expect | Pass condition |
+| --- | --- |
+| Confirmation | Lists `parent #P` and `blocked-by #N` beside the rendered body before `gh issue create` |
+| Body | No Parent line; no Blocked by line, or `**Blocked by:** None` when the issue is agent-targeted |
+| Blocked by link | `gh api graphql -f query='query{repository(owner:"<o>",name:"<r>"){issue(number:<new>){blockedBy(first:10){nodes{number}}}}}'` returns `#N` |
+| Parent link | The same query on `#P` with `subIssues(first:10){nodes{number}}` includes the new issue |
+| Problem section | The quoted `#N` in the Problem section adds no link of its own: `blockedBy` holds `#N` once, from the slot, and nothing else |
+
+**Prompt B:** the same task with Blocked by `#999`.
+
+| Expect | Pass condition |
+| --- | --- |
+| Resolve | `#999` comes back with no node, so the confirmation lists no blocked-by link for it |
+| Body | `#999` stays on the Blocked by line as text, and `gh issue view <new> --json body` matches the confirmed body byte for byte |
+| Report | The new issue URL; `blockedBy` on the new issue is empty |
+
+**Prompt C:** the same task with Blocked by `#M`, where `#M` is a pull request in the sandbox repo.
+
+| Expect | Pass condition |
+| --- | --- |
+| Body | `#M` stays on the Blocked by line as text |
+| Links | `blockedBy` on the new issue is empty |
+
+Fails if any link is set that the confirmation did not list, if the body changes after creation, or if a failed link is reported without its retry command.
+
+*Unverified live: whether GitHub answers `issue(number:<PR>)` with `issue: null` or with a GraphQL error. `link-issues.py resolve` treats both as no node with a reason, so either path keeps a pull request as text, and Prompt C checks the result rather than the path. Record which answer GitHub gave when this runs.*
+
+*A nonexistent number fails at `resolve`, before any issue exists, so it never reaches `link`. The `FAILED` line and its `retry:` command need a link that resolved and then failed to send, such as a blocker deleted between the confirmation and creation. Run that once by hand when it matters; the smoke suite's fake covers the same path at the wire.*
+
+*Runner note: delete the sandbox issues afterward.*
 
 ## Grading
 

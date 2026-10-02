@@ -257,6 +257,42 @@ for f in file-issue/assets/bug.template.md file-issue/assets/feature.template.md
 done
 require_text file-issue/SKILL.md "fails unless that artifact is declared on the Blocked by line"
 
+# Native-first slots (#175), pinned in the prose. Entries resolve before the
+# render so the body is final at creation, and links go out only after
+# `gh issue create` prints the URL, because addSubIssue and addBlockedBy both
+# need the new issue's node. The two mutations are the creation-only rule's
+# one exception, named exactly so a third write can't ride in on "linking".
+require_text file-issue/SKILL.md "Resolve every Parent and Blocked by entry before"
+require_text file-issue/SKILL.md "link-issues.py resolve"
+require_text file-issue/SKILL.md "link-issues.py link"
+require_text file-issue/SKILL.md "slot entries only"
+require_text file-issue/SKILL.md "admits exactly two writes"
+require_text file-issue/SKILL.md "addSubIssue"
+require_text file-issue/SKILL.md "addBlockedBy"
+require_text file-issue/SKILL.md "the links it will set beside the rendered body"
+require_text file-issue/SKILL.md "\`link --dry-run\` with no \`--issue\`"
+require_text file-issue/SKILL.md "every link was set or reported with its retry command"
+require_text file-issue/SKILL.md "lands on the Blocked by line as text"
+require_text file-issue/SKILL.md "links the new issue to its parent and blockers"
+# A failed link is reported with its retry command and the body stays as
+# created. Writing the failure back into the body is the edit the
+# creation-only rule exists to forbid (Deliberately Not Built).
+refute_text file-issue/SKILL.md "edit the body to add"
+for f in file-issue/assets/bug.template.md file-issue/assets/feature.template.md file-issue/assets/task.template.md file-issue/assets/spike.template.md; do
+  require_text "$f" "becomes a native link"
+  require_text "$f" "anything else stays as text"
+done
+require_text file-issue/references/issue-forms.md "capture it for \`link-issues.py link\`"
+require_text file-issue/references/evidence-map.md "Native link first, text fallback"
+require_text file-issue/README.md "└── link-issues.py"
+require_text file-issue/README.md "links the new issue to its parent and blockers"
+require_text _maintenance/file-issue/RATIONALE.md "Parent and Blocked by link natively when they name an issue"
+require_text _maintenance/file-issue/RATIONALE.md "\`--issue\` is optional only under \`--dry-run\`"
+require_text _maintenance/file-issue/RATIONALE.md "## Deliberately Not Built"
+require_text _maintenance/file-issue/RATIONALE.md "Editing the issue body after creation to add a failed link back as text"
+refute_text _maintenance/file-issue/RATIONALE.md "blocking stays text, never GitHub-native"
+require_text _maintenance/file-issue/EVALS.md "### 10. Native links"
+
 # Native links (#175), pinned at the wire. A fake gh answers only canned
 # nodes and logs every call, so these check the mutations that actually went
 # out, not what the script meant to send.

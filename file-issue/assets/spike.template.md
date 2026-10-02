@@ -27,6 +27,7 @@ Blocked by lists every prerequisite that must land before work can start, or
 states "None" outright. A spike is rarely blocked; when this one is, the
 blocker is usually the decision another spike exists to make. Otherwise drop
 the line rather than shipping it blank.
+An entry naming an issue (`#N`, `owner/repo#N`, or an issue URL, written bare with no commentary beside it) becomes a native link and leaves the body; anything else stays as text, a file the repo does not hold yet included.
 -->
 
 ## Question to Answer
