@@ -244,6 +244,10 @@ require_text work-issue/references/worker-prompt.md "what you left and why"
 # repair re-gate never passes through divvy-up's Step 6, so it names the pass.
 require_text work-issue/SKILL.md "Re-gate—the format pass"
 require_text work-issue/SKILL.md "Gate it the way Step 3 gates: the format pass"
+require_text work-issue/SKILL.md "scoped to the repair's reported \`files_changed\`"
+# The red-team repair and the rebase repair also skip divvy-up's Step 6.
+require_text work-issue/SKILL.md "Re-gate the repair as Step 3's repair is"
+require_text work-issue/SKILL.md "repair dispatch, re-gated as Step 3's repair is"
 
 # Step 4's trigger reads adversarial-review's table at run time through that
 # skill's own script, so no signal is copied here, but which rows it reads is

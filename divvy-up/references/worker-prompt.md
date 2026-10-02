@@ -85,8 +85,11 @@ actually prints:
 If that command writes files—a format or `--fix` step chained ahead of its
 checks—the rule against writing outside your own files wins. Run its
 check-only form, or its checks without the fix step, and say which you ran
-in `verify_output`. A formatting complaint about a file you do not own is
-the format pass's to fix, not yours.
+in `verify_output`. Where the formatter takes paths, run it on your own
+files first. A formatting-only complaint is the format pass's to fix when
+it lands on a file you do not own, or on one of yours the formatter could
+not be scoped to: name it in `verify_output`, and set your status by
+everything else verification printed.
 
 If anything about the task, the contract, or the definition of done is
 ambiguous, stop and report the ambiguity. Do not guess. A guess made inside a
@@ -109,9 +112,9 @@ preamble, no summary paragraph, no closing assessment. This shape:
 
 `status` is `done`, `stopped` (you hit real ambiguity—put it in `question`,
 and report `files_changed` and `verify_output` as far as you got), or
-`failed` (verification would not pass and you could not fix it—put what
-failed in `question`). Leave `question` empty except for `stopped` or
-`failed`.
+`failed` (verification would not pass, a complaint left to the format
+pass aside, and you could not fix it—put what failed in `question`).
+Leave `question` empty except for `stopped` or `failed`.
 ```
 
 ## Placeholders

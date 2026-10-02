@@ -252,6 +252,10 @@ require_text divvy-up/references/worker-prompt.md "outlive its own"
 require_text divvy-up/references/worker-prompt.md "Run no command that writes files outside the ones you own"
 require_text divvy-up/references/worker-prompt.md "skipping it here drops no step"
 require_text divvy-up/references/worker-prompt.md "the rule against writing outside your own files wins"
+# A formatter that cannot be scoped leaves the worker's own files unformatted,
+# and a check-only verify flags them; without this the obedient worker reports
+# `failed` and Step 6 reverts it.
+require_text divvy-up/references/worker-prompt.md "formatting-only complaint is the format pass's"
 require_text divvy-up/SKILL.md "Every git write belongs to you"
 require_text divvy-up/SKILL.md "**format pass**"
 require_text divvy-up/SKILL.md "after the ownership check, because its writes are yours"
