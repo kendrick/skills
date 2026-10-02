@@ -62,11 +62,11 @@ file-issue/
 │   ├── feature.template.md
 │   ├── task.template.md
 │   └── spike.template.md
-├── scripts/
-│   └── link-issues.py    # resolves Parent and Blocked by entries and sets them as native links
-└── references/
-    ├── issue-forms.md    # issue-form YAML schema and gh mechanics
-    └── evidence-map.md   # every gate traced to its claim and evidence tier
+├── references/
+│   ├── issue-forms.md    # issue-form YAML schema and gh mechanics
+│   └── evidence-map.md   # every gate traced to its claim and evidence tier
+└── scripts/
+    └── link-issues.py    # resolves Parent and Blocked by entries and sets them as native links
 ```
 
 ## Gotchas

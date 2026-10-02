@@ -278,6 +278,10 @@ require_text file-issue/SKILL.md "links the new issue to its parent and blockers
 # created. Writing the failure back into the body is the edit the
 # creation-only rule exists to forbid (Deliberately Not Built).
 refute_text file-issue/SKILL.md "edit the body to add"
+# The phrase above can be reworded around; the command can't. Writing a link
+# back into the body takes `gh issue edit` or the updateIssue mutation.
+refute_text file-issue/SKILL.md "gh issue edit"
+refute_text file-issue/SKILL.md "updateIssue"
 for f in file-issue/assets/bug.template.md file-issue/assets/feature.template.md file-issue/assets/task.template.md file-issue/assets/spike.template.md; do
   require_text "$f" "becomes a native link"
   require_text "$f" "anything else stays as text"
