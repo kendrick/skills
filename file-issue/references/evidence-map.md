@@ -28,7 +28,7 @@ Surfaced, never blocking.
 | Non-goals | Shape Up: under-specified projects grow because nothing bounds them. Practitioner testimony only; no measured effect on scope creep or review churn. Doubles as a bound on an agent's change surface. | [P] | Q5 |
 | Convention-matching labels | Conforming to a repo's detected template is [E]-backed. Which specific labels a project uses is its own convention. | [E] conformance, [C] specifics | Q9, Q7 |
 | Environment metadata | Ranked near zero by developers: OS 4%, product 5%, component 3%, severity 0%. Cheap to collect, so collect it — but never hold an issue for it. Value is project-type dependent and rises for native and mobile. | [E], low | Q1 |
-| Parent and Blocked by slots | Provenance and prerequisites are two things the stranger audience cannot recover: a dropped spec link throws away the cheapest context transfer available, and an undeclared prerequisite strands the run. Universal tracker practice, unmeasured. | [C] | — |
+| Parent and Blocked by slots | Provenance and prerequisites are two things the stranger audience cannot recover: a dropped spec link throws away the cheapest context transfer available, and an undeclared prerequisite strands the run. Native link first, text fallback: an entry that names an issue becomes a sub-issue or blocked-by link, which GitHub shows on both ends, and anything else stays in the body as text. Universal tracker practice, unmeasured. | [C] | — |
 
 ## Question Ordering
 

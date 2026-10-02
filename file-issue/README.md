@@ -62,6 +62,8 @@ file-issue/
 │   ├── feature.template.md
 │   ├── task.template.md
 │   └── spike.template.md
+├── scripts/
+│   └── link-issues.py    # resolves Parent and Blocked by entries and sets them as native links
 └── references/
     ├── issue-forms.md    # issue-form YAML schema and gh mechanics
     └── evidence-map.md   # every gate traced to its claim and evidence tier
@@ -69,7 +71,7 @@ file-issue/
 
 ## Gotchas
 
-- It creates, and that's all. No editing, closing, triaging, or relabeling existing issues, since those are different jobs needing guards this doesn't have.
+- It creates the issue, links the new issue to its parent and blockers as native sub-issue and blocked-by links, and that's all. An entry that isn't an issue, such as a spec path or a file that doesn't exist yet, stays in the body as text. If a link fails, you get the issue URL and a retry command, and the body stays as filed. No editing, closing, triaging, or relabeling existing issues, since those are different jobs needing guards this doesn't have.
 - One issue per run. Splitting a plan into linked tickets is [to-tickets](https://github.com/mattpocock/skills)' job, and the escape hatch hands off to it rather than half-building decomposition here.
 - Duplicates get surfaced, never blocked. This is deliberate and evidence-backed: duplicates rank low on developer annoyance, routinely carry information the original lacks, and refusing them teaches people to stop reporting. You get the candidates and the call.
 - The repo's template always beats the built-in one. If your form has four fields, your issue has four fields, even where the skill's own rubric would want a fifth.
