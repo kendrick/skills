@@ -246,6 +246,12 @@ require_text divvy-up/SKILL.md "Failed on \`fable\`"
 # and moves HEAD out from under the revert that undoes a failed task.
 require_text divvy-up/references/worker-prompt.md "leave every git write to the orchestrator"
 require_text divvy-up/references/worker-prompt.md "outlive its own"
+
+# kendrick/skills#116: six workers ran a whole-tree formatter at once. A
+# byte-identical rewrite leaves no diff, so the dispatch is the only guard.
+require_text divvy-up/references/worker-prompt.md "Run no command that writes files outside the ones you own"
+require_text divvy-up/references/worker-prompt.md "skipping it here drops no step"
+require_text divvy-up/references/worker-prompt.md "the rule against writing outside your own files wins"
 require_text divvy-up/SKILL.md "Every git write belongs to you"
 
 # `stopped` had no rollback and no resume, so a stopped task satisfied no branch

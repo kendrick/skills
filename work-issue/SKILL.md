@@ -151,7 +151,7 @@ Every git write is the orchestrator's; workers write files. Commit messages go t
 
 Then invoke `code-review` by name, with the fixed point BASE_SHA and the spec path `RUN_DIR/issue.md`, in session on the session model. Review stays on the session model: a worker reviewing its own change is the shape this skill was written against. Save both axes verbatim to `RUN_DIR/review/self-<round>.md`.
 
-Route each finding. A Spec finding naming a CRITERIA line, or a Standards hard violation, becomes a repair dispatch to the worker with the finding quoted and `{{PRIOR}}` carrying that worker's earlier report. A smell-baseline judgment call is the worker's to fix or to leave, and leaving it goes in `left` with the reason. Re-gate, then commit.
+Route each finding. A Spec finding naming a CRITERIA line, or a Standards hard violation, becomes a repair dispatch to the worker with the finding quoted and `{{PRIOR}}` carrying that worker's earlier report. A smell-baseline judgment call is the worker's to fix or to leave, and leaving it goes in `left` with the reason. Re-gate—the format pass `divvy-up`'s Step 6 runs, then VERIFY_CMD—then commit. The worker was told to leave any tree-wide format or `--fix` pass to the orchestrator, and a repair never passes through that Step 6.
 
 The worker's final report is `RUN_DIR/reports/build-final.json`, and its `claims` is non-empty. Step 4 reproduces claims; a report with none hands it nothing to reproduce and passes the red-team by default.
 
@@ -235,7 +235,7 @@ Before the dispatch, write `git rev-parse HEAD` to `RUN_DIR/redteam/repair-base-
 
 One dispatch carrying every in-scope row, each finding quoted with its URL. Under herdr that is `herdr agent prompt issue-N …` on the same agent; otherwise a fresh subagent with the build report as `{{PRIOR}}`. Same preamble, same report contract.
 
-Gate it the way Step 3 gates: VERIFY_CMD, then `code-review` against BASE_SHA, with findings routed the same way. Commit. The report lands at `RUN_DIR/reports/repair-<k>.json`.
+Gate it the way Step 3 gates: the format pass, VERIFY_CMD, then `code-review` against BASE_SHA, with findings routed the same way. Commit. The report lands at `RUN_DIR/reports/repair-<k>.json`.
 
 **Done when:** `repair-base-<k>` holds the HEAD SHA from before the first dispatch for round k; every in-scope row is fixed and committed, or sits in `left` with a reason the orchestrator accepted and recorded on the row; `code-review` ran on the repaired diff; `repair-<k>.json` exists.
 

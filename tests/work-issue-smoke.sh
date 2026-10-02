@@ -240,6 +240,11 @@ require_text work-issue/SKILL.md "what you left and why"
 require_text work-issue/references/worker-prompt.md "Flag rather than route around"
 require_text work-issue/references/worker-prompt.md "what you left and why"
 
+# kendrick/skills#116: workers leave formatting to the orchestrator, and a
+# repair re-gate never passes through divvy-up's Step 6, so it names the pass.
+require_text work-issue/SKILL.md "Re-gate—the format pass"
+require_text work-issue/SKILL.md "Gate it the way Step 3 gates: the format pass"
+
 # Step 4's trigger reads adversarial-review's table at run time through that
 # skill's own script, so no signal is copied here, but which rows it reads is
 # fixed here. Drop a row and the red-team phase stops firing on money, authz, or
