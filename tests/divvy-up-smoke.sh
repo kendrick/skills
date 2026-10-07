@@ -288,7 +288,7 @@ refute_text divvy-up/SKILL.md "\`files_changed\` against the derived"
 require_text divvy-up/SKILL.md "where the command itself errored, revert every path it changed outside the derived set back to WAVE_BASE, then stop"
 require_text divvy-up/SKILL.md "Paths inside the derived set keep the pass's writes"
 require_text divvy-up/SKILL.md "rerun the derivation above and take every path it now lists"
-require_text divvy-up/README.md "a half-finished reformat outside the wave's paths never becomes part"
+require_text divvy-up/README.md "A half-finished reformat of those files never reaches the next run's starting point"
 require_text divvy-up/SKILL.md "Revert each one the way reverting a task, below, reverts an owned path"
 
 # The write ban covers what the gate can see. Ignored build output is

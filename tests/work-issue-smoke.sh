@@ -249,7 +249,8 @@ require_text work-issue/SKILL.md "scoped to the repair's reported \`files_change
 require_text work-issue/SKILL.md "Re-gate the repair as Step 3's repair is"
 require_text work-issue/SKILL.md "repair dispatch, re-gated as Step 3's repair is"
 # A format pass that errors reverts its writes outside the derived set before
-# stopping; a repair has no WAVE_BASE, so it names what stands in (PR #180).
+# stopping. A repair has no WAVE_BASE, so SKILL.md says what stands in for it
+# (PR #180).
 require_text work-issue/SKILL.md "a repair does the same with its reported \`files_changed\` as the derived set"
 # A repair has no manifest of its own, and without one the revert would
 # delete every untracked file the user already had.
