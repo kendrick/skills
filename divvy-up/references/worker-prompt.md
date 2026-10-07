@@ -54,6 +54,12 @@ every such command to your own files, or skip it. The orchestrator runs the
 repo's format pass once, alone, after the wave clears its ownership check,
 so skipping it here drops no step.
 
+The files this rule covers are the ones git would show you: tracked files,
+and untracked files that are not ignored. Ignored build and test output
+(caches, coverage, `target/`, `.tsbuildinfo`) is fine to write, because the
+orchestrator's check lists untracked files with `--exclude-standard` and
+never sees ignored ones either.
+
 The contract you code against—the shared types, interface, schema, or
 migration a prior wave already landed:
 

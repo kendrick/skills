@@ -275,6 +275,27 @@ require_text divvy-up/SKILL.md "A non-zero exit from the pass is no task's failu
 # modification time. Workers' own verification touches files they do not
 # own, and a timestamp cannot say which concurrent agent wrote a path.
 refute_text divvy-up/SKILL.md "mtime"
+# The same row's second cut: checking `files_changed` against the diff. A
+# stale write-back restores WAVE_BASE bytes and leaves no diff to compare.
+# The backticked form is pinned with its object, since Step 6 legitimately
+# checks `files_changed` against `owns`.
+refute_text divvy-up/SKILL.md "files_changed against"
+refute_text divvy-up/SKILL.md "\`files_changed\` against the diff"
+refute_text divvy-up/SKILL.md "\`files_changed\` against the derived"
+
+# A format command that errors partway leaves a partial rewrite, and a
+# resumed run's fresh WAVE_BASE would absorb it unchecked (PR #180 review).
+require_text divvy-up/SKILL.md "where the command itself errored, revert every path it changed outside the derived set back to WAVE_BASE, then stop"
+require_text divvy-up/SKILL.md "Paths inside the derived set keep the pass's writes"
+require_text divvy-up/SKILL.md "rerun the derivation above and take every path it now lists"
+require_text divvy-up/README.md "a half-finished reformat outside the wave's paths never becomes part"
+require_text divvy-up/SKILL.md "Revert each one the way reverting a task, below, reverts an owned path"
+
+# The write ban covers what the gate can see. Ignored build output is
+# invisible to `--exclude-standard`, and banning it contradicts running
+# {{VERIFY_CMD}} (PR #180 review).
+require_text divvy-up/references/worker-prompt.md "The files this rule covers are the ones git would show you"
+require_text divvy-up/references/worker-prompt.md "never sees ignored ones either"
 
 # `stopped` had no rollback and no resume, so a stopped task satisfied no branch
 # of Step 6's completion rule.

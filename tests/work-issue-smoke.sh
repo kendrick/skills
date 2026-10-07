@@ -248,6 +248,16 @@ require_text work-issue/SKILL.md "scoped to the repair's reported \`files_change
 # The red-team repair and the rebase repair also skip divvy-up's Step 6.
 require_text work-issue/SKILL.md "Re-gate the repair as Step 3's repair is"
 require_text work-issue/SKILL.md "repair dispatch, re-gated as Step 3's repair is"
+# A format pass that errors reverts its writes outside the derived set before
+# stopping; a repair has no WAVE_BASE, so it names what stands in (PR #180).
+require_text work-issue/SKILL.md "a repair does the same with its reported \`files_changed\` as the derived set"
+# A repair has no manifest of its own, and without one the revert would
+# delete every untracked file the user already had.
+require_text work-issue/SKILL.md "Immediately before its format pass, a repair gate records an untracked manifest"
+require_text work-issue/SKILL.md "uses HEAD plus that manifest as its WAVE_BASE"
+# Step 4 item 4 and Step 5 item 2 re-gate as Step 3's repair is, so the stop
+# fires there too.
+require_text work-issue/SKILL.md "| The format pass's command itself errors | 3, 4, 5, 7 |"
 
 # Step 4's trigger reads adversarial-review's table at run time through that
 # skill's own script, so no signal is copied here, but which rows it reads is
@@ -670,8 +680,8 @@ awk -v h="$stops_header" '
   on { exit }
 ' work-issue/SKILL.md > "$tmp/stops.txt"
 stops_rows="$(wc -l < "$tmp/stops.txt" | tr -d ' ')"
-[[ "$stops_rows" -eq 25 ]] || {
-  echo "Where a Run Stops lists $stops_rows stops, expected 25" >&2
+[[ "$stops_rows" -eq 26 ]] || {
+  echo "Where a Run Stops lists $stops_rows stops, expected 26" >&2
   exit 1
 }
 while IFS= read -r row; do
