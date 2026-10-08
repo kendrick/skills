@@ -1953,6 +1953,126 @@ git -C "$v_subdir" -c user.email=t@t -c user.name=t commit -qm migrated
 v_subdir_out="$(bash "$verify" "$v_subdir/clients/acme" --since "$v_subdir_since")"
 require_output "$v_subdir_out" "links checked: 1 (id fallback: 1)"
 
+# --- bench-fixture.sh (#191) ---
+# The fixture's labels come from source_refs, so a wrong label yields a recall
+# number that looks real. These pin which records become queries and which files
+# count as expected, on the bench scope built for exactly these cases.
+bench=inbox-to-memory/scripts/bench-fixture.sh
+bench_scope="$fixtures/bench"
+require_file "$bench"
+require_dir "$bench_scope"
+bash -n "$bench"
+
+bench_note1=notes/2026-02-03-bench-rollback-owner-Bn1RbkOwn1.md
+bench_note2=notes/2026-02-10-bench-freeze-source-Bn2FrzSrc2.md
+bench_note3=notes/2025-11-18-bench-region-boundary-Bn3RgnBnd3.md
+bench_rec_a=_memory/decisions/rollback-has-one-named-owner-BnRecA0001.md
+bench_rec_b=_memory/context/region-boundary-split-BnRecB0002.md
+bench_rec_c=_memory/decisions/old-rollback-rotation-BnRecC0003.md
+bench_rec_d=_memory/context/vendor-sla-dangling-BnRecD0004.md
+
+bench_dir="$(mktemp -d "${TMPDIR:-/tmp}/i2m-bench.XXXXXX")"
+trap 'rm -rf "$not_a_scope" "$inline_scope" "$dismissal_scope" "$mig" "$jrn" "$t2_extract_scope" "$t2x_dir" "$subset_scope" "$batched_scope" "$lifecycle_scope" "$idem_dir" "$v_pass" "$scripts_copy" "$v_combo" "$v_linkdrop" "$v_lintdefect" "$v1_broken_scope" "$v1_pass_scope" "$wt_headline" "$wt_backward" "$wt_dedupe" "$wt_status" "$wt_keyins" "$v_subdir" "$bench_dir"' EXIT
+
+# One python3 call per claim, so a failure names the rule that broke rather than
+# "the fixture differs". `q` maps query id to query; `files` is every path any
+# query expects.
+bench_assert() {
+  local json="$1"
+  local label="$2"
+  local expr="$3"
+  python3 -c '
+import json, sys
+d = json.load(open(sys.argv[1]))
+q = {x["id"]: x for x in d["queries"]}
+files = [f for x in d["queries"] for f in x["expected_files"]]
+sys.exit(0 if eval(sys.argv[2]) else 1)
+' "$json" "$expr" || {
+    echo "bench fixture on $json: $label" >&2
+    cat "$json" >&2
+    exit 1
+  }
+}
+
+bash "$bench" "$bench_scope" >"$bench_dir/out.json" 2>"$bench_dir/err.txt"
+bench_assert "$bench_dir/out.json" "query ids are not exactly A, B, F" \
+  'set(q) == {"record-BnRecA0001", "record-BnRecB0002", "record-BnRecF0006"}'
+# Summary wins over title. Contract-v2 records carry only a title, so B is the
+# one record that would notice the rule flipping.
+bench_assert "$bench_dir/out.json" "B's query is not its summary" \
+  'q["record-BnRecB0002"]["query"] == "Billing region and deployment region split in two places"'
+bench_assert "$bench_dir/out.json" "A's expected_files are not its two notes then itself" \
+  'q["record-BnRecA0001"]["expected_files"] == ["'"$bench_note1"'", "'"$bench_note2"'", "'"$bench_rec_a"'"]'
+# F cites `<scope-path>::<id>`; machine-contracts says the id resolves the file.
+bench_assert "$bench_dir/out.json" "F's scope-qualified ref did not resolve to note3" \
+  'q["record-BnRecF0006"]["expected_files"][0] == "'"$bench_note3"'"'
+bench_assert "$bench_dir/out.json" "a superseded record is listed as expected" \
+  '"'"$bench_rec_c"'" not in files'
+# Otherwise a record citing many notes could never score full recall.
+bench_assert "$bench_dir/out.json" "an expected_in_top_k is below its expected_files count" \
+  'all(x["expected_in_top_k"] >= len(x["expected_files"]) for x in d["queries"])'
+# The default floor of 5 hides the raise on a three-file record, so drop it.
+bash "$bench" "$bench_scope" --top-k 2 >"$bench_dir/topk.json" 2>/dev/null
+bench_assert "$bench_dir/topk.json" "--top-k 2 was not raised to A's three expected files" \
+  'q["record-BnRecA0001"]["expected_in_top_k"] == 3 and q["record-BnRecB0002"]["expected_in_top_k"] == 2'
+# Exactly one line: a second would mean a clean record was also reported, and
+# D's query is already proven absent by the id-set check above.
+[[ "$(cat "$bench_dir/err.txt")" == "bench-fixture: $bench_rec_d: source_ref BnNoSuchNote does not resolve to a note" ]] || {
+  echo "bench-fixture stderr is not the one dangling-ref line for D:" >&2
+  cat "$bench_dir/err.txt" >&2
+  exit 1
+}
+
+# Falsifier 1: the status filter, not the fixture's shape, is what keeps A in.
+# Flip A to superseded on a copy and its query and its path both have to go,
+# while the file itself stays where it was.
+cp -R "$bench_scope" "$bench_dir/scope"
+perl -pi -e 's/^status: accepted$/status: superseded/' "$bench_dir/scope/$bench_rec_a"
+grep -qx 'status: superseded' "$bench_dir/scope/$bench_rec_a" || {
+  echo "could not flip A's status in the bench copy" >&2
+  exit 1
+}
+bash "$bench" "$bench_dir/scope" >"$bench_dir/flipped.json" 2>/dev/null
+bench_assert "$bench_dir/flipped.json" "a superseded A still produced a query" \
+  '"record-BnRecA0001" not in q and set(q) == {"record-BnRecB0002", "record-BnRecF0006"}'
+bench_assert "$bench_dir/flipped.json" "a superseded A is still listed as expected" \
+  '"'"$bench_rec_a"'" not in files'
+# Falsifier 2: superseded files stay in the scope, because a superseded record
+# that outranks its replacement is the intrusion the fixture exists to count.
+require_file "$bench_dir/scope/$bench_rec_a"
+require_file "$bench_dir/scope/$bench_rec_c"
+refute_text "$bench" "os.remove"
+refute_text "$bench" "shutil.move"
+
+# Hand-written questions ride along after the derived ones, numbered from 1.
+cat >"$bench_dir/questions.json" <<'JSON'
+[
+  {"query": "who owns a rollback", "expected_files": ["notes/2026-02-03-bench-rollback-owner-Bn1RbkOwn1.md"]},
+  {"query": "when are freeze dates fixed", "expected_files": ["notes/2026-02-10-bench-freeze-source-Bn2FrzSrc2.md"], "expected_in_top_k": 3}
+]
+JSON
+bash "$bench" "$bench_scope" --questions "$bench_dir/questions.json" >"$bench_dir/q.json" 2>/dev/null
+bench_assert "$bench_dir/q.json" "--questions did not append question-1 and question-2 after the records" \
+  '[x["id"] for x in d["queries"]][-2:] == ["question-1", "question-2"] and len(d["queries"]) == 5'
+bench_assert "$bench_dir/q.json" "--questions dropped a question's own expected_in_top_k" \
+  'q["question-2"]["expected_in_top_k"] == 3 and q["question-2"]["query"] == "when are freeze dates fixed"'
+
+# A question with no query would bench as an empty search and score zero
+# silently, so the file is rejected whole and the bad item named by number.
+cat >"$bench_dir/bad-questions.json" <<'JSON'
+[
+  {"query": "who owns a rollback", "expected_files": ["notes/2026-02-03-bench-rollback-owner-Bn1RbkOwn1.md"]},
+  {"expected_files": ["notes/2026-02-10-bench-freeze-source-Bn2FrzSrc2.md"]}
+]
+JSON
+bench_rc=0
+bench_bad_err="$(bash "$bench" "$bench_scope" --questions "$bench_dir/bad-questions.json" 2>&1 >/dev/null)" || bench_rc=$?
+[[ "$bench_rc" == 2 ]] || {
+  echo "bench-fixture accepted a question with no query (exit $bench_rc, want 2)" >&2
+  exit 1
+}
+require_output "$bench_bad_err" "bench-fixture: questions item 2: query must be a non-empty string"
+
 # The checked-in fixtures are never migrated or stamped in place. Every
 # migration or write-through test works on a copy, and a test that forgets
 # to copy would otherwise rewrite the fixture it is asserting against and
