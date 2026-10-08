@@ -309,7 +309,7 @@ require_text divvy-up/SKILL.md "or on a format-command error naming no derived p
 require_text divvy-up/SKILL.md "An error naming no derived path, such as a missing tool, a bad config, or a repo-level failure, stops the run"
 # A guess here sends a healthy task back for a retry.
 require_text divvy-up/SKILL.md "Where the output cannot be tied to a path either way, stop the same way"
-require_text divvy-up/README.md "When the error names only files the wave's tasks wrote, each task that wrote one of them has failed"
+require_text divvy-up/README.md "When the error names only files the wave's tasks wrote, each task that owns one of them has failed"
 require_text divvy-up/SKILL.md "Paths inside the derived set keep the pass's writes"
 require_text divvy-up/SKILL.md "rerun the derivation above and take every path it now lists"
 require_text divvy-up/README.md "A half-finished reformat of those files never reaches the next run's starting point"

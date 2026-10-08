@@ -263,7 +263,10 @@ require_text work-issue/SKILL.md "| The format pass's command errors naming no p
 # the stop row names only the errors left over.
 refute_text work-issue/SKILL.md "| The format pass's command itself errors |"
 refute_text work-issue/SKILL.md "outside the derived set before it stops"
-require_text work-issue/SKILL.md "An error naming a path in \`files_changed\` is the repair's failure: re-dispatch the repair with the formatter's output attached"
+require_text work-issue/SKILL.md "An error naming only paths in \`files_changed\` is the repair's failure: re-dispatch the repair with the formatter's output attached"
+# Mixed output can name a file the repair never touched, and a re-dispatch on
+# it spends the one retry on that file (red-team round 5).
+require_text work-issue/SKILL.md "output naming both a \`files_changed\` path and an outside one"
 # An uncapped re-dispatch loops on a formatter the repair can't satisfy, so it
 # gets the one retry divvy-up gives a failed task.
 require_text work-issue/SKILL.md "once, one rung up, as \`divvy-up\`'s \`failed\` route does for a task"
