@@ -268,7 +268,9 @@ require_text file-issue/SKILL.md "An entry the viewer lacks permission to link i
 require_text file-issue/SKILL.md "link-issues.py resolve"
 require_text file-issue/SKILL.md "link-issues.py link"
 require_text file-issue/SKILL.md "slot entries only"
-require_text file-issue/SKILL.md "admits exactly two writes"
+require_text file-issue/SKILL.md "admits exactly three writes"
+require_text file-issue/SKILL.md "link-issues.py strip"
+require_text file-issue/SKILL.md "removes only the entries whose link landed"
 require_text file-issue/SKILL.md "addSubIssue"
 require_text file-issue/SKILL.md "addBlockedBy"
 require_text file-issue/SKILL.md "the links it will set beside the rendered body"
@@ -276,14 +278,16 @@ require_text file-issue/SKILL.md "\`link --dry-run\` with no \`--issue\`"
 require_text file-issue/SKILL.md "every link was set or reported with its retry command"
 require_text file-issue/SKILL.md "lands on the Blocked by line as text"
 require_text file-issue/SKILL.md "links the new issue to its parent and blockers"
-# A failed link is reported with its retry command and the body stays as
-# created. Writing the failure back into the body is the edit the
-# creation-only rule exists to forbid (Deliberately Not Built).
+# A failed link is reported with its retry command and its text stays in the
+# body. Writing the failure back into the body is the edit the creation-only
+# rule exists to forbid (Deliberately Not Built): the one body write removes
+# entries whose link landed and adds nothing.
 refute_text file-issue/SKILL.md "edit the body to add"
-# The phrase above can be reworded around; the command can't. Writing a link
-# back into the body takes `gh issue edit` or the updateIssue mutation.
+refute_text file-issue/SKILL.md "add it back as text"
+# The phrases above can be reworded around; the command can't. A body edit
+# outside `strip` takes `gh issue edit`.
 refute_text file-issue/SKILL.md "gh issue edit"
-refute_text file-issue/SKILL.md "updateIssue"
+require_text file-issue/SKILL.md "never adds text"
 for f in file-issue/assets/bug.template.md file-issue/assets/feature.template.md file-issue/assets/task.template.md file-issue/assets/spike.template.md; do
   require_text "$f" "becomes a native link"
   require_text "$f" "anything else stays as text"
@@ -296,6 +300,8 @@ require_text _maintenance/file-issue/RATIONALE.md "Parent and Blocked by link na
 require_text _maintenance/file-issue/RATIONALE.md "\`--issue\` is optional only under \`--dry-run\`"
 require_text _maintenance/file-issue/RATIONALE.md "## Deliberately Not Built"
 require_text _maintenance/file-issue/RATIONALE.md "Editing the issue body after creation to add a failed link back as text"
+require_text _maintenance/file-issue/RATIONALE.md "text leaves the body only after its link has landed"
+require_text _maintenance/file-issue/RATIONALE.md "Linking is github.com-only"
 refute_text _maintenance/file-issue/RATIONALE.md "blocking stays text, never GitHub-native"
 require_text _maintenance/file-issue/EVALS.md "### 10. Native links"
 
@@ -464,6 +470,95 @@ require_text "$link_tmp/out" "  retry: gh api graphql -f query='mutation{addBloc
 require_text "$link_tmp/out" "linked parent #12"
 require_text "$link_tmp/out" "linked blocked-by #7"
 require_count "$FAKE_GH_LOG" 'addBlockedBy(input:{issueId:"I_40",blockingIssueId:"I_7"})' 1
+
+# Strip after link (#175, PR #179 rounds 1-3). Every entry is rendered as
+# text, the issue is created, the links go out, and only then does `strip`
+# remove the entries whose link landed, in one updateIssue. A link that fails
+# for any reason leaves its text where it was, so no failure route is lossy.
+body_a="$link_tmp/body-a.md"
+cat > "$body_a" <<'MD'
+# Title
+
+**Parent:** #12
+
+**Blocked by:** #7
+
+## Problem
+
+See #7 and #12 in the old trace.
+MD
+: > "$FAKE_GH_LOG"
+rc=0; run_link link --issue "$new_issue" --plan "$link_tmp/plan.json" --out "$link_tmp/res-a.json" > "$link_tmp/out" || rc=$?
+expect_rc 0 "$rc" "link with --out"
+require_json "$link_tmp/res-a.json" 'sorted(l["kind"] for l in d["linked"])' '["blocked-by", "parent"]'
+: > "$FAKE_GH_LOG"
+rc=0; FAKE_GH_BODY="$body_a" run_link strip --issue "$new_issue" --plan "$link_tmp/plan.json" --result "$link_tmp/res-a.json" > "$link_tmp/out" || rc=$?
+expect_rc 0 "$rc" "strip after every link landed"
+require_count "$FAKE_GH_LOG" "updateIssue" 1
+refute_text "$FAKE_GH_LOG.body" "**Parent:**"
+refute_text "$FAKE_GH_LOG.body" "**Blocked by:**"
+require_text "$FAKE_GH_LOG.body" "See #7 and #12 in the old trace."
+require_text "$FAKE_GH_LOG.body" "# Title"
+# Agent-targeted keeps an explicit None where the list emptied.
+: > "$FAKE_GH_LOG"
+rc=0; FAKE_GH_BODY="$body_a" run_link strip --issue "$new_issue" --plan "$link_tmp/plan.json" --result "$link_tmp/res-a.json" --agent-targeted > "$link_tmp/out" || rc=$?
+expect_rc 0 "$rc" "strip, agent-targeted"
+require_text "$FAKE_GH_LOG.body" "**Blocked by:** None"
+refute_text "$FAKE_GH_LOG.body" "**Parent:**"
+# One blocker fails: its text stays on the line, the linked entries leave.
+body_b="$link_tmp/body-b.md"
+cat > "$body_b" <<'MD'
+**Parent:** #12
+
+**Blocked by:** #66, #7
+
+Body text.
+MD
+: > "$FAKE_GH_LOG"
+rc=0; run_link link --issue "$new_issue" --plan "$link_tmp/fail.json" --out "$link_tmp/res-b.json" > "$link_tmp/out" || rc=$?
+expect_rc 1 "$rc" "link with a failing blocker and --out"
+require_json "$link_tmp/res-b.json" '[l["entry"] for l in d["failed"]]' '["#66"]'
+: > "$FAKE_GH_LOG"
+rc=0; FAKE_GH_BODY="$body_b" run_link strip --issue "$new_issue" --plan "$link_tmp/fail.json" --result "$link_tmp/res-b.json" > "$link_tmp/out" || rc=$?
+expect_rc 0 "$rc" "strip after a partial link"
+require_count "$FAKE_GH_LOG" "updateIssue" 1
+require_text "$FAKE_GH_LOG.body" "**Blocked by:** #66"
+refute_text "$FAKE_GH_LOG.body" "#7"
+refute_text "$FAKE_GH_LOG.body" "**Parent:**"
+require_text "$FAKE_GH_LOG.body" "Body text."
+# Nothing linked: no body write at all.
+: > "$FAKE_GH_LOG"
+rc=0; run_link link --issue "$new_issue" --plan "$link_tmp/text.json" --out "$link_tmp/res-c.json" > "$link_tmp/out" || rc=$?
+expect_rc 0 "$rc" "link a text-only plan with --out"
+: > "$FAKE_GH_LOG"
+rc=0; FAKE_GH_BODY="$body_a" run_link strip --issue "$new_issue" --plan "$link_tmp/text.json" --result "$link_tmp/res-c.json" > "$link_tmp/out" || rc=$?
+expect_rc 0 "$rc" "strip with nothing linked"
+require_count "$FAKE_GH_LOG" "updateIssue" 0
+require_count "$FAKE_GH_LOG" "id body" 0
+# A failed strip write leaves the body as filed and prints a retry command.
+: > "$FAKE_GH_LOG"
+rc=0; FAKE_GH_BODY="$body_a" FAKE_GH_UPDATE_FAIL=1 run_link strip --issue "$new_issue" --plan "$link_tmp/plan.json" --result "$link_tmp/res-a.json" > "$link_tmp/out" || rc=$?
+expect_rc 1 "$rc" "strip whose write fails"
+require_text "$link_tmp/out" "FAILED strip"
+require_text "$link_tmp/out" "retry: gh api graphql"
+require_text "$link_tmp/out" "-F body=@"
+# A GitHub Enterprise URL: link exits 3 before sending anything, the result
+# records nothing linked, and strip writes nothing, so every entry survives
+# as text. Linking is github.com-only (Known Limitations).
+: > "$FAKE_GH_LOG"
+rc=0; run_link link --issue https://github.example.com/o/r/issues/40 --plan "$link_tmp/plan.json" --out "$link_tmp/res-ghe.json" > /dev/null 2>&1 || rc=$?
+expect_rc 3 "$rc" "link on an enterprise URL"
+require_count "$FAKE_GH_LOG" "mutation" 0
+require_json "$link_tmp/res-ghe.json" 'd["linked"]' '[]'
+: > "$FAKE_GH_LOG"
+rc=0; FAKE_GH_BODY="$body_a" run_link strip --issue "$new_issue" --plan "$link_tmp/plan.json" --result "$link_tmp/res-ghe.json" > "$link_tmp/out" || rc=$?
+expect_rc 0 "$rc" "strip after an enterprise link"
+require_count "$FAKE_GH_LOG" "updateIssue" 0
+# --dry-run on link names the strip it would do beside the links.
+rc=0; run_link link --plan "$link_tmp/plan.json" --dry-run > "$link_tmp/out" || rc=$?
+expect_rc 0 "$rc" "link --dry-run names the strip"
+require_text "$link_tmp/out" "would strip parent #12"
+require_text "$link_tmp/out" "would strip blocked-by #7"
 
 # Usage errors and an unresolvable new issue exit 3, not argparse's 2.
 rc=0; run_link > /dev/null 2>&1 || rc=$?

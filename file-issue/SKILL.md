@@ -1,6 +1,6 @@
 ---
 name: file-issue
-description: "File one GitHub issue: a bug report, feature request, task, or spike, created with `gh`. Use when the user wants to file or open an issue, report a bug, request a feature, write up a chore or a spike, turn a half-formed complaint into something tracked, or write an issue a coding agent can pick up cold. Files exactly one issue: to slice a spec or plan into many linked tickets, use to-tickets instead. Never edits, closes, triages, or ranks existing issues. Beyond creation it only links the new issue to its parent and blockers."
+description: "File one GitHub issue: a bug report, feature request, task, or spike, created with `gh`. Use when the user wants to file or open an issue, report a bug, request a feature, write up a chore or a spike, turn a half-formed complaint into something tracked, or write an issue a coding agent can pick up cold. Files exactly one issue: to slice a spec or plan into many linked tickets, use to-tickets instead. Never edits, closes, triages, or ranks existing issues. Beyond creation it only links the new issue to its parent and blockers, then removes the linked entries from the body."
 argument-hint: '[what the issue is about | --deep | --fast | --dry-run]'
 ---
 
@@ -159,32 +159,35 @@ Resolve every Parent and Blocked by entry before rendering. Pass slot entries on
 python3 <skill-path>/scripts/link-issues.py resolve --parent '<entry>' --blocked-by '<entry>' --blocked-by '<entry>' > <resolved.json>
 ```
 
-Omit a flag whose slot is empty, and pass `--repo` when the issue targets a repo other than the current one. An entry with a `node` becomes a native link; an entry with `node: null` stays text, and its `reason` says why. A Parent in a repository another owner holds is always one of those, since GitHub only accepts a sub-issue under a parent with the same owner. An entry the viewer lacks permission to link is another: a blocker needs TRIAGE or higher on the repo the issue is filed into, a parent needs WRITE or higher on its own repo, and a permission `resolve` cannot read counts as missing. Build the final body from that JSON, because the body is final at creation:
-
-- A resolved entry leaves its line.
-- A Parent line whose one entry resolved is dropped.
-- A Blocked by line left empty becomes `**Blocked by:** None` on an agent-targeted issue, and is dropped otherwise.
-- An unresolved entry stays on its line as text.
+Omit a flag whose slot is empty, and pass `--repo` when the issue targets a repo other than the current one. An entry with a `node` becomes a native link; an entry with `node: null` stays text, and its `reason` says why. A Parent in a repository another owner holds is always one of those, since GitHub only accepts a sub-issue under a parent with the same owner. An entry the viewer lacks permission to link is another: a blocker needs TRIAGE or higher on the repo the issue is filed into, a parent needs WRITE or higher on its own repo, and a permission `resolve` cannot read counts as missing. Render every Parent and Blocked by entry as text, resolved or not: a link can still fail once the issue exists, and the text is what survives it. An entry whose link lands leaves the body afterwards, at the strip below.
 
 When the preflight found `gh` unauthenticated, `resolve` cannot run: every entry stays in the body as text, and the dry-run says the links were not resolved.
 
-Then render the full issue as markdown, show it with the links it will set beside the rendered body, and wait for explicit confirmation before `gh issue create`. `--dry-run` renders and stops. Under `--dry-run`, run `resolve`, then `link --dry-run` with no `--issue`, which lists each link it would set and sends no mutation, then stop. `--yolo` skips the confirmation but not the self-check.
+Then render the full issue as markdown, show it with the links it will set beside the rendered body, and wait for explicit confirmation before `gh issue create`. `--dry-run` renders and stops. Under `--dry-run`, run `resolve`, then `link --dry-run` with no `--issue`, which lists each link it would set and each entry the strip would then remove, and sends no mutation, then stop. `--yolo` skips the confirmation but not the self-check.
 
 `gh issue create` prints the new issue's URL. Capture it and link:
 
 ```
-python3 <skill-path>/scripts/link-issues.py link --issue <URL> --plan <resolved.json>
+python3 <skill-path>/scripts/link-issues.py link --issue <URL> --plan <resolved.json> --out <result.json>
 ```
 
-Exit 0 means every link was set. Exit 1 means at least one failed: report the issue URL, each `FAILED` line, and the `retry:` command under it. The issue body stays exactly as created; the retry command is the whole remedy. Exit 3 means a usage error, an unreadable plan, or a new issue that could not be resolved, and no link was sent: report the URL and that no links were set.
+Exit 0 means every link was set. Exit 1 means at least one failed: report the issue URL, each `FAILED` line, and the `retry:` command under it; the failed entry's text is still in the body, so nothing is lost. Exit 3 means a usage error, an unreadable plan, or a new issue that could not be resolved, and no link was sent: report the URL and that no links were set.
 
-Creation only. The rule admits exactly two writes beyond `gh issue create`: the mutations `addSubIssue` and `addBlockedBy`, each naming the new issue. It makes no other write to an existing issue, and never edits, closes, relabels, or reassigns one; when that is what the user wants, say that this skill does not do it.
+Then strip the linked entries from the body, passing `--agent-targeted` when the issue is agent-targeted so an emptied Blocked by line reads `None` rather than vanishing:
 
-**Done when:** the issue URL has been reported and every link was set or reported with its retry command, or the draft and its link list have been rendered under `--dry-run`, or the user chose to comment on an existing issue instead.
+```
+python3 <skill-path>/scripts/link-issues.py strip --issue <URL> --plan <resolved.json> --result <result.json> [--agent-targeted]
+```
+
+`strip` fetches the body, removes only the entries whose link landed from the Parent and Blocked by lines, and sends one `updateIssue`. A Parent line whose entry linked goes; a Blocked by line left empty becomes `**Blocked by:** None` when agent-targeted and goes otherwise; an entry whose link failed stays where it was. It never adds text and never touches another line, and with nothing linked it writes nothing. Exit 1 means the body write failed: report the `FAILED strip` line and its `retry:` command and leave the body as filed, since a text entry beside its link is harmless.
+
+Creation only. The rule admits exactly three writes beyond `gh issue create`, each naming the new issue: the mutations `addSubIssue` and `addBlockedBy`, and one `updateIssue` that removes only the entries whose link landed from the new issue's own body. It makes no other write to an existing issue, and never edits, closes, relabels, or reassigns one; when that is what the user wants, say that this skill does not do it.
+
+**Done when:** the issue URL has been reported, every link was set or reported with its retry command, and the linked entries were stripped from the body or the strip was reported with its retry command, or the draft and its link list have been rendered under `--dry-run`, or the user chose to comment on an existing issue instead.
 
 ## Further Reading
 
 - [references/issue-forms.md](references/issue-forms.md) — issue-form YAML schema, template resolution order, `gh issue create` mechanics
 - [references/evidence-map.md](references/evidence-map.md) — every gate and default traced to its claim and evidence tier
-- [scripts/link-issues.py](scripts/link-issues.py) — resolves Parent and Blocked by entries to issue nodes and sets them as native links, printing a retry command for any that fail
+- [scripts/link-issues.py](scripts/link-issues.py) — resolves Parent and Blocked by entries to issue nodes, sets them as native links, and strips the linked entries from the body, printing a retry command for any write that fails
 - [assets/](assets/) — `bug`, `feature`, `task`, and `spike` bodies, used only when the repo has no template of its own

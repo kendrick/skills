@@ -169,7 +169,7 @@ Fails if the skill rewrites the rule instead of asking, if it demands the test r
 | Expect | Pass condition |
 | --- | --- |
 | Confirmation | Lists `parent #P` and `blocked-by #N` beside the rendered body before `gh issue create` |
-| Body | No Parent line; no Blocked by line, or `**Blocked by:** None` when the issue is agent-targeted |
+| Body | Once the run reports done: no Parent line; no Blocked by line, or `**Blocked by:** None` when the issue is agent-targeted. The body as created carried both lines as text; `strip` removed them after the links landed |
 | Blocked by link | `gh api graphql -f query='query{repository(owner:"<o>",name:"<r>"){issue(number:<new>){blockedBy(first:10){nodes{number}}}}}'` returns `#N` |
 | Parent link | The same query on `#P` with `subIssues(first:10){nodes{number}}` includes the new issue |
 | Problem section | The quoted `#N` in the Problem section adds no link of its own: `blockedBy` holds `#N` once, from the slot, and nothing else |
@@ -189,7 +189,7 @@ Fails if the skill rewrites the rule instead of asking, if it demands the test r
 | Body | `#M` stays on the Blocked by line as text |
 | Links | `blockedBy` on the new issue is empty |
 
-Fails if any link is set that the confirmation did not list, if the body changes after creation, or if a failed link is reported without its retry command.
+Fails if any link is set that the confirmation did not list, if the body changes after creation in any way other than `strip` removing an entry whose link landed, or if a failed link is reported without its retry command.
 
 *Unverified live: whether GitHub answers `issue(number:<PR>)` with `issue: null` or with a GraphQL error. `link-issues.py resolve` treats both as no node with a reason, so either path keeps a pull request as text, and Prompt C checks the result rather than the path. Record which answer GitHub gave when this runs. Also unverified live: that GitHub rejects `addSubIssue` for a parent held by another owner, which is why `resolve` keeps such a Parent as text without looking it up; a sandbox run can confirm it by filing with Parent `<other-owner>/<repo>#N` and checking that the body keeps the line and `subIssues` on the parent stays empty. Also unverified live: that GitHub rejects `addBlockedBy` below triage and `addSubIssue` below write, which is why `resolve` keeps such entries as text; a sandbox run with a read-only account filing with Parent `#P` and Blocked by `#N` should keep both lines in the body and set no link. A token scoped narrower than the account's role is not that test: `viewerPermission` reports the role, so such a run links at resolve and fails at the mutation (see Known Limitations in RATIONALE.md).*
 

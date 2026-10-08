@@ -60,7 +60,7 @@ gh issue create --template <filename> --title <title> --body <body>
 
 For a repo with no template, plain `--title` and `--body` with a body assembled from `assets/`.
 
-`gh issue create` prints the new issue's URL on stdout; capture it for `link-issues.py link`, which needs the new issue to set its Parent and Blocked by links.
+`gh issue create` prints the new issue's URL on stdout; capture it for `link-issues.py link`, which needs the new issue to set its Parent and Blocked by links, and for `link-issues.py strip`, which removes the linked entries from the body once they have landed.
 
 ## Known Quirks
 

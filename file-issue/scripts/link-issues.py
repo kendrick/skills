@@ -7,7 +7,8 @@ here rather than in a fresh act of judgment each time. Deciding which entries
 belong in those slots stays in SKILL.md: this script never reads the body.
 
     link-issues.py resolve [--repo O/R] [--parent ENTRY] [--blocked-by ENTRY ...]
-    link-issues.py link [--issue URL] --plan RESOLVED.json [--dry-run]
+    link-issues.py link [--issue URL] --plan RESOLVED.json [--out RESULT.json] [--dry-run]
+    link-issues.py strip --issue URL --plan RESOLVED.json --result RESULT.json [--agent-targeted] [--dry-run]
 
 `resolve` prints JSON. An entry gets a node only when GitHub returns an issue
 for it; a path, a discussion or PR URL, a PR number, or anything unparseable
@@ -18,14 +19,24 @@ permission to link: addBlockedBy needs TRIAGE or higher on the repo the issue
 is filed into, and addSubIssue needs WRITE or higher on the parent's repo.
 
 `link` sends one addSubIssue for the parent, then one addBlockedBy per
-blocker, keeps going past a failure, and never retries or edits the body.
---issue is optional only under --dry-run, because no issue exists yet during a
-dry run; without it the lines carry the placeholder <new> and nothing is sent.
+blocker, keeps going past a failure, and never retries. With --out it records
+which links landed. --issue is optional only under --dry-run, because no issue
+exists yet during a dry run; without it the lines carry the placeholder <new>
+and nothing is sent.
+
+`strip` runs after `link`. The body is rendered with every entry as text, so a
+link that fails for any reason leaves its text where it was; `strip` fetches
+the body, removes only the entries whose link landed from the Parent and
+Blocked by lines, and sends one updateIssue. It never adds text, never touches
+another line, and writes nothing when nothing linked. --agent-targeted keeps an
+explicit "None" on a Blocked by line the strip emptied.
 
 Exit codes:
-    0  resolve printed its JSON; link set every link (or --dry-run listed them)
-    1  link: at least one link failed (each is printed with a retry command)
-    3  usage error, unreadable plan, or the new issue can't be resolved
+    0  resolve printed its JSON; link set every link (or --dry-run listed them);
+       strip wrote the body, or had nothing to remove
+    1  link: at least one link failed; strip: the body write failed (each is
+       printed with a retry command)
+    3  usage error, unreadable plan or result, or the new issue can't be resolved
 """
 
 import argparse
@@ -33,6 +44,7 @@ import json
 import re
 import subprocess
 import sys
+import tempfile
 
 GH_TIMEOUT = 60
 
@@ -256,8 +268,17 @@ def load_plan(path):
     return plan.get("repo"), links
 
 
+def write_result(path, issue, node, linked, failed):
+    with open(path, "w") as f:
+        json.dump({"issue": issue, "node": node, "linked": linked, "failed": failed}, f, indent=2)
+
+
 def cmd_link(args):
     plan_repo, links = load_plan(args.plan)
+    if args.out:
+        # An empty result lands before anything can fail, so a `link` that
+        # exits 3 still leaves `strip` a file that says nothing linked.
+        write_result(args.out, args.issue, None, [], [])
     if args.issue is None:
         if not args.dry_run:
             raise UsageError("--issue is required unless --dry-run is given")
@@ -273,21 +294,114 @@ def cmd_link(args):
         if new is None or not NODE_RE.match(new):
             raise UsageError(f"can't resolve the new issue {args.issue}: {reason or 'malformed node'}")
 
-    failed = 0
+    linked, failed = [], []
     for kind, item in links:
         query = mutation(kind, new, item["node"])
         name = label(item, home)
+        record = {"kind": kind, "entry": item["entry"], "number": item.get("number"), "repo": item.get("repo")}
         if args.dry_run:
             print(f"would link {kind} {name}: {query}")
+            linked.append(record)
             continue
         rc, out, err = gh(["api", "graphql", "-f", f"query={query}"])
         if rc == 0:
             print(f"linked {kind} {name}")
+            linked.append(record)
         else:
-            failed += 1
+            failed.append(record)
             print(f"FAILED {kind} {name}: {first_line(err, out, rc)}")
             print(f"  retry: gh api graphql -f query='{query}'")
+    if args.dry_run:
+        for record in linked:
+            print(f"would strip {record['kind']} {label(record, home)} from the body once its link lands")
+    if args.out:
+        write_result(args.out, args.issue, new, linked, failed)
     return 1 if failed else 0
+
+
+PARENT_LINE = "**Parent:**"
+BLOCKED_LINE = "**Blocked by:**"
+
+
+def strip_body(body, linked, agent_targeted):
+    """Return the body with each linked entry removed from its slot line, and whether anything changed."""
+    parent_done = any(l["kind"] == "parent" for l in linked)
+    blockers_done = {l["entry"].strip() for l in linked if l["kind"] == "blocked-by"}
+    out, changed = [], False
+    for line in body.splitlines(keepends=True):
+        text = line.strip()
+        if parent_done and text.startswith(PARENT_LINE):
+            changed = True
+            continue
+        if blockers_done and text.startswith(BLOCKED_LINE):
+            entries = [e.strip() for e in text[len(BLOCKED_LINE):].split(",") if e.strip()]
+            kept = [e for e in entries if e not in blockers_done]
+            if len(kept) == len(entries):
+                out.append(line)
+                continue
+            changed = True
+            ending = line[len(line.rstrip("\r\n")):]
+            if kept:
+                out.append(f"{BLOCKED_LINE} {', '.join(kept)}{ending}")
+            elif agent_targeted:
+                # An absent list reads as unexamined; "None" says the slot
+                # was considered and emptied on purpose.
+                out.append(f"{BLOCKED_LINE} None{ending}")
+            continue
+        out.append(line)
+    return "".join(out), changed
+
+
+def load_result(path):
+    try:
+        with open(path) as f:
+            result = json.load(f)
+    except (OSError, ValueError) as e:
+        raise UsageError(f"can't read result {path}: {e}")
+    linked = result.get("linked") if isinstance(result, dict) else None
+    if not isinstance(linked, list) or not all(isinstance(l, dict) and l.get("kind") in ("parent", "blocked-by") and isinstance(l.get("entry"), str) for l in linked):
+        raise UsageError(f"result {path} isn't the shape link --out writes")
+    return linked
+
+
+UPDATE_BODY = 'mutation($id:ID!,$body:String!){updateIssue(input:{id:$id,body:$body}){issue{number}}}'
+
+
+def cmd_strip(args):
+    load_plan(args.plan)
+    linked = load_result(args.result)
+    if not linked:
+        print("nothing linked; the body stays as filed")
+        return 0
+    m = URL_RE.match(args.issue.strip())
+    if not m:
+        raise UsageError(f"--issue must be an issue URL, got {args.issue!r}")
+    home, number = f"{m.group(1)}/{m.group(2)}", int(m.group(3))
+    data, reason = repo_query(home, f"issue(number:{number}){{id body}}")
+    issue = (data or {}).get("issue") or {}
+    node, body = issue.get("id"), issue.get("body")
+    if not node or not NODE_RE.match(node) or body is None:
+        raise UsageError(f"can't read the body of {args.issue}: {reason or 'no issue in the response'}")
+    new_body, changed = strip_body(body, linked, args.agent_targeted)
+    if not changed:
+        print("no slot line carried a linked entry; the body stays as filed")
+        return 0
+    if args.dry_run:
+        print("would update the body to:")
+        print(new_body, end="" if new_body.endswith("\n") else "\n")
+        return 0
+    rc, out, err = gh(["api", "graphql", "-f", f"query={UPDATE_BODY}", "-f", f"id={node}", "-f", f"body={new_body}"])
+    if rc == 0:
+        print(f"stripped {', '.join(label(l, home) for l in linked)} from the body")
+        return 0
+    # The body has newlines and quotes, so the retry reads it from a file
+    # rather than carrying it inline.
+    saved = tempfile.NamedTemporaryFile("w", prefix="strip-body-", suffix=".md", delete=False)
+    saved.write(new_body)
+    saved.close()
+    print(f"FAILED strip: {first_line(err, out, rc)}")
+    print(f"  retry: gh api graphql -f query='{UPDATE_BODY}' -f id={node} -F body=@{saved.name}")
+    return 1
 
 
 def main(argv):
@@ -301,11 +415,18 @@ def main(argv):
     lk.add_argument("--issue")
     lk.add_argument("--plan", required=True)
     lk.add_argument("--dry-run", action="store_true")
+    lk.add_argument("--out")
+    st = sub.add_parser("strip")
+    st.add_argument("--issue", required=True)
+    st.add_argument("--plan", required=True)
+    st.add_argument("--result", required=True)
+    st.add_argument("--agent-targeted", action="store_true")
+    st.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
     if args.cmd is None:
-        parser.error("a subcommand is required: resolve or link")
+        parser.error("a subcommand is required: resolve, link, or strip")
     try:
-        return cmd_resolve(args) if args.cmd == "resolve" else cmd_link(args)
+        return {"resolve": cmd_resolve, "link": cmd_link, "strip": cmd_strip}[args.cmd](args)
     except UsageError as e:
         print(f"link-issues.py: {e}", file=sys.stderr)
         return 3

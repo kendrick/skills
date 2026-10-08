@@ -3,7 +3,16 @@
 # nodes below and fails every other lookup, so a script that links whatever
 # number it was handed can't pass by luck. Every call is logged one line per
 # invocation, which is how the suite asserts which mutations went out.
-printf '%s\n' "$*" >> "${FAKE_GH_LOG:?FAKE_GH_LOG must name the call log}"
+# An updateIssue body spans lines, so it goes to a side file and the log line
+# names the file instead; the log stays one line per call.
+logline=""
+for a in "$@"; do
+  case "$a" in
+    body=*) printf '%s' "${a#body=}" > "${FAKE_GH_LOG:?FAKE_GH_LOG must name the call log}.body"; a='body=@body' ;;
+  esac
+  logline="$logline$a "
+done
+printf '%s\n' "${logline% }" >> "${FAKE_GH_LOG:?FAKE_GH_LOG must name the call log}"
 
 if [ "$1" = "repo" ] && [ "$2" = "view" ]; then
   printf '{"nameWithOwner":"o/r"}\n'
@@ -15,11 +24,20 @@ if [ "$1" != "api" ] || [ "$2" != "graphql" ]; then
   exit 2
 fi
 
-call="$*"
+call="${logline% }"
 
 case "$call" in
   *mutation*)
     case "$call" in
+      *updateIssue*)
+        if [ "${FAKE_GH_UPDATE_FAIL:-}" = 1 ]; then
+          printf '{"data":{"updateIssue":null},"errors":[{"type":"FORBIDDEN","message":"Resource not accessible by integration"}]}\n'
+          echo "GraphQL: Resource not accessible by integration (updateIssue)" >&2
+          exit 1
+        fi
+        printf '{"data":{"updateIssue":{"issue":{"number":40}}}}\n'
+        exit 0
+        ;;
       *'addBlockedBy(input:{issueId:"'*'",blockingIssueId:"I_FAIL"})'*)
         # Real gh puts the error JSON on stdout and a summary on stderr.
         printf '{"data":{"addBlockedBy":null},"errors":[{"type":"NOT_FOUND","message":"Could not resolve to a node with the global id of '"'"'I_FAIL'"'"'"}]}\n'
@@ -60,6 +78,15 @@ for pair in $(printf '%s' "${FAKE_GH_PERMS:-}" | tr ',' ' '); do
   case "$pair" in "$repo_key="*) perm="${pair#*=}" ;; esac
 done
 if [ "$perm" = null ]; then perm_json=null; else perm_json="\"$perm\""; fi
+
+# The body query reads the canned body in FAKE_GH_BODY, so a strip case can
+# check which lines survived.
+case "$call" in
+  *'issue(number:40){id body}'*)
+    python3 -c 'import json,sys; print(json.dumps({"data":{"repository":{"issue":{"id":"I_40","body":open(sys.argv[1]).read()}}}}))' "${FAKE_GH_BODY:?FAKE_GH_BODY must name the canned body}"
+    exit 0
+    ;;
+esac
 
 case "$call" in
   *'issue(number:'*) ;;
