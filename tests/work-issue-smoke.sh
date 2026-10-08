@@ -240,6 +240,47 @@ require_text work-issue/SKILL.md "what you left and why"
 require_text work-issue/references/worker-prompt.md "Flag rather than route around"
 require_text work-issue/references/worker-prompt.md "what you left and why"
 
+# kendrick/skills#116: workers leave formatting to the orchestrator, and a
+# repair re-gate never passes through divvy-up's Step 6, so it names the pass.
+require_text work-issue/SKILL.md "Re-gate—the format pass"
+require_text work-issue/SKILL.md "Gate it the way Step 3 gates: the format pass"
+require_text work-issue/SKILL.md "scoped to the repair's reported \`files_changed\`"
+# The red-team repair and the rebase repair also skip divvy-up's Step 6.
+require_text work-issue/SKILL.md "Re-gate the repair as Step 3's repair is"
+require_text work-issue/SKILL.md "repair dispatch, re-gated as Step 3's repair is"
+# A format pass that errors reverts its writes outside the derived set before
+# anything else. A repair has no WAVE_BASE, so SKILL.md says what stands in for it
+# (PR #180).
+require_text work-issue/SKILL.md "a repair does the same with its reported \`files_changed\` as the derived set"
+# A repair has no manifest of its own, and without one the revert would
+# delete every untracked file the user already had.
+require_text work-issue/SKILL.md "Immediately before its format pass, a repair gate records an untracked manifest"
+require_text work-issue/SKILL.md "uses HEAD plus that manifest as its WAVE_BASE"
+# Step 4 item 4 and Step 5 item 2 re-gate as Step 3's repair is, so the stop
+# fires there too.
+require_text work-issue/SKILL.md "| The format pass's command errors naming no path in the derived set or the repair's \`files_changed\`, or none it can be tied to, or a repair already re-dispatched for a format-pass error fails it again | 3, 4, 5, 7 |"
+# An error the repair caused gets a retry (PR #180 review, r4213929212), so
+# the stop row names only the errors left over.
+refute_text work-issue/SKILL.md "| The format pass's command itself errors |"
+refute_text work-issue/SKILL.md "outside the derived set before it stops"
+require_text work-issue/SKILL.md "An error naming only paths in \`files_changed\` is the repair's failure: re-dispatch the repair once"
+# Mixed output can name a file the repair never touched, and a re-dispatch on
+# it spends the one retry on that file (red-team round 5).
+require_text work-issue/SKILL.md "output naming both a \`files_changed\` path and an outside one"
+# An uncapped re-dispatch loops on a formatter the repair can't satisfy, so it
+# gets one retry.
+require_text work-issue/SKILL.md "re-dispatch the repair once, at the same model, with the formatter's output attached"
+# work-issue never assigns a repair a rung, a fable repair has none above it, and herdr re-prompts the same agent (PR #180 r4221441436).
+refute_text work-issue/SKILL.md "once, one rung up"
+require_text work-issue/SKILL.md "Where that re-dispatched repair fails the format pass the same way again, revert its writes as above and stop the run"
+# The outside revert alone left the repair's own writes behind at the stop.
+# Resume never reverts those, so it stopped on row 7 or re-dispatched onto
+# them from row 9 (adversarial-review of #116, F-r1-authz-01).
+require_text work-issue/SKILL.md "revert the repair's own writes on every branch"
+require_text work-issue/SKILL.md "each one the pre-pass manifest lists as untracked is deleted"
+require_text work-issue/SKILL.md "Delete any report already saved for the repair"
+require_text work-issue/SKILL.md "stops the run with the tree clean"
+
 # Step 4's trigger reads adversarial-review's table at run time through that
 # skill's own script, so no signal is copied here, but which rows it reads is
 # fixed here. Drop a row and the red-team phase stops firing on money, authz, or
@@ -661,8 +702,8 @@ awk -v h="$stops_header" '
   on { exit }
 ' work-issue/SKILL.md > "$tmp/stops.txt"
 stops_rows="$(wc -l < "$tmp/stops.txt" | tr -d ' ')"
-[[ "$stops_rows" -eq 25 ]] || {
-  echo "Where a Run Stops lists $stops_rows stops, expected 25" >&2
+[[ "$stops_rows" -eq 26 ]] || {
+  echo "Where a Run Stops lists $stops_rows stops, expected 26" >&2
   exit 1
 }
 while IFS= read -r row; do

@@ -44,6 +44,22 @@ orchestrator uses to undo a failed task—so your failure would outlive its own
 rollback. The orchestrator commits after the wave passes its gate, and only if
 the user asked for that.
 
+Run no command that writes files outside the ones you own. Formatters and
+linters run with `--fix` are the usual trap: they default to the whole tree,
+and this repo's own agent docs will tell you to run one before you finish,
+because those docs were written for an agent working alone. A tree-wide
+rewrite lands on files a peer is halfway through writing, and one that
+changes no bytes leaves no trace the orchestrator's check can find. Scope
+every such command to your own files, or skip it. The orchestrator runs the
+repo's format pass once, alone, after the wave clears its ownership check,
+so skipping it here drops no step.
+
+The files this rule covers are the ones git would show you: tracked files,
+and untracked files that are not ignored. Ignored build and test output
+(caches, coverage, `target/`, `.tsbuildinfo`) is fine to write, because the
+orchestrator's check lists untracked files with `--exclude-standard` and
+never sees ignored ones either.
+
 The contract you code against—the shared types, interface, schema, or
 migration a prior wave already landed:
 
@@ -72,6 +88,15 @@ actually prints:
 
     {{VERIFY_CMD}}
 
+If that command writes files—a format or `--fix` step chained ahead of its
+checks—the rule against writing outside your own files wins. Run its
+check-only form, or its checks without the fix step, and say which you ran
+in `verify_output`. Where the formatter takes paths, run it on your own
+files first. A formatting-only complaint is the format pass's to fix when
+it lands on a file you do not own, or on one of yours the formatter could
+not be scoped to: name it in `verify_output`, and set your status by
+everything else verification printed.
+
 If anything about the task, the contract, or the definition of done is
 ambiguous, stop and report the ambiguity. Do not guess. A guess made inside a
 subagent surfaces as an ordinary-looking diff that nobody questions, and by
@@ -93,9 +118,9 @@ preamble, no summary paragraph, no closing assessment. This shape:
 
 `status` is `done`, `stopped` (you hit real ambiguity—put it in `question`,
 and report `files_changed` and `verify_output` as far as you got), or
-`failed` (verification would not pass and you could not fix it—put what
-failed in `question`). Leave `question` empty except for `stopped` or
-`failed`.
+`failed` (verification would not pass, a complaint left to the format
+pass aside, and you could not fix it—put what failed in `question`).
+Leave `question` empty except for `stopped` or `failed`.
 ```
 
 ## Placeholders
@@ -105,7 +130,7 @@ failed in `question`). Leave `question` empty except for `stopped` or
 - `{{CONTRACT}}` — the shared types, interface, schema, or migration a wave-0 task already landed, quoted inline or named by path. A worker left to infer the contract will guess at something plausible and wrong; quoting or naming the real thing is what lets every task in the wave agree on the same shape without talking to each other.
 - `{{DONE_WHEN}}` — the wave table's Done when cell for this task, verbatim. It is the only acceptance bar the worker gets, so copying it exactly matters more than making it read smoothly.
 - `{{CONSTRAINTS}}` — the task's Constraints cell from the wave table, verbatim. An empty cell substitutes the literal `none recorded`, so the template goes across unchanged rather than growing a conditional paragraph the dispatcher has to decide about.
-- `{{VERIFY_CMD}}` — the repo's verification command (test suite, linter, build—whatever this repo runs). The worker runs it before reporting, so a task that reports `done` with a broken build is a worker that skipped this line, not a gap in the contract.
+- `{{VERIFY_CMD}}` — the repo's verification command (test suite, linter, build—whatever this repo runs). The worker runs it before reporting, so a task that reports `done` with a broken build is a worker that skipped this line, not a gap in the contract. Substitute a form that writes nothing where the repo has one (`prettier --check`, `cargo fmt --check`, `ruff format --check`, a lint script without `--fix`). Every worker in the wave runs this at once, so a command that writes is a tree-wide write six times over; a worker handed one falls back to its checks, and Step 6's format pass does what the fix step would have.
 - `{{CALLER_NOTES}}` — empty on a direct run. A wrapping skill that dispatches through divvy-up supplies its own preamble here, verbatim, and it goes across ahead of everything else the caller could not otherwise say.
 - `{{PRIOR}}` — empty on a first dispatch. On a re-dispatch after a failure, it carries the previous attempt's report, what the gate found wrong with it, and, if the failure was a constraint violation, which constraint was broken—a worker who does not know which shortcut was refused will reach for it again.
 
