@@ -59,6 +59,8 @@ require_file tests/fixtures/jira-refine/staging-good.md
 require_file tests/fixtures/jira-refine/staging-bad.md
 require_file tests/fixtures/jira-refine/fake-jira
 require_file tests/fixtures/jira-refine/fake-jira-rest.py
+require_file tests/fixtures/jira-refine/jira-cli-config-healthy.yml
+require_file tests/fixtures/jira-refine/jira-cli-config-no-types.yml
 
 [[ "$(find jira-refine -maxdepth 1 -type f | wc -l | tr -d ' ')" == "2" ]] || {
   echo "jira-refine/ must ship only SKILL.md and README.md at top level" >&2
@@ -1157,6 +1159,10 @@ export PATH="$tmp/bin:$PATH"
 export FAKE_JIRA_LOG="$cli_log"
 export FAKE_JIRA_SEED="$fixtures/issues.json"
 export FAKE_JIRA_STATE="$tmp/cli-state.json"
+# The preflight reads jira-cli's own config for its issue-type cache (#90).
+# Without this, every case below would read the developer's real config and
+# pass or fail on whatever `jira init` last wrote there.
+export JIRA_CONFIG_FILE="$fixtures/jira-cli-config-healthy.yml"
 # jira-cli writes a custom field by its declared name and the raw API returns it
 # by id, so the fake needs the same name-to-id declaration the real CLI carries
 # in its own config. Every half is already in the fixture config — `goal` and
@@ -1304,6 +1310,60 @@ grep -Fq "no cli_name, which jira-cli writes by" "$tmp/cli-nocli.json" || {
   cat "$tmp/cli-nocli.json" >&2
   exit 1
 }
+
+# --- The jira-cli issue-type cache (#90). ------------------------------------
+# `jira me` passes on a config with no cached types, and then every `jira issue
+# create` fails with "invalid issue types in config". The preflight has to stop
+# the run before the first write, so the fake's log must not grow at all.
+before_notypes="$(log_lines "$cli_log")"
+set +e
+JIRA_CONFIG_FILE="$fixtures/jira-cli-config-no-types.yml" \
+  python3 "$apply" create --config "$config" --transport jira-cli \
+  < "$tmp/cli-create.jsonl" > "$tmp/cli-notypes.json" 2> "$tmp/cli-notypes.err"
+notypes_status=$?
+set -e
+[[ "$notypes_status" == 3 ]] || {
+  echo "a jira-cli config with no cached issue types should exit 3, got $notypes_status" >&2
+  cat "$tmp/cli-notypes.err" >&2
+  exit 1
+}
+[[ "$(log_lines "$cli_log")" == "$before_notypes" ]] || {
+  echo "a run stopped for an empty issue-type cache must not reach the tracker" >&2
+  exit 1
+}
+grep -Fq "caches no issue types" "$tmp/cli-notypes.err" || {
+  echo "the exit-3 message should say the config caches no issue types:" >&2
+  cat "$tmp/cli-notypes.err" >&2
+  exit 1
+}
+grep -Fq 'run `jira init`' "$tmp/cli-notypes.err" || {
+  echo "the exit-3 message should name \`jira init\` as the fix:" >&2
+  cat "$tmp/cli-notypes.err" >&2
+  exit 1
+}
+
+# A missing file is jira-apply's path lookup falling short, not a broken
+# config: `jira me` just authenticated against one. So the run goes on with a
+# note rather than blocking a working setup on a guess about where it lives.
+set +e
+JIRA_CONFIG_FILE="$tmp/no-such-jira-config.yml" \
+  python3 "$apply" get PROJ-412 --config "$config" --transport jira-cli \
+  > "$tmp/cli-noconfig.json" 2> "$tmp/cli-noconfig.err"
+noconfig_status=$?
+set -e
+[[ "$noconfig_status" == 0 ]] || {
+  echo "a missing jira-cli config should not stop the run, got exit $noconfig_status:" >&2
+  cat "$tmp/cli-noconfig.err" >&2
+  exit 1
+}
+grep -Fq "the issue-type cache was not checked" "$tmp/cli-noconfig.err" || {
+  echo "a missing jira-cli config should say the issue-type cache went unchecked:" >&2
+  cat "$tmp/cli-noconfig.err" >&2
+  exit 1
+}
+
+# `jira init` rewrites a config the user owns; preflight names it and stops.
+refute_text jira-refine/scripts/jira-apply.py '["init"'
 
 # --- The extra_fields config table. -----------------------------------------
 # Loud rather than lenient, unlike [fields] and [auth], which a wrong shape
