@@ -55,7 +55,8 @@ inbox-to-memory/
 │   ├── scaffold_digest.py  # computes and stamps the scaffold_digest a scaffolded file carries
 │   ├── lint-scope.sh       # what the verify phase runs
 │   ├── migrate-scope.sh    # brings a v1 scope onto the v2 contract
-│   └── collapse-vtt.sh     # merges VTT cues into speaker turns
+│   ├── collapse-vtt.sh     # merges VTT cues into speaker turns
+│   └── bench-fixture.sh    # builds a qmd bench fixture from accepted records
 └── references/       # progressive-disclosure reading
     ├── extraction-heuristics.md
     ├── scope-decisions.md
