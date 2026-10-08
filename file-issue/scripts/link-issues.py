@@ -324,7 +324,7 @@ PARENT_LINE = "**Parent:**"
 BLOCKED_LINE = "**Blocked by:**"
 
 
-FENCE_RE = re.compile(r"^\s{0,3}(`{3,}|~{3,})")
+FENCE_RE = re.compile(r"^\s{0,3}(`{3,}|~{3,})(.*)$")
 
 
 def strip_body(body, linked, agent_targeted):
@@ -335,14 +335,16 @@ def strip_body(body, linked, agent_targeted):
     fence = None
     for line in body.splitlines(keepends=True):
         text = line.strip()
-        # A slot line inside a code fence is a sample, not the slot. The
-        # fence closes on the same marker character it opened with.
-        m = FENCE_RE.match(line)
+        # A slot line inside a code fence is a sample, not the slot. Per
+        # CommonMark a fence closes only on a run of the opener's character at
+        # least as long as the opener, with nothing but whitespace after it,
+        # so a ```` fence keeps a ``` line inside it.
+        m = FENCE_RE.match(line.rstrip("\r\n"))
         if m:
-            marker = m.group(1)[0]
+            run, rest = m.group(1), m.group(2)
             if fence is None:
-                fence = marker
-            elif fence == marker:
+                fence = run
+            elif run[0] == fence[0] and len(run) >= len(fence) and not rest.strip():
                 fence = None
             out.append(line)
             continue
