@@ -1104,6 +1104,68 @@ class RestTransport(Transport):
         ]
 
 
+def jira_cli_config_path():
+    """Where `jira issue create` reads its cached issue types (issue #90).
+
+    jira-cli resolves --config, then $JIRA_CONFIG_FILE, then
+    <config home>/.jira/.config.yml. jira-apply never passes --config, so this
+    mirrors the rest: $JIRA_CONFIG_FILE if non-empty, then
+    $XDG_CONFIG_HOME/.jira/.config.yml, then ~/.config/.jira/.config.yml,
+    which is the path #90 observed."""
+    explicit = os.environ.get("JIRA_CONFIG_FILE")
+    if explicit:
+        return explicit
+    home = os.environ.get("XDG_CONFIG_HOME")
+    if home:
+        return os.path.join(home, ".jira", ".config.yml")
+    return os.path.join(os.path.expanduser("~"), ".config", ".jira", ".config.yml")
+
+
+def _config_body_lines(lines):
+    """Yield (indent, stripped) for lines that carry content."""
+    for raw in lines:
+        stripped = raw.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        yield len(raw) - len(raw.lstrip(" ")), stripped
+
+
+def jira_cli_issue_types_cached(text):
+    """True when the config's `issue:` block caches at least one type.
+
+    A line scan, because the repo is standard library only and PyYAML is not.
+    `jira init` writes `types:` as a block sequence of `- id:` mappings; an
+    inline flow list also counts. Anything unrecognized reads as not cached,
+    which fails closed toward the `jira init` message."""
+    lines = text.splitlines()
+    start = None
+    for i, raw in enumerate(lines):
+        if re.fullmatch(r"issue:[ \t]*(#.*)?", raw):
+            start = i + 1
+            break
+    if start is None:
+        return False
+    block = []
+    for raw in lines[start:]:
+        if raw.strip() and not raw.lstrip().startswith("#") and raw[0] not in " \t":
+            break
+        block.append(raw)
+    body = list(_config_body_lines(block))
+    for j, (indent, stripped) in enumerate(body):
+        if not stripped.startswith("types:"):
+            continue
+        inline = stripped[len("types:"):].split("#", 1)[0].strip()
+        if inline:
+            return inline.startswith("[") and inline.endswith("]") and bool(
+                inline[1:-1].strip()
+            )
+        if j + 1 < len(body):
+            nxt_indent, nxt = body[j + 1]
+            return nxt_indent > indent and nxt.startswith("- ")
+        return False
+    return False
+
+
 class JiraCliTransport(Transport):
     """ankitpokhrel's `jira` binary, for a client environment that allows only it.
 
@@ -1124,6 +1186,28 @@ class JiraCliTransport(Transport):
         probe = self._run(["me"])
         if probe.returncode != 0:
             die(f"`jira me` failed: {self._why(probe)}")
+        # `jira issue create` validates -t against the issue types cached in
+        # its config, and `jira me` never touches that cache (#90). A config
+        # with none passes the probe and then fails every create.
+        path = jira_cli_config_path()
+        if not os.path.isfile(path):
+            print(
+                f"jira-apply: note: no jira-cli config at {path}; "
+                "the issue-type cache was not checked",
+                file=sys.stderr,
+            )
+            return
+        try:
+            with open(path, encoding="utf-8") as fh:
+                text = fh.read()
+        except OSError as e:
+            die(f"cannot read jira-cli's config at {path}: {e}")
+        if not jira_cli_issue_types_cached(text):
+            die(
+                f"jira-cli's config at {path} caches no issue types, so every "
+                '`jira issue create` would fail with "invalid issue types in '
+                'config"; run `jira init` to rebuild it'
+            )
 
     def _run(self, args):
         try:

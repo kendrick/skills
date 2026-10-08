@@ -1,0 +1,23 @@
+version: 1
+installation: Cloud
+server: https://your-site.atlassian.net
+login: you@example.com
+project:
+  key: "FRW"
+  type: ""
+board:
+  id: 0
+  name: ""
+issue:
+  fields:
+    custom:
+      story_points: customfield_10016
+  types:
+    - id: "10001"
+      name: Story
+      handle: Story
+      subtask: false
+    - id: "10002"
+      name: Bug
+      handle: Bug
+      subtask: false

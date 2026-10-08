@@ -170,3 +170,10 @@ v2 API returns it:
 
 This is the interface both fixture-owning tasks in this wave build against —
 the fake transports read exactly this shape, keyed by issue key.
+
+## jira-cli configs: `jira-cli-config-healthy.yml`, `jira-cli-config-no-types.yml`
+
+Two `jira-cli` config files for the preflight's issue-type check. Both are the placeholder config `jira init` writes before it has talked to a site (`your-site.atlassian.net`, `you@example.com`, project `FRW`), so no real host or address lives in the repo. The preflight reads the file named by `JIRA_CONFIG_FILE` instead of the developer's own `~/.config/.jira/.config.yml`.
+
+- `jira-cli-config-no-types.yml` — the ten-line config with no `issue:` block, which is what a config looks like when `jira init` never cached the project's issue types. A `jira issue create` against it has no type to send. The smoke case that points `JIRA_CONFIG_FILE` here expects the preflight to exit 3 with a message naming `jira init` as the fix.
+- `jira-cli-config-healthy.yml` — the same ten lines plus an `issue:` block. `types:` is a block sequence of two mappings (`Story` id `10001`, `Bug` id `10002`), and `fields:` with a `custom:` entry sits ahead of it as a sibling key, so a scan for `types:` has to walk past a neighbor to find it. The jira-cli leg of `tests/jira-refine-smoke.sh` exports `JIRA_CONFIG_FILE` at this file, so every existing case in that leg passes the preflight without ever reading the developer's real config.
