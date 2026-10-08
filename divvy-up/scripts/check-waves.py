@@ -14,12 +14,12 @@ run rather than warning about it.
 
 An overlap between tasks in DIFFERENT waves is not a problem. It is the planner
 having serialized two tasks that touch one tree, which is what should happen.
-Those print on stdout as `serialized:` lines and pass.
+Those print on stdout as `serialized:` lines and pass. With no `.git` above the
+cwd, a leading `skipped:` line says the on-disk checks didn't run and success
+prints `OK (spelling only): ...`, not `OK: ...`.
 
-`owners` is the check on a wave that already ran. A path in the diff that no
-task in the wave owns exits 1 instead of being skipped. An agent writing outside
-its territory is the exact failure the wave structure exists to prevent, and
-catching it is worth nothing unless it stops the run.
+`owners` checks a wave that already ran. A path in the diff that no task in the
+wave owns exits 1, not a skip, because a write outside its territory must stop.
 
 Exit codes: 0 pass; 1 semantic failure (missing or malformed table, in-wave
 overlap, malformed entry, unknown model, non-contiguous waves, unowned or
@@ -348,7 +348,7 @@ def repo_root_for():
     Walks up from the working directory, never from the plan file. Entries are
     relative to the repo under change, and the plan often sits outside it—a
     conversation-only plan is written to a temp file, and resolving from there
-    would find no `.git` and silently skip every on-disk check. Answers None
+    would find no `.git` and skip every on-disk check. Answers None
     when no `.git` is found above the working directory. None keeps the spelling-only checks
     and skips the on-disk ones, which is what a plan validated outside a
     checkout should get.
@@ -434,6 +434,16 @@ def cmd_validate(args):
             f"{list(range(len(waves)))}"
         )
 
+    # Stdout, not stderr: stderr is the one-line-per-problem channel on exit 1,
+    # and a caller counting those lines would read a warning as a failure. Printed
+    # on the failure path too, so a degraded failure says what it never checked
+    # (#122, after PR #121 made the checks depend on a repo root).
+    if repo_root is None:
+        print(
+            "skipped: on-disk entry checks (a directory entry missing its "
+            "trailing '/', a trailing '/' on a file); no .git above "
+            f"{os.getcwd()}"
+        )
     for line in serialized:
         print(line)
     if problems:
@@ -441,7 +451,9 @@ def cmd_validate(args):
             sys.stderr.write(f"check-waves: {problem}\n")
         return 1
 
-    print(f"OK: {_count(len(rows), 'task')} in {_count(len(waves), 'wave')}, disjoint")
+    # "OK (spelling only)" so a caller matching ^OK: sees full validations only.
+    ok = "OK" if repo_root else "OK (spelling only)"
+    print(f"{ok}: {_count(len(rows), 'task')} in {_count(len(waves), 'wave')}, disjoint")
     return 0
 
 
