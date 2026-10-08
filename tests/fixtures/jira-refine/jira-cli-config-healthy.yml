@@ -13,11 +13,11 @@ issue:
     custom:
       story_points: customfield_10016
   types:
-    - id: "10001"
-      name: Story
-      handle: Story
-      subtask: false
-    - id: "10002"
-      name: Bug
-      handle: Bug
-      subtask: false
+  - id: "10001"
+    name: Story
+    handle: Story
+    subtask: false
+  - id: "10002"
+    name: Bug
+    handle: Bug
+    subtask: false

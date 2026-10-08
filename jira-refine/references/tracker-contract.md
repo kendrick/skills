@@ -232,7 +232,14 @@ REST needs `site` plus the two environment variables named under `[auth]` by the
 - `jira me` proves auth.
 - The config's cached `issue.types` list proves `jira issue create` can run. With that list empty or absent, `jira me` still passes and every create fails with `invalid issue types in config`. jira-apply reads the file instead of calling the binary, because no jira-cli command reports the cache short of attempting a write.
 
-jira-apply never passes `--config`, so it resolves the file the way jira-cli does without one: `$JIRA_CONFIG_FILE` when set and non-empty, then `$XDG_CONFIG_HOME/.jira/.config.yml` when `XDG_CONFIG_HOME` is set, then `~/.config/.jira/.config.yml`. The list counts as populated when it holds at least one entry, as a block sequence or a non-empty flow list.
+jira-apply never passes `--config`, so it resolves the file the way jira-cli does without one: `$JIRA_CONFIG_FILE` when set and non-empty, then `$XDG_CONFIG_HOME/.jira/.config.yml` when `XDG_CONFIG_HOME` is set, then `~/.config/.jira/.config.yml`.
+
+The check reads the file line by line, not as YAML. Only a `types:` key that is a direct child of the top-level `issue:` counts; a `types:` nested deeper, such as one under `issue.fields`, is ignored. Keys may be bare or quoted. The list counts as populated in two cases:
+
+- The first content line after `types:` is a `- ` item at the key's own indent or deeper. A `-` alone on its line counts when a more-indented line follows it.
+- `types:` carries a non-empty flow list that opens and closes on the same line.
+
+Every other shape reads as not cached and exits 3, including an inline `issue: {...}` mapping, a flow list spread over several lines, and tab indentation. The exit-3 fix still applies to them, because `jira init` rewrites the file in block style.
 
 An empty or absent list exits 3 with ``jira-cli's config at <path> caches no issue types, so every `jira issue create` would fail with "invalid issue types in config"; run `jira init` to rebuild it``. An unreadable file also exits 3, naming the path and the OS error. Tell the user to run `jira init`. jira-apply never runs `jira init` itself, because that command rewrites a config the user owns. A config jira-apply cannot find passes with one stderr line, `jira-apply: note: no jira-cli config at <path>; the issue-type cache was not checked`, because `jira me` has just found a config somewhere and the gap is in jira-apply's own resolution. The check runs on every jira-cli batch, update-only batches included.
 

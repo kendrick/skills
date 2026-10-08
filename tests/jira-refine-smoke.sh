@@ -1362,8 +1362,66 @@ grep -Fq "the issue-type cache was not checked" "$tmp/cli-noconfig.err" || {
   exit 1
 }
 
+# The scan is a line reader standing in for a YAML parser, and each shape below
+# is one a line reader can misread. Misreading a populated list blocks a working
+# config behind a `jira init` the user doesn't need. Misreading an empty one
+# lets every create fail at write time, the bug #90 filed.
+expect_preflight() {
+  local want="$1" name="$2"
+  printf '%s\n' "$3" > "$tmp/cli-shape-$name.yml"
+  set +e
+  JIRA_CONFIG_FILE="$tmp/cli-shape-$name.yml" \
+    python3 "$apply" get PROJ-412 --config "$config" --transport jira-cli \
+    > /dev/null 2> "$tmp/cli-shape-$name.err"
+  local status=$?
+  set -e
+  [[ "$status" == "$want" ]] || {
+    echo "jira-cli config shape '$name' should exit $want at preflight, got $status:" >&2
+    cat "$tmp/cli-shape-$name.yml" "$tmp/cli-shape-$name.err" >&2
+    exit 1
+  }
+}
+
+# yaml.v2 writes a sequence at its key's own indent and yaml.v3 one level
+# deeper. YAML reads both as the same populated list.
+expect_preflight 0 compact-sequence 'issue:
+  types:
+  - id: "10001"
+    name: Story'
+expect_preflight 0 indented-sequence 'issue:
+  types:
+    - id: "10001"
+      name: Story'
+expect_preflight 0 bare-dash-item 'issue:
+  types:
+  -
+    id: "10001"
+    name: Story'
+expect_preflight 0 quoted-keys '"issue":
+  "types":
+  - id: "10001"'
+expect_preflight 0 flow-list 'issue:
+  types: [{id: "10001", name: Story}]'
+expect_preflight 3 empty-flow-list 'issue:
+  types: []'
+# `issue.fields` can carry a `types:` of its own. Only the direct child of
+# `issue:` is the cache `jira issue create` reads, in both directions.
+expect_preflight 0 nested-empty-before-real 'issue:
+  fields:
+    types: []
+  types:
+  - id: "10001"'
+expect_preflight 3 nested-populated-before-empty 'issue:
+  fields:
+    types:
+    - id: "10001"
+  types: []'
+
 # `jira init` rewrites a config the user owns; preflight names it and stops.
-refute_text jira-refine/scripts/jira-apply.py '["init"'
+# Refuting the quoted word in both quote styles covers `["init"]`,
+# `["jira", "init"]`, and the other argv spellings of the subcommand.
+refute_text jira-refine/scripts/jira-apply.py '"init"'
+refute_text jira-refine/scripts/jira-apply.py "'init'"
 
 # --- The extra_fields config table. -----------------------------------------
 # Loud rather than lenient, unlike [fields] and [auth], which a wrong shape

@@ -1121,48 +1121,65 @@ def jira_cli_config_path():
     return os.path.join(os.path.expanduser("~"), ".config", ".jira", ".config.yml")
 
 
-def _config_body_lines(lines):
-    """Yield (indent, stripped) for lines that carry content."""
-    for raw in lines:
+def _config_content_lines(text):
+    # YAML forbids tabs in indentation, so a tab-led line counts as column 0.
+    # That ends the issue block, and the scan fails closed.
+    for raw in text.splitlines():
         stripped = raw.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        yield len(raw) - len(raw.lstrip(" ")), stripped
+        if stripped and not stripped.startswith("#"):
+            yield len(raw) - len(raw.lstrip(" ")), stripped
+
+
+_ISSUE_KEY = re.compile(r"""(?:issue|"issue"|'issue'):(?:\s+#.*)?""")
+_TYPES_KEY = re.compile(r"""(?:types|"types"|'types'):(?:\s+(.*))?""")
+_BARE_ITEM = re.compile(r"-(?:\s+#.*)?")
 
 
 def jira_cli_issue_types_cached(text):
-    """True when the config's `issue:` block caches at least one type.
+    """True when the config's `issue.types` list holds at least one entry.
 
     A line scan, because the repo is standard library only and PyYAML is not.
-    `jira init` writes `types:` as a block sequence of `- id:` mappings; an
-    inline flow list also counts. Anything unrecognized reads as not cached,
-    which fails closed toward the `jira init` message."""
-    lines = text.splitlines()
-    start = None
-    for i, raw in enumerate(lines):
-        if re.fullmatch(r"issue:[ \t]*(#.*)?", raw):
-            start = i + 1
+    Only a `types:` that is a direct child of the top-level `issue:` counts.
+    `issue.fields` can hold a `types:` of its own, and matching that one passes
+    or fails the run on the wrong list. Shapes the scan doesn't read, such as
+    an inline `issue: {...}` mapping or a flow list spread over lines, read as
+    not cached. That fails closed toward the `jira init` message, and
+    `jira init` rewrites the file in a form the scan does read."""
+    lines = list(_config_content_lines(text))
+    for i, (indent, stripped) in enumerate(lines):
+        if indent == 0 and _ISSUE_KEY.fullmatch(stripped):
             break
-    if start is None:
+    else:
         return False
     block = []
-    for raw in lines[start:]:
-        if raw.strip() and not raw.lstrip().startswith("#") and raw[0] not in " \t":
+    for indent, stripped in lines[i + 1:]:
+        if indent == 0:
             break
-        block.append(raw)
-    body = list(_config_body_lines(block))
-    for j, (indent, stripped) in enumerate(body):
-        if not stripped.startswith("types:"):
+        block.append((indent, stripped))
+    if not block:
+        return False
+    child_indent = block[0][0]
+    for j, (indent, stripped) in enumerate(block):
+        key = _TYPES_KEY.fullmatch(stripped) if indent == child_indent else None
+        if not key:
             continue
-        inline = stripped[len("types:"):].split("#", 1)[0].strip()
+        inline = (key.group(1) or "").split("#", 1)[0].strip()
         if inline:
             return inline.startswith("[") and inline.endswith("]") and bool(
                 inline[1:-1].strip()
             )
-        if j + 1 < len(body):
-            nxt_indent, nxt = body[j + 1]
-            return nxt_indent > indent and nxt.startswith("- ")
-        return False
+        if j + 1 == len(block):
+            return False
+        # yaml.v2 writes a sequence at its key's own indent and yaml.v3 one
+        # level deeper, and YAML reads both as the key's value. At the key's
+        # own indent, any line other than a `-` item would end the list.
+        item_indent, item = block[j + 1]
+        if item_indent < indent:
+            return False
+        if _BARE_ITEM.fullmatch(item):
+            # A `-` alone on its line carries its entry on the lines below.
+            return j + 2 < len(block) and block[j + 2][0] > item_indent
+        return item.startswith("- ")
     return False
 
 
