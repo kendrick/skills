@@ -173,7 +173,7 @@ Check the base before any dispatch: `git -C ROOT fetch origin DEFAULT`, then com
 
 Read [references/lane-brief.md](references/lane-brief.md) again and instantiate it once per lane in the merge set, with `{{PHASE}}` `publish`, `{{GRANT}}` the full grant, and `{{FACTS}}` the directory's current contents. Dispatch every one in a SINGLE message at LANE_MODEL. Each lane invokes `work-issue <N> <PLAN[N]> --isolate` again; `work-issue`'s resume probe reads the red-team clean and no pull request and places the lane at its Step 5, and from there the lane rebases, pushes `issue-N`, opens its pull request, and runs its triage and repair as its own skill says, without asking.
 
-Save every report verbatim to `WAVE_DIR/reports/issue-<N>-publish.json`. Route by the same table as Step 5; a lane that stopped at `work-issue`'s ten-minute poll with `triage/waiting` is `done` for this wave's purposes, since resolving stays the reviewer's act and `work-issue N` continues it.
+Save every report verbatim to `WAVE_DIR/reports/issue-<N>-publish.json`. Route by the same table as Step 5; a lane that stopped with `triage/waiting` when `work-issue`'s review poll hit its cap is `done` for this wave's purposes, since resolving stays the reviewer's act and `work-issue N` continues it.
 
 **Done when:** the fetched `origin/DEFAULT` equalled the `base:` of the newest green merge test at the moment of dispatch; every lane in the merge set was dispatched with the full grant in one message and its publish report is on disk verbatim; each is `done`, waiting on its reviewer, or out of the merge set with the reason recorded.
 
