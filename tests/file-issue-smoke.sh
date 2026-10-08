@@ -264,6 +264,7 @@ require_text file-issue/SKILL.md "fails unless that artifact is declared on the 
 # one exception, named exactly so a third write can't ride in on "linking".
 require_text file-issue/SKILL.md "Resolve every Parent and Blocked by entry before"
 require_text file-issue/SKILL.md "A Parent in a repository another owner holds is always one of those"
+require_text file-issue/SKILL.md "An entry the viewer lacks permission to link is another"
 require_text file-issue/SKILL.md "link-issues.py resolve"
 require_text file-issue/SKILL.md "link-issues.py link"
 require_text file-issue/SKILL.md "slot entries only"
@@ -362,6 +363,52 @@ require_count "$FAKE_GH_LOG" "addSubIssue" 0
 rc=0; run_link resolve --repo O/r --parent 'o/other#12' > "$link_tmp/sameowner.json" || rc=$?
 expect_rc 0 "$rc" "resolve a same-owner other-repo parent"
 require_json "$link_tmp/sameowner.json" 'd["parent"]["node"]' '"I_12"'
+
+# Link writes need permissions that issue creation does not: addBlockedBy
+# needs TRIAGE or higher on the repo the issue is filed into, and addSubIssue
+# needs WRITE or higher on the parent's repo. An entry the viewer cannot link
+# stays text, because the retry command cannot grant the permission, and a
+# permission the script cannot read counts as missing.
+: > "$FAKE_GH_LOG"
+rc=0; FAKE_GH_PERMS="o/r=READ" run_link resolve --repo o/r --parent '#12' --blocked-by '#7' > "$link_tmp/perm-read.json" || rc=$?
+expect_rc 0 "$rc" "resolve with READ on the home repo"
+require_json "$link_tmp/perm-read.json" 'd["parent"]["node"]' 'null'
+require_json "$link_tmp/perm-read.json" '"WRITE" in d["parent"]["reason"] and "READ" in d["parent"]["reason"]' 'true'
+require_json "$link_tmp/perm-read.json" '[b["node"] for b in d["blocked_by"]]' '[null]'
+require_json "$link_tmp/perm-read.json" '"TRIAGE" in d["blocked_by"][0]["reason"] and "READ" in d["blocked_by"][0]["reason"]' 'true'
+require_count "$FAKE_GH_LOG" 'issue(number:7)' 0
+: > "$FAKE_GH_LOG"
+rc=0; run_link link --issue "$new_issue" --plan "$link_tmp/perm-read.json" > "$link_tmp/out" || rc=$?
+expect_rc 0 "$rc" "link a plan resolved under READ"
+require_count "$FAKE_GH_LOG" "mutation" 0
+# TRIAGE on the parent's repo is enough for a dependency but not a sub-issue.
+: > "$FAKE_GH_LOG"
+rc=0; FAKE_GH_PERMS="o/other=TRIAGE" run_link resolve --repo o/r --parent 'o/other#12' --blocked-by '#7' > "$link_tmp/perm-triage.json" || rc=$?
+expect_rc 0 "$rc" "resolve with TRIAGE on the parent repo"
+require_json "$link_tmp/perm-triage.json" 'd["parent"]["node"]' 'null'
+require_json "$link_tmp/perm-triage.json" '"TRIAGE" in d["parent"]["reason"]' 'true'
+require_json "$link_tmp/perm-triage.json" '[b["node"] for b in d["blocked_by"]]' '["I_7"]'
+: > "$FAKE_GH_LOG"
+rc=0; run_link link --issue "$new_issue" --plan "$link_tmp/perm-triage.json" > "$link_tmp/out" || rc=$?
+expect_rc 0 "$rc" "link a plan whose parent repo is TRIAGE"
+require_count "$FAKE_GH_LOG" "addSubIssue" 0
+require_count "$FAKE_GH_LOG" "addBlockedBy" 1
+# TRIAGE at home plus WRITE on the parent repo links both.
+: > "$FAKE_GH_LOG"
+rc=0; FAKE_GH_PERMS="o/r=TRIAGE,o/other=WRITE" run_link resolve --repo o/r --parent 'o/other#12' --blocked-by '#7' > "$link_tmp/perm-ok.json" || rc=$?
+expect_rc 0 "$rc" "resolve with TRIAGE at home and WRITE on the parent repo"
+require_json "$link_tmp/perm-ok.json" 'd["parent"]["node"]' '"I_12"'
+require_json "$link_tmp/perm-ok.json" '[b["node"] for b in d["blocked_by"]]' '["I_7"]'
+: > "$FAKE_GH_LOG"
+rc=0; run_link link --issue "$new_issue" --plan "$link_tmp/perm-ok.json" > "$link_tmp/out" || rc=$?
+expect_rc 0 "$rc" "link a plan resolved under TRIAGE and WRITE"
+require_count "$FAKE_GH_LOG" "addSubIssue" 1
+require_count "$FAKE_GH_LOG" "addBlockedBy" 1
+# A permission the script cannot read is a missing one.
+rc=0; FAKE_GH_PERMS="o/r=null" run_link resolve --repo o/r --parent '#12' --blocked-by '#7' > "$link_tmp/perm-null.json" || rc=$?
+expect_rc 0 "$rc" "resolve with an unreadable home permission"
+require_json "$link_tmp/perm-null.json" 'd["parent"]["node"]' 'null'
+require_json "$link_tmp/perm-null.json" '[b["node"] for b in d["blocked_by"]]' '[null]'
 
 # A path, a discussion URL, a pull request, and a missing number all stay
 # text: no node, a reason, and no mutation (criteria 3-4).

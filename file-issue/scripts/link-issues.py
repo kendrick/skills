@@ -13,7 +13,9 @@ belong in those slots stays in SKILL.md: this script never reads the body.
 for it; a path, a discussion or PR URL, a PR number, or anything unparseable
 gets `node: null` and a reason, and stays in the body as text. So does a Parent
 in a repository another owner holds, because GitHub only accepts a sub-issue
-under a parent with the same owner.
+under a parent with the same owner. So does an entry the viewer lacks
+permission to link: addBlockedBy needs TRIAGE or higher on the repo the issue
+is filed into, and addSubIssue needs WRITE or higher on the parent's repo.
 
 `link` sends one addSubIssue for the parent, then one addBlockedBy per
 blocker, keeps going past a failure, and never retries or edits the body.
@@ -90,10 +92,28 @@ def parse_entry(entry, home):
     return None
 
 
-def lookup(repo, number):
-    """Return (node, reason). node is None when there's no issue to link."""
+# viewerPermission levels, lowest first. addBlockedBy needs TRIAGE or higher on
+# the repo the new issue is filed into, and addSubIssue needs WRITE or higher
+# on the parent's repo (docs.github.com/en/issues/tracking-your-work-with-issues/
+# using-issues/creating-issue-dependencies and /en/rest/issues/sub-issues).
+# Creating an issue needs only read, so a filer can create and still be unable
+# to link, and a link that fails for want of permission has no retry that
+# could succeed. An entry the viewer cannot link therefore stays text.
+PERMISSION_RANK = {"READ": 1, "TRIAGE": 2, "WRITE": 3, "MAINTAIN": 4, "ADMIN": 5}
+BLOCKER_NEEDS = "TRIAGE"
+PARENT_NEEDS = "WRITE"
+
+
+def permits(level, needed):
+    # An unreadable or unknown level counts as missing: losing a link costs a
+    # manual link later, and losing the text costs the provenance.
+    return PERMISSION_RANK.get(level or "", 0) >= PERMISSION_RANK[needed]
+
+
+def repo_query(repo, selection):
+    """Run one repository(...) query and return (repository data, reason)."""
     owner, name = repo.split("/", 1)
-    query = f'query{{repository(owner:"{owner}",name:"{name}"){{issue(number:{number}){{id}}}}}}'
+    query = f'query{{repository(owner:"{owner}",name:"{name}"){{{selection}}}}}'
     rc, out, err = gh(["api", "graphql", "-f", f"query={query}"])
     if rc != 0:
         return None, f"lookup failed: {first_line(err, out, rc)}"
@@ -103,11 +123,28 @@ def lookup(repo, number):
         return None, "lookup failed: unreadable response from gh"
     if not data:
         return None, f"no repository {repo}"
+    return data, None
+
+
+def lookup(repo, number, with_permission=False):
+    """Return (node, permission, reason). node is None when there's no issue to link."""
+    selection = f"issue(number:{number}){{id}}"
+    if with_permission:
+        selection = "viewerPermission " + selection
+    data, reason = repo_query(repo, selection)
+    if data is None:
+        return None, None, reason
     issue = data.get("issue")
     if not issue or not issue.get("id"):
         # A PR number lands here too: GitHub's issue(number:) won't return one.
-        return None, f"no issue #{number} in {repo} (a pull request, or no such number)"
-    return issue["id"], None
+        return None, data.get("viewerPermission"), f"no issue #{number} in {repo} (a pull request, or no such number)"
+    return issue["id"], data.get("viewerPermission"), None
+
+
+def viewer_permission(repo):
+    """Return the viewer's permission level on repo, or None where it can't be read."""
+    data, _ = repo_query(repo, "viewerPermission")
+    return data.get("viewerPermission") if data else None
 
 
 def resolve_entry(entry, home, parent=False):
@@ -126,11 +163,22 @@ def resolve_entry(entry, home, parent=False):
             "entry": entry, "number": number, "repo": repo, "node": None,
             "reason": f"a sub-issue needs a parent owned by {home_owner}, and {repo}#{number} is owned by {owner}",
         }
-    node, reason = lookup(repo, number)
+    node, level, reason = lookup(repo, number, with_permission=parent)
+    if node is not None and parent and not permits(level, PARENT_NEEDS):
+        node, reason = None, f"addSubIssue needs {PARENT_NEEDS} or higher on {repo}, and the viewer has {level or 'no readable permission'}"
     result = {"entry": entry, "number": number, "repo": repo, "node": node}
     if node is None:
         result["reason"] = reason
     return result
+
+
+def unlinkable(entry, home, reason):
+    """A blocker that parsed as an issue reference but cannot be linked from home."""
+    parsed = parse_entry(entry, home)
+    if parsed is None:
+        return {"entry": entry, "node": None, "reason": "not an issue reference"}
+    repo, number = parsed
+    return {"entry": entry, "number": number, "repo": repo, "node": None, "reason": reason}
 
 
 def default_repo():
@@ -149,10 +197,22 @@ def cmd_resolve(args):
     repo = args.repo or default_repo()
     if not REPO_RE.match(repo):
         raise UsageError(f"--repo must be OWNER/REPO, got {repo!r}")
+    # addBlockedBy writes the dependency onto the new issue, so the permission
+    # that matters for every blocker is the viewer's on the home repo. One
+    # query covers them all, and it runs only when a blocker could link.
+    if any(parse_entry(e, repo) for e in args.blocked_by):
+        level = viewer_permission(repo)
+        if permits(level, BLOCKER_NEEDS):
+            blockers = [resolve_entry(e, repo) for e in args.blocked_by]
+        else:
+            reason = f"addBlockedBy needs {BLOCKER_NEEDS} or higher on {repo}, and the viewer has {level or 'no readable permission'}"
+            blockers = [unlinkable(e, repo, reason) for e in args.blocked_by]
+    else:
+        blockers = [resolve_entry(e, repo) for e in args.blocked_by]
     plan = {
         "repo": repo,
         "parent": resolve_entry(args.parent, repo, parent=True) if args.parent is not None else None,
-        "blocked_by": [resolve_entry(e, repo) for e in args.blocked_by],
+        "blocked_by": blockers,
     }
     print(json.dumps(plan, indent=2))
     return 0
@@ -209,7 +269,7 @@ def cmd_link(args):
         if not m:
             raise UsageError(f"--issue must be an issue URL, got {args.issue!r}")
         home = f"{m.group(1)}/{m.group(2)}"
-        new, reason = lookup(home, int(m.group(3)))
+        new, _, reason = lookup(home, int(m.group(3)))
         if new is None or not NODE_RE.match(new):
             raise UsageError(f"can't resolve the new issue {args.issue}: {reason or 'malformed node'}")
 

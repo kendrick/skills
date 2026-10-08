@@ -159,7 +159,7 @@ Resolve every Parent and Blocked by entry before rendering. Pass slot entries on
 python3 <skill-path>/scripts/link-issues.py resolve --parent '<entry>' --blocked-by '<entry>' --blocked-by '<entry>' > <resolved.json>
 ```
 
-Omit a flag whose slot is empty, and pass `--repo` when the issue targets a repo other than the current one. An entry with a `node` becomes a native link; an entry with `node: null` stays text, and its `reason` says why. A Parent in a repository another owner holds is always one of those, since GitHub only accepts a sub-issue under a parent with the same owner. Build the final body from that JSON, because the body is final at creation:
+Omit a flag whose slot is empty, and pass `--repo` when the issue targets a repo other than the current one. An entry with a `node` becomes a native link; an entry with `node: null` stays text, and its `reason` says why. A Parent in a repository another owner holds is always one of those, since GitHub only accepts a sub-issue under a parent with the same owner. An entry the viewer lacks permission to link is another: a blocker needs TRIAGE or higher on the repo the issue is filed into, a parent needs WRITE or higher on its own repo, and a permission `resolve` cannot read counts as missing. Build the final body from that JSON, because the body is final at creation:
 
 - A resolved entry leaves its line.
 - A Parent line whose one entry resolved is dropped.

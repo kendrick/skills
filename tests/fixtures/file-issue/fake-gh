@@ -51,6 +51,24 @@ case "$call" in
     ;;
 esac
 
+# viewerPermission comes from FAKE_GH_PERMS, "owner/repo=LEVEL,..." with the
+# literal LEVEL null for a repo the viewer cannot see into. Unlisted repos
+# answer WRITE, which is what the pre-permission cases were written against.
+repo_key="$(printf '%s' "$call" | sed -n 's/.*repository(owner:"\([^"]*\)",name:"\([^"]*\)").*/\1\/\2/p')"
+perm=WRITE
+for pair in $(printf '%s' "${FAKE_GH_PERMS:-}" | tr ',' ' '); do
+  case "$pair" in "$repo_key="*) perm="${pair#*=}" ;; esac
+done
+if [ "$perm" = null ]; then perm_json=null; else perm_json="\"$perm\""; fi
+
+case "$call" in
+  *'issue(number:'*) ;;
+  *viewerPermission*)
+    printf '{"data":{"repository":{"viewerPermission":%s}}}\n' "$perm_json"
+    exit 0
+    ;;
+esac
+
 case "$call" in
   *'issue(number:12)'*) node='"I_12"' ;;
   *'issue(number:7)'*) node='"I_7"' ;;
@@ -67,8 +85,12 @@ case "$call" in
     ;;
 esac
 
+case "$call" in
+  *viewerPermission*) perm_field="\"viewerPermission\":$perm_json," ;;
+  *) perm_field="" ;;
+esac
 if [ -n "$node" ]; then
-  printf '{"data":{"repository":{"issue":{"id":%s}}}}\n' "$node"
+  printf '{"data":{"repository":{%s"issue":{"id":%s}}}}\n' "$perm_field" "$node"
 else
-  printf '{"data":{"repository":{"issue":null}}}\n'
+  printf '{"data":{"repository":{%s"issue":null}}}\n' "$perm_field"
 fi
