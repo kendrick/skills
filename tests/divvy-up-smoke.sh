@@ -285,7 +285,31 @@ refute_text divvy-up/SKILL.md "\`files_changed\` against the derived"
 
 # A format command that errors partway leaves a partial rewrite, and a
 # resumed run's fresh WAVE_BASE would absorb it unchecked (PR #180 review).
-require_text divvy-up/SKILL.md "where the command itself errored, revert every path it changed outside the derived set back to WAVE_BASE, then stop"
+require_text divvy-up/SKILL.md "where the command itself errored, revert every path it changed outside the derived set back to WAVE_BASE, then classify the error by the paths its output names"
+# A worker can leave an owned file the formatter can't parse, and a retry can
+# fix that. Stopping the run instead left the task's changes in place and
+# escalated nothing (PR #180 review, r4213929212).
+refute_text divvy-up/SKILL.md "outside the derived set back to WAVE_BASE, then stop"
+require_text divvy-up/SKILL.md "A non-zero exit from the pass is no task's failure by itself"
+require_text divvy-up/SKILL.md "An error naming only paths inside the derived set is the failure of each task that owns one of them"
+require_text divvy-up/SKILL.md "route every other task in the wave by its own report"
+# Routing the other tasks by report never skips the wave's verification.
+require_text divvy-up/SKILL.md "Verification still runs for the wave as usual; after it, route every other task"
+require_text divvy-up/SKILL.md "as repo-relative paths, resolving an absolute path against the repo root first"
+# A tree-wide pass can also choke on a file that was broken before the wave
+# started. Retrying the task whose path it also named sends a healthy task
+# back.
+require_text divvy-up/SKILL.md "Output naming both a derived path and a path outside the derived set counts as one that cannot be tied"
+# A partial rewrite left in place gets absorbed by a resumed run's fresh
+# WAVE_BASE, so the revert precedes every branch.
+require_text divvy-up/SKILL.md "The revert comes first on every branch"
+# The stop branches belong in Done-when, or a run that stopped there reads as
+# unfinished.
+require_text divvy-up/SKILL.md "or on a format-command error naming no derived path or one that could not be tied to a path"
+require_text divvy-up/SKILL.md "An error naming no derived path, such as a missing tool, a bad config, or a repo-level failure, stops the run"
+# A guess here sends a healthy task back for a retry.
+require_text divvy-up/SKILL.md "Where the output cannot be tied to a path either way, stop the same way"
+require_text divvy-up/README.md "When the error names only files the wave's tasks wrote, each task that wrote one of them has failed"
 require_text divvy-up/SKILL.md "Paths inside the derived set keep the pass's writes"
 require_text divvy-up/SKILL.md "rerun the derivation above and take every path it now lists"
 require_text divvy-up/README.md "A half-finished reformat of those files never reaches the next run's starting point"

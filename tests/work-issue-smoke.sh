@@ -249,7 +249,7 @@ require_text work-issue/SKILL.md "scoped to the repair's reported \`files_change
 require_text work-issue/SKILL.md "Re-gate the repair as Step 3's repair is"
 require_text work-issue/SKILL.md "repair dispatch, re-gated as Step 3's repair is"
 # A format pass that errors reverts its writes outside the derived set before
-# stopping. A repair has no WAVE_BASE, so SKILL.md says what stands in for it
+# anything else. A repair has no WAVE_BASE, so SKILL.md says what stands in for it
 # (PR #180).
 require_text work-issue/SKILL.md "a repair does the same with its reported \`files_changed\` as the derived set"
 # A repair has no manifest of its own, and without one the revert would
@@ -258,7 +258,23 @@ require_text work-issue/SKILL.md "Immediately before its format pass, a repair g
 require_text work-issue/SKILL.md "uses HEAD plus that manifest as its WAVE_BASE"
 # Step 4 item 4 and Step 5 item 2 re-gate as Step 3's repair is, so the stop
 # fires there too.
-require_text work-issue/SKILL.md "| The format pass's command itself errors | 3, 4, 5, 7 |"
+require_text work-issue/SKILL.md "| The format pass's command errors naming no path in the derived set or the repair's \`files_changed\`, or none it can be tied to, or a repair already re-dispatched for a format-pass error fails it again | 3, 4, 5, 7 |"
+# An error the repair caused gets a retry (PR #180 review, r4213929212), so
+# the stop row names only the errors left over.
+refute_text work-issue/SKILL.md "| The format pass's command itself errors |"
+refute_text work-issue/SKILL.md "outside the derived set before it stops"
+require_text work-issue/SKILL.md "An error naming a path in \`files_changed\` is the repair's failure: re-dispatch the repair with the formatter's output attached"
+# An uncapped re-dispatch loops on a formatter the repair can't satisfy, so it
+# gets the one retry divvy-up gives a failed task.
+require_text work-issue/SKILL.md "once, one rung up, as \`divvy-up\`'s \`failed\` route does for a task"
+require_text work-issue/SKILL.md "Where that re-dispatched repair fails the format pass the same way again, revert its writes as above and stop the run"
+# The outside revert alone left the repair's own writes behind at the stop.
+# Resume never reverts those, so it stopped on row 7 or re-dispatched onto
+# them from row 9 (adversarial-review of #116, F-r1-authz-01).
+require_text work-issue/SKILL.md "revert the repair's own writes on every branch"
+require_text work-issue/SKILL.md "each one the pre-pass manifest lists as untracked is deleted"
+require_text work-issue/SKILL.md "Delete any report already saved for the repair"
+require_text work-issue/SKILL.md "stops the run with the tree clean"
 
 # Step 4's trigger reads adversarial-review's table at run time through that
 # skill's own script, so no signal is copied here, but which rows it reads is
