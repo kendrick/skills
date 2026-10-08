@@ -191,7 +191,7 @@ Fails if the skill rewrites the rule instead of asking, if it demands the test r
 
 Fails if any link is set that the confirmation did not list, if the body changes after creation, or if a failed link is reported without its retry command.
 
-*Unverified live: whether GitHub answers `issue(number:<PR>)` with `issue: null` or with a GraphQL error. `link-issues.py resolve` treats both as no node with a reason, so either path keeps a pull request as text, and Prompt C checks the result rather than the path. Record which answer GitHub gave when this runs.*
+*Unverified live: whether GitHub answers `issue(number:<PR>)` with `issue: null` or with a GraphQL error. `link-issues.py resolve` treats both as no node with a reason, so either path keeps a pull request as text, and Prompt C checks the result rather than the path. Record which answer GitHub gave when this runs. Also unverified live: that GitHub rejects `addSubIssue` for a parent held by another owner, which is why `resolve` keeps such a Parent as text without looking it up; a sandbox run can confirm it by filing with Parent `<other-owner>/<repo>#N` and checking that the body keeps the line and `subIssues` on the parent stays empty.*
 
 *A nonexistent number fails at `resolve`, before any issue exists, so it never reaches `link`. The `FAILED` line and its `retry:` command need a link that resolved and then failed to send, such as a blocker deleted between the confirmation and creation. Run that once by hand when it matters; the smoke suite's fake covers the same path at the wire.*
 

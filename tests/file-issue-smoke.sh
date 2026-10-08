@@ -333,6 +333,28 @@ expect_rc 0 "$rc" "resolve owner/repo#N and issue URL"
 require_json "$link_tmp/forms.json" 'd["parent"]["node"]' '"I_12"'
 require_json "$link_tmp/forms.json" '[b["node"] for b in d["blocked_by"]]' '["I_7"]'
 
+# A Parent held by another owner stays text, and resolve never looks it up:
+# GitHub's add-sub-issue contract requires the sub-issue and its parent to
+# share an owner (docs.github.com/en/rest/issues/sub-issues#add-sub-issue), so
+# a resolved cross-owner parent would leave the body and then fail to link
+# with nothing to retry. Blockers carry no such rule and are still looked up.
+: > "$FAKE_GH_LOG"
+rc=0; run_link resolve --repo o/r --parent 'x/y#12' --blocked-by 'x/y#7' > "$link_tmp/xowner.json" || rc=$?
+expect_rc 0 "$rc" "resolve a cross-owner parent"
+require_json "$link_tmp/xowner.json" 'd["parent"]["node"]' 'null'
+require_json "$link_tmp/xowner.json" '"owned by x" in d["parent"]["reason"] and "sub-issue" in d["parent"]["reason"]' 'true'
+require_count "$FAKE_GH_LOG" 'issue(number:12)' 0
+require_count "$FAKE_GH_LOG" 'repository(owner:"x",name:"y"){issue(number:7)' 1
+: > "$FAKE_GH_LOG"
+rc=0; run_link link --issue "$new_issue" --plan "$link_tmp/xowner.json" > "$link_tmp/out" || rc=$?
+expect_rc 0 "$rc" "link a plan whose parent is cross-owner"
+require_count "$FAKE_GH_LOG" "addSubIssue" 0
+# Same owner, other repo, still resolves, and the owner comparison ignores
+# case because GitHub logins do.
+rc=0; run_link resolve --repo O/r --parent 'o/other#12' > "$link_tmp/sameowner.json" || rc=$?
+expect_rc 0 "$rc" "resolve a same-owner other-repo parent"
+require_json "$link_tmp/sameowner.json" 'd["parent"]["node"]' '"I_12"'
+
 # A path, a discussion URL, a pull request, and a missing number all stay
 # text: no node, a reason, and no mutation (criteria 3-4).
 rc=0; run_link resolve --repo o/r --parent https://github.com/o/r/discussions/3 --blocked-by docs/new-spec.md --blocked-by '#99' > "$link_tmp/text.json" || rc=$?

@@ -11,7 +11,9 @@ belong in those slots stays in SKILL.md: this script never reads the body.
 
 `resolve` prints JSON. An entry gets a node only when GitHub returns an issue
 for it; a path, a discussion or PR URL, a PR number, or anything unparseable
-gets `node: null` and a reason, and stays in the body as text.
+gets `node: null` and a reason, and stays in the body as text. So does a Parent
+in a repository another owner holds, because GitHub only accepts a sub-issue
+under a parent with the same owner.
 
 `link` sends one addSubIssue for the parent, then one addBlockedBy per
 blocker, keeps going past a failure, and never retries or edits the body.
@@ -108,11 +110,22 @@ def lookup(repo, number):
     return issue["id"], None
 
 
-def resolve_entry(entry, home):
+def resolve_entry(entry, home, parent=False):
     parsed = parse_entry(entry, home)
     if parsed is None:
         return {"entry": entry, "node": None, "reason": "not an issue reference"}
     repo, number = parsed
+    home_owner, owner = home.split("/", 1)[0], repo.split("/", 1)[0]
+    if parent and owner.lower() != home_owner.lower():
+        # addSubIssue only accepts a parent with the same owner as the new
+        # issue (docs.github.com/en/rest/issues/sub-issues#add-sub-issue). A
+        # cross-owner parent that resolved would leave the body at creation
+        # and then fail to link, with no retry that could ever succeed, so it
+        # is unresolved before any lookup. Logins compare case-insensitively.
+        return {
+            "entry": entry, "number": number, "repo": repo, "node": None,
+            "reason": f"a sub-issue needs a parent owned by {home_owner}, and {repo}#{number} is owned by {owner}",
+        }
     node, reason = lookup(repo, number)
     result = {"entry": entry, "number": number, "repo": repo, "node": node}
     if node is None:
@@ -138,7 +151,7 @@ def cmd_resolve(args):
         raise UsageError(f"--repo must be OWNER/REPO, got {repo!r}")
     plan = {
         "repo": repo,
-        "parent": resolve_entry(args.parent, repo) if args.parent is not None else None,
+        "parent": resolve_entry(args.parent, repo, parent=True) if args.parent is not None else None,
         "blocked_by": [resolve_entry(e, repo) for e in args.blocked_by],
     }
     print(json.dumps(plan, indent=2))

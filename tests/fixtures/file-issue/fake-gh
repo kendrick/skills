@@ -42,6 +42,9 @@ esac
 
 case "$call" in
   *'repository(owner:"o",name:"r")'*) ;;
+  # A second repo under the same owner, so the suite can show that the
+  # same-owner rule for parents keys on the owner and not on the repo.
+  *'repository(owner:"o",name:"other")'*) ;;
   *)
     echo "GraphQL: Could not resolve to a Repository with the name requested." >&2
     exit 1
