@@ -62,7 +62,7 @@ The pins below are what `tests/work-wave-smoke.sh` asserts. Its refutes run agai
 | Cut | Why |
 |---|---|
 | A `cp -R` scratch tree for the merge test | Row 6. Its `.git` file points at the original gitdir, so anything staged inside stages into the real index. Pinned by a `refute_text` on `cp -R` in `SKILL.md`. |
-| A `git archive` scratch tree for the merge test | Row 6. It carries no `.git`, so `repo_root_for` finds no root and every on-disk check is skipped silently. Pinned by a `refute_text` on `git archive` in `SKILL.md`. |
+| A `git archive` scratch tree for the merge test | Row 6. It carries no `.git`, so `repo_root_for` finds no root and every on-disk check is skipped. Since #122 `validate` reports the skip, but a merge test needs those checks to run. Pinned by a `refute_text` on `git archive` in `SKILL.md`. |
 | One octopus merge of every lane branch | Row 6. An N-way conflict names no branch it hit, and the human does not merge that way. Pinned by a `refute_text` on `octopus` in `SKILL.md`. |
 | Blaming a merge-test conflict on the branch merged just before | Row 35. With three or more lanes the branch that conflicts can have hit any branch already merged, so the neighbor is often innocent and the wave would correct the wrong coupling row. Pinned by a `refute_text` on `branch before` in `SKILL.md` and in `references/merge-test.md`. |
 | A dirty-tree check that reads `git diff --stat HEAD` alone | Row 7. The diff never sees an untracked file a suite writes, so a mutating suite read as clean. Pinned by the `require_text` on the paired `ls-files --others --exclude-standard` command in both files; a refute cannot name the old check without naming the half that stays. |
