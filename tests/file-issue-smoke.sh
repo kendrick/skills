@@ -263,6 +263,7 @@ require_text file-issue/SKILL.md "fails unless that artifact is declared on the 
 # need the new issue's node. The two mutations are the creation-only rule's
 # one exception, named exactly so a third write can't ride in on "linking".
 require_text file-issue/SKILL.md "Resolve every Parent and Blocked by entry before"
+require_text file-issue/SKILL.md "A Parent in a repository another owner holds is always one of those"
 require_text file-issue/SKILL.md "link-issues.py resolve"
 require_text file-issue/SKILL.md "link-issues.py link"
 require_text file-issue/SKILL.md "slot entries only"
@@ -345,6 +346,13 @@ require_json "$link_tmp/xowner.json" 'd["parent"]["node"]' 'null'
 require_json "$link_tmp/xowner.json" '"owned by x" in d["parent"]["reason"] and "sub-issue" in d["parent"]["reason"]' 'true'
 require_count "$FAKE_GH_LOG" 'issue(number:12)' 0
 require_count "$FAKE_GH_LOG" 'repository(owner:"x",name:"y"){issue(number:7)' 1
+# The same rule holds when the cross-owner parent arrives as an issue URL.
+: > "$FAKE_GH_LOG"
+rc=0; run_link resolve --repo o/r --parent https://github.com/x/y/issues/12 > "$link_tmp/xowner-url.json" || rc=$?
+expect_rc 0 "$rc" "resolve a cross-owner parent given as a URL"
+require_json "$link_tmp/xowner-url.json" 'd["parent"]["node"]' 'null'
+require_json "$link_tmp/xowner-url.json" '"owned by x" in d["parent"]["reason"]' 'true'
+require_count "$FAKE_GH_LOG" 'issue(number:12)' 0
 : > "$FAKE_GH_LOG"
 rc=0; run_link link --issue "$new_issue" --plan "$link_tmp/xowner.json" > "$link_tmp/out" || rc=$?
 expect_rc 0 "$rc" "link a plan whose parent is cross-owner"
