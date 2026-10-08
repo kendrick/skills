@@ -258,10 +258,11 @@ done
 require_text file-issue/SKILL.md "fails unless that artifact is declared on the Blocked by line"
 
 # Native-first slots (#175), pinned in the prose. Entries resolve before the
-# render so the body is final at creation, and links go out only after
-# `gh issue create` prints the URL, because addSubIssue and addBlockedBy both
-# need the new issue's node. The two mutations are the creation-only rule's
-# one exception, named exactly so a third write can't ride in on "linking".
+# render, every entry is filed as text, links go out once `gh issue create`
+# prints the URL (addSubIssue and addBlockedBy both need the new issue's
+# node), and only then does `strip` remove the entries whose link landed. The
+# creation-only rule admits exactly those three writes, named so a fourth
+# can't ride in on "linking".
 require_text file-issue/SKILL.md "Resolve every Parent and Blocked by entry before"
 require_text file-issue/SKILL.md "A Parent in a repository another owner holds is always one of those"
 require_text file-issue/SKILL.md "An entry the viewer lacks permission to link is another"
@@ -276,6 +277,8 @@ require_text file-issue/SKILL.md "addBlockedBy"
 require_text file-issue/SKILL.md "the links it will set beside the rendered body"
 require_text file-issue/SKILL.md "\`link --dry-run\` with no \`--issue\`"
 require_text file-issue/SKILL.md "every link was set or reported with its retry command"
+require_text file-issue/SKILL.md "the linked entries were stripped from the body or the strip was reported with its retry command"
+require_text file-issue/SKILL.md "\`strip\` still runs and, finding nothing linked, writes nothing"
 require_text file-issue/SKILL.md "lands on the Blocked by line as text"
 require_text file-issue/SKILL.md "links the new issue to its parent and blockers"
 # A failed link is reported with its retry command and its text stays in the
@@ -535,13 +538,44 @@ rc=0; FAKE_GH_BODY="$body_a" run_link strip --issue "$new_issue" --plan "$link_t
 expect_rc 0 "$rc" "strip with nothing linked"
 require_count "$FAKE_GH_LOG" "updateIssue" 0
 require_count "$FAKE_GH_LOG" "id body" 0
-# A failed strip write leaves the body as filed and prints a retry command.
+# A failed strip write leaves the body as filed, and the retry re-runs strip
+# itself, which re-fetches the body: a replayed snapshot would overwrite any
+# edit made between the failure and the retry.
 : > "$FAKE_GH_LOG"
-rc=0; FAKE_GH_BODY="$body_a" FAKE_GH_UPDATE_FAIL=1 run_link strip --issue "$new_issue" --plan "$link_tmp/plan.json" --result "$link_tmp/res-a.json" > "$link_tmp/out" || rc=$?
+rc=0; FAKE_GH_BODY="$body_a" FAKE_GH_UPDATE_FAIL=1 run_link strip --issue "$new_issue" --plan "$link_tmp/plan.json" --result "$link_tmp/res-a.json" --agent-targeted > "$link_tmp/out" || rc=$?
 expect_rc 1 "$rc" "strip whose write fails"
 require_text "$link_tmp/out" "FAILED strip"
-require_text "$link_tmp/out" "retry: gh api graphql"
-require_text "$link_tmp/out" "-F body=@"
+require_text "$link_tmp/out" "retry: python3 "
+require_text "$link_tmp/out" "link-issues.py strip --issue $new_issue --plan $link_tmp/plan.json --result $link_tmp/res-a.json --agent-targeted"
+refute_text "$link_tmp/out" "body=@"
+# A Parent line is removed only when its text is exactly the linked entry, a
+# slot line inside a code fence is never touched, and a quoted slot line is
+# left alone.
+body_c="$link_tmp/body-c.md"
+cat > "$body_c" <<'MD'
+**Parent:** #12 — the auth epic, see thread
+
+**Blocked by:** #7
+
+```
+**Blocked by:** #7
+**Parent:** #12
+```
+
+~~~
+**Blocked by:** #7
+~~~
+
+> **Blocked by:** #7
+MD
+: > "$FAKE_GH_LOG"
+rc=0; FAKE_GH_BODY="$body_c" run_link strip --issue "$new_issue" --plan "$link_tmp/plan.json" --result "$link_tmp/res-a.json" > "$link_tmp/out" || rc=$?
+expect_rc 0 "$rc" "strip around commentary, fences, and quotes"
+require_count "$FAKE_GH_LOG" "updateIssue" 1
+require_text "$FAKE_GH_LOG.body" "**Parent:** #12 — the auth epic, see thread"
+require_count "$FAKE_GH_LOG.body" "**Blocked by:** #7" 3
+require_count "$FAKE_GH_LOG.body" "**Parent:** #12" 2
+require_text "$FAKE_GH_LOG.body" "> **Blocked by:** #7"
 # A GitHub Enterprise URL: link exits 3 before sending anything, the result
 # records nothing linked, and strip writes nothing, so every entry survives
 # as text. Linking is github.com-only (Known Limitations).

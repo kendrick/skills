@@ -41,10 +41,11 @@ Exit codes:
 
 import argparse
 import json
+import os
 import re
+import shlex
 import subprocess
 import sys
-import tempfile
 
 GH_TIMEOUT = 60
 
@@ -323,14 +324,34 @@ PARENT_LINE = "**Parent:**"
 BLOCKED_LINE = "**Blocked by:**"
 
 
+FENCE_RE = re.compile(r"^\s{0,3}(`{3,}|~{3,})")
+
+
 def strip_body(body, linked, agent_targeted):
     """Return the body with each linked entry removed from its slot line, and whether anything changed."""
-    parent_done = any(l["kind"] == "parent" for l in linked)
+    parents_done = {l["entry"].strip() for l in linked if l["kind"] == "parent"}
     blockers_done = {l["entry"].strip() for l in linked if l["kind"] == "blocked-by"}
     out, changed = [], False
+    fence = None
     for line in body.splitlines(keepends=True):
         text = line.strip()
-        if parent_done and text.startswith(PARENT_LINE):
+        # A slot line inside a code fence is a sample, not the slot. The
+        # fence closes on the same marker character it opened with.
+        m = FENCE_RE.match(line)
+        if m:
+            marker = m.group(1)[0]
+            if fence is None:
+                fence = marker
+            elif fence == marker:
+                fence = None
+            out.append(line)
+            continue
+        if fence is not None:
+            out.append(line)
+            continue
+        # A Parent line goes only when it reads exactly as the linked entry;
+        # commentary beside the reference is text nobody linked, so it stays.
+        if parents_done and text.startswith(PARENT_LINE) and text[len(PARENT_LINE):].strip() in parents_done:
             changed = True
             continue
         if blockers_done and text.startswith(BLOCKED_LINE):
@@ -394,13 +415,14 @@ def cmd_strip(args):
     if rc == 0:
         print(f"stripped {', '.join(label(l, home) for l in linked)} from the body")
         return 0
-    # The body has newlines and quotes, so the retry reads it from a file
-    # rather than carrying it inline.
-    saved = tempfile.NamedTemporaryFile("w", prefix="strip-body-", suffix=".md", delete=False)
-    saved.write(new_body)
-    saved.close()
+    # The retry is this command again, not the body it tried to send: a
+    # replayed snapshot would overwrite any edit made in between, and a
+    # fresh run re-fetches the body before it strips.
+    retry = ["python3", os.path.abspath(sys.argv[0]), "strip", "--issue", args.issue, "--plan", args.plan, "--result", args.result]
+    if args.agent_targeted:
+        retry.append("--agent-targeted")
     print(f"FAILED strip: {first_line(err, out, rc)}")
-    print(f"  retry: gh api graphql -f query='{UPDATE_BODY}' -f id={node} -F body=@{saved.name}")
+    print(f"  retry: {' '.join(shlex.quote(a) for a in retry)}")
     return 1
 
 

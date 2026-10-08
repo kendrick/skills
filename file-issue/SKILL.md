@@ -171,7 +171,7 @@ Then render the full issue as markdown, show it with the links it will set besid
 python3 <skill-path>/scripts/link-issues.py link --issue <URL> --plan <resolved.json> --out <result.json>
 ```
 
-Exit 0 means every link was set. Exit 1 means at least one failed: report the issue URL, each `FAILED` line, and the `retry:` command under it; the failed entry's text is still in the body, so nothing is lost. Exit 3 means a usage error, an unreadable plan, or a new issue that could not be resolved, and no link was sent: report the URL and that no links were set.
+Exit 0 means every link was set. Exit 1 means at least one failed: report the issue URL, each `FAILED` line, and the `retry:` command under it; the failed entry's text is still in the body, so nothing is lost. Exit 3 means a usage error, an unreadable plan, or a new issue that could not be resolved, and no link was sent: report the URL and that no links were set. `strip` still runs and, finding nothing linked, writes nothing.
 
 Then strip the linked entries from the body, passing `--agent-targeted` when the issue is agent-targeted so an emptied Blocked by line reads `None` rather than vanishing:
 
