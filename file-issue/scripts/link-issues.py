@@ -27,9 +27,10 @@ and nothing is sent.
 `strip` runs after `link`. The body is rendered with every entry as text, so a
 link that fails for any reason leaves its text where it was; `strip` fetches
 the body, removes only the entries whose link landed from the Parent and
-Blocked by lines, and sends one updateIssue. It never adds text, never touches
-another line, and writes nothing when nothing linked. --agent-targeted keeps an
-explicit "None" on a Blocked by line the strip emptied.
+Blocked by lines, and sends one updateIssue. It never adds a reference back,
+never touches another line, and writes nothing when nothing linked. The only
+text it writes is the "None" that --agent-targeted puts on a Blocked by line
+the strip emptied.
 
 Exit codes:
     0  resolve printed its JSON; link set every link (or --dry-run listed them);
@@ -265,6 +266,14 @@ def load_plan(path):
             continue
         if not isinstance(node, str) or not NODE_RE.match(node):
             raise UsageError(f"plan {path} has a malformed {kind} node: {node!r}")
+        # link records the entry text and strip matches on it, so a node with
+        # no entry would reach the body as a KeyError rather than exit 3.
+        if not isinstance(item.get("entry"), str) or not item["entry"].strip():
+            raise UsageError(f"plan {path} has a {kind} node with no entry text")
+        if item.get("number") is not None and not isinstance(item["number"], int):
+            raise UsageError(f"plan {path} has a {kind} entry with a non-integer number")
+        if item.get("repo") is not None and not isinstance(item["repo"], str):
+            raise UsageError(f"plan {path} has a {kind} entry with a non-string repo")
         links.append((kind, item))
     return plan.get("repo"), links
 

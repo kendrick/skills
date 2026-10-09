@@ -261,15 +261,16 @@ require_text file-issue/SKILL.md "fails unless that artifact is declared on the 
 # render, every entry is filed as text, links go out once `gh issue create`
 # prints the URL (addSubIssue and addBlockedBy both need the new issue's
 # node), and only then does `strip` remove the entries whose link landed. The
-# creation-only rule admits exactly those three writes, named so a fourth
-# can't ride in on "linking".
+# creation-only rule admits exactly three kinds of write, each naming the new
+# issue, named so a fourth kind can't ride in on "linking".
 require_text file-issue/SKILL.md "Resolve every Parent and Blocked by entry before"
 require_text file-issue/SKILL.md "A Parent in a repository another owner holds is always one of those"
 require_text file-issue/SKILL.md "An entry the viewer lacks permission to link is another"
 require_text file-issue/SKILL.md "link-issues.py resolve"
 require_text file-issue/SKILL.md "link-issues.py link"
 require_text file-issue/SKILL.md "slot entries only"
-require_text file-issue/SKILL.md "admits exactly three writes"
+require_text file-issue/SKILL.md "admits exactly three kinds of write"
+require_text file-issue/SKILL.md "one \`addBlockedBy\` per blocker"
 require_text file-issue/SKILL.md "link-issues.py strip"
 require_text file-issue/SKILL.md "removes only the entries whose link landed"
 require_text file-issue/SKILL.md "addSubIssue"
@@ -284,13 +285,14 @@ require_text file-issue/SKILL.md "links the new issue to its parent and blockers
 # A failed link is reported with its retry command and its text stays in the
 # body. Writing the failure back into the body is the edit the creation-only
 # rule exists to forbid (Deliberately Not Built): the one body write removes
-# entries whose link landed and adds nothing.
+# entries whose link landed and never adds a reference back. The only text it
+# writes is the `None` an emptied agent-targeted Blocked by line gets.
 refute_text file-issue/SKILL.md "edit the body to add"
 refute_text file-issue/SKILL.md "add it back as text"
 # The phrases above can be reworded around; the command can't. A body edit
 # outside `strip` takes `gh issue edit`.
 refute_text file-issue/SKILL.md "gh issue edit"
-require_text file-issue/SKILL.md "never adds text"
+require_text file-issue/SKILL.md "never adds a reference back"
 for f in file-issue/assets/bug.template.md file-issue/assets/feature.template.md file-issue/assets/task.template.md file-issue/assets/spike.template.md; do
   require_text "$f" "becomes a native link"
   require_text "$f" "anything else stays as text"
@@ -621,6 +623,11 @@ require_text "$link_tmp/out" "would strip blocked-by #7"
 # Usage errors and an unresolvable new issue exit 3, not argparse's 2.
 rc=0; run_link > /dev/null 2>&1 || rc=$?
 expect_rc 3 "$rc" "no subcommand"
+# A plan entry with a node but no entry text would be dereferenced by link
+# and strip; it is refused up front rather than left to a traceback.
+printf '{"repo":"o/r","blocked_by":[{"node":"I_7"}]}' > "$link_tmp/bad.json"
+rc=0; run_link link --plan "$link_tmp/bad.json" --dry-run > /dev/null 2>&1 || rc=$?
+expect_rc 3 "$rc" "plan entry with a node and no entry"
 rc=0; run_link resolve --bogus > /dev/null 2>&1 || rc=$?
 expect_rc 3 "$rc" "unknown flag"
 rc=0; run_link link --issue "$new_issue" > /dev/null 2>&1 || rc=$?
