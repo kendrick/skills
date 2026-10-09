@@ -73,6 +73,16 @@ require_json() {
   }
 }
 
+require_output() {
+  local want="$1"
+  local got="$2"
+  local what="$3"
+  diff -u "$want" "$got" >&2 || {
+    echo "$what: output differs from $want" >&2
+    exit 1
+  }
+}
+
 require_file file-issue/SKILL.md
 require_file file-issue/README.md
 require_file file-issue/references/issue-forms.md
@@ -636,6 +646,146 @@ rc=0; run_link link --issue "$new_issue" --plan "$link_tmp/missing.json" > /dev/
 expect_rc 3 "$rc" "unreadable plan"
 rc=0; run_link link --issue https://github.com/o/r/issues/41 --plan "$link_tmp/plan.json" > /dev/null 2>&1 || rc=$?
 expect_rc 3 "$rc" "new issue with no node"
+
+# check-relationships.py (#66), pinned against a stub gh that serves one canned
+# page of open issues. Each page is compared whole, so a finding the script
+# drops or invents fails as surely as a reworded one.
+rel_script=_maintenance/file-issue/check-relationships.py
+require_file "$rel_script"
+# Report-only is a deliberate cut, recorded in Deliberately Not Built as
+# "Fixing findings automatically".
+refute_text "$rel_script" "addBlockedBy"
+refute_text "$rel_script" "addSubIssue"
+refute_text "$rel_script" "updateIssue"
+rel_tmp="$link_tmp/rel"
+mkdir -p "$rel_tmp/bin"
+cp tests/fixtures/file-issue/fake-gh-issues "$rel_tmp/bin/gh"
+chmod +x "$rel_tmp/bin/gh"
+run_rel() {
+  local script="$1"
+  shift
+  PATH="$rel_tmp/bin:$PATH" FAKE_GH_LOG="$rel_tmp/gh.log" FAKE_GH_REFS="$rel_tmp/refs.txt" python3 "$script" "$@"
+}
+# What GitHub's issueOrPullRequest lookup returns for each entry headed for
+# UNLINKED. Every other entry is missing on purpose: a lookup the script
+# shouldn't make hits the stub's unhandled exit 2 and fails the run with 3.
+cat > "$rel_tmp/refs.txt" <<'REFS'
+o/r#2 Issue
+o/r#9 Issue
+o/x#96 Issue
+O/y#4 Issue
+o/x#97 PullRequest
+o/r#31 PullRequest
+o/r#32 null
+REFS
+
+# Page A, one issue per case. #6's path must print nothing, and so must #7,
+# which names #2 in prose, in a bare Blocked by line inside a ``` error block,
+# and in a quoted Blocked by line. #20–#22 hold slot lines in a ``` fence
+# (one behind a ``` line that can't close the ```` opener), a ~~~ fence, and
+# code indented 4 spaces or a tab, and print nothing either. #23 names a
+# Parent under another owner. link-issues.py keeps that entry as text, so #23
+# prints nothing. #24's and #25's parents share the owner, #25's in another
+# case, so GitHub can link them and both report. #26's parent and #27's
+# blocker are pull requests, which link-issues.py keeps as text, so both
+# print nothing. #28's blocker resolves to nothing and reports.
+cat > "$rel_tmp/page-a.json" <<'JSON'
+{"data":{"repository":{"issues":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[
+{"number":1,"body":"## Problem\n\nx\n\n**Blocked by:** #2\n","parent":null,"blockedBy":{"nodes":[]}},
+{"number":3,"body":"**Blocked by:** None\n","parent":null,"blockedBy":{"nodes":[{"number":2,"repository":{"nameWithOwner":"o/r"}}]}},
+{"number":4,"body":"**Blocked by:** #2\n","parent":null,"blockedBy":{"nodes":[{"number":2,"repository":{"nameWithOwner":"o/r"}}]}},
+{"number":5,"body":"**Parent:** #9\n","parent":{"number":8,"repository":{"nameWithOwner":"o/r"}},"blockedBy":{"nodes":[]}},
+{"number":6,"body":"**Blocked by:** docs/spec.md\n","parent":null,"blockedBy":{"nodes":[]}},
+{"number":7,"body":"## Problem\n\nSince #2 landed, the parser fails.\n\n```\nerror: see #2\n**Blocked by:** #2\n```\n\n> **Blocked by:** #2\n","parent":null,"blockedBy":{"nodes":[]}},
+{"number":10,"body":"## Problem\n\nx\n","parent":null,"blockedBy":{"nodes":[{"number":2,"repository":{"nameWithOwner":"o/r"}}]}},
+{"number":11,"body":"**Blocked by:** o/x#3\n","parent":null,"blockedBy":{"nodes":[{"number":3,"repository":{"nameWithOwner":"o/x"}}]}},
+{"number":20,"body":"## Problem\n\n```\n**Blocked by:** #2\n**Parent:** #9\n```\n\n````\n```\n**Blocked by:** #2\n````\n","parent":null,"blockedBy":{"nodes":[]}},
+{"number":21,"body":"## Problem\n\n~~~\n**Blocked by:** #2\n~~~\n","parent":null,"blockedBy":{"nodes":[]}},
+{"number":22,"body":"## Problem\n\n    **Blocked by:** #2\n\t**Parent:** #9\n","parent":null,"blockedBy":{"nodes":[]}},
+{"number":23,"body":"**Parent:** other/project#7\n","parent":null,"blockedBy":{"nodes":[]}},
+{"number":24,"body":"**Parent:** o/x#96\n","parent":null,"blockedBy":{"nodes":[]}},
+{"number":25,"body":"**Parent:** O/y#4\n","parent":null,"blockedBy":{"nodes":[]}},
+{"number":26,"body":"**Parent:** o/x#97\n","parent":null,"blockedBy":{"nodes":[]}},
+{"number":27,"body":"**Blocked by:** #31\n","parent":null,"blockedBy":{"nodes":[]}},
+{"number":28,"body":"**Blocked by:** #32\n","parent":null,"blockedBy":{"nodes":[]}}
+]}}}}
+JSON
+cat > "$rel_tmp/want-a.txt" <<'OUT'
+UNLINKED #1 blocked-by #2
+CONTRADICTED #3 blocked-by None
+DUPLICATE #4 blocked-by #2
+UNLINKED #5 parent #9
+DUPLICATE #11 blocked-by o/x#3
+UNLINKED #24 parent o/x#96
+UNLINKED #25 parent O/y#4
+UNLINKED #28 blocked-by #32
+17 open issues checked: 5 unlinked, 1 contradicted, 2 duplicate.
+OUT
+: > "$rel_tmp/gh.log"
+rc=0; FAKE_GH_PAGE="$rel_tmp/page-a.json" run_rel "$rel_script" --repo o/r > "$rel_tmp/out-a" || rc=$?
+expect_rc 1 "$rc" "check-relationships on page A"
+require_output "$rel_tmp/want-a.txt" "$rel_tmp/out-a" "check-relationships on page A"
+require_count "$rel_tmp/gh.log" "mutation" 0
+# One lookup per entry headed for UNLINKED, and none for a DUPLICATE, a
+# CONTRADICTED, or #23's cross-owner parent.
+require_count "$rel_tmp/gh.log" "issueOrPullRequest" 7
+
+# Page B holds only what passes: DUPLICATE alone exits 0, so the
+# hand-reconciled #57–#62 stay clean. No --repo, so the repo comes from the
+# stub's repo view.
+cat > "$rel_tmp/page-b.json" <<'JSON'
+{"data":{"repository":{"issues":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[
+{"number":4,"body":"**Blocked by:** #2\n","parent":null,"blockedBy":{"nodes":[{"number":2,"repository":{"nameWithOwner":"o/r"}}]}},
+{"number":10,"body":"## Problem\n\nx\n","parent":{"number":8,"repository":{"nameWithOwner":"o/r"}},"blockedBy":{"nodes":[{"number":2,"repository":{"nameWithOwner":"o/r"}}]}},
+{"number":12,"body":"**Parent:** None\n**Blocked by:** None\n","parent":null,"blockedBy":{"nodes":[]}}
+]}}}}
+JSON
+cat > "$rel_tmp/want-b.txt" <<'OUT'
+DUPLICATE #4 blocked-by #2
+3 open issues checked: 0 unlinked, 0 contradicted, 1 duplicate.
+OUT
+: > "$rel_tmp/gh.log"
+rc=0; FAKE_GH_PAGE="$rel_tmp/page-b.json" run_rel "$rel_script" > "$rel_tmp/out-b" || rc=$?
+expect_rc 0 "$rc" "check-relationships on page B"
+require_output "$rel_tmp/want-b.txt" "$rel_tmp/out-b" "check-relationships on page B"
+require_count "$rel_tmp/gh.log" "repo view" 1
+require_count "$rel_tmp/gh.log" "mutation" 0
+
+# Usage errors and a failed page request exit 3, not argparse's 2 and not
+# the 1 that means findings.
+rc=0; run_rel "$rel_script" --bogus > /dev/null 2>&1 || rc=$?
+expect_rc 3 "$rc" "check-relationships with an unknown flag"
+rc=0; FAKE_GH_FAIL=1 FAKE_GH_PAGE="$rel_tmp/page-a.json" run_rel "$rel_script" --repo o/r > /dev/null 2>&1 || rc=$?
+expect_rc 3 "$rc" "check-relationships when the page request fails"
+# A failed lookup is a failed gh call, so it exits 3 and prints no partial
+# report. Only a NOT_FOUND answer, as for #28, counts as a dangling entry.
+rc=0; FAKE_GH_REF_FAIL=1 FAKE_GH_PAGE="$rel_tmp/page-a.json" run_rel "$rel_script" --repo o/r > "$rel_tmp/out-ref-fail" 2>/dev/null || rc=$?
+expect_rc 3 "$rc" "check-relationships when an entry lookup fails"
+[[ ! -s "$rel_tmp/out-ref-fail" ]] || {
+  echo "check-relationships printed a report although an entry lookup failed" >&2
+  exit 1
+}
+
+# A scratch copy with the UNLINKED branch deleted must fail the page A
+# comparison, or that comparison can't see the class that fails the run.
+mkdir -p "$rel_tmp/mutant/_maintenance/file-issue" "$rel_tmp/mutant/file-issue/scripts"
+cp file-issue/scripts/link-issues.py "$rel_tmp/mutant/file-issue/scripts/"
+python3 - "$rel_script" "$rel_tmp/mutant/$rel_script" <<'PY'
+import sys
+src = open(sys.argv[1], encoding="utf-8").read()
+branch = '''            elif kind_of(parsed[0], parsed[1]) != "PullRequest":
+                found.append(("UNLINKED", f"UNLINKED #{number} {slot} {entry}"))
+'''
+assert src.count(branch) == 1, "the UNLINKED branch moved; update this mutant"
+open(sys.argv[2], "w", encoding="utf-8").write(src.replace(branch, "", 1))
+PY
+FAKE_GH_PAGE="$rel_tmp/page-a.json" run_rel "$rel_tmp/mutant/$rel_script" --repo o/r > "$rel_tmp/out-mutant" 2>&1 || true
+# The mutant has to have run to its findings, or a crash would pass this check.
+require_text "$rel_tmp/out-mutant" "CONTRADICTED #3 blocked-by None"
+if diff -q "$rel_tmp/want-a.txt" "$rel_tmp/out-mutant" > /dev/null; then
+  echo "a copy of $rel_script without its UNLINKED branch still matches page A, so that case pins nothing" >&2
+  exit 1
+fi
 
 # Every gate in the self-check needs a row in the evidence map, or the tiering
 # claim in the README is false.

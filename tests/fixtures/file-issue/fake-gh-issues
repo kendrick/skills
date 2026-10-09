@@ -1,0 +1,62 @@
+#!/bin/sh
+# Stand-in for gh in the check-relationships.py block of
+# tests/file-issue-smoke.sh. It answers a repo lookup, the open-issues page,
+# and an entry's issueOrPullRequest lookup, and fails every other call, so a
+# mutation fails here as well as in the suite's log check. It stays separate
+# from fake-gh so neither stub's routing takes on a second job.
+printf '%s\n' "$*" >> "${FAKE_GH_LOG:?FAKE_GH_LOG must name the call log}"
+
+if [ "$1" = "repo" ] && [ "$2" = "view" ]; then
+  printf '{"nameWithOwner":"o/r"}\n'
+  exit 0
+fi
+
+if [ "$1" = "api" ] && [ "$2" = "graphql" ]; then
+  case "$*" in
+    *mutation*) ;;
+    *issueOrPullRequest*)
+      # FAKE_GH_REFS names a file of "owner/name#number typename" lines. A
+      # typename of null answers the way real gh does for a dangling
+      # reference: the NOT_FOUND response on stdout, and exit 1. A reference
+      # missing from the file falls through to the unhandled exit 2.
+      if [ "${FAKE_GH_REF_FAIL:-}" = 1 ]; then
+        echo "HTTP 502: Bad Gateway (https://api.github.com/graphql)" >&2
+        exit 1
+      fi
+      owner= name= number=
+      for arg in "$@"; do
+        case "$arg" in
+          owner=*) owner="${arg#owner=}" ;;
+          name=*) name="${arg#name=}" ;;
+          number=*) number="${arg#number=}" ;;
+        esac
+      done
+      kind="$(awk -v ref="$owner/$name#$number" '$1 == ref { print $2; exit }' "${FAKE_GH_REFS:?FAKE_GH_REFS must name the reference map}")"
+      case "$kind" in
+        '') ;;
+        null)
+          printf '{"data":{"repository":{"issueOrPullRequest":null}},"errors":[{"type":"NOT_FOUND","message":"Could not resolve to an issue or pull request with the number of %s."}]}' "$number"
+          echo "gh: Could not resolve to an issue or pull request with the number of $number." >&2
+          exit 1
+          ;;
+        *)
+          printf '{"data":{"repository":{"issueOrPullRequest":{"__typename":"%s"}}}}\n' "$kind"
+          exit 0
+          ;;
+      esac
+      ;;
+    *'issues(states:OPEN'*)
+      # FAKE_GH_FAIL fails the page request the way a real gh fails on a
+      # network or auth error, so the suite can pin the script's exit 3.
+      if [ "${FAKE_GH_FAIL:-}" = 1 ]; then
+        echo "HTTP 502: Bad Gateway (https://api.github.com/graphql)" >&2
+        exit 1
+      fi
+      cat "${FAKE_GH_PAGE:?FAKE_GH_PAGE must name the canned issues page}"
+      exit 0
+      ;;
+  esac
+fi
+
+echo "fake-gh-issues: unhandled call: $*" >&2
+exit 2
