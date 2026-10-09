@@ -111,6 +111,70 @@ The funnel keeps token cost roughly constant as the bank grows. A bank with 500 
 
 Apply it even when the bank is small. It's a habit, not an optimization.
 
+## Measuring the Funnel
+
+`scripts/bench-fixture.sh` turns a scope's `accepted` records into a `qmd bench` fixture, so a retrieval change gets a recall number instead of a guess. The labels come free: each record's `source_refs` already names the notes it was crystallized from, so the expected answer to a record's question is those notes plus the record itself.
+
+Index the scope, generate the fixture, then bench it:
+
+```bash
+qmd collection add <scope-root> --name <c>
+qmd embed -c <c>
+qmd ls <c>
+bash inbox-to-memory/scripts/bench-fixture.sh <scope-root> --collection <c> > fixture.json
+qmd bench fixture.json -c <c>
+```
+
+Run `qmd ls <c>` before the bench and confirm it lists the scope's files. qmd scores a collection it never indexed as all zeros and says nothing, which reads exactly like a funnel that retrieves nothing.
+
+The script takes `<scope-root> [--collection NAME] [--top-k K] [--questions FILE]`, writes the fixture to stdout and diagnostics to stderr, and only reads the scope. Exit 0 means it emitted a fixture, skipped records included. Exit 2 means a usage error, a malformed questions file, or something the script can't read: the scope, a note, a record, or the questions file.
+
+### What becomes a query
+
+- A record is any `*.md` under `<scope-root>/_memory/` whose frontmatter has `memory_type`. A note is any `*.md` under `<scope-root>/notes/`.
+- A record produces a query only when its `status` is exactly `accepted`.
+- In a record-derived query, a file enters `expected_files` only when its `status` is something other than `superseded`. Notes carry no status, so they always enter. Items from `--questions` are taken as written: the author owns those labels, and the script does not filter them.
+- Superseded files stay in the scope and in the index. The fixture exists to catch a superseded record that outranks the current one, and an index without it would hide that.
+- The query text is the record's `summary` when present and non-empty, else its `title`. V2 records carry no `summary`, so `title` is the usual source. A record with neither is reported on stderr and skipped.
+
+### The fixture
+
+The output follows qmd's custom-fixture schema: `{"description", "version": 1, "collection", "queries": [...]}`. `collection` defaults to the scope root's basename; `--collection` overrides it, and should match the name given to `qmd collection add`.
+
+Each query is `{"id": "record-<record id>", "query", "type": "semantic", "expected_files", "expected_in_top_k"}`:
+
+- `expected_files` lists the resolved source notes in `source_refs` order, then the record itself, duplicates removed. Paths are relative to the scope root, matching what `qmd ls` shows for a collection added at that root.
+- `expected_in_top_k` is `--top-k` (default 5), raised to `len(expected_files)` when that is larger, so a record citing six notes can still score full recall.
+
+### Resolving `source_refs`
+
+All three on-disk shapes resolve: an inline list (`[a, b]`), a block list (`- a`), and the v1 mapping form (`- note_id: X` with sibling keys). An entry written `<scope-path>::<id>` resolves by the part after `::`, because the id is what locates a file.
+
+An id resolves to the one note under `notes/` whose frontmatter `id:` equals it. When none matches, or more than one does, the script prints one of these and skips that record's query whole:
+
+```
+bench-fixture: <record path>: source_ref <entry> does not resolve to a note
+bench-fixture: <record path>: source_ref <entry> resolves to <n> notes
+```
+
+A query whose `expected_files` is only partly right makes its recall number meaningless, so a record with one dangling ref contributes nothing rather than a half-labelled query. Treat each such line as a broken link in the scope and fix the ref.
+
+### Adding hand-written questions
+
+`--questions FILE` appends questions no single record asks. The file is a JSON array; each item needs `query` (a non-empty string) and `expected_files` (a non-empty list of scope-relative paths), and may set `type` and `expected_in_top_k`:
+
+```json
+[
+  {"query": "who owns hypercare after go-live?", "expected_files": ["notes/steerco-2025-03.md", "_memory/decisions/hypercare-owner.md"]}
+]
+```
+
+Items land after the record queries as `question-1`, `question-2`, and on, defaulting to `type: "semantic"` and the same top-k rule. A malformed item exits 2 and names its index.
+
+### Where it stops
+
+A journal scope produces no queries, because its entries are `current`, `superseded`, or `archived`, never `accepted`. A ref that points into another scope, such as a client record citing a note in one of its projects, lands outside the collection and is skipped as unresolved.
+
 ## When the Funnel Doesn't Apply
 
 Some queries genuinely need broad context:

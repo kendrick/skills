@@ -1953,6 +1953,251 @@ git -C "$v_subdir" -c user.email=t@t -c user.name=t commit -qm migrated
 v_subdir_out="$(bash "$verify" "$v_subdir/clients/acme" --since "$v_subdir_since")"
 require_output "$v_subdir_out" "links checked: 1 (id fallback: 1)"
 
+# --- bench-fixture.sh (#191) ---
+# Labels come from source_refs, so a wrong label still yields a plausible recall
+# number. Pin which records become queries and which files count as expected.
+bench=inbox-to-memory/scripts/bench-fixture.sh
+bench_scope="$fixtures/bench"
+require_file "$bench"
+require_dir "$bench_scope"
+bash -n "$bench"
+
+bench_note1=notes/2026-02-03-bench-rollback-owner-Bn1RbkOwn1.md
+bench_note2=notes/2026-02-10-bench-freeze-source-Bn2FrzSrc2.md
+bench_note3=notes/2025-11-18-bench-region-boundary-Bn3RgnBnd3.md
+bench_rec_a=_memory/decisions/rollback-has-one-named-owner-BnRecA0001.md
+bench_rec_b=_memory/context/region-boundary-split-BnRecB0002.md
+bench_rec_c=_memory/decisions/old-rollback-rotation-BnRecC0003.md
+bench_rec_d=_memory/context/vendor-sla-dangling-BnRecD0004.md
+
+bench_dir="$(mktemp -d "${TMPDIR:-/tmp}/i2m-bench.XXXXXX")"
+trap 'rm -rf "$not_a_scope" "$inline_scope" "$dismissal_scope" "$mig" "$jrn" "$t2_extract_scope" "$t2x_dir" "$subset_scope" "$batched_scope" "$lifecycle_scope" "$idem_dir" "$v_pass" "$scripts_copy" "$v_combo" "$v_linkdrop" "$v_lintdefect" "$v1_broken_scope" "$v1_pass_scope" "$wt_headline" "$wt_backward" "$wt_dedupe" "$wt_status" "$wt_keyins" "$v_subdir" "$bench_dir"' EXIT
+
+# One python3 call per claim, so a failure names the rule that broke.
+bench_assert() {
+  local json="$1"
+  local label="$2"
+  local expr="$3"
+  python3 -c '
+import json, sys
+d = json.load(open(sys.argv[1]))
+q = {x["id"]: x for x in d["queries"]}
+files = [f for x in d["queries"] for f in x["expected_files"]]
+sys.exit(0 if eval(sys.argv[2]) else 1)
+' "$json" "$expr" || {
+    echo "bench fixture on $json: $label" >&2
+    cat "$json" >&2
+    exit 1
+  }
+}
+
+bash "$bench" "$bench_scope" >"$bench_dir/out.json" 2>"$bench_dir/err.txt"
+bench_assert "$bench_dir/out.json" "query ids are not exactly A, B, F" \
+  'set(q) == {"record-BnRecA0001", "record-BnRecB0002", "record-BnRecF0006"}'
+# Contract-v2 records carry only a title, so B is the one record that notices
+# summary-over-title flipping.
+bench_assert "$bench_dir/out.json" "B's query is not its summary" \
+  'q["record-BnRecB0002"]["query"] == "Billing region and deployment region split in two places"'
+bench_assert "$bench_dir/out.json" "A's expected_files are not its two notes then itself" \
+  'q["record-BnRecA0001"]["expected_files"] == ["'"$bench_note1"'", "'"$bench_note2"'", "'"$bench_rec_a"'"]'
+# machine-contracts says the id alone resolves a `<scope-path>::<id>` ref.
+bench_assert "$bench_dir/out.json" "F's scope-qualified ref did not resolve to note3" \
+  'q["record-BnRecF0006"]["expected_files"][0] == "'"$bench_note3"'"'
+bench_assert "$bench_dir/out.json" "a superseded record is listed as expected" \
+  '"'"$bench_rec_c"'" not in files'
+# Without the raise, a record citing many notes could never score full recall.
+bench_assert "$bench_dir/out.json" "an expected_in_top_k is below its expected_files count" \
+  'all(x["expected_in_top_k"] >= len(x["expected_files"]) for x in d["queries"])'
+# The default floor of 5 would mask the raise on a three-file record.
+bash "$bench" "$bench_scope" --top-k 2 >"$bench_dir/topk.json" 2>/dev/null
+bench_assert "$bench_dir/topk.json" "--top-k 2 was not raised to A's three expected files" \
+  'q["record-BnRecA0001"]["expected_in_top_k"] == 3 and q["record-BnRecB0002"]["expected_in_top_k"] == 2'
+# Exactly one line: a second means a clean record was also reported. D's query
+# is already proven absent by the id-set check above.
+[[ "$(cat "$bench_dir/err.txt")" == "bench-fixture: $bench_rec_d: source_ref BnNoSuchNote does not resolve to a note" ]] || {
+  echo "bench-fixture stderr is not the one dangling-ref line for D:" >&2
+  cat "$bench_dir/err.txt" >&2
+  exit 1
+}
+
+# Falsifier 1: on a copy, flip A to superseded. The status filter alone has to
+# drop its query and its path, and the file stays put.
+cp -R "$bench_scope" "$bench_dir/scope"
+perl -pi -e 's/^status: accepted$/status: superseded/' "$bench_dir/scope/$bench_rec_a"
+grep -qx 'status: superseded' "$bench_dir/scope/$bench_rec_a" || {
+  echo "could not flip A's status in the bench copy" >&2
+  exit 1
+}
+bash "$bench" "$bench_dir/scope" >"$bench_dir/flipped.json" 2>/dev/null
+bench_assert "$bench_dir/flipped.json" "a superseded A still produced a query" \
+  '"record-BnRecA0001" not in q and set(q) == {"record-BnRecB0002", "record-BnRecF0006"}'
+bench_assert "$bench_dir/flipped.json" "a superseded A is still listed as expected" \
+  '"'"$bench_rec_a"'" not in files'
+# Falsifier 2: superseded files must stay in the scope. A superseded record
+# outranking its replacement is the intrusion the fixture exists to count.
+require_file "$bench_dir/scope/$bench_rec_a"
+require_file "$bench_dir/scope/$bench_rec_c"
+refute_text "$bench" "os.remove"
+refute_text "$bench" "shutil.move"
+# Answer grading needs a judge model and a rubric, so the fixture stops at
+# retrieval. `expected_answer` is the field a scoring fixture would add.
+refute_text "$bench" "expected_answer"
+
+# A record can cite one note twice. expected_files lists each path once, since
+# a repeated path would inflate the recall denominator.
+cp -R "$bench_scope" "$bench_dir/dupe"
+perl -pi -e 's/^source_refs: .*$/source_refs: [Bn1RbkOwn1, Bn1RbkOwn1]/' "$bench_dir/dupe/$bench_rec_a"
+grep -qx 'source_refs: \[Bn1RbkOwn1, Bn1RbkOwn1\]' "$bench_dir/dupe/$bench_rec_a" || {
+  echo "could not rewrite A's source_refs in the bench copy" >&2
+  exit 1
+}
+bash "$bench" "$bench_dir/dupe" >"$bench_dir/dupe.json" 2>/dev/null
+bench_assert "$bench_dir/dupe.json" "A's duplicate ref to note1 was not collapsed" \
+  'q["record-BnRecA0001"]["expected_files"] == ["'"$bench_note1"'", "'"$bench_rec_a"'"]'
+
+# Hand-written questions follow the derived ones, numbered from 1.
+cat >"$bench_dir/questions.json" <<'JSON'
+[
+  {"query": "who owns a rollback", "expected_files": ["notes/2026-02-03-bench-rollback-owner-Bn1RbkOwn1.md"]},
+  {"query": "when are freeze dates fixed", "expected_files": ["notes/2026-02-10-bench-freeze-source-Bn2FrzSrc2.md"], "expected_in_top_k": 3}
+]
+JSON
+bash "$bench" "$bench_scope" --questions "$bench_dir/questions.json" >"$bench_dir/q.json" 2>/dev/null
+bench_assert "$bench_dir/q.json" "--questions did not append question-1 and question-2 after the records" \
+  '[x["id"] for x in d["queries"]][-2:] == ["question-1", "question-2"] and len(d["queries"]) == 5'
+bench_assert "$bench_dir/q.json" "--questions dropped a question's own expected_in_top_k" \
+  'q["question-2"]["expected_in_top_k"] == 3 and q["question-2"]["query"] == "when are freeze dates fixed"'
+
+# A query-less question would bench as an empty search and score zero silently,
+# so the whole file is rejected and the bad item named by number.
+cat >"$bench_dir/bad-questions.json" <<'JSON'
+[
+  {"query": "who owns a rollback", "expected_files": ["notes/2026-02-03-bench-rollback-owner-Bn1RbkOwn1.md"]},
+  {"expected_files": ["notes/2026-02-10-bench-freeze-source-Bn2FrzSrc2.md"]}
+]
+JSON
+bench_rc=0
+bench_bad_err="$(bash "$bench" "$bench_scope" --questions "$bench_dir/bad-questions.json" 2>&1 >/dev/null)" || bench_rc=$?
+[[ "$bench_rc" == 2 ]] || {
+  echo "bench-fixture accepted a question with no query (exit $bench_rc, want 2)" >&2
+  exit 1
+}
+require_output "$bench_bad_err" "bench-fixture: questions item 2: query must be a non-empty string"
+
+# Exit 0 with an empty fixture reads like a scope with no accepted records, so
+# an unreadable scope must fail loudly.
+bench_rc=0
+mkdir "$bench_dir/no-memory"
+bench_err="$(bash "$bench" "$bench_dir/no-memory" 2>&1 >/dev/null)" || bench_rc=$?
+[[ "$bench_rc" == 2 ]] || {
+  echo "bench-fixture exited $bench_rc on a scope with no _memory/ (want 2)" >&2
+  exit 1
+}
+require_output "$bench_err" "bench-fixture: no _memory/ directory under"
+
+# chmod 000 doesn't block root, so skip the unreadable case there.
+if [[ "$(id -u)" != 0 ]]; then
+  cp -R "$bench_scope" "$bench_dir/locked"
+  chmod 000 "$bench_dir/locked/_memory"
+  bench_rc=0
+  bench_err="$(bash "$bench" "$bench_dir/locked" 2>&1 >/dev/null)" || bench_rc=$?
+  chmod 755 "$bench_dir/locked/_memory"
+  [[ "$bench_rc" == 2 ]] || {
+    echo "bench-fixture exited $bench_rc on an unreadable _memory/ (want 2)" >&2
+    exit 1
+  }
+  require_output "$bench_err" "bench-fixture: unreadable directory"
+else
+  echo "skipping unreadable-_memory assertion: running as root" >&2
+fi
+
+# A scope with records and no notes/ resolves nothing and stays allowed.
+cp -R "$bench_scope" "$bench_dir/nonotes"
+rm -rf "$bench_dir/nonotes/notes"
+bench_rc=0
+bash "$bench" "$bench_dir/nonotes" >/dev/null 2>&1 || bench_rc=$?
+[[ "$bench_rc" == 0 ]] || {
+  echo "bench-fixture exited $bench_rc on a scope with no notes/ (want 0)" >&2
+  exit 1
+}
+
+# An inline comment must not leak into a value: `accepted # x` would fail the
+# status gate and drop A with exit 0. The quoted title keeps the `#` inside its
+# quotes. F's block list gets a second ref below a full-line comment, since a
+# reader that ends the list at a column-0 `#` line loses every ref after it.
+cp -R "$bench_scope" "$bench_dir/comments"
+bench_rec_f=_memory/context/region-boundary-cross-scope-BnRecF0006.md
+perl -pi -e 's/^status: accepted$/status: accepted # approved/; s/^(source_refs: \[.*\])$/$1 # both notes/; s/^title: .*$/title: '"'"'Rollback # one owner'"'"' # short/' "$bench_dir/comments/$bench_rec_a"
+perl -pi -e 's/^(  - .*::Bn3RgnBnd3)$/$1 # cross-scope\n# a full-line comment\n  - Bn1RbkOwn1/' "$bench_dir/comments/$bench_rec_f"
+grep -qx 'status: accepted # approved' "$bench_dir/comments/$bench_rec_a" \
+  && grep -qx 'source_refs: \[Bn1RbkOwn1, Bn2FrzSrc2\] # both notes' "$bench_dir/comments/$bench_rec_a" \
+  && grep -qx '  - 11 Clients/acme/pursuits/bench::Bn3RgnBnd3 # cross-scope' "$bench_dir/comments/$bench_rec_f" \
+  && grep -A1 -x '# a full-line comment' "$bench_dir/comments/$bench_rec_f" | grep -qx '  - Bn1RbkOwn1' || {
+  echo "could not add inline comments to the bench copy" >&2
+  exit 1
+}
+bash "$bench" "$bench_dir/comments" >"$bench_dir/comments.json" 2>"$bench_dir/comments-err.txt"
+bench_assert "$bench_dir/comments.json" "an inline comment changed which records became queries" \
+  'set(q) == {"record-BnRecA0001", "record-BnRecB0002", "record-BnRecF0006"}'
+bench_assert "$bench_dir/comments.json" "an inline comment kept A's inline source_refs from resolving" \
+  'q["record-BnRecA0001"]["expected_files"] == ["'"$bench_note1"'", "'"$bench_note2"'", "'"$bench_rec_a"'"]'
+bench_assert "$bench_dir/comments.json" "a # inside a quoted title was stripped, or the comment after it kept" \
+  'q["record-BnRecA0001"]["query"] == "Rollback # one owner"'
+bench_assert "$bench_dir/comments.json" "a comment in F's block list lost or broke one of its two refs" \
+  'q["record-BnRecF0006"]["expected_files"] == ["'"$bench_note3"'", "'"$bench_note1"'", "'"$bench_rec_f"'"]'
+
+# A note that can't be decoded must stop the run. Skipping the note leaves A's
+# ref dangling, so A drops out and the run still exits 0.
+cp -R "$bench_scope" "$bench_dir/badutf8"
+printf '\xff\n' >>"$bench_dir/badutf8/$bench_note1"
+bench_rc=0
+bash "$bench" "$bench_dir/badutf8" >"$bench_dir/badutf8.json" 2>"$bench_dir/badutf8-err.txt" || bench_rc=$?
+[[ "$bench_rc" == 2 && ! -s "$bench_dir/badutf8.json" ]] || {
+  echo "bench-fixture exited $bench_rc on an undecodable note (want 2 and no fixture)" >&2
+  cat "$bench_dir/badutf8-err.txt" >&2
+  exit 1
+}
+require_output "$(cat "$bench_dir/badutf8-err.txt")" "$bench_note1: unreadable ("
+
+# A record whose frontmatter opens and never closes must stop the run too.
+# Read as a non-record, it dropped out of the queries and the run exited 0.
+cp -R "$bench_scope" "$bench_dir/unclosed"
+python3 - "$bench_dir/unclosed/$bench_rec_b" <<'PYFIX'
+import sys
+p = sys.argv[1]
+lines = open(p, encoding="utf-8").read().splitlines(True)
+close = next(i for i, ln in enumerate(lines) if i > 0 and ln.strip() == "---")
+open(p, "w", encoding="utf-8").writelines(lines[:close] + lines[close + 1:])
+PYFIX
+grep -c '^---$' "$bench_dir/unclosed/$bench_rec_b" | grep -qx 1 || {
+  echo "the unclosed-frontmatter fixture still has its closing fence" >&2
+  exit 1
+}
+bench_rc=0
+bash "$bench" "$bench_dir/unclosed" >"$bench_dir/unclosed.json" 2>"$bench_dir/unclosed-err.txt" || bench_rc=$?
+[[ "$bench_rc" == 2 && ! -s "$bench_dir/unclosed.json" ]] || {
+  echo "bench-fixture exited $bench_rc on unterminated frontmatter (want 2 and no fixture)" >&2
+  cat "$bench_dir/unclosed-err.txt" >&2
+  exit 1
+}
+require_output "$(cat "$bench_dir/unclosed-err.txt")" "$bench_rec_b: frontmatter opens with --- but never closes"
+
+# The same holds for a record the OS won't open. chmod 000 doesn't block root.
+if [[ "$(id -u)" != 0 ]]; then
+  cp -R "$bench_scope" "$bench_dir/lockedrec"
+  chmod 000 "$bench_dir/lockedrec/$bench_rec_b"
+  bench_rc=0
+  bench_err="$(bash "$bench" "$bench_dir/lockedrec" 2>&1 >/dev/null)" || bench_rc=$?
+  chmod 644 "$bench_dir/lockedrec/$bench_rec_b"
+  [[ "$bench_rc" == 2 ]] || {
+    echo "bench-fixture exited $bench_rc on an unreadable record (want 2)" >&2
+    exit 1
+  }
+  require_output "$bench_err" "$bench_rec_b: unreadable ("
+else
+  echo "skipping unreadable-record assertion: running as root" >&2
+fi
+
 # The checked-in fixtures are never migrated or stamped in place. Every
 # migration or write-through test works on a copy, and a test that forgets
 # to copy would otherwise rewrite the fixture it is asserting against and
