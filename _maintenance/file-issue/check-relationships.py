@@ -14,8 +14,12 @@ the authority, so an issue-resolvable entry in the body is the defect.
 One line per finding on stdout, then a summary line:
 
     UNLINKED #<n> <slot> <entry>     the body names an issue the native field lacks
-    CONTRADICTED #<n> <slot>         the body says None; the native field is not empty
+    CONTRADICTED #<n> <slot> None    the body says None; the native field is not empty
     DUPLICATE #<n> <slot> <entry>    the body names an issue the native field holds too
+
+The repo's validators print findings to stderr. This script prints them to
+stdout because it reports rather than gates, and
+`_maintenance/jd/check-prose-refs.py` does the same.
 
 `DUPLICATE` is a legacy double record that is safe to strip by hand, and it
 doesn't fail the run, so the hand-reconciled #57-#62 stay clean. An entry
@@ -26,10 +30,12 @@ native field.
 Only a line that starts with `**Blocked by:**` or `**Parent:**` counts. An issue
 number in a Problem section or a quoted error block is prose, not a
 relationship, and flagging it would train the reader to ignore the report.
+For the same reason the script skips a slot line inside a ``` or ~~~ fence, in
+code indented four columns, or behind a `>` quote marker.
 
 Entries go through `parse_entry` from file-issue's link-issues.py rather than a
-second regex here, so this check and the writer agree on what counts as an
-issue reference.
+second regex here, and fences through its `FENCE_RE`, so this check and the
+writer agree on what counts as an issue reference and as a code block.
 
 It writes nothing to GitHub. An unrecorded blocker and a stale body line need
 different fixes, and a person rules on each; the posture is jd-audit's.
@@ -75,13 +81,13 @@ class GhError(Exception):
     pass
 
 
-def load_parse_entry():
+def load_link_issues():
     # The filename has a hyphen, so a plain import can't reach it.
     path = REPO_ROOT / "file-issue" / "scripts" / "link-issues.py"
     spec = importlib.util.spec_from_file_location("link_issues", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    return module.parse_entry
+    return module.parse_entry, module.FENCE_RE
 
 
 def gh(args):
@@ -122,19 +128,40 @@ def fetch_issues(repo):
             return issues
 
 
-def ref(node):
+def issue_key(node):
     return (node["repository"]["nameWithOwner"].lower(), node["number"])
 
 
 def native_refs(issue):
     parent = issue.get("parent")
     blockers = (issue.get("blockedBy") or {}).get("nodes") or []
-    return {"parent": {ref(parent)} if parent else set(), "blocked-by": {ref(n) for n in blockers}}
+    return {"parent": {issue_key(parent)} if parent else set(), "blocked-by": {issue_key(n) for n in blockers}}
 
 
-def body_slots(body):
-    """Yield (slot, entries) for each slot line; entries are the comma-split texts."""
+def body_slots(body, fence_re):
+    """Yield (slot, entries) for each slot line outside code; entries are the comma-split texts."""
+    fence = None
     for line in (body or "").splitlines():
+        # Same fence rule as strip_body in link-issues.py: a fence closes only
+        # on a run of the opener's character at least as long as the opener,
+        # so a ```` fence keeps a ``` line inside it.
+        m = fence_re.match(line)
+        if m:
+            run, rest = m.group(1), m.group(2)
+            if fence is None:
+                fence = run
+            elif run[0] == fence[0] and len(run) >= len(fence) and not rest.strip():
+                fence = None
+            continue
+        if fence is not None:
+            continue
+        # Four columns of indent make a code block, except under a list item,
+        # where they make continuation text. The check skips both. No
+        # template indents a slot line, so skipping list text can cost a
+        # finding only on a hand-written body.
+        expanded = line.expandtabs(4)
+        if len(expanded) - len(expanded.lstrip(" ")) >= 4:
+            continue
         text = line.strip()
         for marker, slot in SLOTS.items():
             if text.startswith(marker):
@@ -142,16 +169,16 @@ def body_slots(body):
                 yield slot, [e.strip() for e in rest.split(",") if e.strip()]
 
 
-def check_issue(issue, home, parse_entry):
+def check_issue(issue, home, parse_entry, fence_re):
     native = native_refs(issue)
     number = issue["number"]
     found, contradicted = [], set()
-    for slot, entries in body_slots(issue.get("body")):
+    for slot, entries in body_slots(issue.get("body"), fence_re):
         for entry in entries:
             if entry.lower() == "none":
                 if native[slot] and slot not in contradicted:
                     contradicted.add(slot)
-                    found.append(("CONTRADICTED", f"CONTRADICTED #{number} {slot}"))
+                    found.append(("CONTRADICTED", f"CONTRADICTED #{number} {slot} {entry}"))
                 continue
             parsed = parse_entry(entry, home)
             if parsed is None:
@@ -174,7 +201,7 @@ def main(argv):
             repo = gh_json(["repo", "view", "--json", "nameWithOwner"]).get("nameWithOwner")
         if not repo or repo.count("/") != 1:
             raise GhError(f"cannot resolve a repository from {repo!r}")
-        parse_entry = load_parse_entry()
+        parse_entry, fence_re = load_link_issues()
         issues = fetch_issues(repo)
     except GhError as e:
         print(f"check-relationships.py: {e}", file=sys.stderr)
@@ -185,7 +212,7 @@ def main(argv):
 
     counts = {"UNLINKED": 0, "CONTRADICTED": 0, "DUPLICATE": 0}
     for issue in issues:
-        for kind, line in check_issue(issue, repo, parse_entry):
+        for kind, line in check_issue(issue, repo, parse_entry, fence_re):
             counts[kind] += 1
             print(line)
     print(

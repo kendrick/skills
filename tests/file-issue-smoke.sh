@@ -73,6 +73,16 @@ require_json() {
   }
 }
 
+require_output() {
+  local want="$1"
+  local got="$2"
+  local what="$3"
+  diff -u "$want" "$got" >&2 || {
+    echo "$what: output differs from $want" >&2
+    exit 1
+  }
+}
+
 require_file file-issue/SKILL.md
 require_file file-issue/README.md
 require_file file-issue/references/issue-forms.md
@@ -656,18 +666,12 @@ run_rel() {
   shift
   PATH="$rel_tmp/bin:$PATH" FAKE_GH_LOG="$rel_tmp/gh.log" python3 "$script" "$@"
 }
-require_output() {
-  local want="$1"
-  local got="$2"
-  local what="$3"
-  diff -u "$want" "$got" >&2 || {
-    echo "$what: output differs from $want" >&2
-    exit 1
-  }
-}
 
 # Page A, one issue per case. #6's path must print nothing, and so must #7,
-# which names #2 in prose, in an error block, and in a quoted Blocked by line.
+# which names #2 in prose, in a bare Blocked by line inside a ``` error block,
+# and in a quoted Blocked by line. #20–#22 hold slot lines in a ``` fence
+# (one behind a ``` line that can't close the ```` opener), a ~~~ fence, and
+# code indented 4 spaces or a tab, and print nothing either.
 cat > "$rel_tmp/page-a.json" <<'JSON'
 {"data":{"repository":{"issues":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[
 {"number":1,"body":"## Problem\n\nx\n\n**Blocked by:** #2\n","parent":null,"blockedBy":{"nodes":[]}},
@@ -675,18 +679,21 @@ cat > "$rel_tmp/page-a.json" <<'JSON'
 {"number":4,"body":"**Blocked by:** #2\n","parent":null,"blockedBy":{"nodes":[{"number":2,"repository":{"nameWithOwner":"o/r"}}]}},
 {"number":5,"body":"**Parent:** #9\n","parent":{"number":8,"repository":{"nameWithOwner":"o/r"}},"blockedBy":{"nodes":[]}},
 {"number":6,"body":"**Blocked by:** docs/spec.md\n","parent":null,"blockedBy":{"nodes":[]}},
-{"number":7,"body":"## Problem\n\nSince #2 landed, the parser fails.\n\n```\nerror: see #2\n> **Blocked by:** #2\n```\n","parent":null,"blockedBy":{"nodes":[]}},
+{"number":7,"body":"## Problem\n\nSince #2 landed, the parser fails.\n\n```\nerror: see #2\n**Blocked by:** #2\n```\n\n> **Blocked by:** #2\n","parent":null,"blockedBy":{"nodes":[]}},
 {"number":10,"body":"## Problem\n\nx\n","parent":null,"blockedBy":{"nodes":[{"number":2,"repository":{"nameWithOwner":"o/r"}}]}},
-{"number":11,"body":"**Blocked by:** o/x#3\n","parent":null,"blockedBy":{"nodes":[{"number":3,"repository":{"nameWithOwner":"o/x"}}]}}
+{"number":11,"body":"**Blocked by:** o/x#3\n","parent":null,"blockedBy":{"nodes":[{"number":3,"repository":{"nameWithOwner":"o/x"}}]}},
+{"number":20,"body":"## Problem\n\n```\n**Blocked by:** #2\n**Parent:** #9\n```\n\n````\n```\n**Blocked by:** #2\n````\n","parent":null,"blockedBy":{"nodes":[]}},
+{"number":21,"body":"## Problem\n\n~~~\n**Blocked by:** #2\n~~~\n","parent":null,"blockedBy":{"nodes":[]}},
+{"number":22,"body":"## Problem\n\n    **Blocked by:** #2\n\t**Parent:** #9\n","parent":null,"blockedBy":{"nodes":[]}}
 ]}}}}
 JSON
 cat > "$rel_tmp/want-a.txt" <<'OUT'
 UNLINKED #1 blocked-by #2
-CONTRADICTED #3 blocked-by
+CONTRADICTED #3 blocked-by None
 DUPLICATE #4 blocked-by #2
 UNLINKED #5 parent #9
 DUPLICATE #11 blocked-by o/x#3
-8 open issues checked: 2 unlinked, 1 contradicted, 2 duplicate.
+11 open issues checked: 2 unlinked, 1 contradicted, 2 duplicate.
 OUT
 : > "$rel_tmp/gh.log"
 rc=0; FAKE_GH_PAGE="$rel_tmp/page-a.json" run_rel "$rel_script" --repo o/r > "$rel_tmp/out-a" || rc=$?
@@ -737,7 +744,7 @@ open(sys.argv[2], "w", encoding="utf-8").write(src.replace(branch, "", 1))
 PY
 FAKE_GH_PAGE="$rel_tmp/page-a.json" run_rel "$rel_tmp/mutant/$rel_script" --repo o/r > "$rel_tmp/out-mutant" 2>&1 || true
 # The mutant has to have run to its findings, or a crash would pass this check.
-require_text "$rel_tmp/out-mutant" "CONTRADICTED #3 blocked-by"
+require_text "$rel_tmp/out-mutant" "CONTRADICTED #3 blocked-by None"
 if diff -q "$rel_tmp/want-a.txt" "$rel_tmp/out-mutant" > /dev/null; then
   echo "a copy of $rel_script without its UNLINKED branch still matches page A, so that case pins nothing" >&2
   exit 1
