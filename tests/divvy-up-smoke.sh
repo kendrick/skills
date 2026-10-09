@@ -568,4 +568,108 @@ grep -Fq "malformed entry '\`src/shared/util.ts\`' in quote-decorated: backtick;
   exit 1
 }
 
+# kendrick/skills#122: with no .git above the cwd, validate skips the on-disk
+# entry checks on purpose, yet it used to print the same `OK:` line as a full
+# run. On PR #121 a `git archive` baseline went green on checks that never ran.
+# Two trees with the same bytes, one inside a checkout and one not. Each runs
+# from inside its own tree, because repo_root_for walks up from the cwd, not
+# from the plan file.
+repro="$tmp/repro-122"
+mkdir -p "$repro/in-checkout/src"
+git -C "$repro/in-checkout" init -q
+echo x > "$repro/in-checkout/src/keep.py"
+cat > "$repro/in-checkout/plan.md" <<'PLAN'
+# P
+
+## Waves
+
+| Wave | Task | Files owned | Model | Done when | Constraints |
+| --- | --- | --- | --- | --- | --- |
+| 0 | a | src | sonnet | done | |
+PLAN
+cp -R "$repro/in-checkout" "$repro/no-git"
+rm -rf "$repro/no-git/.git"
+
+set +e
+checkout_err="$(cd "$repro/in-checkout" && python3 "$repo_root/$waves" validate plan.md 2>&1 >/dev/null)"
+checkout_status=$?
+nogit_out="$(cd "$repro/no-git" && python3 "$repo_root/$waves" validate plan.md 2>/dev/null)"
+nogit_status=$?
+set -e
+
+[[ "$checkout_status" == "1" ]] || {
+  echo "kendrick/skills#122: a slashless directory entry inside a checkout should exit 1, got $checkout_status: $checkout_err" >&2
+  exit 1
+}
+grep -Fq "malformed entry 'src' in a: exists as a directory but lacks the trailing '/'" <<<"$checkout_err" || {
+  echo "kendrick/skills#122: the checkout run must name the slashless entry: $checkout_err" >&2
+  exit 1
+}
+# Exit 0 is the contract: a plan validated outside a checkout is an intended
+# run (Decision 33), so the degraded run warns rather than fails.
+[[ "$nogit_status" == "0" ]] || {
+  echo "kendrick/skills#122: a run with no .git above the cwd should still exit 0, got $nogit_status: $nogit_out" >&2
+  exit 1
+}
+grep -Fq "skipped: on-disk entry checks (a directory entry missing its trailing '/', a trailing '/' on a file)" <<<"$nogit_out" || {
+  echo "kendrick/skills#122: a run with no .git above the cwd must say which checks it skipped: $nogit_out" >&2
+  exit 1
+}
+grep -Fq "OK (spelling only): 1 task in 1 wave, disjoint" <<<"$nogit_out" || {
+  echo "kendrick/skills#122: a degraded run must end on the spelling-only success line: $nogit_out" >&2
+  exit 1
+}
+# A caller matching ^OK: must see full validations only.
+if grep -Eq '^OK: ' <<<"$nogit_out"; then
+  echo "kendrick/skills#122: a degraded run must not print the full-run success line: $nogit_out" >&2
+  exit 1
+fi
+
+# A degraded run that fails must still say what it skipped, or a reader fixing
+# the overlap would take the next green run for a full one. The overlap is a
+# spelling-level problem, so the no-root path still catches it.
+cat > "$repro/no-git/plan-overlap.md" <<'PLAN'
+# P
+
+## Waves
+
+| Wave | Task | Files owned | Model | Done when | Constraints |
+| --- | --- | --- | --- | --- | --- |
+| 0 | a | src/keep.py | sonnet | done | |
+| 0 | b | src/keep.py | sonnet | done | |
+PLAN
+set +e
+nogit_fail_out="$(cd "$repro/no-git" && python3 "$repo_root/$waves" validate plan-overlap.md 2>/dev/null)"
+nogit_fail_status=$?
+set -e
+[[ "$nogit_fail_status" == "1" ]] || {
+  echo "kendrick/skills#122: an in-wave overlap with no .git above the cwd should exit 1, got $nogit_fail_status: $nogit_fail_out" >&2
+  exit 1
+}
+grep -Fq "skipped: on-disk entry checks (a directory entry missing its trailing '/', a trailing '/' on a file)" <<<"$nogit_fail_out" || {
+  echo "kendrick/skills#122: a failing run with no .git above the cwd must still say which checks it skipped: $nogit_fail_out" >&2
+  exit 1
+}
+if grep -Eq '^OK' <<<"$nogit_fail_out"; then
+  echo "kendrick/skills#122: a failing degraded run must print no OK line: $nogit_fail_out" >&2
+  exit 1
+fi
+
+# The other half of the distinction: a full run keeps its old line and stays
+# silent about skipping, or the two would still read alike.
+full_out="$(python3 "$waves" validate "$fixtures/waves-good.md")"
+grep -Eq '^OK: ' <<<"$full_out" || {
+  echo "kendrick/skills#122: a full run from the repo root must still print OK: $full_out" >&2
+  exit 1
+}
+if grep -Fq "skipped:" <<<"$full_out"; then
+  echo "kendrick/skills#122: a full run from the repo root must not print a skipped: line: $full_out" >&2
+  exit 1
+fi
+
+# Deliberately Not Built: failing validate when no repo root is found. The
+# phrase a failure for that case would carry; the behavioral exit-0 assertion
+# above catches the rest.
+refute_text divvy-up/scripts/check-waves.py "no repo root"
+
 echo "divvy-up smoke: OK"

@@ -13,7 +13,7 @@ Both alternatives are trapped by #109's reproducer, filed on PR #121's deferred-
 
 `cp -R` keeps the copy's `.git` as a plain file pointing at the original tree's gitdir. #109's own reproducer staged into the issue worktree's real index while believing itself sandboxed, because a copy made this way shares an index with the tree it was copied from rather than owning one.
 
-`git archive` leaves no `.git` at all. `divvy-up/scripts/check-waves.py`'s `repo_root_for` treats `os.path.exists(node/.git)` as marking a root, so a tree with no `.git` reads as no root, and every on-disk check `check-waves.py` runs over it is silently skipped rather than failed.
+`git archive` leaves no `.git` at all. `divvy-up/scripts/check-waves.py`'s `repo_root_for` treats `os.path.exists(node/.git)` as marking a root, so a tree with no `.git` reads as no root, and every on-disk check `check-waves.py` runs over it is skipped rather than failed. `validate` reports the skip, printing a `skipped:` line that names the checks and ending on `OK (spelling only):` instead of `OK:`. The notice doesn't make `git archive` usable, because a merge test needs those checks to run.
 
 `git worktree add --detach` dodges both. The tree it makes has its own gitdir and index under `<COMMON>/worktrees/`, so nothing staged inside it touches ROOT's index, and it carries its own `.git` file, so `repo_root_for` sees a real root and runs its checks against it.
 
