@@ -1363,9 +1363,10 @@ grep -Fq "the issue-type cache was not checked" "$tmp/cli-noconfig.err" || {
 }
 
 # The scan is a line reader standing in for a YAML parser, and each shape below
-# is one a line reader can misread. Misreading a populated list blocks a working
-# config behind a `jira init` the user doesn't need. Misreading an empty one
-# lets every create fail at write time, the bug #90 filed.
+# is one a line reader can misread. jira-cli's create needs `issue.types` to be
+# a list and nothing more, so misreading any list blocks a working config
+# behind a `jira init` the user doesn't need. Misreading a value that isn't a
+# list lets every create fail at write time, the bug #90 filed.
 expect_preflight() {
   local want="$1" name="$2"
   printf '%s\n' "$3" > "$tmp/cli-shape-$name.yml"
@@ -1402,20 +1403,37 @@ expect_preflight 0 quoted-keys '"issue":
   - id: "10001"'
 expect_preflight 0 flow-list 'issue:
   types: [{id: "10001", name: Story}]'
-expect_preflight 3 empty-flow-list 'issue:
+# An empty list is still a list, and jira-cli never checks `-t` against it.
+expect_preflight 0 empty-flow-list 'issue:
   types: []'
+# A `types:` key with no list is null to YAML, and jira-cli rejects it as
+# surely as a missing key. In the first case, the line after `types:` is a
+# sibling key at the same indent.
+expect_preflight 3 null-types 'issue:
+  types:
+  fields:
+    custom: {}'
+expect_preflight 3 null-types-last 'issue:
+  types:'
+expect_preflight 3 tilde-types 'issue:
+  types: ~'
+expect_preflight 3 scalar-types 'issue:
+  types: Story'
+expect_preflight 3 mapping-types 'issue:
+  types:
+    id: "10001"'
 # `issue.fields` can carry a `types:` of its own. Only the direct child of
 # `issue:` is the cache `jira issue create` reads, in both directions.
-expect_preflight 0 nested-empty-before-real 'issue:
+expect_preflight 0 nested-null-before-real 'issue:
   fields:
-    types: []
+    types:
   types:
   - id: "10001"'
-expect_preflight 3 nested-populated-before-empty 'issue:
+expect_preflight 3 nested-populated-before-null 'issue:
   fields:
     types:
     - id: "10001"
-  types: []'
+  types:'
 
 # `jira init` rewrites a config the user owns; preflight names it and stops.
 # Refuting the quoted word in both quote styles covers `["init"]`,

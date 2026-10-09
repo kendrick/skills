@@ -1132,16 +1132,23 @@ def _config_content_lines(text):
 
 _ISSUE_KEY = re.compile(r"""(?:issue|"issue"|'issue'):(?:\s+#.*)?""")
 _TYPES_KEY = re.compile(r"""(?:types|"types"|'types'):(?:\s+(.*))?""")
-_BARE_ITEM = re.compile(r"-(?:\s+#.*)?")
+_SEQ_ITEM = re.compile(r"-(?:\s.*)?")
+_INLINE_COMMENT = re.compile(r"(?:^|\s)#")
 
 
 def jira_cli_issue_types_cached(text):
-    """True when the config's `issue.types` list holds at least one entry.
+    """True when the config's `issue.types` is a sequence, whatever it holds.
+
+    jira-cli's setIssueTypes makes the same check before every
+    `jira issue create` (create.go:167-171). It fails with "invalid issue
+    types in config" when the value isn't a slice, and it never checks `-t`
+    against the list. So absent, null (`types:` with nothing under it, `~`,
+    `null`), a scalar, and a mapping all fail, and `types: []` passes.
 
     A line scan, because the repo is standard library only and PyYAML is not.
     Only a `types:` that is a direct child of the top-level `issue:` counts.
     `issue.fields` can hold a `types:` of its own, and matching that one passes
-    or fails the run on the wrong list. Shapes the scan doesn't read, such as
+    or fails the run on the wrong value. Shapes the scan doesn't read, such as
     an inline `issue: {...}` mapping or a flow list spread over lines, read as
     not cached. That fails closed toward the `jira init` message, and
     `jira init` rewrites the file in a form the scan does read."""
@@ -1163,23 +1170,20 @@ def jira_cli_issue_types_cached(text):
         key = _TYPES_KEY.fullmatch(stripped) if indent == child_indent else None
         if not key:
             continue
-        inline = (key.group(1) or "").split("#", 1)[0].strip()
+        inline = _INLINE_COMMENT.split(key.group(1) or "", 1)[0].strip()
         if inline:
-            return inline.startswith("[") and inline.endswith("]") and bool(
-                inline[1:-1].strip()
-            )
+            # A flow list closed on this line passes whatever it holds. An
+            # unclosed `[` spans lines, which the scan can't follow, so it
+            # fails closed.
+            return inline.startswith("[") and inline.endswith("]")
         if j + 1 == len(block):
             return False
         # yaml.v2 writes a sequence at its key's own indent and yaml.v3 one
-        # level deeper, and YAML reads both as the key's value. At the key's
-        # own indent, any line other than a `-` item would end the list.
+        # level deeper, and YAML reads both as the key's value. Anything else
+        # deeper is a mapping or scalar; anything else at the key's indent is
+        # the next sibling, which leaves `types:` null.
         item_indent, item = block[j + 1]
-        if item_indent < indent:
-            return False
-        if _BARE_ITEM.fullmatch(item):
-            # A `-` alone on its line carries its entry on the lines below.
-            return j + 2 < len(block) and block[j + 2][0] > item_indent
-        return item.startswith("- ")
+        return item_indent >= indent and bool(_SEQ_ITEM.fullmatch(item))
     return False
 
 
@@ -1203,9 +1207,9 @@ class JiraCliTransport(Transport):
         probe = self._run(["me"])
         if probe.returncode != 0:
             die(f"`jira me` failed: {self._why(probe)}")
-        # `jira issue create` validates -t against the issue types cached in
-        # its config, and `jira me` never touches that cache (#90). A config
-        # with none passes the probe and then fails every create.
+        # `jira issue create` refuses to run unless the config's issue.types
+        # is a list, and `jira me` never reads it (#90). A config without one
+        # passes the probe and then fails every create.
         path = jira_cli_config_path()
         if not os.path.isfile(path):
             print(
