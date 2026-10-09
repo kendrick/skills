@@ -1975,8 +1975,7 @@ bench_dir="$(mktemp -d "${TMPDIR:-/tmp}/i2m-bench.XXXXXX")"
 trap 'rm -rf "$not_a_scope" "$inline_scope" "$dismissal_scope" "$mig" "$jrn" "$t2_extract_scope" "$t2x_dir" "$subset_scope" "$batched_scope" "$lifecycle_scope" "$idem_dir" "$v_pass" "$scripts_copy" "$v_combo" "$v_linkdrop" "$v_lintdefect" "$v1_broken_scope" "$v1_pass_scope" "$wt_headline" "$wt_backward" "$wt_dedupe" "$wt_status" "$wt_keyins" "$v_subdir" "$bench_dir"' EXIT
 
 # One python3 call per claim, so a failure names the rule that broke rather than
-# "the fixture differs". `q` maps query id to query; `files` is every path any
-# query expects.
+# "the fixture differs".
 bench_assert() {
   local json="$1"
   local label="$2"
@@ -2072,6 +2071,43 @@ bench_bad_err="$(bash "$bench" "$bench_scope" --questions "$bench_dir/bad-questi
   exit 1
 }
 require_output "$bench_bad_err" "bench-fixture: questions item 2: query must be a non-empty string"
+
+# An empty fixture on exit 0 reads like a scope with no accepted records, so a
+# scope the script cannot read has to fail loudly instead.
+bench_rc=0
+mkdir "$bench_dir/no-memory"
+bench_err="$(bash "$bench" "$bench_dir/no-memory" 2>&1 >/dev/null)" || bench_rc=$?
+[[ "$bench_rc" == 2 ]] || {
+  echo "bench-fixture exited $bench_rc on a scope with no _memory/ (want 2)" >&2
+  exit 1
+}
+require_output "$bench_err" "bench-fixture: no _memory/ directory under"
+
+# chmod 000 does not block reads for root, so the unreadable case is skipped there.
+if [[ "$(id -u)" != 0 ]]; then
+  cp -R "$bench_scope" "$bench_dir/locked"
+  chmod 000 "$bench_dir/locked/_memory"
+  bench_rc=0
+  bench_err="$(bash "$bench" "$bench_dir/locked" 2>&1 >/dev/null)" || bench_rc=$?
+  chmod 755 "$bench_dir/locked/_memory"
+  [[ "$bench_rc" == 2 ]] || {
+    echo "bench-fixture exited $bench_rc on an unreadable _memory/ (want 2)" >&2
+    exit 1
+  }
+  require_output "$bench_err" "bench-fixture: unreadable directory"
+else
+  echo "skipping unreadable-_memory assertion: running as root" >&2
+fi
+
+# A scope with records and no notes/ resolves nothing and stays allowed.
+cp -R "$bench_scope" "$bench_dir/nonotes"
+rm -rf "$bench_dir/nonotes/notes"
+bench_rc=0
+bash "$bench" "$bench_dir/nonotes" >/dev/null 2>&1 || bench_rc=$?
+[[ "$bench_rc" == 0 ]] || {
+  echo "bench-fixture exited $bench_rc on a scope with no notes/ (want 0)" >&2
+  exit 1
+}
 
 # The checked-in fixtures are never migrated or stamped in place. Every
 # migration or write-through test works on a copy, and a test that forgets

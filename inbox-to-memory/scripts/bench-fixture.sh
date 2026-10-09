@@ -45,6 +45,7 @@ Emit a qmd bench fixture (JSON) on stdout: one query per `accepted` record under
 Index the scope first so the expected paths match what qmd ls shows:
   qmd collection add <scope-root> --name <collection>
   qmd embed -c <collection>
+  qmd ls <collection>   # confirm it lists the scope's files; qmd scores an unindexed collection as all zeros
   bench-fixture.sh <scope-root> --collection <collection> > fixture.json
   qmd bench fixture.json -c <collection>
 
@@ -152,7 +153,15 @@ def frontmatter(path):
 
 def md_files(root):
     out = []
-    for dp, _dn, fns in os.walk(root):
+    if not os.path.isdir(root):
+        return out
+
+    def unreadable(err):
+        # os.walk swallows these by default, which would emit an empty fixture
+        # that reads like a scope with no accepted records.
+        die("unreadable directory: %s" % err.filename)
+
+    for dp, _dn, fns in os.walk(root, onerror=unreadable):
         for fn in fns:
             if fn.endswith(".md"):
                 out.append(os.path.join(dp, fn))
@@ -193,6 +202,8 @@ def main():
     scope = os.path.normpath(args.scope)
     if not os.path.isdir(scope):
         die("not a directory: %s" % args.scope)
+    if not os.path.isdir(os.path.join(scope, "_memory")):
+        die("no _memory/ directory under %s" % args.scope)
     collection = args.collection or os.path.basename(os.path.abspath(scope))
 
     questions = []
@@ -223,7 +234,7 @@ def main():
 
     rel = lambda p: os.path.relpath(p, scope).replace(os.sep, "/")
 
-    notes = {}  # id -> [(path, fm)]
+    notes = {}
     for p in md_files(os.path.join(scope, "notes")):
         fm = frontmatter(p)
         if fm and fm.get("id"):

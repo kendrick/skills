@@ -133,7 +133,7 @@ The script takes `<scope-root> [--collection NAME] [--top-k K] [--questions FILE
 
 - A record is any `*.md` under `<scope-root>/_memory/` whose frontmatter has `memory_type`. A note is any `*.md` under `<scope-root>/notes/`.
 - A record produces a query only when its `status` is exactly `accepted`.
-- A file enters any query's `expected_files` only when its `status` is something other than `superseded`. Notes carry no status, so they always enter.
+- In a record-derived query, a file enters `expected_files` only when its `status` is something other than `superseded`. Notes carry no status, so they always enter. Items from `--questions` are taken as written: the author owns those labels, and the script does not filter them.
 - Superseded files stay in the scope and in the index. The fixture exists to catch a superseded record that outranks the current one, and an index without it would hide that.
 - The query text is the record's `summary` when present and non-empty, else its `title`. V2 records carry no `summary`, so `title` is the usual source. A record with neither is reported on stderr and skipped.
 
