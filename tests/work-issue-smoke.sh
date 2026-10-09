@@ -1723,6 +1723,133 @@ require_text work-issue/SKILL.md "awk 'NF == 3 { print \$3 }' RUN_DIR/timing.log
 require_text work-issue/references/resume.md "Passing \`--ratio <r>\` to one \`budget\` command outranks every \`budget-raised\` line"
 require_text work-issue/SKILL.md "the queue, the \`budget\` line,"
 
+# #165: Step 6's background poll loop, run for real. Lanes execute the fenced
+# block in SKILL.md as written, so the suite runs that block too. A pinned line
+# would stay green while a dropped `break` kept the loop polling for an hour
+# past a finished review. The fake `sleep` advances a clock file and the fake
+# `date` reads it, so a 30-min wait runs in seconds and still leaves stamps far
+# enough apart for `budget` to measure.
+loop_block="$(awk '
+  /^```/ {
+    if (on) exit
+    fence = !fence
+    first = fence
+    next
+  }
+  first { first = 0; if ($0 ~ /^MAX=60;/) on = 1 }
+  on { print }
+' work-issue/SKILL.md)"
+[[ -n "$loop_block" ]] || {
+  echo "Step 6's poll loop block (a fence opening on MAX=60;) is missing from work-issue/SKILL.md" >&2
+  exit 1
+}
+grep -Fq 'echo "poll $k: $st"' <<<"$loop_block" || {
+  echo "Step 6's poll loop block no longer ends on the 'poll <k>: <state>' line the wake-up routes on" >&2
+  exit 1
+}
+stub_review="$repo_root/tests/fixtures/work-issue/stub-review"
+[[ -x "$stub_review" ]] || {
+  echo "tests/fixtures/work-issue/stub-review must be executable" >&2
+  exit 1
+}
+
+# Args: case name, MAX, calls answered `pending`, final state. Leaves the run
+# in $tmp/poll-<name>. The timing.log starts with a 30-min build and an open
+# `6`, and the `6 end` lands 10 min after the loop exits, so every case's
+# review time is 20 min once `budget` takes the poll out.
+run_poll_loop() {
+  local name="$1" max="$2" pending="$3" final="$4"
+  local run="$tmp/poll-$name"
+  mkdir -p "$run/review"
+  echo 1767228000 >"$run/clock"
+  printf '%s\n' \
+    "2 start 2026-01-01T00:00:00Z" "2 end 2026-01-01T00:15:00Z" \
+    "3 start 2026-01-01T00:15:00Z" "3 end 2026-01-01T00:30:00Z" \
+    "6 start 2026-01-01T00:30:00Z" >"$run/timing.log"
+  {
+    echo "clock='$run/clock'"
+    echo 'sleep() { echo $(( $(cat "$clock") + $1 )) >"$clock"; }'
+    echo "date() { python3 -c 'import sys, datetime; print(datetime.datetime.fromtimestamp(int(sys.argv[1]), datetime.timezone.utc).strftime(\"%Y-%m-%dT%H:%M:%SZ\"))' \"\$(cat \"\$clock\")\"; }"
+    sed -e "s|work-issue/scripts/run-state.py|$stub_review|g" -e "s|RUN_DIR|$run|g" \
+      -e 's|<PR>|1|g' -e 's|<SINCE>|2026-01-01T00:30:00Z|g' -e 's|<login>|kendrick|g' \
+      -e "s|^MAX=60;|MAX=$max;|" <<<"$loop_block"
+  } >"$run/loop.sh"
+  # A placeholder the substitutions missed would run as a shell redirect
+  # (`<PR>` reads a file named PR) and fail somewhere far from its cause.
+  if grep -Eq 'RUN_DIR|<PR>|<SINCE>|<login>|scripts/run-state\.py' "$run/loop.sh" || ! grep -q "^MAX=$max;" "$run/loop.sh"; then
+    echo "Step 6's poll loop has a placeholder this suite does not fill; see $run/loop.sh" >&2
+    exit 1
+  fi
+  STUB_REVIEW_COUNT="$run/count" STUB_PENDING="$pending" STUB_FINAL="$final" \
+    bash "$run/loop.sh" >"$run/out" 2>"$run/err"
+  echo "6 end $(python3 -c 'import sys, datetime; print(datetime.datetime.fromtimestamp(int(sys.argv[1]) + 600, datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))' "$(cat "$run/clock")")" >>"$run/timing.log"
+}
+
+# Args: case name, last stdout line, stub calls, the `poll end` stamp. The
+# stamp lands one minute past the 00:40 start for every check but the last.
+# That pins the missing sleep after the last check, since a capped loop that
+# idled once more would end a minute late.
+check_poll_loop() {
+  local run="$tmp/poll-$1"
+  local last calls
+  last="$(tail -1 "$run/out")"
+  calls="$(cat "$run/count")"
+  [[ "$last" == "$2" ]] || {
+    echo "poll loop $1: last line should be '$2', got: $last" >&2
+    exit 1
+  }
+  [[ "$calls" == "$3" ]] || {
+    echo "poll loop $1: run-state.py review should run $3 times, ran $calls" >&2
+    exit 1
+  }
+  [[ "$(grep -c '^poll start ' "$run/timing.log")" == 1 && "$(grep -c '^poll end ' "$run/timing.log")" == 1 ]] || {
+    echo "poll loop $1: timing.log should hold exactly one poll start and one poll end" >&2
+    exit 1
+  }
+  grep -Fxq "poll end $4" "$run/timing.log" || {
+    echo "poll loop $1: timing.log should close the poll at $4, got: $(grep '^poll end' "$run/timing.log")" >&2
+    exit 1
+  }
+  # `budget` has to subtract the poll from review. Counted as review, the
+  # findings case reads 50 min against 30 of build.
+  [[ "$(python3 "$run_state" budget --timing "$run/timing.log")" == "build: 30m review: 20m ratio: 0.67 over: no" ]] || {
+    echo "poll loop $1: budget should keep the poll out of review time, got: $(python3 "$run_state" budget --timing "$run/timing.log")" >&2
+    exit 1
+  }
+}
+
+# The acceptance case from #165: N pending answers, then findings, exits
+# after N+1 checks with that check's bundle saved for triage to read.
+run_poll_loop findings 60 30 findings
+check_poll_loop findings "poll 31: findings" 31 2026-01-01T01:10:00Z
+[[ -f "$tmp/poll-findings/review/poll-31.json" && ! -e "$tmp/poll-findings/review/poll-32.json" ]] || {
+  echo "poll loop findings: review/poll-31.json should be the last bundle saved" >&2
+  exit 1
+}
+# MAX cut to 5 stands in for the hour, so the cap is reached in five calls.
+run_poll_loop cap 5 100 findings
+check_poll_loop cap "poll 5: pending" 5 2026-01-01T00:44:00Z
+[[ -f "$tmp/poll-cap/review/poll-5.json" ]] || {
+  echo "poll loop cap: review/poll-5.json should be saved" >&2
+  exit 1
+}
+# Exit 3 prints nothing on stdout. Without the `error <rc>` branch the loop
+# stops on an empty state the routing has no row for, and the stderr is what
+# the woken agent quotes when it stops.
+run_poll_loop error 60 2 error
+check_poll_loop error "poll 3: error 3" 3 2026-01-01T00:42:00Z
+grep -Fq "stub-review: gh failed on call 3" "$tmp/poll-error/err" || {
+  echo "poll loop error: run-state.py's stderr should reach the background command's output" >&2
+  exit 1
+}
+
+# The foreground poll stays for hosts that cannot wake the agent when a
+# background command exits, and its stop names the pull request either way.
+require_text work-issue/SKILL.md "for at most 10 minutes in one invocation"
+require_text work-issue/SKILL.md "no review yet on <PR URL>; \`work-issue N\` resumes here."
+# Ledger: "A flag to tune the background poll's cap, such as `--max-poll`".
+refute_text work-issue/SKILL.md "--max-poll"
+
 # #139: a triage round is current by the SINCE its heading recorded, never by
 # the file's time, because Step 8 edits the round after the push it answers.
 require_text work-issue/SKILL.md "# Triage round <k>, since <SINCE>"

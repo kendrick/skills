@@ -197,11 +197,26 @@ Input is `claims`, `left`, and `plan_concerns` from the final report. The rule, 
 
 ## Step 6 — Triage
 
-Poll every 60 seconds, for at most 10 minutes in one invocation, with `poll start` written to `RUN_DIR/timing.log` before the first poll and `poll end` after the last:
+Where the host can run a shell command in the background and notify you when it exits (Claude Code's `run_in_background`, for example), wait for the review with this loop as one background command, `<PR>`, `<SINCE>`, `<login>`, and `RUN_DIR` filled in. It checks every 60 seconds, capped at 60 checks (one hour), and writes its own `poll start` and `poll end`, so the budget keeps the whole wait out of review time while you sit idle. A turn is spent only when the state leaves `pending`, a check errors, or the cap is hit (#165): the foreground poll spends a turn on every check, and on cambium#137 the Codex review took about 4 minutes, so a slower one outlasts the 10-minute poll and strands the lane until someone re-invokes.
 
 ```
-work-issue/scripts/run-state.py review <PR> --since <SINCE> --author <login> --save RUN_DIR/review/poll-<k>.json
+MAX=60; k=0; st=pending
+echo "poll start $(date -u +%FT%TZ)" >> RUN_DIR/timing.log
+while [ "$k" -lt "$MAX" ]; do
+  k=$((k + 1))
+  out=$(work-issue/scripts/run-state.py review <PR> --since <SINCE> --author <login> --save RUN_DIR/review/poll-$k.json); rc=$?
+  st=${out%%$'\n'*}
+  if [ "$rc" -ne 0 ]; then st="error $rc"; break; fi
+  [ "$st" = pending ] || break
+  [ "$k" -lt "$MAX" ] && sleep 60
+done
+echo "poll end $(date -u +%FT%TZ)" >> RUN_DIR/timing.log
+echo "poll $k: $st"
 ```
+
+The loop's last output line is `poll <k>: <state>`, and that line routes the wake-up: `findings` and `cleared` route as below, read from `RUN_DIR/review/poll-<k>.json`; `pending` means the cap was hit; `error <rc>` stops the invocation naming exit code `<rc>` and quoting the `run-state.py` stderr the background command left as its output. `<k>` restarts at 1 each invocation.
+
+Where the host has no background execution, fall back to the foreground poll. Poll every 60 seconds, for at most 10 minutes in one invocation, with `poll start` written to `RUN_DIR/timing.log` before the first poll and `poll end` after the last, each check running the loop's `run-state.py review` line with its `--save` path at `RUN_DIR/review/poll-<k>.json`.
 
 Three states, each scored relative to SINCE:
 
@@ -213,7 +228,7 @@ Three states, each scored relative to SINCE:
 
 `[bot]` is stripped before logins are compared: REST reports `chatgpt-codex-connector[bot]` where GraphQL reports `chatgpt-codex-connector`, and an unstripped comparison reads one reviewer as two different logins depending on which API answered.
 
-`pending` at ten minutes writes `RUN_DIR/triage/waiting` and stops: "no review yet on <PR URL>; `work-issue N` resumes here." The URL is there because this stop is the report a run gets when nothing has happened, and a run that entered Step 8 only to post a worker's queue and stopped before its final report reads `pending` here next. `cleared` goes to Step 8's final report. `findings` reads [references/triage.md](references/triage.md) and writes `RUN_DIR/triage/round-<k>.md`: the heading `# Triage round <k>, since <SINCE>`, then one row per finding in a table with a `Severity` column holding the reviewer's marker (`P0`, `P1`, `P2`, `blocking`, or `-` where none, per [references/triage.md](references/triage.md)), each row scored by the in-scope test: **in scope** when the finding points at a line inside `git diff BASE_SHA..HEAD`, names a CRITERIA line, or names a plan task; **out of scope** otherwise. Ambiguous is in scope where the reviewer marked it P0 and out otherwise, with the ambiguity recorded on the row. The heading's SINCE is the `--since` value this poll ran with, written once when the round is created. The resume probe reads that heading, never the file's time, to decide whether the round answers the current push, because Step 8 writes reply URLs into the round after the push that answers it.
+`pending` at the cap (60 checks in the background, ten minutes in the foreground) writes `RUN_DIR/triage/waiting` and stops: "no review yet on <PR URL>; `work-issue N` resumes here." The URL is there because this stop is the report a run gets when nothing has happened, and a run that entered Step 8 only to post a worker's queue and stopped before its final report reads `pending` here next. `cleared` goes to Step 8's final report. `findings` reads [references/triage.md](references/triage.md) and writes `RUN_DIR/triage/round-<k>.md`: the heading `# Triage round <k>, since <SINCE>`, then one row per finding in a table with a `Severity` column holding the reviewer's marker (`P0`, `P1`, `P2`, `blocking`, or `-` where none, per [references/triage.md](references/triage.md)), each row scored by the in-scope test: **in scope** when the finding points at a line inside `git diff BASE_SHA..HEAD`, names a CRITERIA line, or names a plan task; **out of scope** otherwise. Ambiguous is in scope where the reviewer marked it P0 and out otherwise, with the ambiguity recorded on the row. The heading's SINCE is the `--since` value this poll ran with, written once when the round is created. The resume probe reads that heading, never the file's time, to decide whether the round answers the current push, because Step 8 writes reply URLs into the round after the push that answers it.
 
 **The review round cap.** Round k is capped once k reaches N, the value in `RUN_DIR/max_review_rounds` (`2` where the file is absent). A capped round is triaged and answered and never repaired. Each in-scope row's Scope cell reads `in scope; queued: review round cap reached (N)`, and the row is appended to `queue.md` with Outside-because `review round cap reached (N)`. The exception is an in-scope row whose Severity is `P0` or `blocking`: its Scope cell stays `in scope`, and the run stops once the round is written, naming the cap and that row, for a human to decide. Queueing it ships a known blocker, and repairing it breaks the cap. A fresh review of new code nearly always finds something, so without the cap P2 threads hold a lane in Steps 6 through 8 for good.
 
@@ -225,7 +240,7 @@ Out-of-scope rows append to `RUN_DIR/queue.md`:
 
 `Source` is the thread or comment URL, or `worker` for a `plan_concerns` entry. `Recommendation` is usually a `file-issue` line for the human to run; the skill leaves the filing to them.
 
-**Done when:** `review` returned `cleared`; or it returned `findings`, the round's heading records the SINCE it was triaged against, and every finding has a row marked in scope or queued with its reason, and in a capped round every in-scope row but a `P0` or `blocking` one is queued with `review round cap reached (N)`, and an in-scope `P0` or `blocking` row stopped the run; or `pending` timed out and `triage/waiting` says so.
+**Done when:** `review` returned `cleared`; or it returned `findings`, the round's heading records the SINCE it was triaged against, and every finding has a row marked in scope or queued with its reason, and in a capped round every in-scope row but a `P0` or `blocking` one is queued with `review round cap reached (N)`, and an in-scope `P0` or `blocking` row stopped the run; or `pending` reached its cap, 60 checks in the background or ten minutes in the foreground, and `triage/waiting` says so; or a check exited non-zero and the invocation stopped naming its exit code and quoting its stderr.
 
 ## Step 7 — Repair
 
@@ -258,7 +273,7 @@ An invocation ends at one of these stops and no other. Each prints its message a
 | No issue number, or a `--max-review-rounds` value that is not a positive integer | 0 | a refusal naming what is missing, or the value given |
 | `gh` is unauthenticated | 0 | a stop saying the issue cannot be read until `gh auth login` |
 | A sibling skill is not installed | any | the stop naming the sibling to install |
-| The resume gather fails: `gh pr list` or `run-state.py review --save` exits non-zero, or `probe` or `phase` exits 3 | 0, Resume | that command's stderr, quoted |
+| The resume gather fails: `gh pr list` or `run-state.py review --save` exits non-zero, or `probe` or `phase` exits 3; or a Step 6 poll check exits non-zero | 0, 6, Resume | that command's stderr, quoted |
 | The plan gate refuses | 0 | the refusal: `check-plan.py`'s stderr quoted, ending "Plan it first: `writing-plans`, then `work-issue N <plan path>`.", or the derivation's questions listed |
 | `divvy-up` stops while deriving the shape | 0 | the stop `divvy-up` prints, quoted as-is |
 | Another run in flight owns a path | 0 | `check-inflight.py`'s stderr, quoted |
@@ -274,7 +289,7 @@ An invocation ends at one of these stops and no other. Each prints its message a
 | The push half of the grant is withheld | after 4 | the report the withholding caller asked for, carrying Step 4's result |
 | A rebase conflict | 5, 8 | `RUN_DIR/conflict.txt` and "resolve, then `work-issue N`" |
 | `gh` is unauthenticated at publish | 5, 8 | `RUN_DIR/pr-body.md` and "resume after `gh auth login`" |
-| No review within ten minutes | 6 | `RUN_DIR/triage/waiting` and "no review yet on <PR URL>; `work-issue N` resumes here." |
+| No review within the poll's cap: 60 checks in the background, ten minutes in the foreground | 6 | `RUN_DIR/triage/waiting` and "no review yet on <PR URL>; `work-issue N` resumes here." |
 | The review round cap meets an in-scope `P0` or `blocking` row | 6, 7 | a stop naming the cap and that row, and on resume the `row 16:` stop reason |
 | An unreported task owns paths a commit past `base_sha` touched | Resume | the `row 7:` stop reason naming the disagreement, with nothing reverted |
 | `RUN_DIR/base_sha` has drifted from the live merge-base | Resume | the `base_sha mismatch` stop reason naming `not-merge-base` or `not-ancestor` |

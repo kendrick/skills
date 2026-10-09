@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Stands in for `run-state.py review` when the smoke suite runs Step 6's
+# background loop. It answers `pending` for the first STUB_PENDING calls, then
+# STUB_FINAL (default `findings`). STUB_FINAL=error exits 3 with stdout empty,
+# as the real script does when `gh` fails, so the loop has no state line to
+# read and has to route on the exit code alone.
+set -euo pipefail
+
+save=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --save) save="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+
+n=$(( $(cat "$STUB_REVIEW_COUNT" 2>/dev/null || echo 0) + 1 ))
+echo "$n" >"$STUB_REVIEW_COUNT"
+
+if (( n > STUB_PENDING )) && [[ "${STUB_FINAL:-findings}" == error ]]; then
+  echo "stub-review: gh failed on call $n" >&2
+  exit 3
+fi
+
+[[ -n "$save" ]] && printf '{}\n' >"$save"
+if (( n <= STUB_PENDING )); then
+  echo pending
+else
+  echo "${STUB_FINAL:-findings}"
+fi
+# The real script prints its deciding line after the state, so the loop's
+# first-line parse has a second line to cut.
+echo "stub call $n"

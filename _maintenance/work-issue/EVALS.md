@@ -77,7 +77,7 @@ python3 work-issue/scripts/run-state.py phase --probe PROBE.json
 
 ### 6. Resume at Row 14—A Pull Request Nobody Has Reviewed Yet
 
-**Setup:** a live run that reached Step 6, polled its ten minutes against a pull request with no review activity, wrote `triage/waiting`, and stopped.
+**Setup:** a live run that reached Step 6, polled to its cap against a pull request with no review activity, wrote `triage/waiting`, and stopped.
 
 **Commands:** the same probe, then re-invoke.
 
