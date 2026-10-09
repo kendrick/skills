@@ -1,6 +1,6 @@
 ---
 name: file-issue
-description: "File one GitHub issue: a bug report, feature request, task, or spike, created with `gh`. Use when the user wants to file or open an issue, report a bug, request a feature, write up a chore or a spike, turn a half-formed complaint into something tracked, or write an issue a coding agent can pick up cold. Files exactly one issue: to slice a spec or plan into many linked tickets, use to-tickets instead. Never edits, closes, triages, or ranks existing issues."
+description: "File one GitHub issue: a bug report, feature request, task, or spike, created with `gh`. Use when the user wants to file or open an issue, report a bug, request a feature, write up a chore or a spike, turn a half-formed complaint into something tracked, or write an issue a coding agent can pick up cold. Files exactly one issue: to slice a spec or plan into many linked tickets, use to-tickets instead. Never edits, closes, triages, or ranks existing issues. Beyond creation it only links the new issue to its parent and blockers, then removes the linked entries from the body."
 argument-hint: '[what the issue is about | --deep | --fast | --dry-run]'
 ---
 
@@ -120,7 +120,7 @@ Gates:
 3. **Observed and expected stated separately.** Bugs only.
 4. **Error output** where the failure produces any. Bugs only; drop it for silent visual defects rather than padding.
 5. **At least one falsifiable acceptance criterion.** All types. A criterion a reviewer cannot fail is not one.
-6. **Agent-readiness**, when the issue is agent-targeted: single-interpretation problem statement, binary criteria, a runnable verification command, environment pointers, file hints, explicit done-criteria, non-goals. The verification command has to exercise the change, not merely pass beside it—an agent that finishes and cannot verify reports done regardless. A change that genuinely cannot be verified alone passes only by declaring its prerequisite as a blocker, or by naming the issue where verification lands. The same test runs on every named artifact: a verification command or file pointer naming something the repo does not yet hold fails unless that artifact is declared on the Blocked by line—an agent will otherwise try to run a file another ticket has yet to create.
+6. **Agent-readiness**, when the issue is agent-targeted: single-interpretation problem statement, binary criteria, a runnable verification command, environment pointers, file hints, explicit done-criteria, non-goals. The verification command has to exercise the change, not merely pass beside it—an agent that finishes and cannot verify reports done regardless. A change that genuinely cannot be verified alone passes only by declaring its prerequisite as a blocker, or by naming the issue where verification lands. The same test runs on every named artifact: a verification command or file pointer naming something the repo does not yet hold fails unless that artifact is declared on the Blocked by line—an agent will otherwise try to run a file another ticket has yet to create. That artifact lands on the Blocked by line as text, since a path never resolves to an issue.
 7. **Falsifier for a derived rule** — where the body rules that a value "is", "counts as", or "should be marked" something under a stated condition, the ticket states that rule as a property and names the check that would fail it. All types. The question to put is what experiment tells the rule apart from its most plausible wrong neighbor: perturb what the rule keys on and the value has to move, perturb the nearest thing the rule could have keyed on instead and the value has to stay put. Acceptance criteria observe the value and this gate reaches the rule behind it, so a ticket stating no such rule passes untouched, and one stating a rule it cannot falsify owes that sentence rather than a rewrite or the test itself.
 
 Defaults: non-goals when scope is ambiguous; Ko-structured title; labels matching observed repo convention; environment metadata.
@@ -153,14 +153,41 @@ Check for duplicates first, with `gh search issues` against the title terms and 
 
 Surface what you find and let the user choose: comment on the existing issue, or file new. Never block — duplicates routinely carry information the original lacks, and refusing them teaches reporters to stop contributing. When the new draft has a better reproduction than the suspected original, say so and recommend appending.
 
-Then render the full issue as markdown, show it, and wait for explicit confirmation before `gh issue create`. `--dry-run` renders and stops. `--yolo` skips the confirmation but not the self-check.
+Resolve every Parent and Blocked by entry before rendering. Pass slot entries only, each as a bare reference (`#N`, `owner/repo#N`, or an issue URL) with any commentary kept out of the argument, and nothing taken from the Problem section, a quoted error block, or anywhere else in the body:
 
-Creation only. Never edit, close, relabel, or reassign an existing issue; when that is what the user wants, say that this skill does not do it.
+```
+python3 <skill-path>/scripts/link-issues.py resolve --parent '<entry>' --blocked-by '<entry>' --blocked-by '<entry>' > <resolved.json>
+```
 
-**Done when:** the issue URL has been reported, or the draft has been rendered under `--dry-run`, or the user chose to comment on an existing issue instead.
+Omit a flag whose slot is empty, and pass `--repo` when the issue targets a repo other than the current one. An entry with a `node` becomes a native link; an entry with `node: null` stays text, and its `reason` says why. A Parent in a repository another owner holds is always one of those, since GitHub only accepts a sub-issue under a parent with the same owner. An entry the viewer lacks permission to link is another: a blocker needs TRIAGE or higher on the repo the issue is filed into, a parent needs WRITE or higher on its own repo, and a permission `resolve` cannot read counts as missing. Render every Parent and Blocked by entry as text, resolved or not: a link can still fail once the issue exists, and the text is what survives it. An entry whose link lands leaves the body afterwards, at the strip below.
+
+When the preflight found `gh` unauthenticated, `resolve` cannot run: every entry stays in the body as text, and the dry-run says the links were not resolved.
+
+Then render the full issue as markdown, show it with the links it will set beside the rendered body, and wait for explicit confirmation before `gh issue create`. `--dry-run` renders and stops. Under `--dry-run`, run `resolve`, then `link --dry-run` with no `--issue`, which lists each link it would set and each entry the strip would then remove, and sends no mutation, then stop. `--yolo` skips the confirmation but not the self-check.
+
+`gh issue create` prints the new issue's URL. Capture it and link:
+
+```
+python3 <skill-path>/scripts/link-issues.py link --issue <URL> --plan <resolved.json> --out <result.json>
+```
+
+Exit 0 means every link was set. Exit 1 means at least one failed: report the issue URL, each `FAILED` line, and the `retry:` command under it; the failed entry's text is still in the body, so nothing is lost. Exit 3 means a usage error, an unreadable plan, or a new issue that could not be resolved, and no link was sent: report the URL and that no links were set. `strip` still runs and, finding nothing linked, writes nothing.
+
+Then strip the linked entries from the body, passing `--agent-targeted` when the issue is agent-targeted so an emptied Blocked by line reads `None` rather than vanishing:
+
+```
+python3 <skill-path>/scripts/link-issues.py strip --issue <URL> --plan <resolved.json> --result <result.json> [--agent-targeted]
+```
+
+`strip` fetches the body, removes only the entries whose link landed from the Parent and Blocked by lines, and sends one `updateIssue`. A Parent line whose entry linked goes; a Blocked by line left empty becomes `**Blocked by:** None` when agent-targeted and goes otherwise; an entry whose link failed stays where it was. It never adds a reference back and never touches another line, and with nothing linked it writes nothing; the `None` on an emptied agent-targeted Blocked by line is the only text it ever writes. Exit 1 means the body write failed: report the `FAILED strip` line and its `retry:` command and leave the body as filed, since a text entry beside its link is harmless.
+
+Creation only. The rule admits exactly three kinds of write beyond `gh issue create`, each naming the new issue: one `addSubIssue` for the parent, one `addBlockedBy` per blocker, and at most one `updateIssue` that removes only the entries whose link landed from the new issue's own body. It makes no other write to an existing issue, and never edits, closes, relabels, or reassigns one; when that is what the user wants, say that this skill does not do it.
+
+**Done when:** the issue URL has been reported, every link was set or reported with its retry command, and the linked entries were stripped from the body or the strip was reported with its retry command, or the draft and its link list have been rendered under `--dry-run`, or the user chose to comment on an existing issue instead.
 
 ## Further Reading
 
 - [references/issue-forms.md](references/issue-forms.md) — issue-form YAML schema, template resolution order, `gh issue create` mechanics
 - [references/evidence-map.md](references/evidence-map.md) — every gate and default traced to its claim and evidence tier
+- [scripts/link-issues.py](scripts/link-issues.py) — resolves Parent and Blocked by entries to issue nodes, sets them as native links, and strips the linked entries from the body, printing a retry command for any write that fails
 - [assets/](assets/) — `bug`, `feature`, `task`, and `spike` bodies, used only when the repo has no template of its own

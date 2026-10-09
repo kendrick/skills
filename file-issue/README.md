@@ -62,14 +62,16 @@ file-issue/
 │   ├── feature.template.md
 │   ├── task.template.md
 │   └── spike.template.md
-└── references/
-    ├── issue-forms.md    # issue-form YAML schema and gh mechanics
-    └── evidence-map.md   # every gate traced to its claim and evidence tier
+├── references/
+│   ├── issue-forms.md    # issue-form YAML schema and gh mechanics
+│   └── evidence-map.md   # every gate traced to its claim and evidence tier
+└── scripts/
+    └── link-issues.py    # resolves Parent and Blocked by entries and sets them as native links
 ```
 
 ## Gotchas
 
-- It creates, and that's all. No editing, closing, triaging, or relabeling existing issues, since those are different jobs needing guards this doesn't have.
+- It creates the issue, links the new issue to its parent and blockers as native sub-issue and blocked-by links, then removes the linked entries from the body, and that's all. An entry that isn't an issue, such as a spec path or a file that doesn't exist yet, stays in the body as text, and so does a Parent in another owner's repo, since GitHub only nests a sub-issue under a parent with the same owner, or any entry you lack permission to link (triage on the repo you file into for a blocker, write on the parent's repo for a parent). If a link fails, you get the issue URL and a retry command, and that entry stays in the body as text, because nothing leaves the body until its link has landed. No editing, closing, triaging, or relabeling existing issues, since those are different jobs needing guards this doesn't have.
 - One issue per run. Splitting a plan into linked tickets is [to-tickets](https://github.com/mattpocock/skills)' job, and the escape hatch hands off to it rather than half-building decomposition here.
 - Duplicates get surfaced, never blocked. This is deliberate and evidence-backed: duplicates rank low on developer annoyance, routinely carry information the original lacks, and refusing them teaches people to stop reporting. You get the candidates and the call.
 - The repo's template always beats the built-in one. If your form has four fields, your issue has four fields, even where the skill's own rubric would want a fifth.

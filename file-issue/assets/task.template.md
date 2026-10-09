@@ -24,6 +24,7 @@ Blocked by lists every prerequisite that must land before work can start, or
 states "None" outright. On an agent-targeted issue, keep the "None": an absent
 list reads as unexamined, not as empty. Otherwise drop the line rather than
 shipping it blank.
+An entry naming an issue (`#N`, `owner/repo#N`, or an issue URL, written bare with no commentary beside it) becomes a native link and leaves the body once that link lands; anything else stays as text, a file the repo does not hold yet included.
 -->
 
 ## What and Why
