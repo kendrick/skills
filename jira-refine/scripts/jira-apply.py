@@ -1104,6 +1104,89 @@ class RestTransport(Transport):
         ]
 
 
+def jira_cli_config_path():
+    """Where `jira issue create` reads its cached issue types (issue #90).
+
+    jira-cli resolves --config, then $JIRA_CONFIG_FILE, then
+    <config home>/.jira/.config.yml. jira-apply never passes --config, so this
+    mirrors the rest: $JIRA_CONFIG_FILE if non-empty, then
+    $XDG_CONFIG_HOME/.jira/.config.yml, then ~/.config/.jira/.config.yml,
+    which is the path #90 observed."""
+    explicit = os.environ.get("JIRA_CONFIG_FILE")
+    if explicit:
+        return explicit
+    home = os.environ.get("XDG_CONFIG_HOME")
+    if home:
+        return os.path.join(home, ".jira", ".config.yml")
+    return os.path.join(os.path.expanduser("~"), ".config", ".jira", ".config.yml")
+
+
+def _config_content_lines(text):
+    # YAML forbids tabs in indentation, so a tab-led line counts as column 0.
+    # That ends the issue block, and the scan fails closed.
+    for raw in text.splitlines():
+        stripped = raw.strip()
+        if stripped and not stripped.startswith("#"):
+            yield len(raw) - len(raw.lstrip(" ")), stripped
+
+
+_ISSUE_KEY = re.compile(r"""(?:issue|"issue"|'issue'):(?:\s+#.*)?""")
+_TYPES_KEY = re.compile(r"""(?:types|"types"|'types'):(?:\s+(.*))?""")
+_SEQ_ITEM = re.compile(r"-(?:\s.*)?")
+_INLINE_COMMENT = re.compile(r"(?:^|\s)#")
+
+
+def jira_cli_issue_types_cached(text):
+    """True when the config's `issue.types` is a sequence, whatever it holds.
+
+    jira-cli's setIssueTypes makes the same check before every
+    `jira issue create` (create.go:167-171). It fails with "invalid issue
+    types in config" when the value isn't a slice, and it never checks `-t`
+    against the list. So absent, null (`types:` with nothing under it, `~`,
+    `null`), a scalar, and a mapping all fail, and `types: []` passes.
+
+    A line scan, because the repo is standard library only and PyYAML is not.
+    Only a `types:` that is a direct child of the top-level `issue:` counts.
+    `issue.fields` can hold a `types:` of its own, and matching that one passes
+    or fails the run on the wrong value. Shapes the scan doesn't read, such as
+    an inline `issue: {...}` mapping or a flow list spread over lines, read as
+    not cached. That fails closed toward the `jira init` message, and
+    `jira init` rewrites the file in a form the scan does read."""
+    lines = list(_config_content_lines(text))
+    for i, (indent, stripped) in enumerate(lines):
+        if indent == 0 and _ISSUE_KEY.fullmatch(stripped):
+            break
+    else:
+        return False
+    block = []
+    for indent, stripped in lines[i + 1:]:
+        if indent == 0:
+            break
+        block.append((indent, stripped))
+    if not block:
+        return False
+    child_indent = block[0][0]
+    for j, (indent, stripped) in enumerate(block):
+        key = _TYPES_KEY.fullmatch(stripped) if indent == child_indent else None
+        if not key:
+            continue
+        inline = _INLINE_COMMENT.split(key.group(1) or "", 1)[0].strip()
+        if inline:
+            # A flow list closed on this line passes whatever it holds. An
+            # unclosed `[` spans lines, which the scan can't follow, so it
+            # fails closed.
+            return inline.startswith("[") and inline.endswith("]")
+        if j + 1 == len(block):
+            return False
+        # yaml.v2 writes a sequence at its key's own indent and yaml.v3 one
+        # level deeper, and YAML reads both as the key's value. Anything else
+        # deeper is a mapping or scalar; anything else at the key's indent is
+        # the next sibling, which leaves `types:` null.
+        item_indent, item = block[j + 1]
+        return item_indent >= indent and bool(_SEQ_ITEM.fullmatch(item))
+    return False
+
+
 class JiraCliTransport(Transport):
     """ankitpokhrel's `jira` binary, for a client environment that allows only it.
 
@@ -1124,6 +1207,28 @@ class JiraCliTransport(Transport):
         probe = self._run(["me"])
         if probe.returncode != 0:
             die(f"`jira me` failed: {self._why(probe)}")
+        # `jira issue create` refuses to run unless the config's issue.types
+        # is a list, and `jira me` never reads it (#90). A config without one
+        # passes the probe and then fails every create.
+        path = jira_cli_config_path()
+        if not os.path.isfile(path):
+            print(
+                f"jira-apply: note: no jira-cli config at {path}; "
+                "the issue-type cache was not checked",
+                file=sys.stderr,
+            )
+            return
+        try:
+            with open(path, encoding="utf-8") as fh:
+                text = fh.read()
+        except OSError as e:
+            die(f"cannot read jira-cli's config at {path}: {e}")
+        if not jira_cli_issue_types_cached(text):
+            die(
+                f"jira-cli's config at {path} caches no issue types, so every "
+                '`jira issue create` would fail with "invalid issue types in '
+                'config"; run `jira init` to rebuild it'
+            )
 
     def _run(self, args):
         try:

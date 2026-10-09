@@ -1,0 +1,10 @@
+version: 1
+installation: Cloud
+server: https://your-site.atlassian.net
+login: you@example.com
+project:
+  key: "FRW"
+  type: ""
+board:
+  id: 0
+  name: ""

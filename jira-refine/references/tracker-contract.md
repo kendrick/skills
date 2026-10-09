@@ -104,7 +104,7 @@ PROJ-412  description=applied  links=1/1  label=applied  goal=unmapped  writes=3
 |---|---|
 | 0 | Every field on every entry reported `applied` or `already-present`, or reported `unmapped` and took its fallback. An unmapped field that landed in the description block is a success: the shipped config leaves `fields.goal` unset, so treating that as a failure would exit 1 on every ordinary run |
 | 1 | Any `conflict`, `missing-issue`, unmapped-without-fallback, or failed write. An extra field the config cannot map lands here, since it has no fallback to take. The report is still complete: a failure is recorded and the entry continues |
-| 3 | Config missing or unparseable, unknown transport, missing credentials, missing `site`, absent `jira` binary, a Python below the 3.11 `tomllib` floor, or the tracker itself unreachable or refusing to answer at preflight — see "Preflight versus the apply loop" below. The message names the floor |
+| 3 | Config missing or unparseable, unknown transport, missing credentials, missing `site`, absent `jira` binary, an unreadable jira-cli config or one whose `issue.types` is not a list, a Python below the 3.11 `tomllib` floor, or the tracker itself unreachable or refusing to answer at preflight — see "Preflight versus the apply loop" below. The message names the floor |
 
 A dry run applies the same codes to the outcomes it planned.
 
@@ -227,7 +227,21 @@ Under the jira-cli transport a Goal is mapped only when both `fields.goal` and `
 
 ## Auth
 
-REST needs `site` plus the two environment variables named under `[auth]` by the keys `email_env` and `token_env`, defaulting to `JIRA_EMAIL` and `JIRA_API_TOKEN`, combined into an `Authorization: Basic` header. The config holds the variable names; the environment holds the values. jira-cli carries its own config and reads `JIRA_API_TOKEN`; preflight it with `jira me`.
+REST needs `site` plus the two environment variables named under `[auth]` by the keys `email_env` and `token_env`, defaulting to `JIRA_EMAIL` and `JIRA_API_TOKEN`, combined into an `Authorization: Basic` header. The config holds the variable names; the environment holds the values. jira-cli carries its own config and reads `JIRA_API_TOKEN`. Its preflight runs two checks, auth first because `jira init` itself needs working auth:
+
+- `jira me` proves auth.
+- The config's cached `issue.types` proves `jira issue create` can run. jira-cli's `setIssueTypes` (`internal/cmd/issue/create/create.go:167-171`) requires that value to be a list and never checks `-t` against its entries. When `issue.types` is absent, null, a scalar, or a mapping, `jira me` still passes and every create fails with `invalid issue types in config`. Any list passes, `types: []` included. jira-apply reads the file instead of calling the binary, because no jira-cli command reports the cache short of attempting a write.
+
+jira-apply never passes `--config`, so it resolves the file the way jira-cli does without one: `$JIRA_CONFIG_FILE` when set and non-empty, then `$XDG_CONFIG_HOME/.jira/.config.yml` when `XDG_CONFIG_HOME` is set, then `~/.config/.jira/.config.yml`.
+
+The check reads the file line by line, not as YAML. Only a `types:` key that is a direct child of the top-level `issue:` counts; a `types:` nested deeper, such as one under `issue.fields`, is ignored. Keys may be bare or quoted. The value counts as a list in two cases:
+
+- The first content line after `types:` is a `-` item, bare or followed by content, at the key's own indent or deeper.
+- `types:` carries a flow list that opens and closes on the same line, whatever it holds.
+
+Every other shape reads as not cached and exits 3. That covers `types:` with nothing under it, `types: ~`, `types: null`, a scalar, and a mapping, which jira-cli rejects too. It also covers shapes the scan fails closed on: an inline `issue: {...}` mapping, a flow list spread over several lines, and tab indentation. The exit-3 fix still applies to them, because `jira init` rewrites the file in block style.
+
+An `issue.types` that is absent or not a list exits 3 with ``jira-cli's config at <path> caches no issue types, so every `jira issue create` would fail with "invalid issue types in config"; run `jira init` to rebuild it``. An unreadable file also exits 3, naming the path and the OS error. Tell the user to run `jira init`. jira-apply never runs `jira init` itself, because that command rewrites a config the user owns. A config jira-apply cannot find passes with one stderr line, `jira-apply: note: no jira-cli config at <path>; the issue-type cache was not checked`, because `jira me` has just found a config somewhere and the gap is in jira-apply's own resolution. The check runs on every jira-cli batch, update-only batches included.
 
 `site` expands `${ENV}` so a test can point the same config at a fake. Credentials never land in the config file or in a report.
 

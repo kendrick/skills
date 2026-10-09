@@ -170,3 +170,10 @@ v2 API returns it:
 
 This is the interface both fixture-owning tasks in this wave build against —
 the fake transports read exactly this shape, keyed by issue key.
+
+## jira-cli configs: `jira-cli-config-healthy.yml`, `jira-cli-config-no-types.yml`
+
+Two `jira-cli` config files for the preflight's issue-type check. Both carry the placeholder values from issue #90's reproduction (`your-site.atlassian.net`, `you@example.com`, project `FRW`), so no real host or address lives in the repo. The jira-cli leg of `tests/jira-refine-smoke.sh` exports `JIRA_CONFIG_FILE` at one of them, so the preflight reads that file instead of the developer's own `~/.config/.jira/.config.yml`.
+
+- `jira-cli-config-no-types.yml`—the ten-line config issue #90 quotes, with no `issue:` block. The issue says a file like this comes from a hand edit or an interrupted `jira init`. A `jira issue create` against it has no type to send. The smoke case that points `JIRA_CONFIG_FILE` here expects the preflight to exit 3 with a message naming `jira init` as the fix.
+- `jira-cli-config-healthy.yml`—the same ten lines plus an `issue:` block. `types:` is a block sequence of two mappings (`Story` id `10001`, `Bug` id `10002`) written at the key's own indent. That compact form is what yaml.v2 emits, and the issue's two-space config suggests that encoder; the smoke suite checks the deeper-indented form inline. `fields:` with a `custom:` entry sits ahead of `types:` as a sibling key, so a scan for `types:` has to walk past a neighbor to find it. The jira-cli leg exports `JIRA_CONFIG_FILE` at this file, so every existing case in that leg passes the preflight without reading the developer's real config.

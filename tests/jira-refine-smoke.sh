@@ -59,6 +59,8 @@ require_file tests/fixtures/jira-refine/staging-good.md
 require_file tests/fixtures/jira-refine/staging-bad.md
 require_file tests/fixtures/jira-refine/fake-jira
 require_file tests/fixtures/jira-refine/fake-jira-rest.py
+require_file tests/fixtures/jira-refine/jira-cli-config-healthy.yml
+require_file tests/fixtures/jira-refine/jira-cli-config-no-types.yml
 
 [[ "$(find jira-refine -maxdepth 1 -type f | wc -l | tr -d ' ')" == "2" ]] || {
   echo "jira-refine/ must ship only SKILL.md and README.md at top level" >&2
@@ -1157,6 +1159,10 @@ export PATH="$tmp/bin:$PATH"
 export FAKE_JIRA_LOG="$cli_log"
 export FAKE_JIRA_SEED="$fixtures/issues.json"
 export FAKE_JIRA_STATE="$tmp/cli-state.json"
+# The preflight reads jira-cli's own config for its issue-type cache (#90).
+# Without this, every case below would read the developer's real config and
+# pass or fail on whatever `jira init` last wrote there.
+export JIRA_CONFIG_FILE="$fixtures/jira-cli-config-healthy.yml"
 # jira-cli writes a custom field by its declared name and the raw API returns it
 # by id, so the fake needs the same name-to-id declaration the real CLI carries
 # in its own config. Every half is already in the fixture config — `goal` and
@@ -1304,6 +1310,136 @@ grep -Fq "no cli_name, which jira-cli writes by" "$tmp/cli-nocli.json" || {
   cat "$tmp/cli-nocli.json" >&2
   exit 1
 }
+
+# --- The jira-cli issue-type cache (#90). ------------------------------------
+# `jira me` passes on a config with no cached types, and then every `jira issue
+# create` fails with "invalid issue types in config". The preflight has to stop
+# the run before the first write, so the fake's log must not grow at all.
+before_notypes="$(log_lines "$cli_log")"
+set +e
+JIRA_CONFIG_FILE="$fixtures/jira-cli-config-no-types.yml" \
+  python3 "$apply" create --config "$config" --transport jira-cli \
+  < "$tmp/cli-create.jsonl" > "$tmp/cli-notypes.json" 2> "$tmp/cli-notypes.err"
+notypes_status=$?
+set -e
+[[ "$notypes_status" == 3 ]] || {
+  echo "a jira-cli config with no cached issue types should exit 3, got $notypes_status" >&2
+  cat "$tmp/cli-notypes.err" >&2
+  exit 1
+}
+[[ "$(log_lines "$cli_log")" == "$before_notypes" ]] || {
+  echo "a run stopped for an empty issue-type cache must not reach the tracker" >&2
+  exit 1
+}
+grep -Fq "caches no issue types" "$tmp/cli-notypes.err" || {
+  echo "the exit-3 message should say the config caches no issue types:" >&2
+  cat "$tmp/cli-notypes.err" >&2
+  exit 1
+}
+grep -Fq 'run `jira init`' "$tmp/cli-notypes.err" || {
+  echo "the exit-3 message should name \`jira init\` as the fix:" >&2
+  cat "$tmp/cli-notypes.err" >&2
+  exit 1
+}
+
+# A missing file is jira-apply's path lookup falling short, not a broken
+# config: `jira me` just authenticated against one. So the run goes on with a
+# note rather than blocking a working setup on a guess about where it lives.
+set +e
+JIRA_CONFIG_FILE="$tmp/no-such-jira-config.yml" \
+  python3 "$apply" get PROJ-412 --config "$config" --transport jira-cli \
+  > "$tmp/cli-noconfig.json" 2> "$tmp/cli-noconfig.err"
+noconfig_status=$?
+set -e
+[[ "$noconfig_status" == 0 ]] || {
+  echo "a missing jira-cli config should not stop the run, got exit $noconfig_status:" >&2
+  cat "$tmp/cli-noconfig.err" >&2
+  exit 1
+}
+grep -Fq "the issue-type cache was not checked" "$tmp/cli-noconfig.err" || {
+  echo "a missing jira-cli config should say the issue-type cache went unchecked:" >&2
+  cat "$tmp/cli-noconfig.err" >&2
+  exit 1
+}
+
+# The scan is a line reader standing in for a YAML parser, and each shape below
+# is one a line reader can misread. jira-cli's create needs `issue.types` to be
+# a list and nothing more, so misreading any list blocks a working config
+# behind a `jira init` the user doesn't need. Misreading a value that isn't a
+# list lets every create fail at write time, the bug #90 filed.
+expect_preflight() {
+  local want="$1" name="$2"
+  printf '%s\n' "$3" > "$tmp/cli-shape-$name.yml"
+  set +e
+  JIRA_CONFIG_FILE="$tmp/cli-shape-$name.yml" \
+    python3 "$apply" get PROJ-412 --config "$config" --transport jira-cli \
+    > /dev/null 2> "$tmp/cli-shape-$name.err"
+  local status=$?
+  set -e
+  [[ "$status" == "$want" ]] || {
+    echo "jira-cli config shape '$name' should exit $want at preflight, got $status:" >&2
+    cat "$tmp/cli-shape-$name.yml" "$tmp/cli-shape-$name.err" >&2
+    exit 1
+  }
+}
+
+# yaml.v2 writes a sequence at its key's own indent and yaml.v3 one level
+# deeper. YAML reads both as the same populated list.
+expect_preflight 0 compact-sequence 'issue:
+  types:
+  - id: "10001"
+    name: Story'
+expect_preflight 0 indented-sequence 'issue:
+  types:
+    - id: "10001"
+      name: Story'
+expect_preflight 0 bare-dash-item 'issue:
+  types:
+  -
+    id: "10001"
+    name: Story'
+expect_preflight 0 quoted-keys '"issue":
+  "types":
+  - id: "10001"'
+expect_preflight 0 flow-list 'issue:
+  types: [{id: "10001", name: Story}]'
+# An empty list is still a list, and jira-cli never checks `-t` against it.
+expect_preflight 0 empty-flow-list 'issue:
+  types: []'
+# A `types:` key with no list is null to YAML, and jira-cli rejects it as
+# surely as a missing key. In the first case, the line after `types:` is a
+# sibling key at the same indent.
+expect_preflight 3 null-types 'issue:
+  types:
+  fields:
+    custom: {}'
+expect_preflight 3 null-types-last 'issue:
+  types:'
+expect_preflight 3 tilde-types 'issue:
+  types: ~'
+expect_preflight 3 scalar-types 'issue:
+  types: Story'
+expect_preflight 3 mapping-types 'issue:
+  types:
+    id: "10001"'
+# `issue.fields` can carry a `types:` of its own. Only the direct child of
+# `issue:` is the cache `jira issue create` reads, in both directions.
+expect_preflight 0 nested-null-before-real 'issue:
+  fields:
+    types:
+  types:
+  - id: "10001"'
+expect_preflight 3 nested-populated-before-null 'issue:
+  fields:
+    types:
+    - id: "10001"
+  types:'
+
+# `jira init` rewrites a config the user owns; preflight names it and stops.
+# Refuting the quoted word in both quote styles covers `["init"]`,
+# `["jira", "init"]`, and the other argv spellings of the subcommand.
+refute_text jira-refine/scripts/jira-apply.py '"init"'
+refute_text jira-refine/scripts/jira-apply.py "'init'"
 
 # --- The extra_fields config table. -----------------------------------------
 # Loud rather than lenient, unlike [fields] and [auth], which a wrong shape
