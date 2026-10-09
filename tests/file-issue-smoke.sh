@@ -664,8 +664,20 @@ chmod +x "$rel_tmp/bin/gh"
 run_rel() {
   local script="$1"
   shift
-  PATH="$rel_tmp/bin:$PATH" FAKE_GH_LOG="$rel_tmp/gh.log" python3 "$script" "$@"
+  PATH="$rel_tmp/bin:$PATH" FAKE_GH_LOG="$rel_tmp/gh.log" FAKE_GH_REFS="$rel_tmp/refs.txt" python3 "$script" "$@"
 }
+# What GitHub's issueOrPullRequest lookup returns for each entry headed for
+# UNLINKED. Every other entry is missing on purpose: a lookup the script
+# shouldn't make hits the stub's unhandled exit 2 and fails the run with 3.
+cat > "$rel_tmp/refs.txt" <<'REFS'
+o/r#2 Issue
+o/r#9 Issue
+o/x#96 Issue
+O/y#4 Issue
+o/x#97 PullRequest
+o/r#31 PullRequest
+o/r#32 null
+REFS
 
 # Page A, one issue per case. #6's path must print nothing, and so must #7,
 # which names #2 in prose, in a bare Blocked by line inside a ``` error block,
@@ -674,7 +686,9 @@ run_rel() {
 # code indented 4 spaces or a tab, and print nothing either. #23 names a
 # Parent under another owner. link-issues.py keeps that entry as text, so #23
 # prints nothing. #24's and #25's parents share the owner, #25's in another
-# case, so GitHub can link them and both report.
+# case, so GitHub can link them and both report. #26's parent and #27's
+# blocker are pull requests, which link-issues.py keeps as text, so both
+# print nothing. #28's blocker resolves to nothing and reports.
 cat > "$rel_tmp/page-a.json" <<'JSON'
 {"data":{"repository":{"issues":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[
 {"number":1,"body":"## Problem\n\nx\n\n**Blocked by:** #2\n","parent":null,"blockedBy":{"nodes":[]}},
@@ -690,7 +704,10 @@ cat > "$rel_tmp/page-a.json" <<'JSON'
 {"number":22,"body":"## Problem\n\n    **Blocked by:** #2\n\t**Parent:** #9\n","parent":null,"blockedBy":{"nodes":[]}},
 {"number":23,"body":"**Parent:** other/project#7\n","parent":null,"blockedBy":{"nodes":[]}},
 {"number":24,"body":"**Parent:** o/x#96\n","parent":null,"blockedBy":{"nodes":[]}},
-{"number":25,"body":"**Parent:** O/y#4\n","parent":null,"blockedBy":{"nodes":[]}}
+{"number":25,"body":"**Parent:** O/y#4\n","parent":null,"blockedBy":{"nodes":[]}},
+{"number":26,"body":"**Parent:** o/x#97\n","parent":null,"blockedBy":{"nodes":[]}},
+{"number":27,"body":"**Blocked by:** #31\n","parent":null,"blockedBy":{"nodes":[]}},
+{"number":28,"body":"**Blocked by:** #32\n","parent":null,"blockedBy":{"nodes":[]}}
 ]}}}}
 JSON
 cat > "$rel_tmp/want-a.txt" <<'OUT'
@@ -701,13 +718,17 @@ UNLINKED #5 parent #9
 DUPLICATE #11 blocked-by o/x#3
 UNLINKED #24 parent o/x#96
 UNLINKED #25 parent O/y#4
-14 open issues checked: 4 unlinked, 1 contradicted, 2 duplicate.
+UNLINKED #28 blocked-by #32
+17 open issues checked: 5 unlinked, 1 contradicted, 2 duplicate.
 OUT
 : > "$rel_tmp/gh.log"
 rc=0; FAKE_GH_PAGE="$rel_tmp/page-a.json" run_rel "$rel_script" --repo o/r > "$rel_tmp/out-a" || rc=$?
 expect_rc 1 "$rc" "check-relationships on page A"
 require_output "$rel_tmp/want-a.txt" "$rel_tmp/out-a" "check-relationships on page A"
 require_count "$rel_tmp/gh.log" "mutation" 0
+# One lookup per entry headed for UNLINKED, and none for a DUPLICATE, a
+# CONTRADICTED, or #23's cross-owner parent.
+require_count "$rel_tmp/gh.log" "issueOrPullRequest" 7
 
 # Page B holds only what passes: DUPLICATE alone exits 0, so the
 # hand-reconciled #57–#62 stay clean. No --repo, so the repo comes from the
@@ -736,6 +757,14 @@ rc=0; run_rel "$rel_script" --bogus > /dev/null 2>&1 || rc=$?
 expect_rc 3 "$rc" "check-relationships with an unknown flag"
 rc=0; FAKE_GH_FAIL=1 FAKE_GH_PAGE="$rel_tmp/page-a.json" run_rel "$rel_script" --repo o/r > /dev/null 2>&1 || rc=$?
 expect_rc 3 "$rc" "check-relationships when the page request fails"
+# A failed lookup is a failed gh call, so it exits 3 and prints no partial
+# report. Only a NOT_FOUND answer, as for #28, counts as a dangling entry.
+rc=0; FAKE_GH_REF_FAIL=1 FAKE_GH_PAGE="$rel_tmp/page-a.json" run_rel "$rel_script" --repo o/r > "$rel_tmp/out-ref-fail" 2>/dev/null || rc=$?
+expect_rc 3 "$rc" "check-relationships when an entry lookup fails"
+[[ ! -s "$rel_tmp/out-ref-fail" ]] || {
+  echo "check-relationships printed a report although an entry lookup failed" >&2
+  exit 1
+}
 
 # A scratch copy with the UNLINKED branch deleted must fail the page A
 # comparison, or that comparison can't see the class that fails the run.
@@ -744,7 +773,7 @@ cp file-issue/scripts/link-issues.py "$rel_tmp/mutant/file-issue/scripts/"
 python3 - "$rel_script" "$rel_tmp/mutant/$rel_script" <<'PY'
 import sys
 src = open(sys.argv[1], encoding="utf-8").read()
-branch = '''            else:
+branch = '''            elif kind_of(parsed[0], parsed[1]) != "PullRequest":
                 found.append(("UNLINKED", f"UNLINKED #{number} {slot} {entry}"))
 '''
 assert src.count(branch) == 1, "the UNLINKED branch moved; update this mutant"

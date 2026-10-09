@@ -33,6 +33,14 @@ link-issues.py leaves that entry in the body as text, and no native link
 exists to compare it with. A parent in another repo under the same owner
 still reports, because GitHub can link it.
 
+An entry that names a pull request prints nothing either. link-issues.py
+looks entries up with `issue(number:)`, which never returns a pull request,
+so a PR entry stays in the body as text and can never become a native link.
+Before printing `UNLINKED`, the script asks GitHub whether the entry names a
+pull request, one read-only `issueOrPullRequest` query per distinct entry.
+It asks only about entries headed for `UNLINKED`. An entry whose number
+resolves to nothing still reports, because a dangling reference is drift too.
+
 Only a line that starts with `**Blocked by:**` or `**Parent:**` counts. An issue
 number in a Problem section or a quoted error block is prose, not a
 relationship, and flagging it would train the reader to ignore the report.
@@ -49,7 +57,8 @@ different fixes, and a person rules on each; the posture is jd-audit's.
 Exit codes:
     0  no UNLINKED or CONTRADICTED finding (DUPLICATE alone still exits 0)
     1  at least one UNLINKED or CONTRADICTED finding
-    3  usage error, or a gh call that failed or returned unreadable output
+    3  usage error, or a gh call that failed or returned unreadable output,
+       an entry lookup included
 """
 
 import argparse
@@ -74,6 +83,11 @@ QUERY = (
     "blockedBy(first:50){nodes{number repository{nameWithOwner}}}}}}}"
 )
 
+REF_QUERY = (
+    "query($owner:String!,$name:String!,$number:Int!){"
+    "repository(owner:$owner,name:$name){issueOrPullRequest(number:$number){__typename}}}"
+)
+
 
 class Parser(argparse.ArgumentParser):
     # argparse exits 2 on bad usage; the repo's validator convention is 3.
@@ -84,7 +98,9 @@ class Parser(argparse.ArgumentParser):
 
 
 class GhError(Exception):
-    pass
+    def __init__(self, message, stdout=""):
+        super().__init__(message)
+        self.stdout = stdout
 
 
 def load_link_issues():
@@ -103,7 +119,7 @@ def gh(args):
         raise GhError(f"gh failed: {e}")
     if done.returncode != 0:
         detail = (done.stderr or done.stdout).strip().splitlines()
-        raise GhError(f"gh exited {done.returncode}: {detail[0] if detail else 'no output'}")
+        raise GhError(f"gh exited {done.returncode}: {detail[0] if detail else 'no output'}", done.stdout)
     return done.stdout
 
 
@@ -132,6 +148,37 @@ def fetch_issues(repo):
             raise GhError("unreadable response from gh")
         if not has_next:
             return issues
+
+
+def only_not_found(stdout):
+    # gh exits 1 when GraphQL reports any error, a missing number or repo
+    # included, and still prints the response on stdout. NOT_FOUND alone means
+    # a dangling reference, which reports; any other error is a failed call.
+    try:
+        errors = json.loads(stdout).get("errors")
+    except (ValueError, AttributeError):
+        return False
+    return bool(errors) and all(isinstance(e, dict) and e.get("type") == "NOT_FOUND" for e in errors)
+
+
+def ref_type(repo, number):
+    """Return the `__typename` GitHub reports for repo#number, or None when nothing resolves."""
+    owner, name = repo.split("/", 1)
+    args = ["api", "graphql", "-f", f"query={REF_QUERY}", "-F", f"owner={owner}", "-F", f"name={name}", "-F", f"number={number}"]
+    try:
+        data = json.loads(gh(args))["data"]["repository"]
+    except GhError as e:
+        if only_not_found(e.stdout):
+            return None
+        raise
+    except (ValueError, KeyError, TypeError):
+        raise GhError("unreadable response from gh")
+    node = (data or {}).get("issueOrPullRequest")
+    if node is None:
+        return None
+    if not isinstance(node, dict) or "__typename" not in node:
+        raise GhError("unreadable response from gh")
+    return node["__typename"]
 
 
 def issue_key(node):
@@ -175,7 +222,7 @@ def body_slots(body, fence_re):
                 yield slot, [e.strip() for e in rest.split(",") if e.strip()]
 
 
-def check_issue(issue, home, parse_entry, fence_re):
+def check_issue(issue, home, parse_entry, fence_re, kind_of):
     native = native_refs(issue)
     number = issue["number"]
     home_owner = home.split("/", 1)[0].lower()
@@ -199,7 +246,10 @@ def check_issue(issue, home, parse_entry, fence_re):
             key = (parsed[0].lower(), parsed[1])
             if key in native[slot]:
                 found.append(("DUPLICATE", f"DUPLICATE #{number} {slot} {entry}"))
-            else:
+            # resolve_entry's lookup asks issue(number:), which never returns
+            # a PR, so a PR entry stays text for good. Red-team round 2 on #66
+            # caught two live cases, #118 and #183, whose parents are merged PRs.
+            elif kind_of(parsed[0], parsed[1]) != "PullRequest":
                 found.append(("UNLINKED", f"UNLINKED #{number} {slot} {entry}"))
     return found
 
@@ -216,6 +266,17 @@ def main(argv):
             raise GhError(f"cannot resolve a repository from {repo!r}")
         parse_entry, fence_re = load_link_issues()
         issues = fetch_issues(repo)
+        kinds = {}
+
+        def kind_of(ref_repo, ref_number):
+            key = (ref_repo.lower(), ref_number)
+            if key not in kinds:
+                kinds[key] = ref_type(ref_repo, ref_number)
+            return kinds[key]
+
+        # Gather every finding before printing any, so a lookup that fails
+        # partway exits 3 without a partial report on stdout.
+        findings = [f for issue in issues for f in check_issue(issue, repo, parse_entry, fence_re, kind_of)]
     except GhError as e:
         print(f"check-relationships.py: {e}", file=sys.stderr)
         return 3
@@ -224,10 +285,9 @@ def main(argv):
         return 3
 
     counts = {"UNLINKED": 0, "CONTRADICTED": 0, "DUPLICATE": 0}
-    for issue in issues:
-        for kind, line in check_issue(issue, repo, parse_entry, fence_re):
-            counts[kind] += 1
-            print(line)
+    for kind, line in findings:
+        counts[kind] += 1
+        print(line)
     print(
         f"{len(issues)} open issues checked: {counts['UNLINKED']} unlinked, "
         f"{counts['CONTRADICTED']} contradicted, {counts['DUPLICATE']} duplicate."
