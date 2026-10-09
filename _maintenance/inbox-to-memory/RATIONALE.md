@@ -41,7 +41,7 @@ The bench fixture came from #191. Nothing measured whether a scope's memory help
 | Dropping an unclassifiable preamble line silently. | It restores the pre-#84 behaviour for one input class: the run reports success, the note is short a line nobody knows about, and phase 4 deletes the evidence. | The nonzero exit and stderr assertions on the preamble fixture. |
 | SRT input. | Nothing in the skill queues `.srt`; `SKILL.md` routes `.md`, `.txt`, and `.vtt`. `segment.py` handles SRT because jira-refine takes transcripts from wherever the user has them. | The `.vtt`-only file-type row in `SKILL.md`. |
 | Dropping superseded files from the scope or the index before benching. | The fixture exists to count superseded records that intrude on results, so removing them deletes the evidence. It would also make a read-only script write into a user's scope. | `refute_text inbox-to-memory/scripts/bench-fixture.sh "os.remove"` and `refute_text inbox-to-memory/scripts/bench-fixture.sh "shutil.move"` |
-| Scoring an agent's answers. | `qmd bench` measures whether retrieval surfaces the right files. Grading a generated answer needs a judge model and a rubric, which is a different eval with its own failure modes, and the fixture stops at retrieval. | Not pinned. |
+| Scoring an agent's answers. | `qmd bench` measures whether retrieval surfaces the right files. Grading a generated answer needs a judge model and a rubric, which is a different eval with its own failure modes, and the fixture stops at retrieval. | `refute_text inbox-to-memory/scripts/bench-fixture.sh "expected_answer"` |
 
 ## Known Limitations
 
