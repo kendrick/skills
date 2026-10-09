@@ -23,8 +23,8 @@
 # suite can run this script without a new test dependency.
 #
 # Exit 0 once a fixture is emitted (skipped records included). Exit 2 on a usage
-# error or an unreadable scope or questions file, matching collapse-vtt.sh, since
-# this script produces an artifact and does not gate a run.
+# error or an unreadable scope, note, record, or questions file, matching
+# collapse-vtt.sh, since this script produces an artifact and does not gate a run.
 set -euo pipefail
 
 # The Python program arrives on stdin via a quoted heredoc, so nothing in it is
@@ -72,6 +72,34 @@ def unquote(v):
     return v
 
 
+def strip_comment(v):
+    # Whitespace has to precede the `#` so a URL fragment like `page#top` survives.
+    # A comment left in the value turns `status: accepted # ok` into a status that
+    # fails the accepted gate, and the record drops out with exit 0.
+    quote, i = None, 0
+    while i < len(v):
+        ch = v[i]
+        if quote:
+            if quote == '"' and ch == "\\":
+                i += 1
+            elif ch == quote:
+                if quote == "'" and v[i + 1:i + 2] == "'":
+                    i += 1
+                else:
+                    quote = None
+        # A quote opens a scalar only at its start; `Bob's` is plain text.
+        elif ch in "'\"" and v[:i].rstrip()[-1:] in ("", "[", ","):
+            quote = ch
+        elif ch == "#" and (i == 0 or v[i - 1] in " \t"):
+            return v[:i].rstrip()
+        i += 1
+    return v
+
+
+def scalar(v):
+    return unquote(strip_comment(v))
+
+
 def split_inline(body):
     items, cur, quote = [], "", None
     for ch in body:
@@ -102,8 +130,9 @@ def frontmatter(path):
         with open(path, encoding="utf-8") as fh:
             lines = fh.read().splitlines()
     except (OSError, UnicodeDecodeError) as e:
-        sys.stderr.write("bench-fixture: %s: unreadable (%s)\n" % (path, e))
-        return None
+        # Skipping the file would drop a note or record from the labels and still
+        # exit 0, so the fixture would look complete when it isn't.
+        die("%s: unreadable (%s)" % (path, e))
     if not lines or lines[0].strip() != "---":
         return {}
     block = []
@@ -119,26 +148,30 @@ def frontmatter(path):
         i += 1
         if not m:
             continue
-        key, val = m.group(1), (m.group(2) or "").strip()
+        key, val = m.group(1), strip_comment(m.group(2) or "").strip()
         if val.startswith("[") and val.endswith("]"):
             fm[key] = split_inline(val[1:-1])
         elif val:
             fm[key] = unquote(val)
         else:
             items, cur = [], None
-            while i < len(block) and (block[i].startswith((" ", "\t", "-")) or not block[i].strip()):
+            while i < len(block) and (
+                block[i].startswith((" ", "\t", "-", "#")) or not block[i].strip()
+            ):
                 ln = block[i].strip()
                 i += 1
+                if ln.startswith("#"):
+                    continue
                 if ln.startswith("- ") or ln == "-":
                     if cur is not None:
                         items.append(cur)
                     body = ln[1:].strip()
                     mm = re.match(r"^([A-Za-z_][\w-]*):\s*(.*)$", body)
-                    cur = {mm.group(1): unquote(mm.group(2))} if mm else unquote(body)
+                    cur = {mm.group(1): scalar(mm.group(2))} if mm else scalar(body)
                 elif isinstance(cur, dict):
                     mm = re.match(r"^([A-Za-z_][\w-]*):\s*(.*)$", ln)
                     if mm:
-                        cur[mm.group(1)] = unquote(mm.group(2))
+                        cur[mm.group(1)] = scalar(mm.group(2))
             if cur is not None:
                 items.append(cur)
             if items:

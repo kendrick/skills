@@ -2121,6 +2121,60 @@ bash "$bench" "$bench_dir/nonotes" >/dev/null 2>&1 || bench_rc=$?
   exit 1
 }
 
+# An inline comment must not leak into a value: `accepted # x` would fail the
+# status gate and drop A with exit 0. The quoted title keeps the `#` inside its
+# quotes. F's block list gets a second ref below a full-line comment, since a
+# reader that ends the list at a column-0 `#` line loses every ref after it.
+cp -R "$bench_scope" "$bench_dir/comments"
+bench_rec_f=_memory/context/region-boundary-cross-scope-BnRecF0006.md
+perl -pi -e 's/^status: accepted$/status: accepted # approved/; s/^(source_refs: \[.*\])$/$1 # both notes/; s/^title: .*$/title: '"'"'Rollback # one owner'"'"' # short/' "$bench_dir/comments/$bench_rec_a"
+perl -pi -e 's/^(  - .*::Bn3RgnBnd3)$/$1 # cross-scope\n# a full-line comment\n  - Bn1RbkOwn1/' "$bench_dir/comments/$bench_rec_f"
+grep -qx 'status: accepted # approved' "$bench_dir/comments/$bench_rec_a" \
+  && grep -qx 'source_refs: \[Bn1RbkOwn1, Bn2FrzSrc2\] # both notes' "$bench_dir/comments/$bench_rec_a" \
+  && grep -qx '  - 11 Clients/acme/pursuits/bench::Bn3RgnBnd3 # cross-scope' "$bench_dir/comments/$bench_rec_f" \
+  && grep -A1 -x '# a full-line comment' "$bench_dir/comments/$bench_rec_f" | grep -qx '  - Bn1RbkOwn1' || {
+  echo "could not add inline comments to the bench copy" >&2
+  exit 1
+}
+bash "$bench" "$bench_dir/comments" >"$bench_dir/comments.json" 2>"$bench_dir/comments-err.txt"
+bench_assert "$bench_dir/comments.json" "an inline comment changed which records became queries" \
+  'set(q) == {"record-BnRecA0001", "record-BnRecB0002", "record-BnRecF0006"}'
+bench_assert "$bench_dir/comments.json" "an inline comment kept A's inline source_refs from resolving" \
+  'q["record-BnRecA0001"]["expected_files"] == ["'"$bench_note1"'", "'"$bench_note2"'", "'"$bench_rec_a"'"]'
+bench_assert "$bench_dir/comments.json" "a # inside a quoted title was stripped, or the comment after it kept" \
+  'q["record-BnRecA0001"]["query"] == "Rollback # one owner"'
+bench_assert "$bench_dir/comments.json" "a comment in F's block list lost or broke one of its two refs" \
+  'q["record-BnRecF0006"]["expected_files"] == ["'"$bench_note3"'", "'"$bench_note1"'", "'"$bench_rec_f"'"]'
+
+# A note that can't be decoded must stop the run. Skipping the note leaves A's
+# ref dangling, so A drops out and the run still exits 0.
+cp -R "$bench_scope" "$bench_dir/badutf8"
+printf '\xff\n' >>"$bench_dir/badutf8/$bench_note1"
+bench_rc=0
+bash "$bench" "$bench_dir/badutf8" >"$bench_dir/badutf8.json" 2>"$bench_dir/badutf8-err.txt" || bench_rc=$?
+[[ "$bench_rc" == 2 && ! -s "$bench_dir/badutf8.json" ]] || {
+  echo "bench-fixture exited $bench_rc on an undecodable note (want 2 and no fixture)" >&2
+  cat "$bench_dir/badutf8-err.txt" >&2
+  exit 1
+}
+require_output "$(cat "$bench_dir/badutf8-err.txt")" "$bench_note1: unreadable ("
+
+# The same holds for a record the OS won't open. chmod 000 doesn't block root.
+if [[ "$(id -u)" != 0 ]]; then
+  cp -R "$bench_scope" "$bench_dir/lockedrec"
+  chmod 000 "$bench_dir/lockedrec/$bench_rec_b"
+  bench_rc=0
+  bench_err="$(bash "$bench" "$bench_dir/lockedrec" 2>&1 >/dev/null)" || bench_rc=$?
+  chmod 644 "$bench_dir/lockedrec/$bench_rec_b"
+  [[ "$bench_rc" == 2 ]] || {
+    echo "bench-fixture exited $bench_rc on an unreadable record (want 2)" >&2
+    exit 1
+  }
+  require_output "$bench_err" "$bench_rec_b: unreadable ("
+else
+  echo "skipping unreadable-record assertion: running as root" >&2
+fi
+
 # The checked-in fixtures are never migrated or stamped in place. Every
 # migration or write-through test works on a copy, and a test that forgets
 # to copy would otherwise rewrite the fixture it is asserting against and

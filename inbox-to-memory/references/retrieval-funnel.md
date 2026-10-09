@@ -127,7 +127,7 @@ qmd bench fixture.json -c <c>
 
 Run `qmd ls <c>` before the bench and confirm it lists the scope's files. qmd scores a collection it never indexed as all zeros and says nothing, which reads exactly like a funnel that retrieves nothing.
 
-The script takes `<scope-root> [--collection NAME] [--top-k K] [--questions FILE]`, writes the fixture to stdout and diagnostics to stderr, and only reads the scope. Exit 0 means it emitted a fixture, skipped records included. Exit 2 means a usage error, an unreadable scope or questions file, or a malformed questions file.
+The script takes `<scope-root> [--collection NAME] [--top-k K] [--questions FILE]`, writes the fixture to stdout and diagnostics to stderr, and only reads the scope. Exit 0 means it emitted a fixture, skipped records included. Exit 2 means a usage error, a malformed questions file, or something the script can't read: the scope, a note, a record, or the questions file.
 
 ### What becomes a query
 
