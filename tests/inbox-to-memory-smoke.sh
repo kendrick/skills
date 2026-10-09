@@ -1973,8 +1973,7 @@ bench_rec_d=_memory/context/vendor-sla-dangling-BnRecD0004.md
 bench_dir="$(mktemp -d "${TMPDIR:-/tmp}/i2m-bench.XXXXXX")"
 trap 'rm -rf "$not_a_scope" "$inline_scope" "$dismissal_scope" "$mig" "$jrn" "$t2_extract_scope" "$t2x_dir" "$subset_scope" "$batched_scope" "$lifecycle_scope" "$idem_dir" "$v_pass" "$scripts_copy" "$v_combo" "$v_linkdrop" "$v_lintdefect" "$v1_broken_scope" "$v1_pass_scope" "$wt_headline" "$wt_backward" "$wt_dedupe" "$wt_status" "$wt_keyins" "$v_subdir" "$bench_dir"' EXIT
 
-# One python3 call per claim, so a failure names the broken rule instead of
-# "the fixture differs".
+# One python3 call per claim, so a failure names the rule that broke.
 bench_assert() {
   local json="$1"
   local label="$2"
@@ -2021,8 +2020,8 @@ bench_assert "$bench_dir/topk.json" "--top-k 2 was not raised to A's three expec
   exit 1
 }
 
-# Falsifier 1: flip A to superseded on a copy, so the status filter rather than
-# the fixture's shape is what must drop its query and path. The file stays put.
+# Falsifier 1: on a copy, flip A to superseded. The status filter alone has to
+# drop its query and its path, and the file stays put.
 cp -R "$bench_scope" "$bench_dir/scope"
 perl -pi -e 's/^status: accepted$/status: superseded/' "$bench_dir/scope/$bench_rec_a"
 grep -qx 'status: superseded' "$bench_dir/scope/$bench_rec_a" || {
