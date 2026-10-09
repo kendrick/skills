@@ -2159,6 +2159,29 @@ bash "$bench" "$bench_dir/badutf8" >"$bench_dir/badutf8.json" 2>"$bench_dir/badu
 }
 require_output "$(cat "$bench_dir/badutf8-err.txt")" "$bench_note1: unreadable ("
 
+# A record whose frontmatter opens and never closes must stop the run too.
+# Read as a non-record, it dropped out of the queries and the run exited 0.
+cp -R "$bench_scope" "$bench_dir/unclosed"
+python3 - "$bench_dir/unclosed/$bench_rec_b" <<'PYFIX'
+import sys
+p = sys.argv[1]
+lines = open(p, encoding="utf-8").read().splitlines(True)
+close = next(i for i, ln in enumerate(lines) if i > 0 and ln.strip() == "---")
+open(p, "w", encoding="utf-8").writelines(lines[:close] + lines[close + 1:])
+PYFIX
+grep -c '^---$' "$bench_dir/unclosed/$bench_rec_b" | grep -qx 1 || {
+  echo "the unclosed-frontmatter fixture still has its closing fence" >&2
+  exit 1
+}
+bench_rc=0
+bash "$bench" "$bench_dir/unclosed" >"$bench_dir/unclosed.json" 2>"$bench_dir/unclosed-err.txt" || bench_rc=$?
+[[ "$bench_rc" == 2 && ! -s "$bench_dir/unclosed.json" ]] || {
+  echo "bench-fixture exited $bench_rc on unterminated frontmatter (want 2 and no fixture)" >&2
+  cat "$bench_dir/unclosed-err.txt" >&2
+  exit 1
+}
+require_output "$(cat "$bench_dir/unclosed-err.txt")" "$bench_rec_b: frontmatter opens with --- but never closes"
+
 # The same holds for a record the OS won't open. chmod 000 doesn't block root.
 if [[ "$(id -u)" != 0 ]]; then
   cp -R "$bench_scope" "$bench_dir/lockedrec"

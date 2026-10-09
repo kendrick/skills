@@ -23,8 +23,9 @@
 # suite can run this script without a new test dependency.
 #
 # Exit 0 once a fixture is emitted (skipped records included). Exit 2 on a usage
-# error or an unreadable scope, note, record, or questions file, matching
-# collapse-vtt.sh, since this script produces an artifact and does not gate a run.
+# error, an unreadable scope, note, record, or questions file, or frontmatter that
+# opens and never closes, matching collapse-vtt.sh, since this script produces an
+# artifact and does not gate a run.
 set -euo pipefail
 
 # The Python program arrives on stdin via a quoted heredoc, so nothing in it is
@@ -141,7 +142,9 @@ def frontmatter(path):
             break
         block.append(ln)
     else:
-        return {}
+        # An opening fence with no close is a malformed record, not a non-record.
+        # Returning {} dropped its query and still exited 0 (PR #202 review).
+        die("%s: frontmatter opens with --- but never closes" % path)
     fm, i = {}, 0
     while i < len(block):
         m = KEY.match(block[i])
