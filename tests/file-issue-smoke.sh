@@ -671,7 +671,10 @@ run_rel() {
 # which names #2 in prose, in a bare Blocked by line inside a ``` error block,
 # and in a quoted Blocked by line. #20–#22 hold slot lines in a ``` fence
 # (one behind a ``` line that can't close the ```` opener), a ~~~ fence, and
-# code indented 4 spaces or a tab, and print nothing either.
+# code indented 4 spaces or a tab, and print nothing either. #23 names a
+# Parent under another owner. link-issues.py keeps that entry as text, so #23
+# prints nothing. #24's and #25's parents share the owner, #25's in another
+# case, so GitHub can link them and both report.
 cat > "$rel_tmp/page-a.json" <<'JSON'
 {"data":{"repository":{"issues":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[
 {"number":1,"body":"## Problem\n\nx\n\n**Blocked by:** #2\n","parent":null,"blockedBy":{"nodes":[]}},
@@ -684,7 +687,10 @@ cat > "$rel_tmp/page-a.json" <<'JSON'
 {"number":11,"body":"**Blocked by:** o/x#3\n","parent":null,"blockedBy":{"nodes":[{"number":3,"repository":{"nameWithOwner":"o/x"}}]}},
 {"number":20,"body":"## Problem\n\n```\n**Blocked by:** #2\n**Parent:** #9\n```\n\n````\n```\n**Blocked by:** #2\n````\n","parent":null,"blockedBy":{"nodes":[]}},
 {"number":21,"body":"## Problem\n\n~~~\n**Blocked by:** #2\n~~~\n","parent":null,"blockedBy":{"nodes":[]}},
-{"number":22,"body":"## Problem\n\n    **Blocked by:** #2\n\t**Parent:** #9\n","parent":null,"blockedBy":{"nodes":[]}}
+{"number":22,"body":"## Problem\n\n    **Blocked by:** #2\n\t**Parent:** #9\n","parent":null,"blockedBy":{"nodes":[]}},
+{"number":23,"body":"**Parent:** other/project#7\n","parent":null,"blockedBy":{"nodes":[]}},
+{"number":24,"body":"**Parent:** o/x#96\n","parent":null,"blockedBy":{"nodes":[]}},
+{"number":25,"body":"**Parent:** O/y#4\n","parent":null,"blockedBy":{"nodes":[]}}
 ]}}}}
 JSON
 cat > "$rel_tmp/want-a.txt" <<'OUT'
@@ -693,7 +699,9 @@ CONTRADICTED #3 blocked-by None
 DUPLICATE #4 blocked-by #2
 UNLINKED #5 parent #9
 DUPLICATE #11 blocked-by o/x#3
-11 open issues checked: 2 unlinked, 1 contradicted, 2 duplicate.
+UNLINKED #24 parent o/x#96
+UNLINKED #25 parent O/y#4
+14 open issues checked: 4 unlinked, 1 contradicted, 2 duplicate.
 OUT
 : > "$rel_tmp/gh.log"
 rc=0; FAKE_GH_PAGE="$rel_tmp/page-a.json" run_rel "$rel_script" --repo o/r > "$rel_tmp/out-a" || rc=$?

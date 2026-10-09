@@ -27,6 +27,12 @@ doesn't fail the run, so the hand-reconciled #57-#62 stay clean. An entry
 prints nothing. So do an issue with no slot line and a `None` over an empty
 native field.
 
+A `**Parent:**` entry under a different owner than the repo also prints
+nothing. GitHub won't link a sub-issue to a parent another owner holds, so
+link-issues.py leaves that entry in the body as text, and no native link
+exists to compare it with. A parent in another repo under the same owner
+still reports, because GitHub can link it.
+
 Only a line that starts with `**Blocked by:**` or `**Parent:**` counts. An issue
 number in a Problem section or a quoted error block is prose, not a
 relationship, and flagging it would train the reader to ignore the report.
@@ -172,6 +178,7 @@ def body_slots(body, fence_re):
 def check_issue(issue, home, parse_entry, fence_re):
     native = native_refs(issue)
     number = issue["number"]
+    home_owner = home.split("/", 1)[0].lower()
     found, contradicted = [], set()
     for slot, entries in body_slots(issue.get("body"), fence_re):
         for entry in entries:
@@ -182,6 +189,12 @@ def check_issue(issue, home, parse_entry, fence_re):
                 continue
             parsed = parse_entry(entry, home)
             if parsed is None:
+                continue
+            # Same owner test as resolve_entry in link-issues.py, the branch
+            # whose reason starts "a sub-issue needs a parent owned by".
+            # resolve_entry goes on to query GitHub, so the check copies the
+            # comparison rather than calling it.
+            if slot == "parent" and parsed[0].split("/", 1)[0].lower() != home_owner:
                 continue
             key = (parsed[0].lower(), parsed[1])
             if key in native[slot]:
