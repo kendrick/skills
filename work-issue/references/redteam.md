@@ -120,6 +120,14 @@ it. Where you edit a fixture to provoke a failure, show the changed bytes
 first, then run the suite. A provocation that never landed leaves the suite
 green and tells you the opposite of the truth.
 
+A scratch copy of this tree is not a sandbox until you cut it loose. In a
+linked worktree `.git` is a file pointing at the original repository, so
+`cp -R` copies the pointer, and any git command run inside the copy writes
+the real index. After `cp -R <tree> <copy>`, run `rm -f <copy>/.git` before
+anything else in the copy. `git archive HEAD | tar -x -C <copy>` also works,
+but the extracted tree has no repository root, so a script that walks up for
+`.git`, such as `check-waves.py validate`, runs its reduced checks there.
+
 Paste real output. A command's output you summarized is a command nobody ran.
 
 Your final message is exactly one fenced json block and nothing else.

@@ -54,6 +54,14 @@ tell you to commit your work: those docs were written for an agent working
 alone. The orchestrator commits each passing wave that changed files and
 owns every push.
 
+A scratch copy of this tree is not a sandbox until you cut it loose. In a
+linked worktree `.git` is a file pointing at the original repository, so
+`cp -R` copies the pointer, and any git command run inside the copy writes
+the real index. After `cp -R <tree> <copy>`, run `rm -f <copy>/.git` before
+anything else in the copy. `git archive HEAD | tar -x -C <copy>` also works,
+but the extracted tree has no repository root, so a script that walks up for
+`.git`, such as `check-waves.py validate`, runs its reduced checks there.
+
 Your final message is exactly one fenced json block and nothing else. It
 carries nine fields: the six the instructions below this preamble describe,
 plus `claims`, `left`, and `plan_concerns`. This shape replaces the six-field
