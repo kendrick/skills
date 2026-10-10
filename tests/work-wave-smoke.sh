@@ -278,6 +278,9 @@ require_text "$brief" "\`refused\` (work-issue's Step 0 refused the plan or the 
 # there to answer it.
 require_text "$brief" "\`--isolate\` is not optional: your siblings are"
 
+# A lane that ends its turn with background workers running hands back a wave nobody gated, as issue-165's lane did in #198.
+require_text "$brief" "Do not end your turn while any worker or repair dispatch you made is outstanding."
+
 # The seam that carries facts past the lane agent to the workers who would
 # otherwise relearn them. Losing it makes decision 3's row false.
 require_text "$brief" "divvy-up's {{CALLER_NOTES}} placeholder; append the current contents of"
@@ -367,6 +370,12 @@ refute_text "$skill" "--no-publish"
 # A description that lists the workflow becomes the shortcut the model takes
 # instead of reading the body.
 refute_text "$skill" "description: \"Step"
+
+# #198's second Non-Goal: Step 5 holds a stopped lane's question for the user.
+# The #198 orchestrator resumed its stopped lanes by hand with SendMessage, so
+# an automatic route would likely name it too.
+refute_text "$skill" "SendMessage"
+require_text "$skill" "The lane's question is held for the user with the wave's next message."
 
 # --- Maintenance ledger. A ledger without its section headings is prose nobody
 # can navigate under time pressure. ---

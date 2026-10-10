@@ -206,6 +206,18 @@ Pass the issue numbers in reverse order, to prove WAVE_ID is derived rather than
 
 **Pass condition:** Step 7 fetches, finds `origin/<DEFAULT>` differing from the green run's `base:` line, and runs Step 6 again before any lane is dispatched. The new `merge-test/<k>.md` records the new tip as its `base:`, and `gh pr list --state all` is empty until it goes green. Fails if a lane is dispatched with the full grant while the newest green `base:` differs from `origin/<DEFAULT>`, or if a merge-test record has no `base:` line.
 
+### 17. A Lane Waits for a Long-Running Background Worker
+
+**Setup:** a wave of two sandbox issues, each with a one-wave plan. Tell lane A's only wave-0 task to run `sleep 300` before it writes anything. Run it on a host whose `Agent` dispatch returns at once as a background agent, as Claude Code's does.
+
+**Commands:** run the wave and answer yes at Step 3. Once lane A returns, read `WAVE_DIR/reports/issue-<A>-build.json`, and list the `gated/` directory in A's `work-issue` RUN_DIR.
+
+**Pass condition:** A's report has `"status": "done"`, a `head` past A's `base_sha`, and a non-empty `files_changed`, and `gated/0-<task>` exists for the sleeping task. The report arrives after that worker's completion notice. Fails if A reports `stopped` with a question asking whether to re-invoke `work-issue`, or if A reports before its worker finishes.
+
+**Second case, a foreground worker:** the same wave on a host where an `Agent` dispatch blocks until the worker returns.
+
+**Pass condition:** the same report and the same marker. Fails if `status`, `files_changed`, or the `gated/` marker differ from the first case.
+
 ## What These Evals Do Not Cover
 
 Whether the coupling question was answered correctly is judgment. A scenario checks that an answer was recorded and acted on, not that `none` was right for a pair that actually coupled, and Scenario 10 passes on either branch for that reason. Cost has no measured delta: nothing here compares a wave against the same issues run by hand. The cross-run race is narrowed, not closed. Two waves invoked in the same second each pass Step 1 against the other's lanes, which have no RUN_DIR yet, and `work-issue` already records that race as open with no fix to validate. The withheld grant's honoring has no scenario of its own either: a lane that ignores it is a lane misbehaving on purpose, and Step 5's `pr` check is the only thing a scenario could observe.
