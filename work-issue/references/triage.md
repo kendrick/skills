@@ -6,8 +6,8 @@ Read this at Step 6 to score what came back from review, and again at Step 8 to 
 
 | State | Rule (relative to SINCE) |
 |---|---|
-| findings | any unresolved review thread whose root comment, or whose latest comment from a login other than the author, is newer than SINCE; or a `CHANGES_REQUESTED` review newer than SINCE; or a pull-request-level or issue comment newer than SINCE from a login other than the author that is not a bare approval |
-| cleared | no findings, and either an `APPROVED` review newer than SINCE, or a `+1` reaction on the pull request newer than SINCE from a login other than the author |
+| findings | any unresolved review thread whose root comment, or whose latest comment from a login other than the author, is newer than SINCE; or a `CHANGES_REQUESTED` review newer than SINCE; or a pull-request-level or issue comment newer than SINCE from a login other than the author that is not a bare approval or a review-status display |
+| cleared | no findings, and either an `APPROVED` review newer than SINCE, or a `+1` reaction on the pull request newer than SINCE from a login other than the author, or a reviewer comment opening with Codex's no-issues verdict |
 | pending | neither |
 
 SINCE is the last push, read from `RUN_DIR/pushed_at`, which Step 5 writes just before pushing. Everything above is scored against it, inclusively: an event stamped the same second as the cutoff counts, since both carry one-second precision. That cutoff is what makes the whole scheme usable.

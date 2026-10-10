@@ -88,6 +88,17 @@ BARE_APPROVALS = frozenset(
     )
 )
 
+# Codex posts two PR-level comments that are neither a finding nor a bare "yes".
+# The status comment opens with this marker, lands seconds after `@codex
+# review`, and is edited in place. The no-issues verdict opens with the second
+# string and is Codex's approval. Both scored `findings` on every wave-1 PR
+# (#199, #200, #201, #202), costing each lane a triage round (#204). Match the
+# body's opening, never its author: a finding comment can quote either string
+# and must still count, and a human comment opening with the marker is still a
+# status display.
+STATUS_MARKER = "<!-- codex-pull-request-review-summary -->"
+NO_ISSUES_OPENING = "Codex Review: Didn't find any major issues"
+
 _STRIPPABLE = "*_`~#>!.,:;?()[]\"' \t\n👍✅🎉"
 
 PROBE_FIELDS = (
@@ -682,6 +693,16 @@ def classify(bundle, since, author):
         if not newer(created):
             continue
         if normalize_login(comment["author"]) == author_key:
+            continue
+        opening = comment["body"].lstrip() if isinstance(comment["body"], str) else ""
+        if opening.startswith(STATUS_MARKER):
+            continue
+        if opening.startswith(NO_ISSUES_OPENING):
+            approving = True
+            lines.append(
+                f"comment approval by {comment['author']} {show_ts(created)} "
+                f"{show_or_unknown(comment.get('url'))}"
+            )
             continue
         if is_bare_approval(comment["body"]):
             continue
