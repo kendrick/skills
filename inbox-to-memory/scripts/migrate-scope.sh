@@ -352,7 +352,9 @@ for file in "$scope"/notes/*.md "$scope"/_memory/*/*.md "$scope"/entries/*.md; d
   if grep -q '^memory_type = ' "$work/props"; then
     order="$RECORD_KEY_ORDER"
     # A record nobody has re-confirmed was last confirmed the day it was written.
-    # Any later date would assert a review that never happened.
+    # A later date would claim a review the migrator has no evidence of; process
+    # mode supplies that evidence when an input confirms the record, and
+    # stamp-confirmed.sh then writes the date onto an accepted record.
     if ! grep -q '^last_confirmed = ' "$work/props"; then
       record_date="$(props_value "$work/props" date)"
       [[ -n "$record_date" ]] && extras="$extras;last_confirmed=$record_date"
