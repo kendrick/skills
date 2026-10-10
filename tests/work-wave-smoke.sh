@@ -318,8 +318,7 @@ for doc in "$skill" "$brief" "$merge_test"; do
   refute_text "$doc" "Generated with"
 done
 
-# --- The cut features, one per Deliberately Not Built row in the ledger,
-# except a row whose ledger entry says why nothing here can pin it.
+# --- The cut features, one per Deliberately Not Built row in the ledger.
 # They run against SKILL.md alone, because merge-test.md, the README, and the
 # ledger name `cp -R` and `git archive` in order to refuse them, and a refute
 # there would fail on the row that justifies it. ---
@@ -371,6 +370,12 @@ refute_text "$skill" "--no-publish"
 # A description that lists the workflow becomes the shortcut the model takes
 # instead of reading the body.
 refute_text "$skill" "description: \"Step"
+
+# #198's second Non-Goal: Step 5 holds a stopped lane's question for the user.
+# The #198 orchestrator resumed its stopped lanes by hand with SendMessage, so
+# an automatic route would likely name it too.
+refute_text "$skill" "SendMessage"
+require_text "$skill" "The lane's question is held for the user with the wave's next message."
 
 # --- Maintenance ledger. A ledger without its section headings is prose nobody
 # can navigate under time pressure. ---
