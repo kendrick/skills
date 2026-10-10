@@ -278,6 +278,9 @@ require_text "$brief" "\`refused\` (work-issue's Step 0 refused the plan or the 
 # there to answer it.
 require_text "$brief" "\`--isolate\` is not optional: your siblings are"
 
+# A lane that ends its turn with background workers running hands back a wave nobody gated, as issue-165's lane did in #198.
+require_text "$brief" "Do not end your turn while any worker or repair dispatch you made is outstanding."
+
 # The seam that carries facts past the lane agent to the workers who would
 # otherwise relearn them. Losing it makes decision 3's row false.
 require_text "$brief" "divvy-up's {{CALLER_NOTES}} placeholder; append the current contents of"
@@ -315,7 +318,8 @@ for doc in "$skill" "$brief" "$merge_test"; do
   refute_text "$doc" "Generated with"
 done
 
-# --- The cut features, one per Deliberately Not Built row in the ledger.
+# --- The cut features, one per Deliberately Not Built row in the ledger,
+# except a row whose ledger entry says why nothing here can pin it.
 # They run against SKILL.md alone, because merge-test.md, the README, and the
 # ledger name `cp -R` and `git archive` in order to refuse them, and a refute
 # there would fail on the row that justifies it. ---
