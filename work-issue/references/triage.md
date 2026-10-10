@@ -23,7 +23,7 @@ A reviewer that signals approval with a reaction is approving the push it was lo
 
 The `findings`-outranks-`cleared` order matters for the same reason. A reviewer can leave an approving reaction and a blocking thread in one pass, and a run that sees the reaction first stops looking.
 
-**Cleared counts an approving reaction or review from any login other than the pull request's author, newer than the last push.** There is no bot allowlist: a run that only accepts approval from a list of known logins ignores the human who actually looked, and a list of trusted bots goes stale the week somebody changes their CI.
+**Cleared counts an approving reaction or review, or a comment opening with Codex's no-issues verdict, from any login other than the pull request's author, newer than the last push.** The verdict is matched by the comment's opening, never by who posted it. There is no bot allowlist: a run that only accepts approval from a list of known logins ignores the human who actually looked, and a list of trusted bots goes stale the week somebody changes their CI.
 
 ## The `[bot]` rule
 
