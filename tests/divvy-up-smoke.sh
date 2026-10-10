@@ -247,6 +247,16 @@ require_text divvy-up/SKILL.md "Failed on \`fable\`"
 require_text divvy-up/references/worker-prompt.md "leave every git write to the orchestrator"
 require_text divvy-up/references/worker-prompt.md "outlive its own"
 
+# kendrick/skills#123: on PR #121 a reproducer's `cp -R` copy of the worktree
+# kept the `.git` pointer file and staged into the real index. A method
+# pinned without its reason gets routed around, so this pins both.
+require_text divvy-up/references/worker-prompt.md "run \`rm -f <copy>/.git\` before"
+require_text divvy-up/references/worker-prompt.md "a file pointing at the original repository"
+require_text divvy-up/SKILL.md "Take any other read of what the wave changed from \`git diff --stat HEAD\` rather than \`git status\`"
+# Deliberately Not Built: detecting a corrupted index at the gate. #123 chose
+# prevention, and this is the command such a gate would run.
+refute_text divvy-up/SKILL.md "git diff --cached"
+
 # kendrick/skills#116: six workers ran a whole-tree formatter at once. A
 # byte-identical rewrite leaves no diff, so the dispatch is the only guard.
 require_text divvy-up/references/worker-prompt.md "Run no command that writes files outside the ones you own"
@@ -671,5 +681,46 @@ fi
 # phrase a failure for that case would carry; the behavioral exit-0 assertion
 # above catches the rest.
 refute_text divvy-up/scripts/check-waves.py "no repo root"
+
+# kendrick/skills#123, end to end, following the issue's reproduction. The
+# `rm -f` step has to cut a `cp -R` copy loose, or the paragraph pinned above
+# teaches a method that still writes the real index.
+repro123="$tmp/repro-123"
+mkdir -p "$repro123"
+# g sets identity and turns off signing per command, so commits work on a
+# machine whose global config lacks a name or requires a GPG agent.
+g() { git -c user.name=divvy-smoke -c user.email=divvy-smoke@example.invalid -c commit.gpgsign=false "$@"; }
+g init -q "$repro123/main"
+echo one > "$repro123/main/f.txt"
+g -C "$repro123/main" add f.txt
+g -C "$repro123/main" commit -qm one
+g -C "$repro123/main" branch base
+g -C "$repro123/main" worktree add -q -b feature "$repro123/wt"
+echo two > "$repro123/wt/f.txt"
+g -C "$repro123/wt" commit -qam two
+
+cp -R "$repro123/wt" "$repro123/copy"
+rm -f "$repro123/copy/.git"
+# Without a ceiling, git in the copy walks up into any repository that
+# encloses the temp dir and runs the checkout against that repository instead.
+if (cd "$repro123/copy" && GIT_CEILING_DIRECTORIES="$(dirname "$tmp")" git checkout base -- . >/dev/null 2>&1); then
+  echo "kendrick/skills#123: git checkout inside a cp -R copy with .git removed must fail, since the copy is no longer a repository" >&2
+  exit 1
+fi
+cut_status="$(git -C "$repro123/wt" status --short)"
+[[ -z "$cut_status" ]] || {
+  echo "kendrick/skills#123: the source worktree must stay clean after git ran in its cut-loose copy, got: $cut_status" >&2
+  exit 1
+}
+
+# The control: the same copy with the pointer left in place must dirty the
+# source index, or the case above passes on a setup that never reproduced #123.
+cp -R "$repro123/wt" "$repro123/copy-pointer"
+(cd "$repro123/copy-pointer" && GIT_CEILING_DIRECTORIES="$(dirname "$tmp")" git checkout base -- . >/dev/null 2>&1) || true
+pointer_status="$(git -C "$repro123/wt" status --short)"
+[[ -n "$pointer_status" ]] || {
+  echo "kendrick/skills#123: a cp -R copy that keeps .git should write the source worktree's index; the reproduction no longer reproduces" >&2
+  exit 1
+}
 
 echo "divvy-up smoke: OK"
