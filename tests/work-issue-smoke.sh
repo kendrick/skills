@@ -193,6 +193,9 @@ require_text work-issue/references/worker-prompt.md "proved before anything read
 # that has no reason attached.
 require_text work-issue/references/worker-prompt.md "a file pointing at the original repository"
 require_text work-issue/references/worker-prompt.md "run \`rm -f <copy>/.git\` before"
+require_text work-issue/references/worker-prompt.md "\`git -C <copy> rev-parse --git-dir\` fails."
+require_text work-issue/references/worker-prompt.md "fails. The one other safe answer is"
+require_text work-issue/references/worker-prompt.md "outside every checkout and repeat the check."
 
 # An unattended run holds a push grant. The one thing it must never be able to
 # do is write over the branch everybody else builds on.
@@ -622,6 +625,24 @@ grep -Fq -- "After \`cp -R <tree> <copy>\`, run \`rm -f <copy>/.git\` before any
   exit 1
 }
 
+# PR #213 review: `rm -f` alone does not cut loose a copy made beneath another
+# checkout, because git walks up and finds that checkout. The block has to carry
+# the check that catches it.
+grep -Fq -- "Then confirm that \`git -C <copy> rev-parse --git-dir\` fails." <<<"$prompt_block" || {
+  echo "work-issue/references/redteam.md: the prompt block no longer tells the reproducer to confirm git -C <copy> rev-parse --git-dir fails" >&2
+  exit 1
+}
+# A plain checkout answers `.git`, and a reproducer that reads that as a
+# walk-up remakes the copy forever.
+grep -Fq -- "The one other safe answer is \`.git\`, which a plain checkout gives" <<<"$prompt_block" || {
+  echo "work-issue/references/redteam.md: the prompt block no longer names .git as the plain-checkout answer" >&2
+  exit 1
+}
+grep -Fq -- "make the copy again under a fresh \`mktemp -d\` outside every checkout and repeat the check." <<<"$prompt_block" || {
+  echo "work-issue/references/redteam.md: the prompt block no longer tells the reproducer to repeat the check on the remade copy" >&2
+  exit 1
+}
+
 # --- `reproduced_at` on a claim nothing ran for. Two claims land there. The
 # report contract sends a claim with no command to `UNVERIFIABLE`, which Step 4
 # item 5 routes to the pull request's "Not independently verified" section, and
@@ -707,10 +728,12 @@ refute_text work-issue/SKILL.md "Once the last wave in \`## Waves\` is committed
 
 # A scratch copy that reached the index leaves staged noise, and `git status`
 # reports it as work the round did. `git diff --stat HEAD` reads the working
-# tree instead. The refute holds the Deliberately Not Built row "Detecting a
-# corrupted index at the gate": #123 ruled out comparing the index to the
-# working tree after the fact, and the prompt paragraph prevents the write.
-require_text work-issue/SKILL.md "Read what a round changed with \`git diff --stat HEAD\` rather than \`git status\`"
+# tree instead, and `git ls-files --others --exclude-standard` lists the new
+# files it skips, which PR #213's review caught missing. The refute holds the
+# Deliberately Not Built row "Detecting a corrupted index at the gate": #123
+# ruled out comparing the index to the working tree after the fact, and the
+# prompt paragraph prevents the write.
+require_text work-issue/SKILL.md "Read what a round changed with \`git diff --stat HEAD\` plus \`git ls-files --others --exclude-standard\` rather than \`git status\`"
 refute_text work-issue/SKILL.md "git diff --cached"
 refute_text work-issue/README.md "Once the last wave is committed"
 

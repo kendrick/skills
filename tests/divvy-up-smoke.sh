@@ -252,7 +252,12 @@ require_text divvy-up/references/worker-prompt.md "outlive its own"
 # pinned without its reason gets routed around, so this pins both.
 require_text divvy-up/references/worker-prompt.md "run \`rm -f <copy>/.git\` before"
 require_text divvy-up/references/worker-prompt.md "a file pointing at the original repository"
-require_text divvy-up/SKILL.md "Take any other read of what the wave changed from \`git diff --stat HEAD\` rather than \`git status\`"
+require_text divvy-up/references/worker-prompt.md "\`git -C <copy> rev-parse --git-dir\` fails."
+require_text divvy-up/references/worker-prompt.md "fails. The one other safe answer is"
+require_text divvy-up/references/worker-prompt.md "outside every checkout and repeat the check."
+# PR #213 review: `git diff --stat HEAD` never lists an untracked file, so a
+# wave whose only output is a new file would read as unchanged.
+require_text divvy-up/SKILL.md "Take any other read of what the wave changed from \`git diff --stat HEAD\` plus the untracked paths the manifest comparison above finds, rather than \`git status\`"
 # Deliberately Not Built: detecting a corrupted index at the gate. #123 chose
 # prevention, and this is the command such a gate would run.
 refute_text divvy-up/SKILL.md "git diff --cached"
@@ -720,6 +725,45 @@ cp -R "$repro123/wt" "$repro123/copy-pointer"
 pointer_status="$(git -C "$repro123/wt" status --short)"
 [[ -n "$pointer_status" ]] || {
   echo "kendrick/skills#123: a cp -R copy that keeps .git should write the source worktree's index; the reproduction no longer reproduces" >&2
+  exit 1
+}
+
+# PR #213 review: `rm -f` does not cut loose a copy made beneath another
+# checkout, because git walks up from the copy and finds that checkout. The
+# worker prompt's `rev-parse --git-dir` check catches this, so the check has to
+# succeed on a copy nested under the main checkout and fail on one outside it.
+mkdir -p "$repro123/main/.scratch"
+cp -R "$repro123/wt" "$repro123/main/.scratch/copy"
+rm -f "$repro123/main/.scratch/copy/.git"
+GIT_CEILING_DIRECTORIES="$(dirname "$tmp")" git -C "$repro123/main/.scratch/copy" rev-parse --git-dir >/dev/null 2>&1 || {
+  echo "kendrick/skills#123: git -C <copy> rev-parse --git-dir must succeed on a copy nested under the main checkout, since git finds that checkout" >&2
+  exit 1
+}
+if GIT_CEILING_DIRECTORIES="$(dirname "$tmp")" git -C "$repro123/copy" rev-parse --git-dir >/dev/null 2>&1; then
+  echo "kendrick/skills#123: git -C <copy> rev-parse --git-dir must fail on a cut-loose copy outside every checkout" >&2
+  exit 1
+fi
+
+# A plain checkout's `.git` is a directory, so `rm -f` leaves it and the copy
+# keeps a repository of its own. The worker prompt calls `.git` the one other
+# safe answer, so a worker copying a plain checkout doesn't read it as a walk-up
+# and remake the copy forever.
+g init -q "$repro123/plain"
+echo one > "$repro123/plain/f.txt"
+g -C "$repro123/plain" add f.txt
+g -C "$repro123/plain" commit -qm one
+cp -R "$repro123/plain" "$repro123/plain-copy"
+if rm -f "$repro123/plain-copy/.git" 2>/dev/null; then
+  echo "kendrick/skills#123: rm -f on a plain checkout's .git directory should fail" >&2
+  exit 1
+fi
+[[ -d "$repro123/plain-copy/.git" ]] || {
+  echo "kendrick/skills#123: rm -f should leave a plain checkout copy's .git directory in place" >&2
+  exit 1
+}
+plain_gitdir="$(GIT_CEILING_DIRECTORIES="$(dirname "$tmp")" git -C "$repro123/plain-copy" rev-parse --git-dir 2>&1)"
+[[ "$plain_gitdir" == ".git" ]] || {
+  echo "kendrick/skills#123: git -C <copy> rev-parse --git-dir on a plain checkout copy must print exactly .git, got: $plain_gitdir" >&2
   exit 1
 }
 

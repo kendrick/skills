@@ -121,7 +121,7 @@ Three checks with a format pass between the first two, then a route.
    divvy-up/scripts/check-waves.py owners <PLAN> --wave N
    ```
 
-   Derive the paths against WAVE_BASE, not against the working tree as a whole, and the same way whether or not COMMIT is set: `git diff --name-only <WAVE_BASE>` for tracked content, plus every untracked path whose `git hash-object` differs from the wave's manifest, is missing from it, or has since disappeared. Reading the whole dirty tree instead fails wave 2 for every path wave 1 legitimately owned. Take any other read of what the wave changed from `git diff --stat HEAD` rather than `git status`, because a worker's scratch copy that reached the shared index leaves staged noise that `git status` reports as uncommitted work, while `git diff --stat HEAD` reads the working tree.
+   Derive the paths against WAVE_BASE, not against the working tree as a whole, and the same way whether or not COMMIT is set: `git diff --name-only <WAVE_BASE>` for tracked content, plus every untracked path whose `git hash-object` differs from the wave's manifest, is missing from it, or has since disappeared. Reading the whole dirty tree instead fails wave 2 for every path wave 1 legitimately owned. Take any other read of what the wave changed from `git diff --stat HEAD` plus the untracked paths the manifest comparison above finds, rather than `git status`, because a worker's scratch copy that reached the shared index leaves staged noise that `git status` reports as uncommitted work, while `git diff --stat HEAD` reads the working tree and skips new files.
 
    A path no task in the wave owns fails the run. That is a write into territory nobody claimed, and it is invisible in a passing test suite.
 
