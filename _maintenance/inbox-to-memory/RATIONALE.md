@@ -4,11 +4,13 @@ Evidence tiers: **[E]** measured or observed in a real run, **[P]** practitioner
 
 ## Where This Came From
 
-This ledger covers `scripts/collapse-vtt.sh` (rows 1–8) and `scripts/bench-fixture.sh` (rows 9–16), and nothing else. The skill predates the rationale bar in `AGENTS.md`, so the rest of it is unledgered; a later change to another part of the skill is the moment to add rows for that part rather than backfilling here.
+This ledger covers `scripts/collapse-vtt.sh` (rows 1–8), `scripts/bench-fixture.sh` (rows 9–16), and `scripts/migrate-scope.sh` (row 17), and nothing else. The skill predates the rationale bar in `AGENTS.md`, so the rest of it is unledgered; a later change to another part of the skill is the moment to add rows for that part rather than backfilling here.
 
 The collapser turns a WebVTT file into speaker turns, and its output becomes a note's `## Raw Content` zone. Phase 4 then deletes the source file, on the stated grounds that the raw zone preserved it. That chain is what makes a quiet defect here expensive: whatever the collapser emits is the only surviving record, and three P0s (#78, #84, #85) each ended in a note that read as correct while the original was gone.
 
 The bench fixture came from #191. Nothing measured whether a scope's memory helps retrieval, so every retrieval change was a guess. Labeling is the step that usually stalls a retrieval eval, but here the labels already exist: every record names the notes it came from in `source_refs`. The script turns each `accepted` record into one `qmd bench` query whose expected files are the record and the notes it cites. A bad label here yields a recall number that looks meaningful and is wrong, and rows 10 and 11 guard against that.
+
+The migrator moves a v1 scope onto schema 2, and `last_confirmed` is the one field it must fill in without any evidence about the record. #34 found its code comment giving the wrong reason for the default, so row 17 records the right one.
 
 ## Decision Ledger
 
@@ -30,6 +32,7 @@ The bench fixture came from #191. Nothing measured whether a scope's memory help
 | 14 | Usage errors and a malformed `--questions` file exit 2, not the validator convention's 3. | The script produces an artifact and gates nothing, so the 0/1/3 validator convention doesn't apply. 2 matches the sibling `collapse-vtt.sh`. | [C] |
 | 15 | The frontmatter reader drops an inline YAML comment, meaning a `#` outside quotes with whitespace before it, from scalars, inline lists, and block-list items, and skips full-line comments inside a block list ([PR #202 review](https://github.com/kendrick/skills/pull/202#discussion_r4226217743)). | The review ran the script on a record with `status: accepted # approved` and got exit 0 with zero queries. The comment stayed in the value, the exact `accepted` match failed, and the record vanished without a stderr line. A trailing comment also hid an inline `source_refs` list, since the value no longer ended in `]`. Requiring the whitespace keeps URL fragments intact. A quote opens a value only at its start, so the apostrophe in `Bob's` stays plain text. A mutant with the stripping disabled turns the smoke suite red. | [E] |
 | 16 | A note or record under `notes/` or `_memory/` that can't be read or decoded as UTF-8 stops the run with exit 2 instead of being skipped ([PR #202 review](https://github.com/kendrick/skills/pull/202#discussion_r4226217750)). | The review put invalid UTF-8 in a cited note and got exit 0 with an empty fixture. Skipping the note left the record's ref dangling, so the record dropped out as well, and the output looked like a complete fixture. That is the partial label set row 11 refuses, and exit 2 is what row 14 already gives an unreadable scope. A mutant that restores the skip turns the smoke suite red. | [E] |
+| 17 | The migrator sets a record's missing `last_confirmed` to the record's own `date`, never to the migration date or a later one (#15 added the default, #27 the stamper, #34 the corrected reason). | A migration is not a review. At migration time the migrator has no evidence that anyone re-confirmed the record, so a later date would claim a review nobody did, and the field exists so stale records stay visible. Process mode supplies that evidence later: it judges in `SKILL.md` phase 2.5 that an input confirms a record, and `stamp-confirmed.sh` then writes the confirming note's date onto an accepted record. | [P] |
 
 ## Deliberately Not Built
 
