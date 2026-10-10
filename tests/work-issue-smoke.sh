@@ -692,8 +692,8 @@ require_text _maintenance/work-issue/RATIONALE.md "Excluding the claim's path fr
 # `findings` outranks `cleared` for a reason: a reviewer can leave an approving
 # reaction and a blocking thread in one pass. A dropped row here is a state the
 # triage step can no longer reach.
-require_text work-issue/SKILL.md "| findings | any unresolved review thread whose root comment, or whose latest comment from a login other than the author, is newer than SINCE; or a \`CHANGES_REQUESTED\` review newer than SINCE; or a pull-request-level or issue comment newer than SINCE from a login other than the author that is not a bare approval or a review-status display |"
-require_text work-issue/SKILL.md "| cleared | no findings, and either an \`APPROVED\` review newer than SINCE, or a \`+1\` reaction on the pull request (\`gh api repos/{owner}/{repo}/issues/<pr>/reactions\`) newer than SINCE from a login other than the author, or a reviewer comment opening with Codex's no-issues verdict |"
+require_text work-issue/SKILL.md "| findings | any unresolved review thread whose root comment, or whose latest comment from a login other than the author, is newer than SINCE; or a \`CHANGES_REQUESTED\` review newer than SINCE; or a pull-request-level or issue comment newer than SINCE from a login other than the author that is not a bare approval and does not open with Codex's review-summary marker comment or its no-issues verdict |"
+require_text work-issue/SKILL.md "| cleared | no findings, and either an \`APPROVED\` review newer than SINCE, or a \`+1\` reaction on the pull request (\`gh api repos/{owner}/{repo}/issues/<pr>/reactions\`) newer than SINCE from a login other than the author, or a comment newer than SINCE from a login other than the author that opens with Codex's no-issues verdict |"
 require_text work-issue/SKILL.md "| pending | neither |"
 
 # Marking a thread resolved is the reviewer's own signal that somebody read
