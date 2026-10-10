@@ -67,7 +67,7 @@ jira-refine/
 
 ## Gotchas
 
-- **Every design choice here is reasoned, not measured.** The ledger's rows carry `[P]` or `[C]` until a live run bumps one to `[E]`, and that run is tracked in `EVALS.md`, not yet done.
+- **Most design choices here are reasoned, not measured.** The ledger's few `[E]` rows were each measured by a bug that actually happened. Every other row carries `[P]` or `[C]` until a live run bumps it, and none of the `EVALS.md` scenarios that would do that has run yet.
 - **It won't fire on its own.** A misfire here writes into a client's tracker, which costs somebody's team a real conversation; a missed trigger costs you one typed word. Type its name.
 - **Number words only go up to 9999.** A key spoken as a larger number won't parse. Say the digits instead, or spell the key.
 - **The jira-cli transport is the thinner path.** It can't discover custom fields at all, its undocumented `--custom` flag on edit means Goal may still fall back to the description block even with `goal_cli_name` set, and its flags are pinned by the test fixture rather than by any particular `jira` release.

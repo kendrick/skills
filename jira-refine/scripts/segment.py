@@ -34,11 +34,11 @@ underlying data instead, for a human or an agent to inspect before it is
 turned into prose.
 
 Exit codes: 0 success; 1 no project key was ever heard as a boundary, so
-there is nothing to stage; 4 the transcript names no ticket key at all,
-typed or spoken, which is a planning session rather than a refinement one;
-3 usage, an unreadable transcript or config, a
+there is nothing to stage; 3 usage, an unreadable transcript or config, a
 config missing `projects`, or a Python below the 3.11 floor `tomllib`
-needs. Argparse supplies 2 for a mistyped flag.
+needs; 4 the transcript names no ticket key at all, typed or spoken, which
+is a planning session rather than a refinement one. Argparse supplies 2 for
+a mistyped flag.
 
 Stdlib only, so the skill stays copy-in portable.
 """
