@@ -1084,6 +1084,17 @@ for check in frontmatter-fences frontmatter-parses frontmatter-budget \
   require_table_row "$contracts" "$check"
 done
 
+# The pin has to fail in the case #31 found: the row gone and the prose sentence
+# under the table still naming the check. Nested in `$not_a_scope` so it
+# rides that cleanup rather than adding a second EXIT trap.
+row_pin_dir="$(mktemp -d "$not_a_scope/row-pin.XXXXXX")"
+grep -Ev '^\| `frontmatter-key-domain` +\|' "$contracts" >"$row_pin_dir/contracts.md"
+require_text "$row_pin_dir/contracts.md" "frontmatter-key-domain"
+if (require_table_row "$row_pin_dir/contracts.md" "frontmatter-key-domain") 2>/dev/null; then
+  echo "require_table_row passed on a contract whose frontmatter-key-domain row is gone" >&2
+  exit 1
+fi
+
 # Both halves of the disagreement travel together, and the contract says why.
 require_text "$contracts" "| claims: <what the record says>"
 require_text "$heuristics" "Flag it only when the statements can't both be true."
