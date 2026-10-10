@@ -36,7 +36,9 @@ turned into prose.
 Exit codes: 0 success; 1 no project key was ever heard as a boundary, so
 there is nothing to stage; 3 usage, an unreadable transcript or config, a
 config missing `projects`, or a Python below the 3.11 floor `tomllib`
-needs. Argparse supplies 2 for a mistyped flag.
+needs; 4 the transcript names no ticket key at all, typed or spoken, which
+is a planning session rather than a refinement one. Argparse supplies 2 for
+a mistyped flag.
 
 Stdlib only, so the skill stays copy-in portable.
 """
@@ -435,6 +437,29 @@ def build_project_regex(project, aliases):
     prefix_pattern = "|".join(_flexible(f) for f in forms)
     pattern = rf"\b(?:{prefix_pattern})\b{_SEP}\b(?P<num>{_NUMBER_PART})\b"
     return re.compile(pattern, re.IGNORECASE)
+
+
+# Typed key shape, case-sensitive so prose like "e-12" or "covid-19" stays out.
+TYPED_KEY_RE = re.compile(r"\b[A-Z][A-Z0-9]+-[0-9]+\b")
+
+
+def names_any_key(turns, cfg):
+    """Exit 1 and exit 4 need different advice (#87). Keys that were spoken
+    but never opened a segment point at the config's `projects` and
+    `spoken_aliases`; a transcript with no key-shaped token at all is a
+    planning session, where tickets are made in the call, and no config edit
+    helps. A configured project or alias plus a number counts even when it
+    never qualified as a boundary, and a typed key counts even when its
+    prefix is not configured."""
+    project_regexes = [
+        build_project_regex(p, cfg["spoken_aliases"].get(p, [])) for p in cfg["projects"]
+    ]
+    for turn in turns:
+        if TYPED_KEY_RE.search(turn.text):
+            return True
+        if any(rx.search(turn.text) for rx in project_regexes):
+            return True
+    return False
 
 
 def _concatenate_digits(tokens):
@@ -987,6 +1012,14 @@ def main(argv=None):
     min_words = args.min_words if args.min_words is not None else cfg["min_segment_words"]
     result = segment_transcript(turns, has_clock, cfg, min_words)
     if result is None:
+        if not names_any_key(turns, cfg):
+            sys.stderr.write(
+                "segment: the transcript names no ticket keys at all, typed or spoken; this "
+                "looks like a planning session, where tickets are made in the call rather than "
+                "discussed. jira-refine stages refinement of existing tickets. Draft the new "
+                "work as Gaps to file instead.\n"
+            )
+            return 4
         sys.stderr.write(
             "segment: no project key was ever heard as a boundary; check `projects` and "
             "`spoken_aliases` in the config\n"

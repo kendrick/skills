@@ -1,0 +1,20 @@
+[00:00:00] Dan: Okay, let's use this hour to plan the next quarter of platform work and figure out what we even need to build.
+[00:00:20] Priya: Sounds good. I think the biggest gap is the ingest outage from last week, we have no alerting on it at all.
+[00:00:50] Dan: Right, we need one for the ingest outage, a ticket that covers alerting and a runbook so on-call knows what to do.
+[00:01:30] Priya: Agreed. That would be a ticket on its own, and I'd keep it separate from the retry work.
+[00:02:10] Sam: Speaking of retries, the exporter gives up after one failure. We should write that up as well.
+[00:02:45] Dan: Yes, that's a second ticket. Let's say the goal is three retries with backoff.
+[00:03:20] Priya: Then there's the dashboard for queue depth. Nobody owns it right now and it keeps going stale.
+[00:03:55] Sam: That would be a ticket too, probably small, maybe a day of work.
+[00:04:30] Dan: What about the permissions cleanup? Half the service accounts have admin they don't need.
+[00:05:05] Priya: We need one for that, and it probably needs a spike first to find out what actually breaks.
+[00:05:40] Sam: Let's make that a spike, then, and time box it to two days.
+[00:06:15] Dan: Fine. Next, the onboarding docs are out of date and new hires keep asking the same questions.
+[00:06:50] Priya: That's a ticket for the docs refresh, and I can take the first pass.
+[00:07:25] Sam: I'd also like a ticket to track the flaky integration tests, they fail about one run in ten.
+[00:08:00] Dan: Good, add that to the list. Anything about cost?
+[00:08:30] Priya: The staging cluster runs all weekend with nobody using it. We should file something to shut it down on a schedule.
+[00:09:05] Sam: Yes, a ticket for the scheduled shutdown, and it saves real money.
+[00:09:40] Dan: Okay, that's six new pieces of work. Priya, can you write them up after this call?
+[00:10:10] Priya: Will do. I'll draft them tonight and share them in the channel.
+[00:10:40] Dan: Great, thanks everyone, that's all for today.

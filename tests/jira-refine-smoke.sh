@@ -53,6 +53,8 @@ require_file tests/fixtures/jira-refine/README.md
 require_file tests/fixtures/jira-refine/refinement.vtt
 require_file tests/fixtures/jira-refine/refinement.srt
 require_file tests/fixtures/jira-refine/refinement.txt
+require_file tests/fixtures/jira-refine/planning.txt
+require_file tests/fixtures/jira-refine/unmatched-keys.txt
 require_file tests/fixtures/jira-refine/jira-refine.toml
 require_file tests/fixtures/jira-refine/issues.json
 require_file tests/fixtures/jira-refine/staging-good.md
@@ -248,6 +250,12 @@ for f in jira-refine/SKILL.md jira-refine/README.md jira-refine/references/*.md 
   refute_text "$f" "manage-issue"
 done
 
+# A Gaps-only staging file for a session with no keys. Both `check-staging.py`
+# and apply assume entries keyed to real tickets, so a drafts-only file is a
+# second staging grammar. Exit 4 hands the drafting to the agent instead.
+refute_text jira-refine/scripts/segment.py "--gaps-only"
+require_text jira-refine/SKILL.md "Exit 4 means the transcript names no ticket keys at all, typed or spoken."
+
 # --- Maintenance and the root README. ---------------------------------------
 
 require_text _maintenance/jira-refine/RATIONALE.md "## Where This Came From"
@@ -326,6 +334,44 @@ if any(v != values[0] for v in values):
 if ("PLAT-77", 1, False) not in values[0] or ("PROJ-455", 0, True) not in values[0]:
     sys.exit(f"PLAT-77 should be revisited and PROJ-455 long: {values[0]}")
 ' "$tmp/segments-vtt.json" "$tmp/segments-srt.json" "$tmp/segments-txt.json" || exit 1
+
+# A planning session names no keys at all, and telling that user to edit
+# `spoken_aliases` sends them hunting for a prefix nobody said. Exit 4 has to
+# name the real cause and keep the alias advice out of it.
+set +e
+planning_err="$(python3 "$segment" "$fixtures/planning.txt" --config "$config" \
+  --session-date 2026-09-07 2>&1 >/dev/null)"
+planning_status=$?
+set -e
+[[ "$planning_status" == "4" ]] || {
+  echo "planning.txt should exit 4, got: $planning_status" >&2
+  exit 1
+}
+grep -Fq "this looks like a planning session" <<<"$planning_err" || {
+  echo "the no-keys exit did not name a planning session: $planning_err" >&2
+  exit 1
+}
+if grep -Fq "spoken_aliases" <<<"$planning_err"; then
+  echo "the no-keys exit must not send the user to spoken_aliases: $planning_err" >&2
+  exit 1
+fi
+
+# Keys that are there but never heard as a boundary are an alias gap, and
+# that message is the user's only pointer to the config fix. Exit 4 must not
+# swallow this case.
+set +e
+unmatched_err="$(python3 "$segment" "$fixtures/unmatched-keys.txt" --config "$config" \
+  --session-date 2026-09-07 2>&1 >/dev/null)"
+unmatched_status=$?
+set -e
+[[ "$unmatched_status" == "1" ]] || {
+  echo "unmatched-keys.txt should exit 1, got: $unmatched_status" >&2
+  exit 1
+}
+grep -Fq 'check `projects` and `spoken_aliases`' <<<"$unmatched_err" || {
+  echo "the unmatched-keys exit lost its config pointer: $unmatched_err" >&2
+  exit 1
+}
 
 python3 "$staging" validate "$fixtures/staging-good.md" >/dev/null || {
   echo "staging-good.md should validate" >&2

@@ -34,9 +34,11 @@ jira-refine/scripts/segment.py TRANSCRIPT --config CONFIG --session-date SESSION
 
 Exit 1 means no project key was ever heard as a boundary. Show the user the config's `projects` list and ask what prefixes the room actually says out loud and what they sound like — "the plat board", "platform dash ninety one" — then add them under `[spoken_aliases]` and rerun. A missing alias costs a whole segment silently.
 
+Exit 4 means the transcript names no ticket keys at all, typed or spoken. That is a planning session, where tickets are made in the call rather than discussed, and stage mode has nothing to refine. Delete the empty STAGING the redirect created and skip Steps 2 through 4. Read the transcript yourself, draft each new-work moment in the Gaps to file shape Step 3 defines—`file-issue`'s task shape plus the line saying where filing it would land—and show the user those drafts. They are the run's deliverable.
+
 `segment.py` writes the skeleton and nothing else, so the shape line is yours to compose. Rerun the same command with `--json` appended and read `stats` (`boundaries`, `revisited_total`, `mentioned_in_passing`, `median_duration_seconds`) and `preamble.turns`, then print one line like `4 segments, 1 revisited, 1 mentioned in passing, 2 preamble turns; median 1m40s`. That line is the user's correction point: it is where they notice the session they remember had six tickets in it.
 
-**Done when:** STAGING exists and the shape line has been printed.
+**Done when:** STAGING exists and the shape line has been printed, or, on exit 4, no STAGING file remains and every new-work moment in the transcript has a draft the user has seen.
 
 ### Step 2 — Fill each entry from its excerpt
 
