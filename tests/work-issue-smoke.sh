@@ -692,8 +692,8 @@ require_text _maintenance/work-issue/RATIONALE.md "Excluding the claim's path fr
 # `findings` outranks `cleared` for a reason: a reviewer can leave an approving
 # reaction and a blocking thread in one pass. A dropped row here is a state the
 # triage step can no longer reach.
-require_text work-issue/SKILL.md "| findings | any unresolved review thread whose root comment, or whose latest comment from a login other than the author, is newer than SINCE; or a \`CHANGES_REQUESTED\` review newer than SINCE; or a pull-request-level or issue comment newer than SINCE from a login other than the author that is not a bare approval |"
-require_text work-issue/SKILL.md "| cleared | no findings, and either an \`APPROVED\` review newer than SINCE, or a \`+1\` reaction on the pull request (\`gh api repos/{owner}/{repo}/issues/<pr>/reactions\`) newer than SINCE from a login other than the author |"
+require_text work-issue/SKILL.md "| findings | any unresolved review thread whose root comment, or whose latest comment from a login other than the author, is newer than SINCE; or a \`CHANGES_REQUESTED\` review newer than SINCE; or a pull-request-level or issue comment newer than SINCE from a login other than the author that is not a bare approval or a review-status display |"
+require_text work-issue/SKILL.md "| cleared | no findings, and either an \`APPROVED\` review newer than SINCE, or a \`+1\` reaction on the pull request (\`gh api repos/{owner}/{repo}/issues/<pr>/reactions\`) newer than SINCE from a login other than the author, or a reviewer comment opening with Codex's no-issues verdict |"
 require_text work-issue/SKILL.md "| pending | neither |"
 
 # Marking a thread resolved is the reviewer's own signal that somebody read
@@ -1378,6 +1378,54 @@ set -e
   echo "a malformed review bundle should exit 3, got: $bad_bundle_status" >&2
   exit 1
 }
+
+# #204: Codex's review-summary comment and its no-issues verdict both scored
+# `findings`, costing every wave-1 lane (#199–#202) a triage round. The bundles
+# come from #202's first poll and #200's verdict comment, run against #202's
+# real SINCE. `unmarked` and `human-author` are the issue's falsifiers: the
+# marker alone decides, so dropping it scores `findings` and a human posting it
+# still scores nothing. `finding-comment` is a Codex comment that quotes both
+# openings mid-body, so neither an author rule nor a substring match passes it.
+pr_bundles_dir=tests/fixtures/work-issue/pr-bundles
+declare -a codex_comment_cases=(
+  "codex-status-only.json:pending"
+  "codex-status-plus-reaction.json:cleared"
+  "codex-no-issues.json:cleared"
+  "codex-status-unmarked.json:findings"
+  "codex-status-human-author.json:pending"
+  "codex-finding-comment.json:findings"
+)
+for case in "${codex_comment_cases[@]}"; do
+  fixture="${case%%:*}"
+  expected="${case##*:}"
+  set +e
+  codex_out="$(python3 "$run_state" review 202 --since 2026-10-09T02:55:20Z --author kendrick \
+    --input "$pr_bundles_dir/$fixture" 2>&1)"
+  codex_status=$?
+  set -e
+  [[ "$codex_status" == "0" && "$(head -1 <<<"$codex_out")" == "$expected" ]] || {
+    echo "run-state.py review should score $fixture as $expected, got: $codex_status: $codex_out" >&2
+    exit 1
+  }
+done
+
+# The no-issues verdict is the only comment that clears on its own, so its line
+# has to name it; a bare `cleared` would leave triage unable to say why.
+grep -Fq "comment approval by chatgpt-codex-connector[bot] 2026-10-09T03:01:33Z https://github.com/kendrick/skills/pull/200#issuecomment-6073368317" \
+  <<<"$(python3 "$run_state" review 202 --since 2026-10-09T02:55:20Z --author kendrick --input "$pr_bundles_dir/codex-no-issues.json")" || {
+  echo "a no-issues verdict should print a comment approval line with its URL" >&2
+  exit 1
+}
+
+# Ledger row 143 keys the rule on the comment's opening, never its author, and
+# #204's Non-Goals keep the summary table's Status column out of scoring. Both
+# are Deliberately Not Built rows, and these refutes pin them. A Status reader
+# changes a score only by acting on `Completed`, since `Running` already scores
+# as nothing.
+refute_text work-issue/scripts/run-state.py '== "chatgpt-codex-connector"'
+refute_text work-issue/scripts/run-state.py "Completed"
+require_text _maintenance/work-issue/RATIONALE.md "Keying the status and no-issues rules on the comment's author"
+require_text _maintenance/work-issue/RATIONALE.md "Pinned by a \`refute_text\` on \`Completed\` in \`scripts/run-state.py\`"
 
 # One case per row of the Resume table, in the table's own order, because first
 # match wins. Rows 4, 5, and 6 all resume at Step 0, and rows 1 and 18 both end
