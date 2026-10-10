@@ -186,6 +186,17 @@ refute_text work-issue/SKILL.md 'description: "Step 1'
 require_text work-issue/SKILL.md "proved before anything reads a result"
 require_text work-issue/references/worker-prompt.md "proved before anything reads a result"
 
+# On PR #121 a red-team reproducer ran git inside a `cp -R` copy of the issue
+# worktree and staged its fixture edits into the real index. A linked
+# worktree's `.git` is a pointer file, so the copy was never a sandbox. The
+# prompt carries the reason with the fix, because a worker routes around a rule
+# that has no reason attached.
+require_text work-issue/references/worker-prompt.md "a file pointing at the original repository"
+require_text work-issue/references/worker-prompt.md "run \`rm -f <copy>/.git\` before"
+require_text work-issue/references/worker-prompt.md "\`git -C <copy> rev-parse --git-dir\` fails."
+require_text work-issue/references/worker-prompt.md "fails. The one other safe answer is"
+require_text work-issue/references/worker-prompt.md "outside every checkout and repeat the check."
+
 # An unattended run holds a push grant. The one thing it must never be able to
 # do is write over the branch everybody else builds on.
 require_text work-issue/SKILL.md "never the default branch"
@@ -606,6 +617,32 @@ grep -Fq -- "\`reproduced_at\` is null wherever no command ran, and two claims r
   exit 1
 }
 
+# The reproducer is told to edit a fixture to provoke a failure, which makes it
+# the worker most likely to `cp -R` the tree first. PR #121's corrupted index
+# came from one. The reproducer reads only the block, so the pin sits there.
+grep -Fq -- "After \`cp -R <tree> <copy>\`, run \`rm -f <copy>/.git\` before anything else in the copy." <<<"$prompt_block" || {
+  echo "work-issue/references/redteam.md: the prompt block no longer tells the reproducer to cut a cp -R scratch copy loose with rm -f <copy>/.git" >&2
+  exit 1
+}
+
+# PR #213 review: `rm -f` alone does not cut loose a copy made beneath another
+# checkout, because git walks up and finds that checkout. The block has to carry
+# the check that catches it.
+grep -Fq -- "Then confirm that \`git -C <copy> rev-parse --git-dir\` fails." <<<"$prompt_block" || {
+  echo "work-issue/references/redteam.md: the prompt block no longer tells the reproducer to confirm git -C <copy> rev-parse --git-dir fails" >&2
+  exit 1
+}
+# A plain checkout answers `.git`, and a reproducer that reads that as a
+# walk-up remakes the copy forever.
+grep -Fq -- "The one other safe answer is \`.git\`, which a plain checkout gives" <<<"$prompt_block" || {
+  echo "work-issue/references/redteam.md: the prompt block no longer names .git as the plain-checkout answer" >&2
+  exit 1
+}
+grep -Fq -- "make the copy again under a fresh \`mktemp -d\` outside every checkout and repeat the check." <<<"$prompt_block" || {
+  echo "work-issue/references/redteam.md: the prompt block no longer tells the reproducer to repeat the check on the remade copy" >&2
+  exit 1
+}
+
 # --- `reproduced_at` on a claim nothing ran for. Two claims land there. The
 # report contract sends a claim with no command to `UNVERIFIABLE`, which Step 4
 # item 5 routes to the pull request's "Not independently verified" section, and
@@ -688,6 +725,16 @@ require_text work-issue/SKILL.md "**Done when:** every wave in \`## Waves\` sett
 require_text work-issue/README.md "so its markers alone move the run on"
 refute_text work-issue/SKILL.md "Step 2 continues until every wave in \`## Waves\` is committed"
 refute_text work-issue/SKILL.md "Once the last wave in \`## Waves\` is committed"
+
+# A scratch copy that reached the index leaves staged noise, and `git status`
+# reports it as work the round did. `git diff --stat HEAD` reads the working
+# tree instead, and `git ls-files --others --exclude-standard` lists the new
+# files it skips, which PR #213's review caught missing. The refute holds the
+# Deliberately Not Built row "Detecting a corrupted index at the gate": #123
+# ruled out comparing the index to the working tree after the fact, and the
+# prompt paragraph prevents the write.
+require_text work-issue/SKILL.md "Read what a round changed with \`git diff --stat HEAD\` plus \`git ls-files --others --exclude-standard\` rather than \`git status\`"
+refute_text work-issue/SKILL.md "git diff --cached"
 refute_text work-issue/README.md "Once the last wave is committed"
 
 # Where a Run Stops is the closed list of places an invocation may end

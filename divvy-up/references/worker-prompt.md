@@ -44,6 +44,20 @@ orchestrator uses to undo a failed task—so your failure would outlive its own
 rollback. The orchestrator commits after the wave passes its gate, and only if
 the user asked for that.
 
+A scratch copy of this tree is not a sandbox until you cut it loose. In a
+linked worktree `.git` is a file pointing at the original repository, so
+`cp -R` copies the pointer, and any git command run inside the copy writes
+the real index. After `cp -R <tree> <copy>`, run `rm -f <copy>/.git` before
+anything else in the copy. Then confirm that
+`git -C <copy> rev-parse --git-dir` fails. The one other safe answer is
+`.git`, which a plain checkout gives, since its `.git` is a directory that
+`rm -f` leaves in place as the copy's own repository. Any other path means git
+walked up from the copy and found a repository above it, so make the copy
+again under a fresh `mktemp -d` outside every checkout and repeat the check.
+`git archive HEAD | tar -x -C <copy>` also works, but the extracted tree has
+no repository root, so a script that walks up for `.git`, such as
+`check-waves.py validate`, runs its reduced checks there.
+
 Run no command that writes files outside the ones you own. Formatters and
 linters run with `--fix` are the usual trap: they default to the whole tree,
 and this repo's own agent docs will tell you to run one before you finish,
