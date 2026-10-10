@@ -1,0 +1,9 @@
+[00:00:00] Dan: Alright, thanks everyone for joining, let's run through the OPS tickets that are still open from last sprint.
+[00:00:20] Priya: Sounds good, I have a handful lined up that need a look before we plan the next one.
+[00:01:00] Dan: Okay, OPS-12 first, the certificate rotation that keeps failing on the staging hosts every ninety days and pages whoever happens to be on call that week.
+[00:01:40] Priya: I think the acceptance bar is that rotation completes unattended and a failure pages exactly once, not once per host like it does today.
+[00:02:20] Dan: Also, this depends on OPS-9 landing, since the new secrets store is a hard blocker for the rotation job.
+[00:03:00] Priya: Understood, I will check with the platform team on where that stands this week.
+[00:03:40] Dan: Next, OPS-31, the backup verification job that reports success even when the restore step silently fails on large volumes.
+[00:04:20] Priya: The fix needs the job to actually restore a sample and compare checksums before it reports anything as healthy.
+[00:05:00] Dan: Good. That's everything on my list, thanks all.

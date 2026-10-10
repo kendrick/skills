@@ -2,6 +2,8 @@
 
 Turns a recorded backlog-refinement transcript into staged Jira tickets, then pushes only the ones you approve.
 
+It handles refinement sessions, where the room discusses tickets that already exist and names each one by its key, said aloud or typed. It doesn't stage planning sessions, where the room creates tickets during the call. A planning transcript names no keys, so there's nothing to refine. On one, `segment.py` exits 4, and the skill drafts each piece of new work as a ticket for you to file by hand.
+
 ## Why This Exists
 
 A refinement call is an input nobody controlled: people talk over each other, decide half a thing out loud, and move on to the next ticket before anyone writes down what they agreed. Typing that up by hand means either skipping detail to keep pace with the room or falling behind and reconstructing it from memory afterward. Neither produces a description a stranger can act on six weeks later.
