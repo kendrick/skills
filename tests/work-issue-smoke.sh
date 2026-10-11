@@ -2608,6 +2608,36 @@ expect_field "with a repair newer than the failed round" repair_after_last_round
 touch -t 202609200000 "$rt/reports/redteam-repair-1.json"
 expect_field "with a repair older than the failed round" repair_after_last_round false "$rt" "$lab_repo"
 
+# A round fails on its parsed fields, never its text (#214). A reproducer that
+# greps these docs pastes NOT_REPRODUCED into a verdict's output, and the old
+# whole-file regex read issue-123's all-REPRODUCED round-2 as failed.
+rq="$(new_run redteam-fields)"
+mkdir -p "$rq/redteam"
+echo '{"verdicts": [{"verdict": "REPRODUCED", "output": "row 10: two red-team rounds in a row have NOT_REPRODUCED; \"holds\": false"}]}' >"$rq/redteam/round-1.json"
+expect_field "with NOT_REPRODUCED and \"holds\": false quoted only in an output" redteam_last_failed false "$rq" "$lab_repo"
+echo '{"verdicts": [{"verdict": "NOT_REPRODUCED"}]}' >"$rq/redteam/round-1.json"
+expect_field "with a NOT_REPRODUCED verdict under verdicts" redteam_last_failed true "$rq" "$lab_repo"
+echo '{"claims": [{"verdict": "NOT_REPRODUCED"}]}' >"$rq/redteam/round-1.json"
+expect_field "with a NOT_REPRODUCED verdict under claims" redteam_last_failed true "$rq" "$lab_repo"
+# Only JSON false fails a left check; the string "false" is not the field's value.
+echo '{"left_checks": [{"holds": "false"}]}' >"$rq/redteam/round-1.json"
+expect_field "with holds as the string \"false\"" redteam_last_failed false "$rq" "$lab_repo"
+# The reproducer saves its output verbatim, so a round can fail to parse, as
+# issue-113's round-3 and round-6 did. Neither clean nor failed: null, named.
+echo 'Verdict: NOT_REPRODUCED {"holds": false' >"$rq/redteam/round-2.json"
+touch -t 202609200100 "$rq/redteam/round-1.json"
+touch -t 202609200200 "$rq/redteam/round-2.json"
+expect_field "with a newest round that is not JSON" redteam_last_failed null "$rq" "$lab_repo"
+grep -Fq "run-state: probe: redteam_last_failed: round-2.json: not JSON" "$tmp/probe-stderr" || {
+  echo "an unparseable round should be named on stderr, got: $(cat "$tmp/probe-stderr")" >&2; exit 1; }
+expect_field "with the newer of two rounds not JSON" redteam_failed_twice null "$rq" "$lab_repo"
+touch -t 202609200300 "$rq/redteam/round-1.json"
+expect_field "with the older of two rounds not JSON" redteam_failed_twice null "$rq" "$lab_repo"
+refute_text work-issue/scripts/run-state.py 'FAILED_ROUND'
+# Deliberately Not Built: no ruling file overrules a reproducer's holds: false.
+# `ruling` catches both names lanes wrote, round-3-ruling.md and ruling-3.md.
+refute_text work-issue/scripts/run-state.py 'ruling'
+
 # trigger_fired is three-valued, and the trigger reads line 1 exactly.
 tg="$(new_run trigger)"
 mkdir -p "$tg/redteam"
