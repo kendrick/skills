@@ -939,12 +939,12 @@ def phase_of(probe):
     # the stop.
     if flag(probe, "build_final") and flag(probe, "redteam_last_failed"):
         if flag(probe, "redteam_failed_twice"):
-            return "stop", "row 10: two red-team rounds in a row have NOT_REPRODUCED; stop and report with the evidence"
+            return "stop", "row 10: two red-team rounds in a row failed; stop and report with the evidence"
         if over_budget:
             return budget_stop(10)
         if flag(probe, "repair_after_last_round"):
-            return "4", "row 10: the newest red-team round has NOT_REPRODUCED and a repair followed it; run round k+1"
-        return "4", "row 10: the newest red-team round has NOT_REPRODUCED and no repair has followed it; dispatch the repair"
+            return "4", "row 10: the newest red-team round failed and a repair followed it; run round k+1"
+        return "4", "row 10: the newest red-team round failed and no repair has followed it; dispatch the repair"
     # `ar_complete` reads Step 4's record of adversarial-review's final ledger
     # state, not its run directory: the directory exists from that skill's
     # preflight onward, and a review interrupted after preflight left one
