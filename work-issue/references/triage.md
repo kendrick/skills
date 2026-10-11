@@ -6,8 +6,8 @@ Read this at Step 6 to score what came back from review, and again at Step 8 to 
 
 | State | Rule (relative to SINCE) |
 |---|---|
-| findings | any unresolved review thread whose root comment, or whose latest comment from a login other than the author, is newer than SINCE; or a `CHANGES_REQUESTED` review newer than SINCE; or a pull-request-level or issue comment newer than SINCE from a login other than the author that is not a bare approval |
-| cleared | no findings, and either an `APPROVED` review newer than SINCE, or a `+1` reaction on the pull request newer than SINCE from a login other than the author |
+| findings | any unresolved review thread whose root comment, or whose latest comment from a login other than the author, is newer than SINCE; or a `CHANGES_REQUESTED` review newer than SINCE; or a pull-request-level or issue comment newer than SINCE from a login other than the author that is not a bare approval and does not open with Codex's review-summary marker comment or its no-issues verdict |
+| cleared | no findings, and either an `APPROVED` review newer than SINCE, or a `+1` reaction on the pull request newer than SINCE from a login other than the author, or a comment newer than SINCE from a login other than the author that opens with Codex's no-issues verdict |
 | pending | neither |
 
 SINCE is the last push, read from `RUN_DIR/pushed_at`, which Step 5 writes just before pushing. Everything above is scored against it, inclusively: an event stamped the same second as the cutoff counts, since both carry one-second precision. That cutoff is what makes the whole scheme usable.
@@ -23,7 +23,7 @@ A reviewer that signals approval with a reaction is approving the push it was lo
 
 The `findings`-outranks-`cleared` order matters for the same reason. A reviewer can leave an approving reaction and a blocking thread in one pass, and a run that sees the reaction first stops looking.
 
-**Cleared counts an approving reaction or review from any login other than the pull request's author, newer than the last push.** There is no bot allowlist: a run that only accepts approval from a list of known logins ignores the human who actually looked, and a list of trusted bots goes stale the week somebody changes their CI.
+**Cleared counts an approving reaction or review, or a comment opening with Codex's no-issues verdict, from any login other than the pull request's author, newer than the last push.** The verdict is matched by the comment's opening, never by who posted it. There is no bot allowlist: a run that only accepts approval from a list of known logins ignores the human who actually looked, and a list of trusted bots goes stale the week somebody changes their CI.
 
 ## The `[bot]` rule
 

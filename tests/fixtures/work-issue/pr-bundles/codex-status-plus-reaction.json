@@ -1,0 +1,27 @@
+{
+  "state": "OPEN",
+  "author": "kendrick",
+  "reactions": [
+    {
+      "content": "eyes",
+      "user": "chatgpt-codex-connector[bot]",
+      "created_at": "2026-10-09T02:58:45Z"
+    },
+    {
+      "content": "+1",
+      "user": "chatgpt-codex-connector[bot]",
+      "created_at": "2026-10-09T03:04:10Z"
+    }
+  ],
+  "reviews": [],
+  "threads": [],
+  "comments": [
+    {
+      "author": "chatgpt-codex-connector[bot]",
+      "created_at": "2026-10-09T02:58:43Z",
+      "body": "<!-- codex-pull-request-review-summary -->\n\n## Codex Review Summary\n\nThis comment shows the latest Codex review activity on this pull request.\n\n| Review | Status | Commit | Review trigger |\n| --- | --- | --- | --- |\n| 📝 **Code Review** | 🔄 **Running** since <relative-time datetime=\"2026-10-09T02:58:42.142752Z\">2026-10-09T02:58:42.142752Z</relative-time> | `a0df4ec` | Manual request |",
+      "id": 6073337460,
+      "url": "https://github.com/kendrick/skills/pull/202#issuecomment-6073337460"
+    }
+  ]
+}

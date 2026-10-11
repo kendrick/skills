@@ -222,8 +222,8 @@ Three states, each scored relative to SINCE:
 
 | State | Rule (relative to SINCE) |
 |---|---|
-| findings | any unresolved review thread whose root comment, or whose latest comment from a login other than the author, is newer than SINCE; or a `CHANGES_REQUESTED` review newer than SINCE; or a pull-request-level or issue comment newer than SINCE from a login other than the author that is not a bare approval |
-| cleared | no findings, and either an `APPROVED` review newer than SINCE, or a `+1` reaction on the pull request (`gh api repos/{owner}/{repo}/issues/<pr>/reactions`) newer than SINCE from a login other than the author |
+| findings | any unresolved review thread whose root comment, or whose latest comment from a login other than the author, is newer than SINCE; or a `CHANGES_REQUESTED` review newer than SINCE; or a pull-request-level or issue comment newer than SINCE from a login other than the author that is not a bare approval and does not open with Codex's review-summary marker comment or its no-issues verdict |
+| cleared | no findings, and either an `APPROVED` review newer than SINCE, or a `+1` reaction on the pull request (`gh api repos/{owner}/{repo}/issues/<pr>/reactions`) newer than SINCE from a login other than the author, or a comment newer than SINCE from a login other than the author that opens with Codex's no-issues verdict |
 | pending | neither |
 
 `[bot]` is stripped before logins are compared: REST reports `chatgpt-codex-connector[bot]` where GraphQL reports `chatgpt-codex-connector`, and an unstripped comparison reads one reviewer as two different logins depending on which API answered.
