@@ -34,6 +34,19 @@ require_text() {
   }
 }
 
+# A check's name also appears in prose. The sentence under the table explains
+# why `frontmatter-key-domain` runs ahead of the budget, so a name-only pin
+# stayed green with that row deleted (#31). Matching the backticked first cell
+# pins the row.
+require_table_row() {
+  local file="$1"
+  local check="$2"
+  grep -Eq -- "^\| \`$check\` +\|" "$file" || {
+    echo "missing table row for $check in $file" >&2
+    exit 1
+  }
+}
+
 # The trailing `return 0` matters: under `set -e`, a function ending on a failed
 # grep aborts the script.
 refute_text() {
@@ -1065,10 +1078,24 @@ require_text inbox-to-memory/SKILL.md "**A dismissed flag stays in the note perm
 
 # The table is what a reader consults after hitting a failure, so a check
 # missing from it ships a failure name that leads nowhere.
-require_text "$contracts" "frontmatter-key-domain"
+for check in frontmatter-fences frontmatter-parses frontmatter-budget \
+  frontmatter-single-line frontmatter-known-keys frontmatter-key-order \
+  frontmatter-key-domain token-grammar contradiction-fields; do
+  require_table_row "$contracts" "$check"
+done
+
+# The pin has to fail in the case #31 found: the row gone and the prose sentence
+# under the table still naming the check. Nested in `$not_a_scope` so it
+# rides that cleanup rather than adding a second EXIT trap.
+row_pin_dir="$(mktemp -d "$not_a_scope/row-pin.XXXXXX")"
+grep -Ev '^\| `frontmatter-key-domain` +\|' "$contracts" >"$row_pin_dir/contracts.md"
+require_text "$row_pin_dir/contracts.md" "frontmatter-key-domain"
+if (require_table_row "$row_pin_dir/contracts.md" "frontmatter-key-domain") 2>/dev/null; then
+  echo "require_table_row passed on a contract whose frontmatter-key-domain row is gone" >&2
+  exit 1
+fi
 
 # Both halves of the disagreement travel together, and the contract says why.
-require_text "$contracts" "contradiction-fields"
 require_text "$contracts" "| claims: <what the record says>"
 require_text "$heuristics" "Flag it only when the statements can't both be true."
 require_text inbox-to-memory/assets/note.template.md "[contradicts accepted: [[<record>|<label>]]]"
