@@ -1111,7 +1111,6 @@ _WS = "[ \t\r\f\v]"
 WAVES_HEADING = re.compile(rf"^{_WS}*## Waves{_WS}*$")
 TABLE_LINE = re.compile(rf"^{_WS}*\|")
 NUMBERED_ROW = re.compile(rf"^{_WS}*\|{_WS}*[0-9]+{_WS}*\|")
-FAILED_ROUND = re.compile(r'NOT_REPRODUCED|"holds": *false')
 TRIAGE_ROUND = re.compile(r"round-([0-9]+)\.md")
 SINCE_HEADING = re.compile(r"# Triage round .* since ([^ ]*)")
 QUEUE_ROW = re.compile(r"^\| [0-9]+ \|")
@@ -1591,22 +1590,41 @@ def g_redteam_rounds(ctx):
 
 
 def round_failed(path):
-    return bool(FAILED_ROUND.search(read_text(path)))
+    # A whole-file regex read a verdict's quoted `output` as the verdict itself
+    # (#214), and wave 34-87-123-198 took false `row 10` stops from it. Walk the
+    # parsed fields instead of the text. The walk is keyless because rounds vary
+    # in shape: some carry `claims`, some `verdicts`, some only `left_checks`.
+    try:
+        data = json.loads(read_text(path))
+    except ValueError as e:
+        raise ValueError(f"{Path(path).name}: not JSON: {e}") from e
+
+    def walk(node):
+        if isinstance(node, dict):
+            if node.get("verdict") == "NOT_REPRODUCED" or node.get("holds") is False:
+                return True
+            node = list(node.values())
+        return isinstance(node, list) and any(walk(v) for v in node)
+
+    return walk(data)
 
 
 @gatherer("redteam_last_failed")
 def g_redteam_last_failed(ctx):
-    """The newest round, by file time, holds a NOT_REPRODUCED claim or a
-    `left_checks` entry with `holds` false, which routes the same way. The
-    newest only: an earlier round's failures are why a later round exists."""
+    """The newest round, by file time, has a `verdict` field of NOT_REPRODUCED
+    or a `holds` field of false, which routes the same way. The newest only: an
+    earlier round's failures are why a later round exists. A round that is not
+    JSON makes the field null."""
     rounds = newest_by_mtime(ctx.path("redteam"), "round-*.json")
     return bool(rounds) and round_failed(rounds[0])
 
 
 @gatherer("redteam_failed_twice")
 def g_redteam_failed_twice(ctx):
-    """The two newest rounds both failed. Step 4 stops after two failed rounds,
-    and row 10 has to honor that stop rather than start a third cycle."""
+    """The two newest rounds both failed, by the same `verdict` and `holds`
+    fields. Step 4 stops after two failed rounds, and row 10 has to honor that
+    stop rather than start a third cycle. Either round not being JSON makes the
+    field null."""
     rounds = newest_by_mtime(ctx.path("redteam"), "round-*.json")[:2]
     return sum(1 for path in rounds if round_failed(path)) == 2
 
