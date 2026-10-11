@@ -1382,15 +1382,18 @@ set -e
 # #204: Codex's review-summary comment and its no-issues verdict both scored
 # `findings`, costing every wave-1 lane (#199–#202) a triage round. The bundles
 # come from #202's first poll and #200's verdict comment, run against #202's
-# real SINCE. `unmarked` and `human-author` are the issue's falsifiers: the
-# marker alone decides, so dropping it scores `findings` and a human posting it
-# still scores nothing. `finding-comment` is a Codex comment that quotes both
-# openings mid-body, so neither an author rule nor a substring match passes it.
+# real SINCE. `unmarked` is the issue's falsifier. The marker alone decides, so
+# dropping it scores `findings`. In the two `human-author` bundles a human posts
+# each opening. The marker still scores nothing and the verdict still clears,
+# so keying either rule to Codex's login fails the suite.
+# `finding-comment` is a Codex comment that quotes both openings mid-body, so
+# neither an author rule nor a substring match passes it.
 pr_bundles_dir=tests/fixtures/work-issue/pr-bundles
 declare -a codex_comment_cases=(
   "codex-status-only.json:pending"
   "codex-status-plus-reaction.json:cleared"
   "codex-no-issues.json:cleared"
+  "codex-no-issues-human-author.json:cleared"
   "codex-status-unmarked.json:findings"
   "codex-status-human-author.json:pending"
   "codex-finding-comment.json:findings"
