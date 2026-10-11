@@ -1623,10 +1623,16 @@ def g_redteam_last_failed(ctx):
 def g_redteam_failed_twice(ctx):
     """The two newest rounds both failed, by the same `verdict` and `holds`
     fields. Step 4 stops after two failed rounds, and row 10 has to honor that
-    stop rather than start a third cycle. Either round not being JSON makes the
-    field null."""
+    stop rather than start a third cycle. A clean newest round makes the field
+    false without reading the older round. The field is null when the newest
+    round is not JSON, or when the newest round failed and the older one is not
+    JSON."""
     rounds = newest_by_mtime(ctx.path("redteam"), "round-*.json")[:2]
-    return sum(1 for path in rounds if round_failed(path)) == 2
+    # A clean newest round already settles the answer. Parsing the older round
+    # anyway would turn an unparseable one into a null that stops the run.
+    if not rounds or not round_failed(rounds[0]):
+        return False
+    return len(rounds) == 2 and round_failed(rounds[1])
 
 
 @gatherer("repair_after_last_round")

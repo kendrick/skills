@@ -2631,8 +2631,14 @@ expect_field "with a newest round that is not JSON" redteam_last_failed null "$r
 grep -Fq "run-state: probe: redteam_last_failed: round-2.json: not JSON" "$tmp/probe-stderr" || {
   echo "an unparseable round should be named on stderr, got: $(cat "$tmp/probe-stderr")" >&2; exit 1; }
 expect_field "with the newer of two rounds not JSON" redteam_failed_twice null "$rq" "$lab_repo"
+# A clean newest round settles failed_twice, so an unparseable older round
+# can't stop the run. After a failed newest round the older one decides, and
+# an older round that won't parse leaves the answer unknown.
 touch -t 202609200300 "$rq/redteam/round-1.json"
-expect_field "with the older of two rounds not JSON" redteam_failed_twice null "$rq" "$lab_repo"
+expect_field "with a clean newest round and an older one not JSON" redteam_failed_twice false "$rq" "$lab_repo"
+echo '{"claims": [{"verdict": "NOT_REPRODUCED"}]}' >"$rq/redteam/round-1.json"
+touch -t 202609200300 "$rq/redteam/round-1.json"
+expect_field "with a failed newest round and an older one not JSON" redteam_failed_twice null "$rq" "$lab_repo"
 refute_text work-issue/scripts/run-state.py 'FAILED_ROUND'
 # Deliberately Not Built: no ruling file overrules a reproducer's holds: false.
 # `ruling` catches both names lanes wrote, round-3-ruling.md and ruling-3.md.
