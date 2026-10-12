@@ -2651,6 +2651,8 @@ printf '```json\n{"claims": [{"verdict": "NOT_REPRODUCED"}]}\n```\n' >"$rf/redte
 expect_field "with a fenced NOT_REPRODUCED round" redteam_last_failed true "$rf" "$lab_repo"
 printf '```json\n{"claims": [{"verdict": "REPRODUCED"}]}\n```\n' >"$rf/redteam/round-1.json"
 expect_field "with a fenced clean round" redteam_last_failed false "$rf" "$lab_repo"
+printf '```json  \r\n{"claims": [{"verdict": "NOT_REPRODUCED"}]}\r\n```\t\r\n' >"$rf/redteam/round-1.json"
+expect_field "with a fenced round whose fence lines carry trailing whitespace" redteam_last_failed true "$rf" "$lab_repo"
 printf '{"claims": [{"verdict": "REPRODUCED", "output": "a\tb"}]}\n' >"$rf/redteam/round-1.json"
 expect_field "with a raw tab inside a string" redteam_last_failed false "$rf" "$lab_repo"
 printf 'Here is my verdict:\n```json\n{"claims": [{"verdict": "NOT_REPRODUCED"}]}\n```\n' >"$rf/redteam/round-1.json"

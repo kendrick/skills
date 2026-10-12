@@ -1602,8 +1602,10 @@ def round_failed(path):
     # still fails, since digging a block out of it would be tidying a verdict.
     # split("\n"), not splitlines(): the rejoin must leave the block's bytes,
     # including any raw line separator inside a string, exactly as saved.
+    # Trailing whitespace after a fence's info string still makes one fenced
+    # block, and a `\r` from CRLF is whitespace too, so rstrip() both ends.
     lines = text.strip().split("\n")
-    if len(lines) >= 2 and lines[0].rstrip("\r") in ("```", "```json") and lines[-1] == "```":
+    if len(lines) >= 2 and lines[0].rstrip() in ("```", "```json") and lines[-1].rstrip() == "```":
         text = "\n".join(lines[1:-1])
     try:
         # strict=False: pasted command output leaves raw control chars inside
@@ -1627,8 +1629,8 @@ def round_failed(path):
 def g_redteam_last_failed(ctx):
     """The newest round, by file time, has a `verdict` field of NOT_REPRODUCED
     or a `holds` field of false, which routes the same way. The newest only: an
-    earlier round's failures are why a later round exists. A round that is not
-    JSON makes the field null."""
+    earlier round's failures are why a later round exists. A round that does not
+    parse by `round_failed`'s rule makes the field null."""
     rounds = newest_by_mtime(ctx.path("redteam"), "round-*.json")
     return bool(rounds) and round_failed(rounds[0])
 
@@ -1639,8 +1641,8 @@ def g_redteam_failed_twice(ctx):
     fields. Step 4 stops after two failed rounds, and row 10 has to honor that
     stop rather than start a third cycle. A clean newest round makes the field
     false without reading the older round. The field is null when the newest
-    round is not JSON, or when the newest round failed and the older one is not
-    JSON."""
+    round does not parse by `round_failed`'s rule, or when the newest round
+    failed and the older one does not parse."""
     rounds = newest_by_mtime(ctx.path("redteam"), "round-*.json")[:2]
     # A clean newest round already settles the answer. Parsing the older round
     # anyway would turn an unparseable one into a null that stops the run.
