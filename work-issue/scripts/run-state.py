@@ -939,12 +939,12 @@ def phase_of(probe):
     # the stop.
     if flag(probe, "build_final") and flag(probe, "redteam_last_failed"):
         if flag(probe, "redteam_failed_twice"):
-            return "stop", "row 10: two red-team rounds in a row have NOT_REPRODUCED; stop and report with the evidence"
+            return "stop", "row 10: two red-team rounds in a row failed; stop and report with the evidence"
         if over_budget:
             return budget_stop(10)
         if flag(probe, "repair_after_last_round"):
-            return "4", "row 10: the newest red-team round has NOT_REPRODUCED and a repair followed it; run round k+1"
-        return "4", "row 10: the newest red-team round has NOT_REPRODUCED and no repair has followed it; dispatch the repair"
+            return "4", "row 10: the newest red-team round failed and a repair followed it; run round k+1"
+        return "4", "row 10: the newest red-team round failed and no repair has followed it; dispatch the repair"
     # `ar_complete` reads Step 4's record of adversarial-review's final ledger
     # state, not its run directory: the directory exists from that skill's
     # preflight onward, and a review interrupted after preflight left one
@@ -1111,7 +1111,6 @@ _WS = "[ \t\r\f\v]"
 WAVES_HEADING = re.compile(rf"^{_WS}*## Waves{_WS}*$")
 TABLE_LINE = re.compile(rf"^{_WS}*\|")
 NUMBERED_ROW = re.compile(rf"^{_WS}*\|{_WS}*[0-9]+{_WS}*\|")
-FAILED_ROUND = re.compile(r'NOT_REPRODUCED|"holds": *false')
 TRIAGE_ROUND = re.compile(r"round-([0-9]+)\.md")
 SINCE_HEADING = re.compile(r"# Triage round .* since ([^ ]*)")
 QUEUE_ROW = re.compile(r"^\| [0-9]+ \|")
@@ -1591,24 +1590,65 @@ def g_redteam_rounds(ctx):
 
 
 def round_failed(path):
-    return bool(FAILED_ROUND.search(read_text(path)))
+    # A whole-file regex read a verdict's quoted `output` as the verdict itself
+    # (#214), and wave 34-87-123-198 took false `row 10` stops from it. Walk the
+    # parsed fields instead of the text. The walk is keyless because rounds vary
+    # in shape: some carry `claims`, some `verdicts`, some only `left_checks`.
+    text = read_text(path)
+    # redteam.md tells the reproducer to answer in one fenced json block and
+    # the orchestrator to save it verbatim, so a well-formed round starts with
+    # ```json; parsing it raw made every such round null (#220 review). Strip
+    # exactly one enclosing fence and nothing more. Prose around the fence
+    # still fails, since digging a block out of it would be tidying a verdict.
+    # split("\n"), not splitlines(): the rejoin must leave the block's bytes,
+    # including any raw line separator inside a string, exactly as read.
+    # Trailing whitespace after a fence's info string still makes one fenced
+    # block, so rstrip() both fence lines.
+    lines = text.strip().split("\n")
+    if len(lines) >= 2 and lines[0].rstrip() in ("```", "```json") and lines[-1].rstrip() == "```":
+        text = "\n".join(lines[1:-1])
+    try:
+        # strict=False: pasted command output leaves raw control chars inside
+        # strings, and issue-113's round-3.json was nulled by a raw newline
+        # while holding a real `holds: false`.
+        data = json.loads(text, strict=False)
+    except ValueError as e:
+        raise ValueError(f"{Path(path).name}: not JSON: {e}") from e
+
+    def walk(node):
+        if isinstance(node, dict):
+            if node.get("verdict") == "NOT_REPRODUCED" or node.get("holds") is False:
+                return True
+            node = list(node.values())
+        return isinstance(node, list) and any(walk(v) for v in node)
+
+    return walk(data)
 
 
 @gatherer("redteam_last_failed")
 def g_redteam_last_failed(ctx):
-    """The newest round, by file time, holds a NOT_REPRODUCED claim or a
-    `left_checks` entry with `holds` false, which routes the same way. The
-    newest only: an earlier round's failures are why a later round exists."""
+    """The newest round, by file time, has a `verdict` field of NOT_REPRODUCED
+    or a `holds` field of false, which routes the same way. The newest only: an
+    earlier round's failures are why a later round exists. A round that does not
+    parse by `round_failed`'s rule makes the field null."""
     rounds = newest_by_mtime(ctx.path("redteam"), "round-*.json")
     return bool(rounds) and round_failed(rounds[0])
 
 
 @gatherer("redteam_failed_twice")
 def g_redteam_failed_twice(ctx):
-    """The two newest rounds both failed. Step 4 stops after two failed rounds,
-    and row 10 has to honor that stop rather than start a third cycle."""
+    """The two newest rounds both failed, by the same `verdict` and `holds`
+    fields. Step 4 stops after two failed rounds, and row 10 has to honor that
+    stop rather than start a third cycle. A clean newest round makes the field
+    false without reading the older round. The field is null when the newest
+    round does not parse by `round_failed`'s rule, or when the newest round
+    failed and the older one does not parse."""
     rounds = newest_by_mtime(ctx.path("redteam"), "round-*.json")[:2]
-    return sum(1 for path in rounds if round_failed(path)) == 2
+    # A clean newest round already settles the answer. Parsing the older round
+    # anyway would turn an unparseable one into a null that stops the run.
+    if not rounds or not round_failed(rounds[0]):
+        return False
+    return len(rounds) == 2 and round_failed(rounds[1])
 
 
 @gatherer("repair_after_last_round")
