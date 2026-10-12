@@ -377,8 +377,9 @@ def gather(pr):
     reactions and the issue comments. GraphQL carries the author, the
     reviews, and the review threads with their resolved flag. Reviews and
     threads are two calls, not one, because each paginates on its own
-    cursor. Only a hand run exercises this path. Every fixture goes through
-    `--input`, so the smoke suite does not cover a change here."""
+    cursor. Every bundle fixture goes through `--input`, so only a hand run
+    reaches the calls past the first. The suite's #215 case drives the first,
+    `gh repo view`, through a stub `gh` that times out once."""
     repo_docs = gh(["repo", "view", "--json", "nameWithOwner"], "gh repo view")
     name_with_owner = (repo_docs[0] if repo_docs else {}).get("nameWithOwner", "")
     if "/" not in name_with_owner:
