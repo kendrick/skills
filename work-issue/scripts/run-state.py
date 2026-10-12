@@ -1601,9 +1601,9 @@ def round_failed(path):
     # exactly one enclosing fence and nothing more. Prose around the fence
     # still fails, since digging a block out of it would be tidying a verdict.
     # split("\n"), not splitlines(): the rejoin must leave the block's bytes,
-    # including any raw line separator inside a string, exactly as saved.
+    # including any raw line separator inside a string, exactly as read.
     # Trailing whitespace after a fence's info string still makes one fenced
-    # block, and a `\r` from CRLF is whitespace too, so rstrip() both ends.
+    # block, so rstrip() both fence lines.
     lines = text.strip().split("\n")
     if len(lines) >= 2 and lines[0].rstrip() in ("```", "```json") and lines[-1].rstrip() == "```":
         text = "\n".join(lines[1:-1])
