@@ -1948,6 +1948,105 @@ require_text work-issue/SKILL.md "no review yet on <PR URL>; \`work-issue N\` re
 # Ledger: "A flag to tune the background poll's cap, such as `--max-poll`".
 refute_text work-issue/SKILL.md "--max-poll"
 
+# #215: one slow gh call exited `review` 3 and ended the poll on PR #213.
+# gh() retries a timeout once and nothing else. The three outcomes are pinned
+# at the seam, calling gh() directly against stub-gh, and the retry at the
+# caller by running `review` itself. A stub serving a whole review bundle would
+# be a second copy of the gather logic. RUN_STATE_GH_TIMEOUT=1 against the
+# stub's 5s hang keeps each timeout to a second.
+stub_gh="$repo_root/tests/fixtures/work-issue/stub-gh"
+[[ -x "$stub_gh" ]] || {
+  echo "tests/fixtures/work-issue/stub-gh must be executable" >&2
+  exit 1
+}
+gh_bin="$tmp/gh-bin"
+mkdir -p "$gh_bin"
+ln -sf "$stub_gh" "$gh_bin/gh"
+
+# Args: mode, expected call count, then `ok` or the text the GhError must
+# carry. Prints nothing; fails the suite on a mismatch.
+check_gh_seam() {
+  local mode="$1" calls="$2" expect="$3"
+  local count="$tmp/gh-seam-$mode.count"
+  local out
+  rm -f "$count"
+  out="$(PATH="$gh_bin:$PATH" STUB_GH_MODE="$mode" STUB_GH_COUNT="$count" RUN_STATE_GH_TIMEOUT=1 \
+    python3 - "$run_state" <<'PY' 2>&1
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("run_state", sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+try:
+    print("returned", module.gh(["stub"], "stub"))
+except module.GhError as e:
+    print("GhError", e)
+PY
+)"
+  case "$expect" in
+    ok)
+      [[ "$out" == "returned [{'ok': 1}]" ]] || {
+        echo "gh() $mode should return the stub's reply after one retry, got: $out" >&2
+        exit 1
+      }
+      ;;
+    *)
+      [[ "$out" == "GhError stub: "*"$expect"* ]] || {
+        echo "gh() $mode should raise GhError with '$expect', got: $out" >&2
+        exit 1
+      }
+      ;;
+  esac
+  [[ "$(cat "$count")" == "$calls" ]] || {
+    echo "gh() $mode should call gh $calls times, called it $(cat "$count")" >&2
+    exit 1
+  }
+}
+check_gh_seam hang-once 2 ok
+check_gh_seam hang-always 2 "timed out after 1s"
+# A 404 fails the same way twice, so a retry would only double the wait.
+check_gh_seam fail-404 1 "HTTP 404"
+
+# The caller: `review`'s first gh call hangs and its retry gets a 404. Exit 3
+# with the 404, not the timeout, and two calls, is what proves the retry ran
+# inside `review`'s own gather.
+rm -f "$tmp/gh-review.count"
+set +e
+PATH="$gh_bin:$PATH" STUB_GH_MODE=hang-then-404 STUB_GH_COUNT="$tmp/gh-review.count" RUN_STATE_GH_TIMEOUT=1 \
+  python3 "$run_state" review 1 --since 2026-01-01T00:00:00Z >"$tmp/gh-review.out" 2>"$tmp/gh-review.err"
+gh_review_status=$?
+set -e
+[[ "$gh_review_status" == 3 ]] || {
+  echo "run-state.py review should exit 3 when the retried gh call fails, got $gh_review_status: $(cat "$tmp/gh-review.err")" >&2
+  exit 1
+}
+grep -Fq "HTTP 404" "$tmp/gh-review.err" && ! grep -Fq "timed out" "$tmp/gh-review.err" || {
+  echo "run-state.py review should report the retry's HTTP 404, not the first timeout, got: $(cat "$tmp/gh-review.err")" >&2
+  exit 1
+}
+[[ "$(cat "$tmp/gh-review.count")" == 2 ]] || {
+  echo "run-state.py review should call gh twice (timeout, then retry), called it $(cat "$tmp/gh-review.count")" >&2
+  exit 1
+}
+
+# A typo in the override must fail loudly, not fall back to a silent 60s wait.
+set +e
+RUN_STATE_GH_TIMEOUT=1s python3 "$run_state" review 1 --since 2026-01-01T00:00:00Z >/dev/null 2>"$tmp/gh-badtimeout.err"
+gh_bad_status=$?
+set -e
+[[ "$gh_bad_status" == 3 ]] && grep -Fq "RUN_STATE_GH_TIMEOUT must be a positive integer, got 1s" "$tmp/gh-badtimeout.err" || {
+  echo "a bad RUN_STATE_GH_TIMEOUT should exit 3 naming the value, got $gh_bad_status: $(cat "$tmp/gh-badtimeout.err")" >&2
+  exit 1
+}
+
+require_text _maintenance/work-issue/RATIONALE.md "| 145 | \`gh()\` in \`run-state.py\` retries a call once on \`subprocess.TimeoutExpired\`, and on nothing else."
+require_text _maintenance/work-issue/RATIONALE.md "| Retrying in Step 6's shell loop |"
+# Ledger: "Retrying in Step 6's shell loop". Scoped to the loop's fenced block,
+# the same block the poll-loop cases above run.
+grep -Fqi "retry" <<<"$loop_block" && {
+  echo "Step 6's poll loop block retries; #215 keeps the retry in gh(), where a timeout is told apart from a 404" >&2
+  exit 1
+}
+
 # #139: a triage round is current by the SINCE its heading recorded, never by
 # the file's time, because Step 8 edits the round after the push it answers.
 require_text work-issue/SKILL.md "# Triage round <k>, since <SINCE>"
