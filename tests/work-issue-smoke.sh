@@ -2640,6 +2640,25 @@ echo '{"claims": [{"verdict": "NOT_REPRODUCED"}]}' >"$rq/redteam/round-1.json"
 touch -t 202609200300 "$rq/redteam/round-1.json"
 expect_field "with a failed newest round and an older one not JSON" redteam_failed_twice null "$rq" "$lab_repo"
 refute_text work-issue/scripts/run-state.py 'FAILED_ROUND'
+
+# redteam.md asks for one fenced json block saved verbatim, so a fenced round
+# is the well-formed case and has to score (#220 review). One enclosing fence
+# comes off; a raw control char inside a string, as in issue-113's round-3,
+# still parses. Prose around the fence stays null.
+rf="$(new_run redteam-fence)"
+mkdir -p "$rf/redteam"
+printf '```json\n{"claims": [{"verdict": "NOT_REPRODUCED"}]}\n```\n' >"$rf/redteam/round-1.json"
+expect_field "with a fenced NOT_REPRODUCED round" redteam_last_failed true "$rf" "$lab_repo"
+printf '```json\n{"claims": [{"verdict": "REPRODUCED"}]}\n```\n' >"$rf/redteam/round-1.json"
+expect_field "with a fenced clean round" redteam_last_failed false "$rf" "$lab_repo"
+printf '{"claims": [{"verdict": "REPRODUCED", "output": "a\tb"}]}\n' >"$rf/redteam/round-1.json"
+expect_field "with a raw tab inside a string" redteam_last_failed false "$rf" "$lab_repo"
+printf 'Here is my verdict:\n```json\n{"claims": [{"verdict": "NOT_REPRODUCED"}]}\n```\n' >"$rf/redteam/round-1.json"
+expect_field "with prose before a fenced round" redteam_last_failed null "$rf" "$lab_repo"
+# Deliberately Not Built: no pulling a fenced block out of surrounding prose.
+# Finding a fence past line 1 takes a search, by method call or by regex.
+refute_text work-issue/scripts/run-state.py '("```")'
+refute_text work-issue/scripts/run-state.py 'r"```'
 # Deliberately Not Built: no ruling file overrules a reproducer's holds: false.
 # `ruling` catches both names lanes wrote, round-3-ruling.md and ruling-3.md.
 refute_text work-issue/scripts/run-state.py 'ruling'

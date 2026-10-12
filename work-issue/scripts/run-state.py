@@ -1594,8 +1594,22 @@ def round_failed(path):
     # (#214), and wave 34-87-123-198 took false `row 10` stops from it. Walk the
     # parsed fields instead of the text. The walk is keyless because rounds vary
     # in shape: some carry `claims`, some `verdicts`, some only `left_checks`.
+    text = read_text(path)
+    # redteam.md tells the reproducer to answer in one fenced json block and
+    # the orchestrator to save it verbatim, so a well-formed round starts with
+    # ```json; parsing it raw made every such round null (#220 review). Strip
+    # exactly one enclosing fence and nothing more. Prose around the fence
+    # still fails, since digging a block out of it would be tidying a verdict.
+    # split("\n"), not splitlines(): the rejoin must leave the block's bytes,
+    # including any raw line separator inside a string, exactly as saved.
+    lines = text.strip().split("\n")
+    if len(lines) >= 2 and lines[0].rstrip("\r") in ("```", "```json") and lines[-1] == "```":
+        text = "\n".join(lines[1:-1])
     try:
-        data = json.loads(read_text(path))
+        # strict=False: pasted command output leaves raw control chars inside
+        # strings, and issue-113's round-3.json was nulled by a raw newline
+        # while holding a real `holds: false`.
+        data = json.loads(text, strict=False)
     except ValueError as e:
         raise ValueError(f"{Path(path).name}: not JSON: {e}") from e
 
