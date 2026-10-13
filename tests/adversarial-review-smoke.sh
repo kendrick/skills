@@ -221,6 +221,9 @@ require_text adversarial-review/references/trigger-table.md "| 6 | representatio
 require_text adversarial-review/references/trigger-table.md "| 7 | general |"
 require_text adversarial-review/references/trigger-table.md "An assertion that recomputes the implementation rather than observing the result."
 require_text adversarial-review/references/trigger-table.md "A unit suffix matches against the number in front of it"
+# The rule that keeps `round(` and `.query(` from reading as regex syntax
+# (#114); the per-signal guard below holds the script to it.
+require_text adversarial-review/references/trigger-table.md "A signal's punctuation is literal"
 # Step 2 matches through the script, which reads the table's own signals
 # (RATIONALE row 41). The recipe it replaced, rebuilt by hand each run, exits 2
 # on the `round(` signal (#114), so the refutes pin that recipe's sentence and
@@ -866,6 +869,60 @@ expect_match() {
 }
 expect_match "1 money" --only 1 <"$diffs/money-round-paren.diff"
 expect_match "1 money" --only 1 < <(printf '+total = round(amount, 2)\n')
+# Every signal rows 1-6 ship must match through the script, or a signal added
+# to the table could pass the suite while matching nothing (#114). The suite
+# reads the table with its own awk, never match-triggers.py's parser, so a
+# parser that drops or mangles a signal can't hide it from this check. The awk
+# walks the signals cell a character at a time and ends it at the first `|`
+# outside backticks, because a `|` inside a signal is part of the signal.
+# Units come from the table's own "The unit suffixes are" sentence, the list
+# the script reads too (row 42): a list hardcoded here would go stale the day
+# a unit is added, and the guard would then build a whole-word line for it.
+table_units="$(grep -o 'The unit suffixes are `[^.]*\.' adversarial-review/references/trigger-table.md | grep -o '`[^`]*`' | tr -d '`')"
+[[ -n "$table_units" ]] || {
+  echo "trigger-table.md: no unit suffixes read from 'The unit suffixes are' for the per-signal guard" >&2
+  exit 1
+}
+table_signals="$(awk '
+  /^\| [1-6] \| / {
+    n = $2; name = $4
+    rest = $0
+    sub(/^\| [0-9]+ \| [^|]* \| /, "", rest)
+    cell = ""; tick = 0
+    for (i = 1; i <= length(rest); i++) {
+      c = substr(rest, i, 1)
+      if (c == "`") tick = !tick
+      if (c == "|" && !tick) break
+      cell = cell c
+    }
+    while (match(cell, /`[^`]+`/)) {
+      printf "%s\t%s\t%s\n", n, name, substr(cell, RSTART + 1, RLENGTH - 2)
+      cell = substr(cell, RSTART + RLENGTH)
+    }
+  }' adversarial-review/references/trigger-table.md)"
+# A row that yields nothing means the extraction broke, and an empty loop
+# below would pass without checking a single signal.
+for n in 1 2 3 4 5 6; do
+  grep -q "^$n	" <<<"$table_signals" || {
+    echo "per-signal guard read no signals from trigger-table.md row $n" >&2
+    exit 1
+  }
+done
+while IFS=$'\t' read -r sig_n sig_name sig; do
+  if grep -Fqxi -- "$sig" <<<"$table_units"; then
+    sig_line="+x = 12$sig"
+  elif [[ "$sig" == *_ ]]; then
+    sig_line="+x ${sig}tail"
+  else
+    sig_line="+x $sig y"
+  fi
+  # A subshell, because expect_match exits on failure and its message names
+  # only the line, not which table signal produced it.
+  (expect_match "$sig_n $sig_name" --only "$sig_n" < <(printf '%s\n' "$sig_line")) || {
+    echo "trigger-table.md row $sig_n signal \`$sig\` does not match its own line: $sig_line" >&2
+    exit 1
+  }
+done <<<"$table_signals"
 # Whole-word: `index` inside `page_index` is no schema signal, and a bare
 # `CREATE INDEX` is. A substring matcher prints `4 schema` for both.
 expect_match "" <"$diffs/schema-page-index.diff"
