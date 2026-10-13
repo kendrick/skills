@@ -103,7 +103,7 @@ One row per record, tab separated. Nothing beyond awk. V1 records emit an empty 
 
 ## Links Resolve by ID
 
-Files are never renamed after creation, and ids never regenerate. Resolve a wiki link in order before calling it broken. Read the target as a path from the linking note's directory first, which is how a cross-scope link resolves. Where the target holds no `/`, look for a file of that name within the scope. Last, where the target's basename is a `<slug>-<nanoid>` name, the ten characters after the last hyphen are the id, and `ls **/*<id>*.md` run from the scope root finds the file wherever it moved within the scope. A target whose basename lacks that suffix carries no id and has no id step. Report a link broken only after every step fails.
+Files are never renamed after creation, and ids never regenerate. Resolve a wiki link in order before calling it broken. Read the target as a path from the linking note's directory first, which is how a cross-scope link resolves. Where the target holds no `/`, look for a file of that name within the scope. Last, where the target's basename is a `<slug>-<nanoid>` name, the ten characters that end it are the id, with a hyphen right before them. The nanoid alphabet includes `-`, so the id can hold a hyphen of its own: `atlas-dry-run-prep-zFpm-hfD5u` carries `zFpm-hfD5u`, not the `hfD5u` after its last hyphen. `ls **/*<id>*.md` run from the scope root finds the file wherever it moved within the scope. A target whose basename lacks that suffix carries no id and has no id step. Report a link broken only after every step fails.
 
 ## Cost Discipline
 

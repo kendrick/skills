@@ -374,16 +374,20 @@ check_anchors() {
   return 0
 }
 
-# Three tries, first hit wins. The path comes first because cross-scope links are
-# supported (SKILL.md) and a link like `../working-state` names a file outside
-# $scope that no search of $scope can ever find. $1 is a cached body file, so the
-# linking file's directory comes from current_file, never from $1. Files are never
-# renamed, so a link that misses both is usually a file that moved inside this
-# scope, and its trailing id never changes. That fallback runs only on a scaffolded
-# `<slug>-<nanoid>` name, with the hyphen required: ten characters of the alphabet
-# alone invent an id out of `working-state` ("king-state"). It stays inside $scope
-# because a vault-wide search would let a dead link pass against any unrelated file
-# sharing ten characters.
+# Three tries, first hit wins: path, then name, then id. The path try comes
+# first because SKILL.md allows cross-scope links, and a link like
+# `../working-state` names a file outside $scope that no search of $scope can
+# find. A target holding a `/` skips the name try, since `find -name` never
+# matches a slash. $1 is a cached body file, so the linking note's dir comes from
+# current_file, never from $1. Files are never renamed, so a link that misses by
+# path and by name usually points at a file that moved inside this scope, and
+# that file's trailing id never changes. The id try needs a scaffolded
+# `<slug>-<nanoid>` basename with a hyphen right before its last ten chars.
+# Without the hyphen, ten nanoid-alphabet chars would invent the id `king-state`
+# out of `working-state`. The nanoid alphabet includes `-`, so an id can hold
+# one: `...-prep-zFpm-hfD5u` carries `zFpm-hfD5u`. The id search stays inside
+# $scope, because a vault-wide search would pass a dead link against any
+# unrelated file that shares those ten chars.
 check_links() {
   local target
   local id_pattern='-([A-Za-z0-9_-]{10})$'
@@ -396,7 +400,7 @@ check_links() {
     case "$target" in
       *'{{'* | *'<'*) continue ;;
     esac
-    # Strip a trailing .md so `[[note.md]]` and `[[note]]` resolve alike.
+    # Authors write `[[note]]` and `[[note.md]]` for the same file.
     local stem="${target%.md}"
     [[ -f "$dir/$stem.md" ]] && continue
     if [[ "$target" != */* ]]; then
@@ -406,7 +410,15 @@ check_links() {
     if [[ "$base" =~ $id_pattern ]]; then
       id="${BASH_REMATCH[1]}"
       find "$scope" -name "*$id*.md" -print -quit | grep -q . && continue
-      fail link-broken "\`$target\` resolves neither by name nor by id \`$id\`"
+      # Each message names only the tries that ran. Naming a skipped try sends
+      # the reader looking for a match the lint never searched for.
+      if [[ "$target" == */* ]]; then
+        fail link-broken "\`$target\` resolves neither by path nor by id \`$id\`"
+      else
+        fail link-broken "\`$target\` resolves neither by name nor by id \`$id\`"
+      fi
+    elif [[ "$target" == */* ]]; then
+      fail link-broken "\`$target\` does not resolve by path"
     else
       fail link-broken "\`$target\` resolves neither by path nor by name"
     fi
