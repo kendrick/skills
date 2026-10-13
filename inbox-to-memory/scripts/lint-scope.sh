@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Walk one opted-in scope and check every v2 note and record against the machine
 # contracts in references/machine-contracts.md. The walk takes in v1 files as
-# well, checking their wiki links and nothing else: a link resolves against every
-# file in the scope, and that resolution never reads the file's own frontmatter.
+# well, checking their wiki links and nothing else. A link resolves as a path
+# from the linking note's dir, then by name or id within the scope, and none of
+# that reads the file's own frontmatter.
 #
 # This ships as a script rather than prose the agent follows because most of what
 # the v2 schema promises is arithmetic: keys in a fixed order, a block that fits
@@ -12,9 +13,10 @@
 # The only check here that touches a v1 file is the link check. Files without a
 # `schema` key predate the contract, they stay legal indefinitely, and a scope
 # holding both generations is a supported state rather than a migration someone
-# abandoned halfway. Links stay on because a target that resolves to no file in
-# scope is broken whichever generation wrote it, and verify-migration.sh already
-# runs that same resolution over the whole scope without ever reading `schema`.
+# abandoned halfway. Links stay on because a target that resolves to no file is
+# broken whichever generation wrote it. verify-migration.sh also sweeps links
+# across the whole scope without reading `schema`, though it skips the path step
+# this check runs first.
 #
 # Requires bash, awk, and yq (brew install yq).
 set -euo pipefail

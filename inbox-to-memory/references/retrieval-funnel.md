@@ -103,7 +103,7 @@ One row per record, tab separated. Nothing beyond awk. V1 records emit an empty 
 
 ## Links Resolve by ID
 
-Files are never renamed after creation, and ids never regenerate. When a wiki link's literal filename target is missing, resolve it by id before calling it broken: the last ten characters of the target are the nanoid, and `ls **/*<id>*.md` finds the file wherever it went. Report a link broken only after that fallback fails too.
+Files are never renamed after creation, and ids never regenerate. Resolve a wiki link in order before calling it broken. Read the target as a path from the linking note's directory first, which is how a cross-scope link resolves. Where the target holds no `/`, look for a file of that name within the scope. Last, where the target's basename is a `<slug>-<nanoid>` name, the ten characters after the last hyphen are the id, and `ls **/*<id>*.md` run from the scope root finds the file wherever it moved within the scope. A target whose basename lacks that suffix carries no id and has no id step. Report a link broken only after every step fails.
 
 ## Cost Discipline
 
