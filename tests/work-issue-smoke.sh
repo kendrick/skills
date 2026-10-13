@@ -775,10 +775,12 @@ done < "$tmp/stops.txt"
 # charges a wave's workers with failures the suite showed before they ran.
 # Each spelling of the stop message is pinned where it's written; the
 # quoted-message check above counts copies and can't tell which one went.
+# Both pins carry the red-baseline scope: on a green baseline every failure
+# is the wave's and retries one rung up, as it did before #188.
 require_text work-issue/SKILL.md "Continue \`divvy-up\` at its Step 5, in the work tree, naming \`RUN_DIR/baseline.txt\` as its BASELINE"
 require_text work-issue/SKILL.md "\`divvy-up\`'s Step 4 never runs here, so a red baseline adds no question."
-require_text work-issue/SKILL.md "the gate stops the run with \"Verification failed without naming individual failures, so this wave's failures can't be told from the baseline's.\", followed by both outputs quoted."
-require_text work-issue/SKILL.md "| Verification fails and its output names no individual failures | 2, 3 | \"Verification failed without naming individual failures, so this wave's failures can't be told from the baseline's.\", followed by BASELINE and the failing output, both quoted |"
+require_text work-issue/SKILL.md "Where the baseline is red and verification fails with either the wave's output or the baseline naming no individual failures, the gate stops the run with \"Verification failed without naming individual failures, so this wave's failures can't be told from the baseline's.\", followed by both outputs quoted."
+require_text work-issue/SKILL.md "| Verification fails on a red baseline, and the wave's output or the baseline names no individual failures | 2, 3 | \"Verification failed without naming individual failures, so this wave's failures can't be told from the baseline's.\", followed by BASELINE and the failing output, both quoted |"
 
 # --- The cut features. Each sounds reasonable on its own, and each has a row
 # in the RATIONALE ledger's Deliberately Not Built table. Applied across

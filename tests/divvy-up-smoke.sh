@@ -159,6 +159,17 @@ require_text divvy-up/SKILL.md "With no command found, VERIFY_CMD and BASELINE a
 # block the plan written to fix that very failure.
 require_text divvy-up/SKILL.md "When BASELINE is red, the same question names each failure BASELINE shows"
 require_text divvy-up/SKILL.md "A red baseline does not stop the run on its own"
+require_text divvy-up/SKILL.md "When a red BASELINE names no individual failures, the question says so in their place"
+# Decision 36 cut ralph-grind's refuse-on-a-red-gate preflight. A red BASELINE
+# goes into Step 4's question instead, since the plan may exist to fix it.
+refute_text divvy-up/SKILL.md "red BASELINE stops the run"
+
+# A wrapper's file replaces the run but not the lookup, since Step 6 still
+# runs VERIFY_CMD. The file holds output with no exit status, so Step 3 says
+# how to read it, and it has to come from the HEAD the run starts at.
+require_text divvy-up/SKILL.md "Resolve VERIFY_CMD all the same, because Step 6 runs it."
+require_text divvy-up/SKILL.md "The wrapper must have recorded the file at the HEAD this run starts from"
+require_text divvy-up/SKILL.md "A named file holds output and no exit status, so read it as red when its output reports a failure and green when it reports none."
 
 # The attribution rule, at the gate and in the worker's own contract. Drop
 # either half and a pre-existing failure gets charged to a task again.
@@ -169,7 +180,11 @@ require_text divvy-up/references/worker-prompt.md "a failure the baseline alread
 
 # Output that names no individual failures can't be attributed, so the gate
 # stops the run. work-issue's stop table quotes this message, so the wording
-# is pinned byte for byte.
+# is pinned byte for byte. The stop is scoped to a red BASELINE: on a green or
+# absent one every failure is the wave's and retries one rung up.
+require_text divvy-up/SKILL.md "With a green or \`absent\` BASELINE every failure belongs to the wave and routes as \`failed\`."
+require_text divvy-up/SKILL.md "With a red BASELINE, where verification fails and either this wave's output or BASELINE names no individual failures, nothing can be attributed"
+require_text divvy-up/SKILL.md "| Verification failed on a red BASELINE, and this wave's output or BASELINE names no individual failures |"
 require_text divvy-up/SKILL.md "Verification failed without naming individual failures, so this wave's failures can't be told from the baseline's."
 
 # The constraint mechanism and the coupling question are each one deleted
