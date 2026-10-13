@@ -79,7 +79,7 @@ It prints `build: <m>m review: <m>m ratio: <r> over: yes|no`, build being Steps 
 
    Then the judgment half, which is why the script is only half the gate. Derive tasks from PLAN the way `divvy-up`'s Step 1 derives them, reading it against CRITERIA and the issue's Problem section. If that derivation would record a question for `divvy-up`'s Step 4, the plan is thin: refuse with the questions listed rather than asking them, because a question asked here is the second confirmation this design forbids. A task that could be built two ways with no recorded choice is refused the same way.
 4. Make the isolation decision from the Step 1 table now, so the confirmation can name it.
-5. Derive the shape: invoke `divvy-up` by name on `RUN_DIR/plan.md` and run its Steps 1 through 3 in the tree that will host the work. Quote its shape line as-is rather than restating the counts.
+5. Derive the shape: invoke `divvy-up` by name on `RUN_DIR/plan.md` and run its Steps 1 through 3 in the tree that will host the work. Quote its shape line as-is rather than restating the counts. Tell `divvy-up` its baseline will be named before its Step 5, so its Step 3 skips its own verify run: neither the tree nor `RUN_DIR/baseline.txt` exists until Step 1, and Step 2 names the file.
 6. Cross-run ownership. Prune stale siblings first: an `issue-M` whose branch is gone from origin and whose pull request is merged or closed moves to `closed/`. Then:
 
    ```
@@ -131,7 +131,7 @@ Every later command in a taken worktree names it by absolute path (`git -C WORKT
 
 ## Step 2 — Dispatch
 
-Continue `divvy-up` at its Step 5, in the work tree.
+Continue `divvy-up` at its Step 5, in the work tree, naming `RUN_DIR/baseline.txt` as its BASELINE: the wrapping skill's baseline that Step 0 item 5 said would come. `divvy-up`'s Step 4 never runs here, so a red baseline adds no question. It reaches each worker as `{{BASELINE}}` and the gate as data, and the gate charges a task only with a failure that baseline does not show. Where verification fails and its output names no individual failures, the gate stops the run with "Verification failed without naming individual failures, so this wave's failures can't be told from the baseline's.", followed by both outputs quoted.
 
 Steps 2 and 3 run once per wave, in the order `## Waves` gives: dispatch the wave here, gate and settle it as Step 3 says, then dispatch the next wave in the same turn. A settled wave with a later wave pending is not a stopping point. Step 2 continues until every wave in `## Waves` is settled, and the Step 0 yes covers every one of them, not wave 0 alone. Between waves the run stops only at a `divvy-up` stop listed under [Where a Run Stops](#where-a-run-stops). On kendrick/cambium three lanes each committed wave 0 and then went idle with wave 1 ready, printing nothing, and each read as a run still working until the user noticed.
 
@@ -282,6 +282,7 @@ An invocation ends at one of these stops and no other. Each prints its message a
 | `--no-isolate` on a dirty tree | 1 | "commit or stash first" |
 | A task stops for an answer | 2, 3 | the held question, put to the user once the rest of the wave lands |
 | A task fails twice, or fails on `fable` | 3 | `divvy-up`'s stop report naming the task and its failure |
+| Verification fails and its output names no individual failures | 2, 3 | "Verification failed without naming individual failures, so this wave's failures can't be told from the baseline's.", followed by BASELINE and the failing output, both quoted |
 | The format pass's command errors naming no path in the derived set or the repair's `files_changed`, or none it can be tied to, or a repair already re-dispatched for a format-pass error fails it again | 3, 4, 5, 7 | the pass's output, quoted, after its writes outside the derived set are reverted, and at a repair gate the repair's own writes too |
 | Two red-team rounds fail in a row | 4 | the failed claims with the reproducer's commands and output |
 | `adversarial-review` derives a depth past the forecast | 4, 8 | that review's own question |

@@ -37,6 +37,7 @@ A throwaway repo and a small plan: one shared-types task, and three tasks that e
 | 25 | A haiku task carrying the constraint `do not loosen an existing assertion` whose worker weakens an assertion instead of satisfying the done-when. The gate fails the task on its constraint even though verification passed, reverts its owned paths, and re-dispatches it alone on sonnet with the constraint named in the re-dispatch. |
 | 26 | Two tasks with disjoint owned files that both change behavior a third module reads. Derivation catches the coupling and lands them in different waves or as one merged task, never side by side in the same wave. |
 | 27 | A repo whose agent docs say to run a whole-tree formatter before finishing, and two concurrent workers. Neither runs it unscoped: each report's `verify_output` names a scoped or check-only command. The orchestrator's format pass runs once, after the ownership check and before verification. |
+| 28 | A fixture task whose output is held fixed while its verification fails one test. Put that test's failure in BASELINE and run the gate, and the task passes, its `verify_output` naming the failure as the baseline's. Take the failure out of BASELINE and run the gate again, and the task routes as `failed`. Then make BASELINE red with an unrelated failure, and have the task add a new failing test. The task still routes as `failed`. A gate that passes every task while BASELINE is red clears the first two checks and fails the third. |
 
 ## Grading the Delta
 
