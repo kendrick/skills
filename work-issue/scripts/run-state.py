@@ -53,6 +53,9 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+# Seconds one `gh` attempt gets. gh() tries a timed-out call twice, so a call
+# can hold a lane for twice this. RUN_STATE_GH_TIMEOUT overrides it at call
+# time so the smoke suite can drive a hang without waiting a minute.
 GH_TIMEOUT = 60
 
 # One page size for both paginated connections below, kept as a module
@@ -221,18 +224,43 @@ def decode_stream(text, label):
     return docs
 
 
+def gh_timeout():
+    """Seconds one `gh` attempt gets: GH_TIMEOUT, or RUN_STATE_GH_TIMEOUT when set.
+
+    A bad override raises rather than falling back to 60s, so a typo in a test
+    fails loudly instead of waiting a minute without anyone noticing."""
+    raw = os.environ.get("RUN_STATE_GH_TIMEOUT")
+    if raw is None:
+        return GH_TIMEOUT
+    if raw.isascii() and raw.isdigit() and int(raw) > 0:
+        return int(raw)
+    raise GhError(f"RUN_STATE_GH_TIMEOUT must be a positive integer, got {raw}")
+
+
 def gh(args, label):
-    try:
-        completed = subprocess.run(
-            ["gh"] + args,
-            capture_output=True,
-            text=True,
-            timeout=GH_TIMEOUT,
-        )
-    except OSError as e:
-        raise GhError(f"{label}: {e}")
-    except subprocess.TimeoutExpired:
-        raise GhError(f"{label}: timed out after {GH_TIMEOUT}s")
+    """Run one read-only `gh` call, retrying a timeout once.
+
+    A single slow API response ended a Step 6 poll on PR #213 (round-2 check 5,
+    `timed out after 60s`) while a REST read of the same reviews answered a
+    minute later. Only TimeoutExpired retries: a non-zero exit, a non-JSON
+    reply, and an OSError would fail the same way again. Every call here is a
+    read, so repeating one can't repeat a write."""
+    timeout = gh_timeout()
+    for attempt in (1, 2):
+        try:
+            completed = subprocess.run(
+                ["gh"] + args,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+        except OSError as e:
+            raise GhError(f"{label}: {e}")
+        except subprocess.TimeoutExpired:
+            if attempt == 2:
+                raise GhError(f"{label}: timed out after {timeout}s")
+            continue
+        break
     if completed.returncode != 0:
         why = (completed.stderr or completed.stdout or "").strip()
         raise GhError(f"{label}: {' '.join(why.split())[:300] or 'exit ' + str(completed.returncode)}")
@@ -349,8 +377,9 @@ def gather(pr):
     reactions and the issue comments. GraphQL carries the author, the
     reviews, and the review threads with their resolved flag. Reviews and
     threads are two calls, not one, because each paginates on its own
-    cursor. Only a hand run exercises this path. Every fixture goes through
-    `--input`, so the smoke suite does not cover a change here."""
+    cursor. Every bundle fixture goes through `--input`, so only a hand run
+    reaches the calls past the first. The suite's #215 case drives the first,
+    `gh repo view`, through a stub `gh` that times out once."""
     repo_docs = gh(["repo", "view", "--json", "nameWithOwner"], "gh repo view")
     name_with_owner = (repo_docs[0] if repo_docs else {}).get("nameWithOwner", "")
     if "/" not in name_with_owner:

@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# Stands in for `gh` when the smoke suite drives run-state.py's gh() into a
+# timeout. STUB_GH_MODE picks the behavior, and STUB_GH_COUNT counts calls the
+# way stub-review does, so a case can tell a retry from a single attempt.
+#   hang-once     hang on call 1, then print {"ok": 1}
+#   hang-always   hang on every call
+#   fail-404      exit 1 with `HTTP 404` on stderr
+#   hang-then-404 hang on call 1, then fail as fail-404
+#   answer        answer every call the way gather() needs, never hang
+#   hang-then-answer  hang on call 1, then answer as `answer`
+# The answer modes reply per call, keyed on the args: `repo view` gets a
+# nameWithOwner, the paginated REST reads get an empty page, and any GraphQL
+# read gets an OPEN pull request whose reviews and review threads are empty.
+# That is the `gh` boundary and no more. gather() still builds the bundle, so
+# the stub never becomes a second copy of it.
+# The hang is `exec sleep` so that the process subprocess.run kills on timeout
+# is the sleeper itself. A `sleep` child would keep the pipes open, and the
+# post-kill wait would last the whole sleep. Keep the sleep short, so a broken
+# retry still lets the suite finish in seconds.
+set -euo pipefail
+
+n=$(( $(cat "$STUB_GH_COUNT" 2>/dev/null || echo 0) + 1 ))
+echo "$n" >"$STUB_GH_COUNT"
+
+hang() { exec sleep 5; }
+answer() {
+  case "$*" in
+    "repo view"*) echo '{"nameWithOwner": "stub-owner/stub-repo"}' ;;
+    "api graphql"*)
+      echo '{"data": {"repository": {"pullRequest": {"author": {"login": "stub-author"}, "state": "OPEN",' \
+        '"reviews": {"nodes": [], "pageInfo": {"hasNextPage": false, "endCursor": null}},' \
+        '"reviewThreads": {"nodes": [], "pageInfo": {"hasNextPage": false, "endCursor": null}}}}}}'
+      ;;
+    "api --paginate repos/"*) echo '[]' ;;
+    *)
+      echo "stub-gh: no canned answer for: gh $*" >&2
+      exit 2
+      ;;
+  esac
+}
+fail_404() {
+  echo "gh: Not Found (HTTP 404)" >&2
+  exit 1
+}
+
+case "${STUB_GH_MODE:?STUB_GH_MODE is unset}" in
+  hang-once) (( n == 1 )) && hang; echo '{"ok": 1}' ;;
+  hang-always) hang ;;
+  fail-404) fail_404 ;;
+  hang-then-404) (( n == 1 )) && hang; fail_404 ;;
+  answer) answer "$@" ;;
+  hang-then-answer) (( n == 1 )) && hang; answer "$@" ;;
+  *)
+    echo "stub-gh: unknown STUB_GH_MODE $STUB_GH_MODE" >&2
+    exit 2
+    ;;
+esac
