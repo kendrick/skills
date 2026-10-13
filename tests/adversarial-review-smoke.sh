@@ -908,6 +908,10 @@ for n in 1 2 3 4 5 6; do
     exit 1
   }
 done
+# Every ASCII punctuation char but `_`, which is a word char and changes the
+# boundary rather than the punctuation.
+near_subs='!"#$%&'"'"'()*+,-./:;<=>?@[\]^`{|}~'
+near_checked=0
 while IFS=$'\t' read -r sig_n sig_name sig; do
   if grep -Fqxi -- "$sig" <<<"$table_units"; then
     sig_line="+x = 12$sig"
@@ -922,7 +926,47 @@ while IFS=$'\t' read -r sig_n sig_name sig; do
     echo "trigger-table.md row $sig_n signal \`$sig\` does not match its own line: $sig_line" >&2
     exit 1
   }
+  # The positive line above can't tell a literal `(` from a class like `[()]`,
+  # which a review proved by making `round)` match `round(` with this suite
+  # still green (PR #227). So each punctuation char is swapped for every other
+  # one, and none of those near-misses may reach the row. A near-miss that
+  # contains another signal of the row, even as a bare substring (`* 100`
+  # becoming `/ 100`), is dropped, since its row match would be honest.
+  [[ "$sig" == *[!A-Za-z0-9_\ ]* ]] || continue
+  near_lines="$(sig="$sig" n="$sig_n" subs="$near_subs" awk -F'\t' '
+    $1 == ENVIRON["n"] { row[++k] = tolower($3) }
+    END {
+      s = ENVIRON["sig"]; subs = ENVIRON["subs"]
+      for (i = 1; i <= length(s); i++) {
+        c = substr(s, i, 1)
+        if (c ~ /[A-Za-z0-9_ ]/) continue
+        for (j = 1; j <= length(subs); j++) {
+          d = substr(subs, j, 1)
+          if (d == c) continue
+          line = "+x " substr(s, 1, i - 1) d substr(s, i + 1) " y"
+          low = tolower(line); hit = 0
+          for (r = 1; r <= k; r++) if (index(low, row[r])) { hit = 1; break }
+          if (!hit) print line
+        }
+      }
+    }' <<<"$table_signals")"
+  [[ -n "$near_lines" ]] || {
+    echo "trigger-table.md row $sig_n signal \`$sig\`: every near-miss contains another row signal, so its punctuation goes unchecked" >&2
+    exit 1
+  }
+  (expect_match "" --only "$sig_n" < <(printf '%s\n' "$near_lines")) || {
+    echo "trigger-table.md row $sig_n signal \`$sig\` matched a near-miss, so its punctuation is not literal:" >&2
+    python3 "$match_py" lines --only "$sig_n" < <(printf '%s\n' "$near_lines") >&2
+    exit 1
+  }
+  near_checked=$((near_checked + 1))
 done <<<"$table_signals"
+# Zero would mean the punctuation filter or the awk broke, and the negative
+# check above ran for nothing.
+[[ "$near_checked" -gt 0 ]] || {
+  echo "per-signal guard ran no near-miss check: no punctuation-bearing signal read from trigger-table.md" >&2
+  exit 1
+}
 # Whole-word: `index` inside `page_index` is no schema signal, and a bare
 # `CREATE INDEX` is. A substring matcher prints `4 schema` for both.
 expect_match "" <"$diffs/schema-page-index.diff"
