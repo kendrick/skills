@@ -372,12 +372,21 @@ check_anchors() {
   return 0
 }
 
-# Files are never renamed, so a link whose literal target is missing is usually a
-# file that moved rather than one that vanished. The id is the last ten characters
-# of the target and it never changes, which is why the fallback resolves before
-# anything gets reported broken.
+# Three tries, first hit wins. The path comes first because cross-scope links are
+# supported (SKILL.md) and a link like `../working-state` names a file outside
+# $scope that no search of $scope can ever find. $1 is a cached body file, so the
+# linking file's directory comes from current_file, never from $1. Files are never
+# renamed, so a link that misses both is usually a file that moved inside this
+# scope, and its trailing id never changes. That fallback runs only on a scaffolded
+# `<slug>-<nanoid>` name, with the hyphen required: ten characters of the alphabet
+# alone invent an id out of `working-state` ("king-state"). It stays inside $scope
+# because a vault-wide search would let a dead link pass against any unrelated file
+# sharing ten characters.
 check_links() {
   local target
+  local id_pattern='-([A-Za-z0-9_-]{10})$'
+  local dir
+  dir="$(dirname "$current_file")"
   while IFS= read -r target; do
     [[ -z "$target" ]] && continue
     # An unsubstituted placeholder is not a link. Templates ship with them, and
@@ -385,10 +394,20 @@ check_links() {
     case "$target" in
       *'{{'* | *'<'*) continue ;;
     esac
-    find "$scope" -name "$target.md" -print -quit | grep -q . && continue
-    local id="${target: -10}"
-    find "$scope" -name "*$id*.md" -print -quit | grep -q . && continue
-    fail link-broken "\`$target\` resolves neither by name nor by id \`$id\`"
+    # Strip a trailing .md so `[[note.md]]` and `[[note]]` resolve alike.
+    local stem="${target%.md}"
+    [[ -f "$dir/$stem.md" ]] && continue
+    if [[ "$target" != */* ]]; then
+      find "$scope" -name "$stem.md" -print -quit | grep -q . && continue
+    fi
+    local base="${stem##*/}" id=""
+    if [[ "$base" =~ $id_pattern ]]; then
+      id="${BASH_REMATCH[1]}"
+      find "$scope" -name "*$id*.md" -print -quit | grep -q . && continue
+      fail link-broken "\`$target\` resolves neither by name nor by id \`$id\`"
+    else
+      fail link-broken "\`$target\` resolves neither by path nor by name"
+    fi
   done < <(grep -oE '\[\[[^]|]*' "$1" | sed 's/^\[\[//' | sort -u || true)
 }
 
