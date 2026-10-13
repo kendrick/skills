@@ -163,6 +163,21 @@ require_text divvy-up/SKILL.md "When a red BASELINE names no individual failures
 # Decision 36 cut ralph-grind's refuse-on-a-red-gate preflight. A red BASELINE
 # goes into Step 4's question instead, since the plan may exist to fix it.
 refute_text divvy-up/SKILL.md "red BASELINE stops the run"
+# refute_text is case-sensitive, so the line above misses "a red baseline
+# stops the run". This check is case-blind. Step 4's "A red baseline does not
+# stop the run on its own" doesn't match it.
+if grep -iFq -- "red BASELINE stops the run" divvy-up/SKILL.md; then
+  echo "unexpected text in divvy-up/SKILL.md: red BASELINE stops the run (any case)" >&2
+  exit 1
+fi
+
+# The README tells the user the same rules: the baseline is captured before
+# the go-ahead, the gate judges each failure against it, and the stop fires
+# only on a red baseline. When the README's stop once lost that scope, every
+# suite stayed green.
+require_text divvy-up/README.md "it runs the repo's verification command once on the untouched tree and keeps the output as a baseline"
+require_text divvy-up/README.md "found on disk rather than asked for, and checks each failure against the baseline."
+require_text divvy-up/README.md "When the baseline is red and either output names no individual failures, the gate can't tell new failures from old ones, so it stops the run and shows you both outputs."
 
 # A wrapper's file replaces the run but not the lookup, since Step 6 still
 # runs VERIFY_CMD. The file holds output with no exit status, so Step 3 says

@@ -769,6 +769,10 @@ while IFS= read -r row; do
   done < <(grep -oE '"[^"]+"' <<<"$msg" || true)
 done < "$tmp/stops.txt"
 
+# Step 1's baseline serves three readers. A sentence that names fewer lets
+# an edit drop the gate's or Step 4's use and still read as complete.
+require_text work-issue/SKILL.md "A baseline captured before any worker runs is what tells the workers, each wave's gate, and Step 4 whether a red suite belongs to this run or was already red."
+
 # Step 2 names RUN_DIR/baseline.txt as divvy-up's BASELINE (#188). Step 0
 # told divvy-up's Step 3 to skip its own verify run and wait for that name, so
 # a Step 2 that drops the sentence leaves the gate with no baseline, and it
