@@ -749,8 +749,8 @@ awk -v h="$stops_header" '
   on { exit }
 ' work-issue/SKILL.md > "$tmp/stops.txt"
 stops_rows="$(wc -l < "$tmp/stops.txt" | tr -d ' ')"
-[[ "$stops_rows" -eq 26 ]] || {
-  echo "Where a Run Stops lists $stops_rows stops, expected 26" >&2
+[[ "$stops_rows" -eq 27 ]] || {
+  echo "Where a Run Stops lists $stops_rows stops, expected 27" >&2
   exit 1
 }
 while IFS= read -r row; do
@@ -768,6 +768,17 @@ while IFS= read -r row; do
     }
   done < <(grep -oE '"[^"]+"' <<<"$msg" || true)
 done < "$tmp/stops.txt"
+
+# Step 2 names RUN_DIR/baseline.txt as divvy-up's BASELINE (#188). Step 0
+# told divvy-up's Step 3 to skip its own verify run and wait for that name, so
+# a Step 2 that drops the sentence leaves the gate with no baseline, and it
+# charges a wave's workers with failures the suite showed before they ran.
+# Each spelling of the stop message is pinned where it's written; the
+# quoted-message check above counts copies and can't tell which one went.
+require_text work-issue/SKILL.md "Continue \`divvy-up\` at its Step 5, in the work tree, naming \`RUN_DIR/baseline.txt\` as its BASELINE"
+require_text work-issue/SKILL.md "\`divvy-up\`'s Step 4 never runs here, so a red baseline adds no question."
+require_text work-issue/SKILL.md "the gate stops the run with \"Verification failed without naming individual failures, so this wave's failures can't be told from the baseline's.\", followed by both outputs quoted."
+require_text work-issue/SKILL.md "| Verification fails and its output names no individual failures | 2, 3 | \"Verification failed without naming individual failures, so this wave's failures can't be told from the baseline's.\", followed by BASELINE and the failing output, both quoted |"
 
 # --- The cut features. Each sounds reasonable on its own, and each has a row
 # in the RATIONALE ledger's Deliberately Not Built table. Applied across

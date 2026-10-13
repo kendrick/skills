@@ -111,7 +111,7 @@ require_text divvy-up/SKILL.md "fable"
 # plan.
 require_text divvy-up/SKILL.md "/agent-guild:job"
 
-# Reference contracts: the eight placeholders every dispatch substitutes, and
+# Reference contracts: the nine placeholders every dispatch substitutes, and
 # the JSON-only rule that keeps the gate from having to arbitrate between a
 # report and a summary paragraph sitting next to it.
 require_text divvy-up/references/worker-prompt.md "{{TASK}}"
@@ -132,6 +132,45 @@ require_text divvy-up/references/worker-prompt.md "{{CALLER_NOTES}}"
 # whether to run wave 0 answers it here on the user's behalf instead of
 # asking a second time in the same turn.
 require_text divvy-up/SKILL.md "answers it here on the user's behalf"
+
+# kendrick/skills#188: the verify baseline. Without it, a suite already red
+# before the run fails the first task to meet it, fails the retry one rung up,
+# and stops the run naming a healthy task.
+
+# This pin greps only the template. The Placeholders list names {{BASELINE}}
+# too, so a file-wide grep would stay green after the template lost the slot
+# and workers stopped seeing the baseline.
+baseline_template="$(awk '/^## Template$/{f=1; next} /^## Placeholders$/{f=0} f' divvy-up/references/worker-prompt.md)"
+grep -Fq -- "{{BASELINE}}" <<<"$baseline_template" || {
+  echo "missing expected text in divvy-up/references/worker-prompt.md's template: {{BASELINE}}" >&2
+  exit 1
+}
+require_text divvy-up/references/worker-prompt.md "- \`{{BASELINE}}\` — BASELINE's tail verbatim"
+
+# Step 3's capture, and the two cases that skip running it. A wrapper's
+# baseline has to replace the run: work-issue reaches Step 3 before its
+# worktree exists, so a capture there would run on the wrong tree.
+require_text divvy-up/SKILL.md "Then capture **BASELINE**, the verify command's output before any task runs"
+require_text divvy-up/SKILL.md "A wrapping skill's baseline replaces the run."
+require_text divvy-up/SKILL.md "or says one will be named before Step 5"
+require_text divvy-up/SKILL.md "With no command found, VERIFY_CMD and BASELINE are both \`absent\`"
+
+# Step 4's red-baseline clause. Refusing outright on a red baseline would
+# block the plan written to fix that very failure.
+require_text divvy-up/SKILL.md "When BASELINE is red, the same question names each failure BASELINE shows"
+require_text divvy-up/SKILL.md "A red baseline does not stop the run on its own"
+
+# The attribution rule, at the gate and in the worker's own contract. Drop
+# either half and a pre-existing failure gets charged to a task again.
+require_text divvy-up/SKILL.md "Run VERIFY_CMD, the command Step 3 resolved, so the gate verifies with the same command BASELINE ran."
+require_text divvy-up/SKILL.md "a failure routes a task as \`failed\` only when BASELINE does not show that same test or check."
+require_text divvy-up/references/worker-prompt.md "A failure that also appears in this baseline is not yours."
+require_text divvy-up/references/worker-prompt.md "a failure the baseline already shows aside"
+
+# Output that names no individual failures can't be attributed, so the gate
+# stops the run. work-issue's stop table quotes this message, so the wording
+# is pinned byte for byte.
+require_text divvy-up/SKILL.md "Verification failed without naming individual failures, so this wave's failures can't be told from the baseline's."
 
 # The constraint mechanism and the coupling question are each one deleted
 # paragraph from being gone, and this smoke test is the only thing that would
