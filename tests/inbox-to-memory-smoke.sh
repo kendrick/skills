@@ -1802,8 +1802,8 @@ require_line "$v1_broken_out" "failures: 1" v1-broken
 #
 # `one-vendor-per-region-G2k65qG3Nc` matches a filename directly.
 # `was-renamed-away-G2k65qG3Nc` matches no filename; only the trailing
-# ten-character id resolves it, through the fallback in check_links
-# (lint-scope.sh:376-377). The rest of the block is the same six-way body
+# ten-character id resolves it, through the id fallback in check_links.
+# The rest of the block is the same six-way body
 # C-3 uses to prove token-grammar, open-question-fields, tension-fields,
 # contradiction-fields, decision-fields, and anchor-form all stay off a v1
 # file.
@@ -1832,6 +1832,33 @@ refute_failure "$v1_pass_out" "tension-fields"
 refute_failure "$v1_pass_out" "contradiction-fields"
 refute_failure "$v1_pass_out" "decision-fields"
 refute_failure "$v1_pass_out" "anchor-form"
+
+# --- Links that leave the scope (#79) ---------------------------------------
+#
+# A real scope reported 17 link-broken failures, all false, because the lint
+# searched $scope for a file named after the whole target and no path ever
+# matches a basename. cross-scope/ is one copied v1 note plus four planted
+# links, so `failures: 3` means exactly the three that should fail did.
+# The id-only file in cross-scope-elsewhere/ must exist, or the bare link fails
+# for want of any match and the Deliberately Not Built row (no id search
+# outside the scope) goes unpinned.
+
+xs="$fixtures/cross-scope"
+xs_note="$xs/notes/2025-11-04-atlas-scoping-call-3iMu15QJ_x.md"
+require_dir "$xs/_inbox"
+require_dir "$xs/_memory"
+require_file "$fixtures/cross-scope-elsewhere/_memory/context/region-cutover-owner-Vb7kQ2mXp9.md"
+require_file "$fixtures/cross-scope-elsewhere/_memory/decisions/vendor-exception-process-Wq4tLs8_Rn.md"
+xs_out="$(run_lint "$xs")"
+require_line "$xs_out" "v1 files: 1" cross-scope
+require_line "$xs_out" "failures: 3" cross-scope
+refute_failure "$xs_out" "cross-scope-elsewhere/_memory/context/region-cutover-owner-Vb7kQ2mXp9"
+require_failure "$xs_out" "FAIL $xs_note: link-broken: \`../_memory/context/missing-record-ZZZZZZZZZZ\` resolves neither by name nor by id \`ZZZZZZZZZZ\`"
+# `working-state` ends in ten nanoid-alphabet characters, `king-state`, so a
+# looser id rule would name an id this link never carried.
+require_failure "$xs_out" "FAIL $xs_note: link-broken: \`../working-state\` resolves neither by path nor by name"
+refute_failure "$xs_out" "\`../working-state\` resolves neither by name nor by id"
+require_failure "$xs_out" "FAIL $xs_note: link-broken: \`vendor-exception-policy-Wq4tLs8_Rn\` resolves neither by name nor by id \`Wq4tLs8_Rn\`"
 
 # ---------------------------------------------------------------------------
 # last_confirmed write-through (#27)
