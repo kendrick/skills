@@ -1951,8 +1951,9 @@ refute_text work-issue/SKILL.md "--max-poll"
 # #215: one slow gh call exited `review` 3 and ended the poll on PR #213.
 # gh() retries a timeout once and nothing else. The three outcomes are pinned
 # at the seam, calling gh() directly against stub-gh, and the retry at the
-# caller by running `review` itself. A stub serving a whole review bundle would
-# be a second copy of the gather logic. RUN_STATE_GH_TIMEOUT=1 against the
+# caller by running `review` itself, once failing after the retry and once
+# answering. stub-gh answers each gh call and never builds a bundle, so
+# gather() stays the only code that does. RUN_STATE_GH_TIMEOUT=1 against the
 # stub's 5s hang keeps each timeout to a second.
 stub_gh="$repo_root/tests/fixtures/work-issue/stub-gh"
 [[ -x "$stub_gh" ]] || {
@@ -2025,6 +2026,44 @@ grep -Fq "HTTP 404" "$tmp/gh-review.err" && ! grep -Fq "timed out" "$tmp/gh-revi
 }
 [[ "$(cat "$tmp/gh-review.count")" == 2 ]] || {
   echo "run-state.py review should call gh twice (timeout, then retry), called it $(cat "$tmp/gh-review.count")" >&2
+  exit 1
+}
+
+# The caller's happy path: the first gh call hangs and the retry answers, so
+# `review` finishes its gather and prints a state. The clean run's call count
+# is measured rather than written down, so a gather that grows a call keeps
+# this case honest. One call over clean is the retry and nothing else.
+# Args: mode. Leaves the exit status, stdout, saved bundle, and call count
+# under $tmp/gh-<mode>.*.
+run_gh_review() {
+  local mode="$1"
+  rm -f "$tmp/gh-$mode.count" "$tmp/gh-$mode.bundle"
+  set +e
+  PATH="$gh_bin:$PATH" STUB_GH_MODE="$mode" STUB_GH_COUNT="$tmp/gh-$mode.count" RUN_STATE_GH_TIMEOUT=1 \
+    python3 "$run_state" review 1 --since 2026-01-01T00:00:00Z --save "$tmp/gh-$mode.bundle" \
+    >"$tmp/gh-$mode.out" 2>"$tmp/gh-$mode.err"
+  echo $? >"$tmp/gh-$mode.status"
+  set -e
+}
+run_gh_review answer
+run_gh_review hang-then-answer
+for mode in answer hang-then-answer; do
+  [[ "$(cat "$tmp/gh-$mode.status")" == 0 ]] || {
+    echo "run-state.py review ($mode) should exit 0, got $(cat "$tmp/gh-$mode.status"): $(cat "$tmp/gh-$mode.err")" >&2
+    exit 1
+  }
+  [[ "$(head -n 1 "$tmp/gh-$mode.out")" == pending ]] || {
+    echo "run-state.py review ($mode) should print pending against an empty bundle, got: $(cat "$tmp/gh-$mode.out")" >&2
+    exit 1
+  }
+  python3 -c 'import json, sys; sys.exit(json.load(open(sys.argv[1])).get("state") != "OPEN")' "$tmp/gh-$mode.bundle" || {
+    echo "run-state.py review ($mode) should save a bundle with state OPEN, got: $(cat "$tmp/gh-$mode.bundle" 2>&1)" >&2
+    exit 1
+  }
+done
+gh_clean_calls="$(cat "$tmp/gh-answer.count")"
+[[ "$(cat "$tmp/gh-hang-then-answer.count")" == "$(( gh_clean_calls + 1 ))" ]] || {
+  echo "run-state.py review should make one call more than a clean run's $gh_clean_calls after a timeout, made $(cat "$tmp/gh-hang-then-answer.count")" >&2
   exit 1
 }
 
