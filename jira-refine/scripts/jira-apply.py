@@ -1281,12 +1281,17 @@ class JiraCliTransport(Transport):
         return 1
 
     def add_labels(self, key, labels, added):
-        # The CLI adds rather than replaces, so it takes only the new labels —
-        # handing it the union would be harmless but would spend an invocation
-        # per label the issue already carries.
+        # The CLI adds rather than replaces, so it takes only the new labels.
+        # All of them go in one invocation with a repeated `--label`. A call per
+        # label could land the first and fail the second, and `execute` would
+        # then report the whole op unmapped while half of it sat on the issue.
+        # One call succeeds or fails as a unit, like the REST transport's PUT.
+        args = ["issue", "edit", key]
         for label in added:
-            self._mutate(["issue", "edit", key, "--label", label, "--no-input"])
-        return len(added)
+            args.extend(["--label", label])
+        args.append("--no-input")
+        self._mutate(args)
+        return 1
 
     def set_field(self, key, field_id, cli_name, value):
         self._mutate(

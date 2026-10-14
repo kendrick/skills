@@ -212,6 +212,11 @@ def load_label_families(raw, path="config"):
             fail(f"family `{fam}` declares no labels")
         norm = {}
         for label, phrases in labels.items():
+            # A quoted TOML key can hold anything, and Jira refuses a label
+            # with a space in it. Rejecting it at load stops the run before
+            # apply lands the description write and then fails the label write.
+            if not label or any(c.isspace() for c in label):
+                fail(f"label `{label}` in family `{fam}` is empty or holds whitespace, which a Jira label cannot")
             if not isinstance(phrases, list) or not phrases:
                 fail(f"label `{label}` in family `{fam}` has no phrases")
             for ph in phrases:

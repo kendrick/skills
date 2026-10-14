@@ -32,7 +32,7 @@ Only the argument shapes `JiraCliTransport` actually builds are handled:
     jira me
     jira issue view KEY --raw
     jira issue edit KEY -b TEXT --no-input
-    jira issue edit KEY --label LABEL --no-input
+    jira issue edit KEY --label LABEL [--label LABEL ...] --no-input
     jira issue edit KEY --custom NAME=VALUE --no-input
     jira issue link DEPENDS_ON KEY LINK_TYPE
     jira issue create -pPROJECT -tTYPE -s SUMMARY -b DESCRIPTION --no-input
@@ -142,11 +142,11 @@ def cmd_issue_view(argv):
 def _parse_edit_flags(argv):
     """(-b value, [--label values], [--custom values], flags-seen) from argv.
 
-    `JiraCliTransport` sends exactly one valued flag per `edit` invocation
-    (one `-b`, or one `--label`, or one `--custom`) plus `--no-input`, but this
-    collects repeats rather than assuming exactly one — a caller that changes
-    to batch several flags per call shouldn't also need this fixture rewritten
-    to notice."""
+    `JiraCliTransport` sends one `-b` or one `--custom` per `edit`
+    invocation, but every new label in a single call on a repeated `--label`,
+    so a label write can't land half its labels and then fail. Repeats are
+    collected for every flag rather than assuming exactly one, so a caller
+    that batches more flags per call doesn't need this fixture rewritten."""
     text = None
     labels = []
     customs = []

@@ -725,6 +725,11 @@ cap-export-timeouts = ["the nightly export"]
 
 [label_families.outcome.labels]
 cap-export-timeouts = ["export sla"]' 'label `cap-export-timeouts` is declared in both `capability` and `outcome`'
+# TOML accepts a quoted key with a space in it, and Jira refuses that label.
+# Rejecting it at load keeps apply's label write from failing after the
+# description write has landed.
+bad_families_config spaced-label '[label_families.capability.labels]
+"bad label" = ["spoken phrase"]' 'label `bad label` in family `capability` is empty or holds whitespace, which a Jira label cannot'
 
 # --- Idempotency, both transports. Rule 8 of tracker-contract.md. -----------
 #
@@ -1807,6 +1812,45 @@ grep -Fq "no cli_name, which jira-cli writes by" "$tmp/cli-nocli.json" || {
   cat "$tmp/cli-nocli.json" >&2
   exit 1
 }
+
+# --- Stated labels over the CLI (#233). --------------------------------------
+# jira-cli adds labels one `--label` at a time, and a call per label could land
+# the first and fail the second, leaving a label on the issue that the report
+# calls unmapped. So both new labels have to ride one `issue edit`. A fresh
+# state seeded with the hand-set `team-owned` label, and its own log, so the
+# count below sees this run alone; the expected labels are written out from the
+# requirement rather than computed from the entry.
+cli_labels_log="$tmp/cli-labels.log"
+FAKE_JIRA_LOG="$cli_labels_log" FAKE_JIRA_SEED="$tmp/labels-seed.json" \
+  FAKE_JIRA_STATE="$tmp/cli-labels-state.json" \
+  python3 "$apply" update --config "$labels_config" --transport jira-cli \
+  < "$tmp/labels-entries.jsonl" > "$tmp/cli-labels.json" 2> "$tmp/cli-labels.err" || {
+  echo "applying the schema-2 entry over jira-cli should exit 0:" >&2
+  cat "$tmp/cli-labels.err" >&2
+  exit 1
+}
+FAKE_JIRA_LOG="$cli_labels_log" FAKE_JIRA_SEED="$tmp/labels-seed.json" \
+  FAKE_JIRA_STATE="$tmp/cli-labels-state.json" \
+  python3 "$apply" get PROJ-412 --config "$labels_config" --transport jira-cli \
+  > "$tmp/cli-labels-after.json" 2>/dev/null || {
+  echo "PROJ-412 should read back over jira-cli after the labels apply" >&2
+  exit 1
+}
+python3 - "$cli_labels_log" "$tmp/cli-labels-after.json" <<'PY' || exit 1
+import json, sys
+writes = [json.loads(l) for l in open(sys.argv[1], encoding="utf-8")]
+label_edits = [w for w in writes if w.get("command") == "issue edit" and "--label" in w["args"]]
+if len(label_edits) != 1:
+    sys.exit(f"both new labels should go out in one `issue edit`, got {len(label_edits)}: {label_edits}")
+args = label_edits[0]["args"]
+sent = [args[i + 1] for i, a in enumerate(args) if a == "--label"]
+if sorted(sent) != ["cap-export-timeouts", "refined-2026-09-07"]:
+    sys.exit(f"the one label edit should carry both new labels and nothing else, got {sent}")
+labels = json.load(open(sys.argv[2], encoding="utf-8"))["fields"]["labels"]
+want = {"team-owned", "refined-2026-09-07", "cap-export-timeouts"}
+if set(labels) != want or len(labels) != len(want):
+    sys.exit(f"PROJ-412 should end with labels {sorted(want)} over jira-cli, got {labels}")
+PY
 
 # --- The jira-cli issue-type cache (#90). ------------------------------------
 # `jira me` passes on a config with no cached types, and then every `jira issue

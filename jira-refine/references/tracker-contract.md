@@ -222,7 +222,7 @@ Under the jira-cli transport a Goal is mapped only when both `fields.goal` and `
 |---|---|---|
 | get_issue | `GET issue/{key}?fields=summary,description,labels,issuelinks,<goal id>` | `jira issue view KEY --raw` |
 | update_description | `PUT issue/{key}` `{"fields":{"description":text}}` | `jira issue edit KEY -b "<text>" --no-input` |
-| add_labels | `PUT issue/{key}` `{"fields":{"labels":[union]}}` | `jira issue edit KEY --label L --no-input`, once per label in `added` |
+| add_labels | `PUT issue/{key}` `{"fields":{"labels":[union]}}` | `jira issue edit KEY --label L1 --label L2 … --no-input`, one invocation carrying every label in `added`, so the op succeeds or fails as one call, as the REST PUT does |
 | set_field | `PUT issue/{key}` `{"fields":{id:value}}` | `jira issue edit KEY --custom name=value --no-input` |
 | create_link | `POST issueLink` `{type:{name},inwardIssue:{key:X},outwardIssue:{key:D}}` | `jira issue link D X "<link_type>"` |
 | create_issue | `POST issue`, extra fields as `fields[id]` | `jira issue create -pPROJ -tTask -s"…" -b"…" -lL --no-input`, one `--custom name=value` per extra field, key parsed from the output |

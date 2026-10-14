@@ -187,7 +187,7 @@ cap-export-timeouts = ["export timeout", "the nightly export"]
 cap-safari-tiles = ["safari tiles", "the dashboard tiles"]
 ```
 
-`max` is optional and, when present, a positive integer; a family without it has no cap. Each label maps to the phrases the room says for it. The config fails to load, exit 3, on a family with no labels, a label with no phrases, a phrase that is not a string or is empty or whitespace, a `max` that is not an integer (`max = true` included) or is below 1, or one label declared in two families.
+`max` is optional and, when present, a positive integer; a family without it has no cap. Each label maps to the phrases the room says for it. The config fails to load, exit 3, on a family with no labels, a label name that is empty or holds whitespace (Jira refuses both, and a quoted TOML key such as `"bad label"` would otherwise load), a label with no phrases, a phrase that is not a string or is empty or whitespace, a `max` that is not an integer (`max = true` included) or is below 1, or one label declared in two families.
 
 Each line under `### Labels` is:
 
