@@ -771,7 +771,25 @@ done < "$tmp/stops.txt"
 
 # Step 1's baseline serves three readers. A sentence that names fewer lets
 # an edit drop the gate's or Step 4's use and still read as complete.
-require_text work-issue/SKILL.md "A baseline captured before any worker runs is what tells the workers, each wave's gate, and Step 4 whether a red suite belongs to this run or was already red."
+require_text work-issue/SKILL.md "A baseline captured before any worker runs is what tells the first wave's workers and gate, and Step 4, whether a red suite belongs to this run or was already red."
+
+# The baseline files carry their exit status, because divvy-up reads status
+# from an `exit:` first line and reads a file without one as red (PR #229
+# review). Each passing wave's gate run is saved too: a resumed session has
+# lost divvy-up's in-memory refresh, and the run-start file would pass a
+# failure an earlier wave fixed and a later one brought back.
+require_text work-issue/SKILL.md "Then INSTALL_CMD, then VERIFY_CMD, saved to \`RUN_DIR/baseline.txt\` as a first line \`exit: <status>\` holding its exit status, then its output tail."
+require_text work-issue/SKILL.md "and \`RUN_DIR/baseline.txt\` opens with \`exit: <status>\`, VERIFY_CMD's real exit status, followed by its real output."
+require_text work-issue/SKILL.md "\`baseline.txt\`, \`baseline-<wave>.txt\`, \`max_review_rounds\`"
+require_text work-issue/SKILL.md "Each time Step 2 continues \`divvy-up\` at a wave, the first dispatch after a resume included, name instead the \`RUN_DIR/baseline-<wave>.txt\` of the highest-numbered wave already settled, and \`baseline.txt\` only while no wave has settled."
+# A run gated before baseline-<wave>.txt existed has markers and no file;
+# Step 2 falls back rather than naming a file that isn't there, and the probe
+# leaves those files out for the same reason.
+require_text work-issue/SKILL.md "Where that file is missing, as on a run gated before these files existed, name the newest \`baseline-<wave>.txt\` that exists among settled waves, else \`baseline.txt\`, and that run is judged against an older baseline."
+require_text work-issue/references/resume.md "The probe checks \`baseline.txt\` alone, never \`baseline-<wave>.txt\`, because Step 2 falls back to an older baseline when a wave's file is missing"
+require_text work-issue/SKILL.md "Just before the markers, save the verification run that passed the gate to \`RUN_DIR/baseline-<wave>.txt\` in \`baseline.txt\`'s format"
+require_text work-issue/SKILL.md "\`RUN_DIR/baseline.txt\` stays the run-start capture, untouched after Step 1, because Step 4's reproducer reads it."
+require_text work-issue/SKILL.md "with a \`gated/<wave>-<task>\` marker for each of its tasks and a \`baseline-<wave>.txt\`;"
 
 # Step 2 names RUN_DIR/baseline.txt as divvy-up's BASELINE (#188). Step 0
 # told divvy-up's Step 3 to skip its own verify run and wait for that name, so
@@ -1707,7 +1725,7 @@ done
 # the probe only through Step 0's write, and a missing file silently reads 2.
 require_text work-issue/SKILL.md "\`--max-review-rounds N\` caps the post-PR review loop at N triage rounds, default 2, and Step 0 writes it to \`RUN_DIR/max_review_rounds\`"
 require_text work-issue/SKILL.md "Write the \`--max-review-rounds\` value, \`2\` where the flag is absent, to \`RUN_DIR/max_review_rounds\`."
-require_text work-issue/SKILL.md "\`baseline.txt\`, \`max_review_rounds\`, \`pushed_at\`"
+require_text work-issue/SKILL.md "\`baseline-<wave>.txt\`, \`max_review_rounds\`, \`pushed_at\`"
 # N is a positive integer: 0 would cap round 1, so no post-PR finding ever got
 # a repair, and nothing downstream checks the file's value. A resume skips
 # Step 0, so the flag it passes changes nothing; the file is the lever.

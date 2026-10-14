@@ -145,12 +145,14 @@ grep -Fq -- "{{BASELINE}}" <<<"$baseline_template" || {
   echo "missing expected text in divvy-up/references/worker-prompt.md's template: {{BASELINE}}" >&2
   exit 1
 }
-require_text divvy-up/references/worker-prompt.md "- \`{{BASELINE}}\` — BASELINE's tail verbatim"
+require_text divvy-up/references/worker-prompt.md "- \`{{BASELINE}}\` — BASELINE as it stands when the wave dispatches: a first line \`exit: <n>\` with its exit status, then its output tail verbatim."
+require_text divvy-up/references/worker-prompt.md "for every later wave it is the refresh Step 6 made from the last passing wave's verification."
+require_text divvy-up/references/worker-prompt.md "The same command ran on this tree before this wave started, and printed"
 
 # Step 3's capture, and the two cases that skip running it. A wrapper's
 # baseline has to replace the run: work-issue reaches Step 3 before its
 # worktree exists, so a capture there would run on the wrong tree.
-require_text divvy-up/SKILL.md "Then capture **BASELINE**, the verify command's output before any task runs"
+require_text divvy-up/SKILL.md "Then capture **BASELINE**, which starts as the verify command's output before any task runs"
 require_text divvy-up/SKILL.md "A wrapping skill's baseline replaces the run."
 require_text divvy-up/SKILL.md "or says one will be named before Step 5"
 require_text divvy-up/SKILL.md "With no command found, VERIFY_CMD and BASELINE are both \`absent\`"
@@ -180,11 +182,32 @@ require_text divvy-up/README.md "found on disk rather than asked for, and checks
 require_text divvy-up/README.md "When the baseline is red and either output names no individual failures, the gate can't tell new failures from old ones, so it stops the run and shows you both outputs."
 
 # A wrapper's file replaces the run but not the lookup, since Step 6 still
-# runs VERIFY_CMD. The file holds output with no exit status, so Step 3 says
-# how to read it, and it has to come from the HEAD the run starts at.
+# runs VERIFY_CMD, and it has to come from the HEAD the run starts at. Its
+# status comes from an `exit:` first line (PR #229 review): read off the
+# output, a suite that exited non-zero without printing a failure read as
+# green. A file without the line reads red.
 require_text divvy-up/SKILL.md "Resolve VERIFY_CMD all the same, because Step 6 runs it."
-require_text divvy-up/SKILL.md "The wrapper must have recorded the file at the HEAD this run starts from"
-require_text divvy-up/SKILL.md "A named file holds output and no exit status, so read it as red when its output reports a failure and green when it reports none."
+require_text divvy-up/SKILL.md "The wrapper must have recorded the run-start file at the HEAD this run starts from, and a later wave's file at the HEAD that wave's gate passed on"
+require_text divvy-up/SKILL.md "keep its exit status and the tail of its output as a first line \`exit: <n>\` followed by the tail, the shape a wrapper's file has and \`{{BASELINE}}\` hands workers."
+require_text divvy-up/SKILL.md "A wrapping skill that continues the run at a later wave can name another file, and that file replaces BASELINE from then on."
+require_text divvy-up/SKILL.md "A named file's first line \`exit: <n>\` gives its status: green on 0, red otherwise."
+require_text divvy-up/SKILL.md "That line is a status, not a failure, so attribution reads failures from the rest of the file."
+require_text divvy-up/SKILL.md "A named file with no \`exit:\` first line reads as red, because a status nobody recorded can't be called green"
+require_text divvy-up/README.md "A handed-over file states the command's exit status on its first line, and a file without that line counts as red"
+# Decision 37 cut reading a named file's status from its output text.
+refute_text divvy-up/SKILL.md "read it as red when its output reports a failure"
+
+# The refresh (PR #229 review). Judged against the run-start BASELINE, a
+# failure wave 0 fixed and wave 1 brings back still shows in BASELINE, so
+# wave 1 passes and the final diff ships broken.
+require_text divvy-up/SKILL.md "Step 6 refreshes it after each passing wave."
+require_text divvy-up/SKILL.md "Once the wave passes its gate, BASELINE becomes the exit status and output tail of the verification run that passed it, the run after any retries, and every later wave's workers and gate read that refreshed BASELINE"
+require_text divvy-up/SKILL.md "a failure an earlier wave fixed and a later wave brings back must count against the later wave."
+require_text divvy-up/SKILL.md "A wave that changed nothing refreshes the same way."
+require_text divvy-up/SKILL.md "Step 4's question reads the run-start BASELINE alone"
+require_text divvy-up/SKILL.md "With VERIFY_CMD \`absent\`, skip this check, and nothing refreshes."
+require_text divvy-up/SKILL.md "Once the wave passes, BASELINE holds its gate's last verification run."
+require_text divvy-up/README.md "Once a wave passes, the gate's own verification run becomes the baseline for the next wave."
 
 # The attribution rule, at the gate and in the worker's own contract. Drop
 # either half and a pre-existing failure gets charged to a task again.

@@ -111,8 +111,8 @@ it lands on a file you do not own, or on one of yours the formatter could
 not be scoped to: name it in `verify_output`, and set your status by
 everything else verification printed.
 
-The same command ran on this tree before any task in this run started, and
-printed this baseline:
+The same command ran on this tree before this wave started, and printed
+this baseline, its exit status on the first line:
 
 {{BASELINE}}
 
@@ -154,7 +154,7 @@ Leave `question` empty except for `stopped` or `failed`.
 - `{{DONE_WHEN}}` — the wave table's Done when cell for this task, verbatim. It is the only acceptance bar the worker gets, so copying it exactly matters more than making it read smoothly.
 - `{{CONSTRAINTS}}` — the task's Constraints cell from the wave table, verbatim. An empty cell substitutes the literal `none recorded`, so the template goes across unchanged rather than growing a conditional paragraph the dispatcher has to decide about.
 - `{{VERIFY_CMD}}` — the repo's verification command (test suite, linter, build—whatever this repo runs). The worker runs it before reporting, so a task that reports `done` with a broken build is a worker that skipped this line, not a gap in the contract. Substitute a form that writes nothing where the repo has one (`prettier --check`, `cargo fmt --check`, `ruff format --check`, a lint script without `--fix`). Every worker in the wave runs this at once, so a command that writes is a tree-wide write six times over; a worker handed one falls back to its checks, and Step 6's format pass does what the fix step would have.
-- `{{BASELINE}}` — BASELINE's tail verbatim, from the capture at Step 3 or the file a wrapping skill named, or the literal `absent` when VERIFY_CMD is. It is what lets a worker tell a failure it caused from one the tree already had, so a pre-existing red suite cannot fail every task in the wave.
+- `{{BASELINE}}` — BASELINE as it stands when the wave dispatches: a first line `exit: <n>` with its exit status, then its output tail verbatim. For wave 0 that is the Step 3 capture or the file a wrapping skill named, and for every later wave it is the refresh Step 6 made from the last passing wave's verification. The literal `absent` goes in when VERIFY_CMD is `absent`. It is what lets a worker tell a failure it caused from one the tree already had, so a pre-existing red suite cannot fail every task in the wave.
 - `{{CALLER_NOTES}}` — empty on a direct run. A wrapping skill that dispatches through divvy-up supplies its own preamble here, verbatim, and it goes across ahead of everything else the caller could not otherwise say.
 - `{{PRIOR}}` — empty on a first dispatch. On a re-dispatch after a failure, it carries the previous attempt's report, what the gate found wrong with it, and, if the failure was a constraint violation, which constraint was broken—a worker who does not know which shortcut was refused will reach for it again.
 
