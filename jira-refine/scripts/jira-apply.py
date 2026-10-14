@@ -68,6 +68,10 @@ TOML_FLOOR = "3.11"
 API_PATH = "rest/api/2"
 TRANSPORTS = ("rest", "jira-cli")
 HTTP_TIMEOUT = 30
+# Jira refuses a single label longer than this. The loaders in segment.py and
+# check-staging.py and the update-input check in jira-apply.py each carry the
+# limit because scripts never import each other; change all three together.
+LABEL_MAX_CHARS = 255
 
 # Plain paragraph lines rather than headings or `{{ }}` macros. The sentinels
 # exist for find_blocks and are noise to a reader, and a heading is the one shape
@@ -1547,12 +1551,14 @@ def _check_labels(entry, lineno):
         isinstance(item, str) and item.strip() for item in raw
     ):
         die(f"stdin line {lineno}: labels must be a list of non-empty strings")
-    # Same predicate the config loaders apply. Without it a hand-built line's
-    # spaced label reaches plan_update_ops, and Jira refuses the label write
+    # Same predicates the config loaders apply. Without them a hand-built line's
+    # spaced or overlong label reaches plan_update_ops, and Jira refuses the label write
     # only after the description write has already landed.
     for item in raw:
         if any(c.isspace() for c in item):
             die(f"stdin line {lineno}: labels must not hold whitespace, which a Jira label cannot: {item!r}")
+        if len(item) > LABEL_MAX_CHARS:
+            die(f"stdin line {lineno}: labels must not run past {LABEL_MAX_CHARS} characters, which a Jira label cannot: '{item[:40]}…'")
 
 
 def _apply(args, required, dry_run):

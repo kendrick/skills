@@ -95,6 +95,10 @@ ANCHOR_MAX_WORDS = 10
 # same two numbers as literals, since scripts never import each other.
 PHRASE_MAX_WORDS = ANCHOR_MAX_WORDS
 PHRASE_MAX_CHARS = ANCHOR_MAX_CHARS
+# Jira refuses a single label longer than this. The loaders in segment.py and
+# check-staging.py and the update-input check in jira-apply.py each carry the
+# limit because scripts never import each other; change all three together.
+LABEL_MAX_CHARS = 255
 NOT_DISCUSSED_RE = re.compile(r"^- not discussed: (.+)$")
 
 
@@ -220,10 +224,10 @@ def load_label_families(raw, path="config"):
         norm = {}
         for label, phrases in labels.items():
             # A quoted TOML key can hold anything, and Jira refuses a label
-            # with a space in it. Rejecting it at load stops the run before
+            # with a space in it or past LABEL_MAX_CHARS. Rejecting it at load stops the run before
             # apply lands the description write and then fails the label write.
-            if not label or any(c.isspace() for c in label):
-                fail(f"label `{label}` in family `{fam}` is empty or holds whitespace, which a Jira label cannot")
+            if not label or len(label) > LABEL_MAX_CHARS or any(c.isspace() for c in label):
+                fail(f"label `{label}` in family `{fam}` is empty, holds whitespace, or runs past {LABEL_MAX_CHARS} characters, which a Jira label cannot")
             if not isinstance(phrases, list) or not phrases:
                 fail(f"label `{label}` in family `{fam}` has no phrases")
             for ph in phrases:

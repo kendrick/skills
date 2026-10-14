@@ -729,7 +729,35 @@ cap-export-timeouts = ["export sla"]' 'label `cap-export-timeouts` is declared i
 # Rejecting it at load keeps apply's label write from failing after the
 # description write has landed.
 bad_families_config spaced-label '[label_families.capability.labels]
-"bad label" = ["spoken phrase"]' 'label `bad label` in family `capability` is empty or holds whitespace, which a Jira label cannot'
+"bad label" = ["spoken phrase"]' 'label `bad label` in family `capability` is empty, holds whitespace, or runs past 255 characters, which a Jira label cannot'
+# Jira caps a label at 255 characters. 256 must stop both loaders; 255 must
+# still load, so the boundary is pinned from both sides.
+long_label_255=$(python3 -c "print('x' * 255)")
+long_label_256=$(python3 -c "print('x' * 256)")
+bad_families_config overlong-label "[label_families.capability.labels]
+$long_label_256 = [\"spoken phrase\"]" "label \`$long_label_256\` in family \`capability\` is empty, holds whitespace, or runs past 255 characters, which a Jira label cannot"
+{
+  echo 'projects = ["PROJ", "PLAT"]'
+  echo '[label_families.capability.labels]'
+  echo "$long_label_255 = [\"spoken phrase\"]"
+} > "$tmp/families-boundary-label.toml"
+python3 "$segment" "$fixtures/refinement-labels.vtt" --config "$tmp/families-boundary-label.toml" \
+  --session-date 2026-09-07 > /dev/null 2> "$tmp/families-boundary-label.err" || {
+  echo "a 255-character label should still load in segment.py" >&2
+  cat "$tmp/families-boundary-label.err" >&2
+  exit 1
+}
+sed "s#^config: .*#config: $tmp/families-boundary-label.toml#" "$fixtures/staging-labels.md" \
+  > "$tmp/families-boundary-label.md"
+python3 "$staging" validate "$tmp/families-boundary-label.md" > /dev/null 2> "$tmp/families-boundary-label-staging.err" || {
+  # The fixture's own labels are absent from this config, so validate may fail
+  # on content; only the label-name guard is under test here.
+  if grep -q "label_families:" "$tmp/families-boundary-label-staging.err"; then
+    echo "a 255-character label should still load in check-staging.py" >&2
+    cat "$tmp/families-boundary-label-staging.err" >&2
+    exit 1
+  fi
+}
 # validate needs a label's whole phrase inside its anchor quote, which caps at
 # ten words and 120 characters and can't hold a double quote. A phrase past
 # any of those makes its label impossible to state, so both loaders refuse it.
@@ -1671,6 +1699,25 @@ set -e
   exit 1
 }
 require_text "$tmp/update-labels-spaced.err" "labels must not hold whitespace, which a Jira label cannot: 'bad label'"
+
+# Jira's 255-character label cap, enforced on a hand-built update line too.
+python3 - "$tmp/labels-entries.jsonl" > "$tmp/update-labels-overlong.jsonl" <<'PY' || exit 1
+import json, sys
+entry = json.loads(open(sys.argv[1], encoding="utf-8").readline())
+entry["labels"] = ["y" * 256]
+print(json.dumps(entry))
+PY
+set +e
+JIRA_REFINE_TEST_SITE="$labels_site" python3 "$apply" update --config "$labels_config" --dry-run \
+  < "$tmp/update-labels-overlong.jsonl" > /dev/null 2> "$tmp/update-labels-overlong.err"
+overlong_status=$?
+set -e
+[[ "$overlong_status" == 3 ]] || {
+  echo "an update entry with a 256-character label should exit 3, got $overlong_status" >&2
+  cat "$tmp/update-labels-overlong.err" >&2
+  exit 1
+}
+require_text "$tmp/update-labels-overlong.err" "labels must not run past 255 characters, which a Jira label cannot: 'yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy…'"
 
 kill "$rest_pid" 2>/dev/null || true
 wait "$rest_pid" 2>/dev/null || true
