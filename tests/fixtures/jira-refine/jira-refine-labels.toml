@@ -7,7 +7,7 @@
 # example to know what a fixture run actually does.
 #
 # TOML puts every bare key under the table header above it, so every scalar
-# setting below has to come before the first [table] — [spoken_aliases],
+# setting below has to come before the first [table]; [spoken_aliases],
 # [fields], and [auth] all follow them for that reason, not for tidiness.
 
 # --- Segmentation: read by segment.py -------------------------------------
@@ -57,7 +57,7 @@ token_env = "JIRA_API_TOKEN"
 # against this config exercises the extra-field path on both transports rather
 # than only the empty-table case the shipped example would give. `id` is the
 # real Jira Cloud Advanced Roadmaps id, and `cli_name` is what jira-cli's own
-# config would declare the same field under — the two halves the fixture's
+# config would declare the same field under, the two halves the fixture's
 # FAKE_JIRA_CUSTOM_FIELDS map is derived from.
 [extra_fields.team]
 id = "customfield_10001"

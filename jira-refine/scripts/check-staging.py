@@ -455,7 +455,7 @@ def check_entry_kv(key, kv_lines):
 
 def check_sections(key, sections, fm, projects, families=None):
     """Every Sections/Anchors/Not-discussed/Provenance rule for one entry.
-    Returns (problems, fields, not_discussed, labels) — the last three are
+    Returns (problems, fields, not_discussed, labels); the last three are
     the values `entries` needs for its JSON line, computed here rather than
     re-walked later so the two commands never disagree about what a
     section's body says. `labels` is None on schema 1. `families` is the
@@ -868,7 +868,7 @@ def split_body(lines, body_start, projects):
 def run_validation(lines, body_start, fm, projects, families=None):
     """Every semantic check both commands need, run once. Returns (problems,
     parsed) where `parsed` is one (key, kv, fields, not_discussed, labels)
-    tuple per entry found — `entries` reuses these instead of re-walking the file, so
+    tuple per entry found; `entries` reuses these instead of re-walking the file, so
     what it emits is guaranteed to be exactly what `validate` graded rather
     than a second, possibly-diverging read of the same text."""
     problems = []

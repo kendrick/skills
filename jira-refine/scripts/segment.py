@@ -143,11 +143,13 @@ def read_text_file(path, label):
 
 def load_label_families(raw, path="config"):
     """Validate and normalize `[label_families]` into an ordered list of
-    (family, max_or_None, {label: [phrases]}). Strict on purpose: a misspelled
-    table (`label_familes`, a family with no `labels`) would otherwise quietly
-    turn the feature off, and the entries would stage at schema 1 with no
-    sign anything was dropped. check-staging.py carries its own copy of this
-    function — scripts never import each other — so the two must agree on
+    (family, max_or_None, {label: [phrases]}). Strict on purpose: a malformed
+    table inside `[label_families]` (a family with no `labels`, a label with
+    no phrases, a bad phrase or `max`, a label in two families) would
+    otherwise drop labels with no sign anything was lost. A misspelled
+    top-level table name is not caught; it simply declares no families.
+    check-staging.py carries its own copy of this
+    function (scripts never import each other), so the two must agree on
     what a valid config is. Config order is preserved because the skeleton's
     per-family `not discussed` lines follow it."""
 

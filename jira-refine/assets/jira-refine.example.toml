@@ -126,8 +126,8 @@ token_env = "JIRA_API_TOKEN"
 
 # --- Label families -------------------------------------------------------
 
-# Labels the room states aloud, for a team that traces work through them —
-# one capability label and one outcome label on every story, say. Each family
+# Labels the room states aloud, for a team that traces work through them,
+# for example one capability label and one outcome label on every story. Each family
 # lists its allowed labels, and each label lists the phrases the room says for
 # it, the same idea as [spoken_aliases]: nobody says `cap-export-timeouts` out
 # loud, they say "this is the nightly export work".
@@ -142,11 +142,11 @@ token_env = "JIRA_API_TOKEN"
 # Declaring any family switches new staging files to `schema: 2`, which adds
 # the Labels section. With none declared, staging files stay `schema: 1`,
 # byte for byte what they were before this table existed, and old files still
-# validate. The table is checked strictly at load: a family with no labels, a
-# label with no phrases, a phrase that is empty or not a string, a `max` that
-# is not an integer or is below 1, or one label in two families stops the run,
-# because a misspelled table would otherwise turn the feature off without a
-# word.
+# validate. The inside of the table is checked strictly at load: a family with
+# no labels, a label with no phrases, a phrase that is empty or not a string, a
+# `max` that is not an integer or is below 1, or one label in two families
+# stops the run, because each would otherwise drop labels without a word. A
+# misspelled table name is not caught: it just declares no families.
 #
 # Commented out because the shipped default declares none:
 # [label_families.capability]
