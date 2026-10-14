@@ -593,7 +593,7 @@ python3 "$staging" validate "$tmp/labels.md" >/dev/null || {
 # that tripped some unrelated check cannot pass for the rule it was built for.
 # The replace is asserted to have landed, or an edit to the fixture would turn
 # a variant into a copy of the valid file, which fails nothing.
-labels_variant() {  # <name> <old line> <new lines> <expected stderr fragment>
+labels_variant() {  # <name> <old line> <new lines> <expected stderr fragment> [exact line count]
   python3 - "$tmp/labels.md" "$tmp/labels-$1.md" "$2" "$3" <<'PY' || exit 1
 import sys
 src, dst, old, new = sys.argv[1:5]
@@ -621,6 +621,11 @@ PY
     printf '%s\n' "$err" >&2
     exit 1
   fi
+  if [[ -n "${5:-}" && "$(grep -c . <<<"$err")" != "$5" ]]; then
+    echo "labels variant '$1' should print exactly $5 stderr line(s), got:" >&2
+    printf '%s\n' "$err" >&2
+    exit 1
+  fi
 }
 
 stated='- cap-export-timeouts (raw: "this is the nightly export work" 00:00:15)'
@@ -645,13 +650,32 @@ labels_variant over-max "$stated" \
 # can trace to the transcript, which is exactly what one inferred from the
 # ticket's subject would look like.
 labels_variant unanchored "$stated" '- cap-export-timeouts' \
-  "entry PROJ-412: Labels line has no valid anchor"
+  "entry PROJ-412: Labels line has no valid anchor" 1
 
 # Deleting the outcome family's not-discussed line leaves the family
 # unaccounted for, the same blank-or-silent ambiguity the content sections
 # refuse.
 labels_variant outcome-silent "- not discussed: labels/outcome" "" \
   "entry PROJ-412: Labels family 'outcome' has neither a label nor a not-discussed line"
+
+# A bad `schema:` line prints one problem. Grading each entry against the
+# schema-1 layout would add a section-order line and a `labels/<family>`
+# not-discussed line for every schema-2 entry.
+sed 's/^schema: 2$/schema: 3/' "$tmp/labels.md" > "$tmp/labels-schema3.md"
+grep -qx 'schema: 3' "$tmp/labels-schema3.md" || {
+  echo "the schema-3 copy of staging-labels.md did not get its schema rewritten" >&2
+  exit 1
+}
+set +e
+schema3_err="$(python3 "$staging" validate "$tmp/labels-schema3.md" 2>&1 >/dev/null)"
+schema3_status=$?
+set -e
+if [[ "$schema3_status" != 1 \
+  || "$schema3_err" != "check-staging: frontmatter: schema is '3', expected '1' or '2'" ]]; then
+  echo "a schema-3 staging-labels.md should exit 1 with only the schema line, got $schema3_status:" >&2
+  printf '%s\n' "$schema3_err" >&2
+  exit 1
+fi
 
 # A schema-2 entry carries the stated labels, anchors stripped, right after the
 # batch label; that is the key jira-apply.py reads.
@@ -1590,6 +1614,31 @@ refute_text "$tmp/plan-create-ops.py" 'entry["labels"]'
   echo "a create refused for stated labels must not reach the tracker" >&2
   exit 1
 }
+
+# On an update, a `labels` that isn't a list of non-empty strings exits 3
+# before planning, so a hand-built line can't PUT a bare string or a blank
+# label onto a live ticket.
+bad_update_labels() {  # <name> <python literal for labels>
+  python3 - "$tmp/labels-entries.jsonl" "$2" > "$tmp/update-labels-$1.jsonl" <<'PY' || exit 1
+import ast, json, sys
+entry = json.loads(open(sys.argv[1], encoding="utf-8").readline())
+entry["labels"] = ast.literal_eval(sys.argv[2])
+print(json.dumps(entry))
+PY
+  set +e
+  JIRA_REFINE_TEST_SITE="$labels_site" python3 "$apply" update --config "$labels_config" --dry-run \
+    < "$tmp/update-labels-$1.jsonl" > /dev/null 2> "$tmp/update-labels-$1.err"
+  local status=$?
+  set -e
+  [[ "$status" == 3 ]] || {
+    echo "an update entry with labels $2 should exit 3, got $status" >&2
+    cat "$tmp/update-labels-$1.err" >&2
+    exit 1
+  }
+  require_text "$tmp/update-labels-$1.err" "labels must be a list of non-empty strings"
+}
+bad_update_labels non-list '"cap-x"'
+bad_update_labels empty-string '[""]'
 
 kill "$rest_pid" 2>/dev/null || true
 wait "$rest_pid" 2>/dev/null || true

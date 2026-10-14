@@ -91,13 +91,22 @@ ANCHOR_MAX_WORDS = 10
 NOT_DISCUSSED_RE = re.compile(r"^- not discussed: (.+)$")
 
 
-def expected_sections(schema):
-    """The '###' headings an entry must carry, in order. Anything but '2'
-    gets the schema-1 list, the shape a file with a bad schema value most
-    likely has."""
-    if schema == "2":
-        return CONTENT_SECTIONS[:5] + ("Labels",) + CONTENT_SECTIONS[5:] + TRAILING_SECTIONS
-    return CONTENT_SECTIONS + TRAILING_SECTIONS
+SCHEMA_SECTIONS = {
+    "1": CONTENT_SECTIONS + TRAILING_SECTIONS,
+    "2": CONTENT_SECTIONS[:5] + ("Labels",) + CONTENT_SECTIONS[5:] + TRAILING_SECTIONS,
+}
+
+
+def entry_schema(schema, names):
+    """The schema one entry is graded against. A missing or unrecognized
+    frontmatter value is already its own problem, so the entry is graded
+    against whichever known layout it carries, falling back to schema 1.
+    A fixed fallback would turn one bad `schema:` line into a section-order
+    line on every entry of the other layout, plus a `labels/<family>`
+    not-discussed line on each schema-2 entry."""
+    if schema in SCHEMA_SECTIONS:
+        return schema
+    return "2" if names == SCHEMA_SECTIONS["2"] else "1"
 
 
 def group_clock_turns(content):
@@ -453,7 +462,7 @@ def check_entry_kv(key, kv_lines):
     return kv, mentions, problems
 
 
-def check_sections(key, sections, fm, projects, families=None):
+def check_sections(key, sections, fm, projects, schema, families=None):
     """Every Sections/Anchors/Not-discussed/Provenance rule for one entry.
     Returns (problems, fields, not_discussed, labels); the last three are
     the values `entries` needs for its JSON line, computed here rather than
@@ -461,9 +470,11 @@ def check_sections(key, sections, fm, projects, families=None):
     section's body says. `labels` is None on schema 1. `families` is the
     config's label families on schema 2, or None when `config:` is missing
     or relative, which is already a frontmatter problem; the Labels anchors
-    are still checked then, but not the family rules."""
+    are still checked then, but not the family rules. `schema` is the one
+    `entry_schema` chose; `families` is None whenever the frontmatter itself
+    doesn't say '2', because only then is the config opened."""
     problems = []
-    schema2 = fm.get("schema") == "2"
+    schema2 = schema == "2"
 
     # Source excerpt first: every anchor check below needs its normalized
     # text, and the excerpt is script-filled last in the file's own layout
@@ -639,6 +650,16 @@ def check_sections(key, sections, fm, projects, families=None):
             check_anchor(line, "Labels")
             m = ANCHOR_RE.search(line)
             if not m:
+                # check_anchor has reported this line. A declared label still
+                # counts toward its family, or the same line would also
+                # report its family as having neither a label nor a
+                # not-discussed line. Jira labels hold no spaces, so the
+                # first token is the label whatever the broken anchor holds.
+                tokens = line[2:].split()
+                fam = label_family.get(tokens[0]) if tokens else None
+                if fam is not None and tokens[0] not in labels:
+                    labels.append(tokens[0])
+                    family_tally[fam] = family_tally.get(fam, 0) + 1
                 continue
             # Jira labels can't hold spaces, so the whole text before the
             # anchor is the label, and a multi-word one reports as undeclared.
@@ -798,7 +819,8 @@ def parse_entry(key, region, schema):
     sub_headers = find_headers(region, "###")
     names = tuple(name for _, name in sub_headers)
     problems = []
-    expected = expected_sections(schema)
+    schema = entry_schema(schema, names)
+    expected = SCHEMA_SECTIONS[schema]
     if names != expected:
         problems.append(
             f"entry {key}: sections are {list(names)}, expected {list(expected)} in order"
@@ -813,7 +835,7 @@ def parse_entry(key, region, schema):
         next_idx = sub_headers[i + 1][0] if i + 1 < len(sub_headers) else len(region)
         sections[name] = region[idx + 1:next_idx]
 
-    return kv, mentions, sections, problems
+    return kv, mentions, sections, problems, schema
 
 
 def split_body(lines, body_start, projects):
@@ -877,10 +899,12 @@ def run_validation(lines, body_start, fm, projects, families=None):
 
     parsed = []
     for key, _lineno, region in entries:
-        kv, _mentions, sections, entry_problems = parse_entry(key, region, fm.get("schema"))
+        kv, _mentions, sections, entry_problems, schema = parse_entry(
+            key, region, fm.get("schema")
+        )
         problems.extend(entry_problems)
         section_problems, fields, not_discussed, labels = check_sections(
-            key, sections, fm, projects, families
+            key, sections, fm, projects, schema, families
         )
         problems.extend(section_problems)
         parsed.append((key, kv, fields, not_discussed, labels))
