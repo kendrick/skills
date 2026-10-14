@@ -765,6 +765,27 @@ bad_families_config long-phrase '[label_families.capability.labels]
 cap-export-timeouts = ["one two three four five six seven eight nine ten eleven"]' 'label `cap-export-timeouts` in family `capability` has a phrase no anchor can hold'
 bad_families_config quoted-phrase '[label_families.capability.labels]
 cap-export-timeouts = ["the \"nightly\" export"]' 'label `cap-export-timeouts` in family `capability` has a phrase no anchor can hold'
+# The 120-character cap alone is not enough: a one-word phrase must share its
+# anchor with three more words, each costing a space and a character, so the
+# shortest snippet is length + 6. 115 + 6 = 121 is refused; 114 + 6 = 120 loads.
+word_120=$(python3 -c "print('x' * 120)")
+word_115=$(python3 -c "print('x' * 115)")
+word_114=$(python3 -c "print('x' * 114)")
+bad_families_config one-word-120-phrase "[label_families.capability.labels]
+cap-export-timeouts = [\"$word_120\"]" 'label `cap-export-timeouts` in family `capability` has a phrase no anchor can hold'
+bad_families_config one-word-115-phrase "[label_families.capability.labels]
+cap-export-timeouts = [\"$word_115\"]" 'label `cap-export-timeouts` in family `capability` has a phrase no anchor can hold'
+{
+  echo 'projects = ["PROJ", "PLAT"]'
+  echo '[label_families.capability.labels]'
+  echo "cap-export-timeouts = [\"$word_114\"]"
+} > "$tmp/families-boundary-phrase.toml"
+python3 "$segment" "$fixtures/refinement-labels.vtt" --config "$tmp/families-boundary-phrase.toml" \
+  --session-date 2026-09-07 > /dev/null 2> "$tmp/families-boundary-phrase.err" || {
+  echo "a one-word 114-character phrase should still load in segment.py" >&2
+  cat "$tmp/families-boundary-phrase.err" >&2
+  exit 1
+}
 
 # --- Idempotency, both transports. Rule 8 of tracker-contract.md. -----------
 #
