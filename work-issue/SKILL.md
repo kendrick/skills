@@ -155,7 +155,7 @@ Route each finding. A Spec finding naming a CRITERIA line, or a Standards hard v
 
 The worker's final report is `RUN_DIR/reports/build-final.json`, and its `claims` is non-empty. Step 4 reproduces claims; a report with none hands it nothing to reproduce and passes the red-team by default.
 
-**Done when:** every wave in `## Waves` settled, with a `gated/<wave>-<task>` marker for each of its tasks and a `baseline-<wave>.txt`; `code-review` ran against BASE_SHA with the issue as spec; every Spec finding and Standards hard violation fixed and committed, or in `left` with a reason; `build-final.json` exists with non-empty `claims`.
+**Done when:** every wave in `## Waves` settled, with a `gated/<wave>-<task>` marker for each of its tasks, and a `baseline-<wave>.txt` for each wave settled since these files existed, while a wave gated before then may lack one, since Step 2's fallback covers it; `code-review` ran against BASE_SHA with the issue as spec; every Spec finding and Standards hard violation fixed and committed, or in `left` with a reason; `build-final.json` exists with non-empty `claims`.
 
 ## Step 4 — Red-team
 

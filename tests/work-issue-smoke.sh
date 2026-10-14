@@ -789,7 +789,7 @@ require_text work-issue/SKILL.md "Where that file is missing, as on a run gated 
 require_text work-issue/references/resume.md "The probe checks \`baseline.txt\` alone, never \`baseline-<wave>.txt\`, because Step 2 falls back to an older baseline when a wave's file is missing"
 require_text work-issue/SKILL.md "Just before the markers, save the verification run that passed the gate to \`RUN_DIR/baseline-<wave>.txt\` in \`baseline.txt\`'s format"
 require_text work-issue/SKILL.md "\`RUN_DIR/baseline.txt\` stays the run-start capture, untouched after Step 1, because Step 4's reproducer reads it."
-require_text work-issue/SKILL.md "with a \`gated/<wave>-<task>\` marker for each of its tasks and a \`baseline-<wave>.txt\`;"
+require_text work-issue/SKILL.md "with a \`gated/<wave>-<task>\` marker for each of its tasks, and a \`baseline-<wave>.txt\` for each wave settled since these files existed, while a wave gated before then may lack one, since Step 2's fallback covers it;"
 
 # Step 2 names RUN_DIR/baseline.txt as divvy-up's BASELINE (#188). Step 0
 # told divvy-up's Step 3 to skip its own verify run and wait for that name, so
