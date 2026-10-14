@@ -811,6 +811,11 @@ require_text work-issue/SKILL.md "With VERIFY_CMD \`absent\`, name no baseline f
 require_text work-issue/SKILL.md "and Step 2 names the file, or, where VERIFY_CMD is \`absent\`, tells it its BASELINE is \`absent\` instead."
 require_text work-issue/SKILL.md "A \`baseline.txt\` reading \`absent\` means the repo has no verification command, so nothing ran before this run and nothing was already failing."
 require_text work-issue/references/redteam.md "A file reading \`absent\` means the repo has no verification command, so nothing ran before this run and nothing was already failing"
+# The README and ledger state the same `absent` rule for a human reader. Left
+# unpinned, an edit to SKILL.md's rule can leave either one describing the old
+# behavior with the suite still green (#188 red team, round 6).
+require_text work-issue/README.md "A repo with no verification command gets a baseline file holding the single word \`absent\`."
+require_text _maintenance/work-issue/RATIONALE.md "| 149 | With VERIFY_CMD \`absent\`, Step 1 runs nothing and writes \`baseline.txt\` holding the single line \`absent\`."
 
 # Step 2 names RUN_DIR/baseline.txt as divvy-up's BASELINE (#188). Step 0
 # told divvy-up's Step 3 to skip its own verify run and wait for that name, so
