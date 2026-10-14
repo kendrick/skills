@@ -256,6 +256,59 @@ done
 refute_text jira-refine/scripts/segment.py "--gaps-only"
 require_text jira-refine/SKILL.md "Exit 4 means the transcript names no ticket keys at all, typed or spoken."
 
+# --- Stated labels. Issue #233. ----------------------------------------------
+
+# A label is held to the Goal's bar: said aloud, anchored, and its snippet has to
+# hold one of that label's configured phrases. The phrase check is what lets a
+# reviewer trust a label without re-reading the transcript.
+require_text jira-refine/SKILL.md "only where a speaker said one of that label's configured phrases"
+require_text jira-refine/SKILL.md "A Labels line carries the room's words and nothing else"
+require_text jira-refine/references/staging-format.md "has to contain one of that label's configured phrases"
+require_text jira-refine/references/staging-format.md "\`Labels anchor snippet '<s>' holds none of the phrases configured for '<label>'\`"
+require_text jira-refine/README.md "**Labels come only from what the room said.**"
+require_text jira-refine/assets/jira-refine.example.toml "# [label_families.capability]"
+
+# Schema 2 only when a family is declared, so a team that never asked for labels
+# keeps its bytes and its old staging files keep validating.
+require_text jira-refine/references/staging-format.md "\`1\`, or \`2\` when the config declares at least one \`[label_families]\` family"
+require_text jira-refine/scripts/check-staging.py "expected '1' or '2'"
+
+# One union write carries batch and stated labels together, and nothing is
+# taken off: a PUT of `labels` replaces the array.
+require_text jira-refine/references/tracker-contract.md "One \`add_labels\` op carries the batch label and every stated label"
+require_text jira-refine/references/tracker-contract.md "Nothing is ever removed, so a label the team set by hand survives every apply."
+require_text jira-refine/scripts/jira-apply.py "labels is update-only; create writes no stated labels"
+
+require_text _maintenance/jira-refine/RATIONALE.md "| 43 | A label goes under \`### Labels\` only where a speaker said one of its configured phrases"
+require_text _maintenance/jira-refine/RATIONALE.md "| 44 | \`segment.py\` writes \`schema: 2\` only when the config declares a label family"
+
+# The four cuts, one refute apiece, each matching a row in Deliberately Not
+# Built. Inferring a label from the ticket's subject, epic, or criteria is a
+# guess no reviewer can check against the transcript; the unanchored variant
+# above pins the same cut in the validator.
+require_text _maintenance/jira-refine/RATIONALE.md "| Inferring a label from a ticket's content, its parent epic, or its acceptance criteria |"
+for f in jira-refine/SKILL.md jira-refine/README.md jira-refine/references/*.md; do
+  refute_text "$f" "infer a label"
+  refute_text "$f" "infer labels"
+done
+
+# Removing labels. A label the room didn't state may be one the team set by
+# hand, and the transcript gives no ground for taking it off.
+require_text _maintenance/jira-refine/RATIONALE.md "| Removing labels |"
+refute_text jira-refine/scripts/jira-apply.py "remove_labels"
+refute_text jira-refine/references/tracker-contract.md "remove_labels"
+
+# Reconciling with labels Jira automation copies down from an epic. Which set
+# wins is the team's automation policy, which no transcript states; the union
+# leaves both.
+require_text _maintenance/jira-refine/RATIONALE.md "| Reconciling stated labels with labels Jira automation copies down from a parent epic |"
+refute_text jira-refine/scripts/jira-apply.py "automation"
+refute_text jira-refine/scripts/jira-apply.py "parent_labels"
+
+# Stated labels on create. Pinned functionally further down, where the create
+# planner's own source is refuted for reading an entry's `labels`.
+require_text _maintenance/jira-refine/RATIONALE.md "| Stated labels on \`create\` |"
+
 # --- Maintenance and the root README. ---------------------------------------
 
 require_text _maintenance/jira-refine/RATIONALE.md "## Where This Came From"
@@ -311,6 +364,24 @@ with open(sys.argv[1], encoding="utf-8") as f:
 ' "$tmp/segments-$ext.json")"
   [[ "$keys" == "PROJ-412,PROJ-413,PLAT-77,PROJ-455" ]] || {
     echo "refinement.$ext should segment to the four fixture keys, got: $keys" >&2
+    exit 1
+  }
+done
+
+# A config with no [label_families] has to stage the golden bytes at schema 1,
+# or every team that never asked for labels inherits a Labels section and a
+# not-discussed line per family (issue #233). The golden files came from main's
+# segment.py; only the three lines that carry a clock or a path are normalized.
+for ext in vtt srt txt; do
+  python3 "$segment" "$fixtures/refinement.$ext" --config "$config" \
+    --session-date 2026-09-07 \
+    | sed -E 's/^(generated|source_path|config): .*/\1: NORMALIZED/' > "$tmp/staged-$ext.md"
+  cmp "$tmp/staged-$ext.md" "$fixtures/golden/refinement.$ext.refine.md" || {
+    echo "refinement.$ext no longer stages byte-identically to main without label families" >&2
+    exit 1
+  }
+  grep -qx 'schema: 1' "$tmp/staged-$ext.md" || {
+    echo "refinement.$ext should stage at schema 1 without label families" >&2
     exit 1
   }
 done
@@ -396,7 +467,7 @@ bad_count="$(printf '%s\n' "$bad_err" | grep -c '^check-staging: ')"
 }
 # Each planted defect is a distinct grammar rule, spread across the frontmatter
 # and two entries so no failure can cascade into another.
-grep -Fq "frontmatter: schema is '2', expected '1'" <<<"$bad_err" || {
+grep -Fq "frontmatter: schema is '3', expected '1' or '2'" <<<"$bad_err" || {
   echo "the wrong-schema defect went unreported: $bad_err" >&2
   exit 1
 }
@@ -457,6 +528,179 @@ set -e
   echo "entries on staging-bad.md must emit nothing, got: $bad_entries" >&2
   exit 1
 }
+
+# --- Stated labels, staging side. Issue #233. --------------------------------
+
+# A schema-1 entry carries no `labels` key at all, not an empty one: an empty
+# list would change the bytes jira-apply.py has always read from a file staged
+# before label families existed.
+python3 - "$tmp/entries.jsonl" <<'PY' || exit 1
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as f:
+    for line in f:
+        if line.strip() and "labels" in json.loads(line):
+            sys.exit(f"a schema-1 entry must carry no labels key: {line.strip()}")
+PY
+
+labels_config="$fixtures/jira-refine-labels.toml"
+
+# Declaring a family is the only switch to schema 2. Labels sits between Goal
+# and Open questions, and each family gets its own not-discussed line in config
+# order, because a room can name a capability and say nothing of the outcome.
+python3 "$segment" "$fixtures/refinement-labels.vtt" --config "$labels_config" \
+  --session-date 2026-09-07 > "$tmp/labels-skeleton.md" || {
+  echo "segment.py failed on refinement-labels.vtt with label families" >&2
+  exit 1
+}
+python3 - "$tmp/labels-skeleton.md" <<'PY' || exit 1
+import re, sys
+text = open(sys.argv[1], encoding="utf-8").read()
+if not re.search(r"^schema: 2$", text, re.M):
+    sys.exit("a config with label families should stage at schema 2")
+entries = [e for e in re.split(r"^## ", text, flags=re.M)[1:] if e.startswith("PROJ-")]
+if len(entries) != 2:
+    sys.exit(f"refinement-labels.vtt should stage two entries, got {len(entries)}")
+for entry in entries:
+    key = entry.split("\n", 1)[0]
+    headings = re.findall(r"^### (.+)$", entry, re.M)
+    want = ["Context", "Acceptance criteria", "Out of scope", "Dependencies", "Goal",
+            "Labels", "Open questions", "Provenance", "Source excerpt"]
+    if headings != want:
+        sys.exit(f"{key}: sections should be {want}, got {headings}")
+    oq = entry.split("### Open questions\n", 1)[1].split("\n\n", 1)[0].splitlines()
+    tail = oq[-2:]
+    if tail != ["- not discussed: labels/capability", "- not discussed: labels/outcome"]:
+        sys.exit(f"{key}: Open questions should end on one line per family in config order, got {tail}")
+PY
+
+# The worked fixture, filled the way the agent would: PROJ-412's speaker says
+# "this is the nightly export work", and nobody names an outcome. Its `config:`
+# is a placeholder, because only schema 2 reads it and it has to be absolute.
+sed "s#^config: .*#config: $labels_config#" "$fixtures/staging-labels.md" > "$tmp/labels.md"
+grep -qx "config: $labels_config" "$tmp/labels.md" || {
+  echo "the staging-labels.md copy did not get its config path rewritten" >&2
+  exit 1
+}
+require_text "$tmp/labels.md" '- cap-export-timeouts (raw: "this is the nightly export work" 00:00:15)'
+require_text "$tmp/labels.md" "- not discussed: labels/outcome"
+python3 "$staging" validate "$tmp/labels.md" >/dev/null || {
+  echo "staging-labels.md should validate against jira-refine-labels.toml" >&2
+  exit 1
+}
+
+# Each variant breaks one Labels rule in PROJ-412 and must exit 1 naming it.
+# Every stderr line has to stay inside PROJ-412's Labels rules, so a variant
+# that tripped some unrelated check cannot pass for the rule it was built for.
+# The replace is asserted to have landed, or an edit to the fixture would turn
+# a variant into a copy of the valid file, which fails nothing.
+labels_variant() {  # <name> <old line> <new lines> <expected stderr fragment>
+  python3 - "$tmp/labels.md" "$tmp/labels-$1.md" "$2" "$3" <<'PY' || exit 1
+import sys
+src, dst, old, new = sys.argv[1:5]
+text = open(src, encoding="utf-8").read()
+if text.count(old + "\n") != 1:
+    sys.exit(f"labels variant: {old!r} should appear exactly once in staging-labels.md")
+open(dst, "w", encoding="utf-8").write(text.replace(old + "\n", new + "\n", 1))
+PY
+  set +e
+  local err status
+  err="$(python3 "$staging" validate "$tmp/labels-$1.md" 2>&1 >/dev/null)"
+  status=$?
+  set -e
+  [[ "$status" == 1 ]] || {
+    echo "labels variant '$1' should exit 1, got $status: $err" >&2
+    exit 1
+  }
+  grep -Fq -- "$4" <<<"$err" || {
+    echo "labels variant '$1' should report: $4" >&2
+    printf '%s\n' "$err" >&2
+    exit 1
+  }
+  if grep -v '^check-staging: entry PROJ-412: Labels' <<<"$err" | grep -q .; then
+    echo "labels variant '$1' tripped a check outside PROJ-412's Labels rules:" >&2
+    printf '%s\n' "$err" >&2
+    exit 1
+  fi
+}
+
+stated='- cap-export-timeouts (raw: "this is the nightly export work" 00:00:15)'
+
+labels_variant outside-family "$stated" \
+  '- cap-made-up (raw: "this is the nightly export work" 00:00:15)' \
+  "entry PROJ-412: Labels label 'cap-made-up' is not declared in any label family"
+
+# The anchor proves someone spoke at that moment; the phrase proves they named
+# this label. A real, verbatim snippet that never says the phrase must fail, or
+# a label can ride on any nearby quote.
+labels_variant no-phrase "$stated" \
+  '- cap-export-timeouts (raw: "the job that times out for" 00:00:15)' \
+  "entry PROJ-412: Labels anchor snippet 'the job that times out for' holds none of the phrases configured for 'cap-export-timeouts'"
+
+labels_variant over-max "$stated" \
+  "$stated
+- cap-safari-tiles (raw: \"this is the nightly export work\" 00:00:15)" \
+  "entry PROJ-412: Labels has 2 labels from family 'capability', max is 1"
+
+# The no-inference cut, functionally: a label with no anchor is a label nobody
+# can trace to the transcript, which is exactly what one inferred from the
+# ticket's subject would look like.
+labels_variant unanchored "$stated" '- cap-export-timeouts' \
+  "entry PROJ-412: Labels line has no valid anchor"
+
+# Deleting the outcome family's not-discussed line leaves the family
+# unaccounted for, the same blank-or-silent ambiguity the content sections
+# refuse.
+labels_variant outcome-silent "- not discussed: labels/outcome" "" \
+  "entry PROJ-412: Labels family 'outcome' has neither a label nor a not-discussed line"
+
+# A schema-2 entry carries the stated labels, anchors stripped, right after the
+# batch label; that is the key jira-apply.py reads.
+python3 "$staging" entries "$tmp/labels.md" --status approved > "$tmp/labels-entries.jsonl"
+python3 - "$tmp/labels-entries.jsonl" <<'PY' || exit 1
+import json, sys
+rows = [json.loads(l) for l in open(sys.argv[1], encoding="utf-8") if l.strip()]
+if [r["key"] for r in rows] != ["PROJ-412"]:
+    sys.exit(f"only PROJ-412 is approved in staging-labels.md, got {[r['key'] for r in rows]}")
+row = rows[0]
+if row.get("labels") != ["cap-export-timeouts"]:
+    sys.exit(f"PROJ-412 should carry labels ['cap-export-timeouts'], got {row.get('labels')!r}")
+keys = list(row)
+if keys.index("labels") != keys.index("label") + 1:
+    sys.exit(f"labels should follow label directly, got key order {keys}")
+PY
+
+# A malformed family must stop both scripts at load, exit 3, rather than load
+# as an empty family and switch its checks off without a word. The two scripts
+# carry separate copies of the loader, so each is driven on its own.
+bad_families_config() {  # <name> <toml body> <expected message fragment>
+  {
+    echo 'projects = ["PROJ", "PLAT"]'
+    printf '%s\n' "$2"
+  } > "$tmp/families-$1.toml"
+  set +e
+  python3 "$segment" "$fixtures/refinement-labels.vtt" --config "$tmp/families-$1.toml" \
+    --session-date 2026-09-07 > /dev/null 2> "$tmp/families-$1-segment.err"
+  local seg_status=$?
+  sed "s#^config: .*#config: $tmp/families-$1.toml#" "$fixtures/staging-labels.md" \
+    > "$tmp/families-$1.md"
+  python3 "$staging" validate "$tmp/families-$1.md" > /dev/null 2> "$tmp/families-$1-staging.err"
+  local staging_status=$?
+  set -e
+  [[ "$seg_status" == 3 && "$staging_status" == 3 ]] || {
+    echo "label_families '$1' should exit 3 from both scripts, got segment=$seg_status check-staging=$staging_status" >&2
+    cat "$tmp/families-$1-segment.err" "$tmp/families-$1-staging.err" >&2
+    exit 1
+  }
+  require_text "$tmp/families-$1-segment.err" "segment: $tmp/families-$1.toml: label_families: $3"
+  require_text "$tmp/families-$1-staging.err" "check-staging: $tmp/families-$1.toml: label_families: $3"
+}
+bad_families_config no-labels '[label_families.capability]
+max = 1' 'family `capability` declares no labels'
+bad_families_config two-families '[label_families.capability.labels]
+cap-export-timeouts = ["the nightly export"]
+
+[label_families.outcome.labels]
+cap-export-timeouts = ["export sla"]' 'label `cap-export-timeouts` is declared in both `capability` and `outcome`'
 
 # --- Idempotency, both transports. Rule 8 of tracker-contract.md. -----------
 #
@@ -1186,6 +1430,164 @@ set -e
 grep -Fq "extra_fields is create-only" "$tmp/update-extra.err" || {
   echo "the rejection should say extra_fields is create-only:" >&2
   cat "$tmp/update-extra.err" >&2
+  exit 1
+}
+
+kill "$rest_pid" 2>/dev/null || true
+wait "$rest_pid" 2>/dev/null || true
+rest_pid=""
+
+# --- Stated labels, apply side. Issue #233. ----------------------------------
+# A fresh fake, because the leg above has rewritten PROJ-412 several times over,
+# and this one needs a label on the issue that nobody in the room said: a PUT
+# of `labels` replaces the array, so the hand-set label surviving is the whole
+# claim. The expected set is written out from the requirement (existing, batch,
+# stated) rather than computed from the entry.
+python3 - "$fixtures/issues.json" "$tmp/labels-seed.json" <<'PY' || exit 1
+import json, sys
+issues = json.load(open(sys.argv[1], encoding="utf-8"))
+issues["PROJ-412"]["fields"]["labels"] = ["team-owned"]
+json.dump(issues, open(sys.argv[2], "w", encoding="utf-8"))
+PY
+labels_port="$(python3 -c '
+import socket
+s = socket.socket()
+s.bind(("127.0.0.1", 0))
+print(s.getsockname()[1])
+s.close()
+')"
+labels_log="$tmp/labels-rest.log"
+FAKE_JIRA_LOG="$labels_log" python3 "$fixtures/fake-jira-rest.py" \
+  --port "$labels_port" --seed "$tmp/labels-seed.json" &
+rest_pid=$!
+python3 -c '
+import socket, sys, time
+port = int(sys.argv[1])
+deadline = time.time() + 15
+while time.time() < deadline:
+    try:
+        socket.create_connection(("127.0.0.1", port), 0.25).close()
+        sys.exit(0)
+    except OSError:
+        time.sleep(0.05)
+sys.exit(1)
+' "$labels_port" || {
+  echo "the labels REST fake never came up on port $labels_port" >&2
+  exit 1
+}
+labels_site="http://127.0.0.1:$labels_port"
+
+JIRA_REFINE_TEST_SITE="$labels_site" python3 "$apply" update --config "$labels_config" --dry-run \
+  < "$tmp/labels-entries.jsonl" > "$tmp/labels-dry.json" 2>/dev/null || {
+  echo "a dry run of the approved schema-2 entry should exit 0" >&2
+  exit 1
+}
+[[ ! -e "$labels_log" ]] || {
+  echo "a labels --dry-run must write nothing, but the fake logged: $(cat "$labels_log")" >&2
+  exit 1
+}
+grep -Fq '"label": "applied"' "$tmp/labels-dry.json" || {
+  echo "the dry run should plan the label write as applied:" >&2
+  cat "$tmp/labels-dry.json" >&2
+  exit 1
+}
+
+# The dry-run report names a verdict, not the op, so the plan itself is read
+# from the same pure planner the dry run used, against the issue as the fake
+# serves it.
+JIRA_REFINE_TEST_SITE="$labels_site" python3 "$apply" get PROJ-412 --config "$labels_config" \
+  > "$tmp/labels-issue.json"
+python3 - "$apply" "$tmp/labels-entries.jsonl" "$tmp/labels-issue.json" <<'PY' || exit 1
+import importlib.util, json, sys
+spec = importlib.util.spec_from_file_location("jira_apply", sys.argv[1])
+ja = importlib.util.module_from_spec(spec); spec.loader.exec_module(ja)
+entry = json.loads(open(sys.argv[2], encoding="utf-8").readline())
+issue = json.load(open(sys.argv[3], encoding="utf-8"))
+cfg = {"transport": "rest", "link_type": "Blocks", "fields": {}, "extra_fields": {}}
+ops, outcomes = ja.plan_update_ops(entry, issue, cfg)
+label_ops = [op for op in ops if op["op"] == "add_labels"]
+if len(label_ops) != 1:
+    sys.exit(f"one label write should carry batch and stated labels together, got {label_ops}")
+want = {"team-owned", "refined-2026-09-07", "cap-export-timeouts"}
+got = label_ops[0]["labels"]
+if set(got) != want or len(got) != len(want):
+    sys.exit(f"the label write should PUT the union {sorted(want)}, got {got}")
+if sorted(label_ops[0]["added"]) != ["cap-export-timeouts", "refined-2026-09-07"]:
+    sys.exit(f"added should name only the labels new to the issue, got {label_ops[0]['added']}")
+PY
+
+# The plan only predicts what the tracker ends up holding, so the real run is
+# read back off the fake, where the hand-set label has to still be present.
+JIRA_REFINE_TEST_SITE="$labels_site" python3 "$apply" update --config "$labels_config" \
+  < "$tmp/labels-entries.jsonl" > /dev/null 2>&1 || {
+  echo "applying the approved schema-2 entry should exit 0" >&2
+  exit 1
+}
+JIRA_REFINE_TEST_SITE="$labels_site" python3 "$apply" get PROJ-412 --config "$labels_config" \
+  > "$tmp/labels-after.json"
+python3 - "$tmp/labels-after.json" "$labels_log" <<'PY' || exit 1
+import json, sys
+labels = json.load(open(sys.argv[1], encoding="utf-8"))["fields"]["labels"]
+want = {"team-owned", "refined-2026-09-07", "cap-export-timeouts"}
+if set(labels) != want or len(labels) != len(want):
+    sys.exit(f"PROJ-412 should end with labels {sorted(want)}, got {labels}")
+writes = [json.loads(l) for l in open(sys.argv[2], encoding="utf-8")]
+label_puts = [w for w in writes if "labels" in (w.get("body") or {}).get("fields", {})]
+if len(label_puts) != 1:
+    sys.exit(f"the apply should send exactly one labels PUT, got {len(label_puts)}")
+PY
+
+# Rule 8 holds with stated labels in the write: a second run sends nothing.
+labels_writes_before="$(log_lines "$labels_log")"
+JIRA_REFINE_TEST_SITE="$labels_site" python3 "$apply" update --config "$labels_config" \
+  < "$tmp/labels-entries.jsonl" > "$tmp/labels-again.json" 2>/dev/null || {
+  echo "a second apply of the schema-2 entry should exit 0" >&2
+  exit 1
+}
+[[ "$(log_lines "$labels_log")" == "$labels_writes_before" ]] || {
+  echo "a second apply with stated labels must write nothing" >&2
+  exit 1
+}
+grep -Fq '"label": "already-present"' "$tmp/labels-again.json" || {
+  echo "the second apply should report every label already present" >&2
+  exit 1
+}
+
+# Stated labels are update-only. A create carrying them exits 3 before any
+# write, because dropping the key would read on the report as a label landed.
+labels_writes_before="$(log_lines "$labels_log")"
+create_entry "Stated labels on create" | python3 -c '
+import json, sys
+entry = json.loads(sys.stdin.read())
+entry["labels"] = ["cap-export-timeouts"]
+print(json.dumps(entry))
+' > "$tmp/create-labels.jsonl"
+set +e
+JIRA_REFINE_TEST_SITE="$labels_site" python3 "$apply" create --config "$labels_config" \
+  < "$tmp/create-labels.jsonl" > /dev/null 2> "$tmp/create-labels.err"
+create_labels_status=$?
+set -e
+[[ "$create_labels_status" == 3 ]] || {
+  echo "a create entry carrying labels should exit 3, got $create_labels_status" >&2
+  cat "$tmp/create-labels.err" >&2
+  exit 1
+}
+require_text "$tmp/create-labels.err" "labels is update-only; create writes no stated labels"
+# `_check_labels` refuses the entry; `plan_create_ops` is the second line. It
+# reads only the batch label, so stated labels have no way onto a new ticket
+# even for an entry that slipped past `_check_labels`.
+python3 - "$apply" "$tmp/plan-create-ops.py" <<'PY' || exit 1
+import ast, sys
+src = open(sys.argv[1], encoding="utf-8").read()
+fn = next(n for n in ast.walk(ast.parse(src))
+          if isinstance(n, ast.FunctionDef) and n.name == "plan_create_ops")
+open(sys.argv[2], "w", encoding="utf-8").write(ast.get_source_segment(src, fn))
+PY
+require_text "$tmp/plan-create-ops.py" '"labels": [label] if label else [],'
+refute_text "$tmp/plan-create-ops.py" 'entry.get("labels")'
+refute_text "$tmp/plan-create-ops.py" 'entry["labels"]'
+[[ "$(log_lines "$labels_log")" == "$labels_writes_before" ]] || {
+  echo "a create refused for stated labels must not reach the tracker" >&2
   exit 1
 }
 
