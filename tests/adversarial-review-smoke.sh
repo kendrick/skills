@@ -982,9 +982,15 @@ done <<<"$table_signals"
   echo "per-signal guard ran no near-miss check: no punctuation-bearing signal read from trigger-table.md" >&2
   exit 1
 }
-# Whole-word: `index` inside `page_index` is no schema signal, and a bare
-# `CREATE INDEX` is. A substring matcher prints `4 schema` for both.
+# Whole-word at both ends: `index` inside `page_index` is no schema signal, and
+# a bare `CREATE INDEX` is. A substring matcher prints `4 schema` for both. The
+# left end is the fixture. The right end has no fixture, so a word char or `_`
+# straight after a signal is checked inline, for a row 4 and a row 1 signal.
 expect_match "" <"$diffs/schema-page-index.diff"
+expect_match "" --only 4 < <(printf '+x indexed y\n')
+expect_match "" --only 4 < <(printf '+x index_name y\n')
+expect_match "" --only 1 < <(printf '+x rated y\n')
+expect_match "" --only 1 < <(printf '+x rate_x y\n')
 expect_match "4 schema" <"$diffs/schema-create-index.diff"
 # Unit suffix: `px` matches after a digit, never as an identifier.
 expect_match "6 representation" <"$diffs/unit-12px.diff"
