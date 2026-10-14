@@ -14,7 +14,7 @@ One fresh general-purpose subagent per round: `sonnet` by default, `opus` where 
 - the `left` array: `what` and `why`
 - BASE_SHA and HEAD
 - the absolute path of the tree
-- `RUN_DIR/baseline.txt`, so a failure that was already failing before this run is recognized rather than attributed
+- `RUN_DIR/baseline.txt`, so a failure that was already failing before this run is recognized rather than attributed. A file reading `absent` means the repo has no verification command, so nothing ran before this run and nothing was already failing
 
 ### What it never receives
 

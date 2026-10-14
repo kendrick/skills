@@ -779,7 +779,7 @@ require_text work-issue/SKILL.md "A baseline captured before any worker runs is 
 # lost divvy-up's in-memory refresh, and the run-start file would pass a
 # failure an earlier wave fixed and a later one brought back.
 require_text work-issue/SKILL.md "Then INSTALL_CMD, then VERIFY_CMD, saved to \`RUN_DIR/baseline.txt\` as a first line \`exit: <status>\` holding its exit status, then its output tail."
-require_text work-issue/SKILL.md "and \`RUN_DIR/baseline.txt\` opens with \`exit: <status>\`, VERIFY_CMD's real exit status, followed by its real output."
+require_text work-issue/SKILL.md "and \`RUN_DIR/baseline.txt\` opens with \`exit: <status>\`, VERIFY_CMD's real exit status, followed by its real output, or, where VERIFY_CMD is \`absent\`, holds the single line \`absent\`."
 require_text work-issue/SKILL.md "\`baseline.txt\`, \`baseline-<wave>.txt\`, \`max_review_rounds\`"
 require_text work-issue/SKILL.md "Each time Step 2 continues \`divvy-up\` at a wave, the first dispatch after a resume included, name instead the \`RUN_DIR/baseline-<wave>.txt\` of the highest-numbered wave already settled, and \`baseline.txt\` only while no wave has settled."
 # A run gated before baseline-<wave>.txt existed has markers and no file.
@@ -801,7 +801,16 @@ require_text work-issue/SKILL.md "with a \`gated/<wave>-<task>\` marker for each
 # With no verification command there is no gate run to save, so neither the
 # save nor Step 2's lookup can demand a file that never gets written.
 require_text work-issue/SKILL.md "With VERIFY_CMD \`absent\` there is no run to save, and no \`baseline-<wave>.txt\` is written."
-require_text work-issue/SKILL.md "With VERIFY_CMD \`absent\` no wave writes a file and there is nothing to run, so name \`baseline.txt\` at every wave."
+# With no command, Step 1 still writes baseline.txt, holding the word
+# `absent`: the probe checks only that the file exists, and row 7 would send a
+# run without it back to Step 1 on every resume. Step 2 hands divvy-up the word
+# rather than the file, because divvy-up reads a named file with no `exit:`
+# line as red (#188 red team, round 5).
+require_text work-issue/SKILL.md "With VERIFY_CMD \`absent\`, run nothing and write \`RUN_DIR/baseline.txt\` holding the single line \`absent\`, because the resume probe reads the file's existence as Step 1 finished."
+require_text work-issue/SKILL.md "With VERIFY_CMD \`absent\`, name no baseline file at any wave and tell \`divvy-up\` its BASELINE is \`absent\`, so its Step 3 \`absent\` rule holds rather than its named-file rule, which reads a file with no \`exit:\` line as red."
+require_text work-issue/SKILL.md "and Step 2 names the file, or, where VERIFY_CMD is \`absent\`, tells it its BASELINE is \`absent\` instead."
+require_text work-issue/SKILL.md "A \`baseline.txt\` reading \`absent\` means the repo has no verification command, so nothing ran before this run and nothing was already failing."
+require_text work-issue/references/redteam.md "A file reading \`absent\` means the repo has no verification command, so nothing ran before this run and nothing was already failing"
 
 # Step 2 names RUN_DIR/baseline.txt as divvy-up's BASELINE (#188). Step 0
 # told divvy-up's Step 3 to skip its own verify run and wait for that name, so
