@@ -929,34 +929,48 @@ while IFS=$'\t' read -r sig_n sig_name sig; do
   # The positive line above can't tell a literal `(` from a class like `[()]`,
   # which a review proved by making `round)` match `round(` with this suite
   # still green (PR #227). So each punctuation char is swapped for every other
-  # one, and none of those near-misses may reach the row. A near-miss that
-  # contains another signal of the row, even as a bare substring (`* 100`
-  # becoming `/ 100`), is dropped, since its row match would be honest.
+  # one, and none of those near-misses may reach the row. They run against a
+  # copy of the table whose row holds only this signal. Against the real row,
+  # `/ 100` made from `* 100` is an honest hit on `/ 100`, and skipping such
+  # lines let both signals compile to `[*/]\ 100` with the suite green (PR
+  # #227 again). `lines` can't settle it either, because it credits only the
+  # row's first matching signal, so a mutated `/ 100` hides behind `* 100`.
   [[ "$sig" == *[!A-Za-z0-9_\ ]* ]] || continue
-  near_lines="$(sig="$sig" n="$sig_n" subs="$near_subs" awk -F'\t' '
-    $1 == ENVIRON["n"] { row[++k] = tolower($3) }
-    END {
-      s = ENVIRON["sig"]; subs = ENVIRON["subs"]
-      for (i = 1; i <= length(s); i++) {
-        c = substr(s, i, 1)
-        if (c ~ /[A-Za-z0-9_ ]/) continue
-        for (j = 1; j <= length(subs); j++) {
-          d = substr(subs, j, 1)
-          if (d == c) continue
-          line = "+x " substr(s, 1, i - 1) d substr(s, i + 1) " y"
-          low = tolower(line); hit = 0
-          for (r = 1; r <= k; r++) if (index(low, row[r])) { hit = 1; break }
-          if (!hit) print line
-        }
+  near_lines="$(sig="$sig" subs="$near_subs" awk 'BEGIN {
+    s = ENVIRON["sig"]; subs = ENVIRON["subs"]
+    for (i = 1; i <= length(s); i++) {
+      c = substr(s, i, 1)
+      if (c ~ /[A-Za-z0-9_ ]/) continue
+      for (j = 1; j <= length(subs); j++) {
+        d = substr(subs, j, 1)
+        if (d != c) print "+x " substr(s, 1, i - 1) d substr(s, i + 1) " y"
       }
-    }' <<<"$table_signals")"
+    }
+  }')"
   [[ -n "$near_lines" ]] || {
-    echo "trigger-table.md row $sig_n signal \`$sig\`: every near-miss contains another row signal, so its punctuation goes unchecked" >&2
+    echo "trigger-table.md row $sig_n signal \`$sig\`: built no near-miss lines, so its punctuation goes unchecked" >&2
     exit 1
   }
-  (expect_match "" --only "$sig_n" < <(printf '%s\n' "$near_lines")) || {
+  # The rest of the table stays byte-identical, so the unit sentence and the
+  # header the script parses are the shipped ones.
+  solo_table="$tmp/solo-trigger-table.md"
+  sig="$sig" n="$sig_n" name="$sig_name" awk '
+    $0 ~ "^\\| " ENVIRON["n"] " \\| " {
+      print "| " ENVIRON["n"] " | " ENVIRON["name"] " | `" ENVIRON["sig"] "` | - | - |"
+      next
+    }
+    { print }' adversarial-review/references/trigger-table.md >"$solo_table"
+  grep -Fqx -- "| $sig_n | $sig_name | \`$sig\` | - | - |" "$solo_table" || {
+    echo "per-signal guard could not isolate row $sig_n signal \`$sig\` in a table copy" >&2
+    exit 1
+  }
+  (expect_match "$sig_n $sig_name" --only "$sig_n" --table "$solo_table" < <(printf '%s\n' "$sig_line")) || {
+    echo "trigger-table.md row $sig_n signal \`$sig\` does not match its own line once alone in its row" >&2
+    exit 1
+  }
+  (expect_match "" --only "$sig_n" --table "$solo_table" < <(printf '%s\n' "$near_lines")) || {
     echo "trigger-table.md row $sig_n signal \`$sig\` matched a near-miss, so its punctuation is not literal:" >&2
-    python3 "$match_py" lines --only "$sig_n" < <(printf '%s\n' "$near_lines") >&2
+    python3 "$match_py" lines --only "$sig_n" --table "$solo_table" < <(printf '%s\n' "$near_lines") >&2
     exit 1
   }
   near_checked=$((near_checked + 1))
