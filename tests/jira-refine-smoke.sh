@@ -730,6 +730,13 @@ cap-export-timeouts = ["export sla"]' 'label `cap-export-timeouts` is declared i
 # description write has landed.
 bad_families_config spaced-label '[label_families.capability.labels]
 "bad label" = ["spoken phrase"]' 'label `bad label` in family `capability` is empty or holds whitespace, which a Jira label cannot'
+# validate needs a label's whole phrase inside its anchor quote, which caps at
+# ten words and 120 characters and can't hold a double quote. A phrase past
+# any of those makes its label impossible to state, so both loaders refuse it.
+bad_families_config long-phrase '[label_families.capability.labels]
+cap-export-timeouts = ["one two three four five six seven eight nine ten eleven"]' 'label `cap-export-timeouts` in family `capability` has a phrase no anchor can hold'
+bad_families_config quoted-phrase '[label_families.capability.labels]
+cap-export-timeouts = ["the \"nightly\" export"]' 'label `cap-export-timeouts` in family `capability` has a phrase no anchor can hold'
 
 # --- Idempotency, both transports. Rule 8 of tracker-contract.md. -----------
 #
@@ -1644,6 +1651,26 @@ PY
 }
 bad_update_labels non-list '"cap-x"'
 bad_update_labels empty-string '[""]'
+# A spaced label passes the list check but Jira refuses it, and plan_update_ops
+# sends the label write after the description write. Refusing it on read keeps
+# a hand-built line from landing half an update.
+python3 - "$tmp/labels-entries.jsonl" > "$tmp/update-labels-spaced.jsonl" <<'PY' || exit 1
+import json, sys
+entry = json.loads(open(sys.argv[1], encoding="utf-8").readline())
+entry["labels"] = ["bad label"]
+print(json.dumps(entry))
+PY
+set +e
+JIRA_REFINE_TEST_SITE="$labels_site" python3 "$apply" update --config "$labels_config" --dry-run \
+  < "$tmp/update-labels-spaced.jsonl" > /dev/null 2> "$tmp/update-labels-spaced.err"
+spaced_status=$?
+set -e
+[[ "$spaced_status" == 3 ]] || {
+  echo "an update entry with labels [\"bad label\"] should exit 3, got $spaced_status" >&2
+  cat "$tmp/update-labels-spaced.err" >&2
+  exit 1
+}
+require_text "$tmp/update-labels-spaced.err" "labels must not hold whitespace, which a Jira label cannot: 'bad label'"
 
 kill "$rest_pid" 2>/dev/null || true
 wait "$rest_pid" 2>/dev/null || true

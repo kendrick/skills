@@ -51,6 +51,11 @@ import statistics
 import sys
 
 MIN_PYTHON = (3, 11)
+# The longest phrase a Labels anchor can hold whole. These mirror
+# check-staging.py's anchor rule (ANCHOR_MAX_WORDS, and the capture cap in
+# ANCHOR_RE); scripts never import each other, so change all of them together.
+PHRASE_MAX_WORDS = 10
+PHRASE_MAX_CHARS = 120
 
 # Every key below matches the same-named default in jira-refine.example.toml.
 # A user's config only has to state what it overrides.
@@ -184,6 +189,21 @@ def load_label_families(raw, path="config"):
             for ph in phrases:
                 if not isinstance(ph, str) or not ph.strip():
                     fail(f"label `{label}` in family `{fam}` has a non-string or empty phrase")
+                # validate requires a stated label's whole phrase inside its
+                # anchor snippet, so a phrase the anchor rule can't hold makes
+                # the label impossible to state. Refuse it here instead. A short
+                # phrase is fine: the quote around it supplies the other words.
+                spoken = " ".join(ph.split())
+                if (
+                    '"' in spoken
+                    or len(spoken) > PHRASE_MAX_CHARS
+                    or len(spoken.split()) > PHRASE_MAX_WORDS
+                ):
+                    fail(
+                        f"label `{label}` in family `{fam}` has a phrase no anchor can hold "
+                        f"(over {PHRASE_MAX_WORDS} words, over {PHRASE_MAX_CHARS} characters, "
+                        f"or a double quote): {ph!r}"
+                    )
             if label in owner:
                 fail(f"label `{label}` is declared in both `{owner[label]}` and `{fam}`")
             owner[label] = fam

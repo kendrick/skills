@@ -1547,6 +1547,12 @@ def _check_labels(entry, lineno):
         isinstance(item, str) and item.strip() for item in raw
     ):
         die(f"stdin line {lineno}: labels must be a list of non-empty strings")
+    # Same predicate the config loaders apply. Without it a hand-built line's
+    # spaced label reaches plan_update_ops, and Jira refuses the label write
+    # only after the description write has already landed.
+    for item in raw:
+        if any(c.isspace() for c in item):
+            die(f"stdin line {lineno}: labels must not hold whitespace, which a Jira label cannot: {item!r}")
 
 
 def _apply(args, required, dry_run):

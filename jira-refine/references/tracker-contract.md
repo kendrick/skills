@@ -57,7 +57,7 @@ Field types and provenance:
 | `status` | string | Always `approved` in practice; `entries --status approved` is the filter |
 | `on_conflict` | string or null | `append`, `replace`, or null when the human set nothing |
 | `session`, `source`, `label` | string | Copied from the staging frontmatter |
-| `labels` | array of string | `update` only, and only from a schema-2 file. The labels stated under the entry's `### Labels`, in file order, anchors stripped. Absent, not empty, on schema 1. On a `create` entry, or as anything but a list of non-empty strings, it exits 3 |
+| `labels` | array of string | `update` only, and only from a schema-2 file. The labels stated under the entry's `### Labels`, in file order, anchors stripped. Absent, not empty, on schema 1. On a `create` entry, or as anything but a list of non-empty strings, it exits 3. A label that holds whitespace exits 3 too, before any write, because Jira refuses it and would otherwise fail the label write after the description had landed |
 | `fields.context`, `fields.out_of_scope`, `fields.provenance` | string | The section body, empty string when the section is empty |
 | `fields.acceptance_criteria`, `fields.open_questions` | array of string | One entry per bullet |
 | `fields.dependencies` | array of string | Issue keys only |

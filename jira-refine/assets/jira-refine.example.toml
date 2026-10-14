@@ -149,7 +149,11 @@ token_env = "JIRA_API_TOKEN"
 # does a label name that is empty or holds whitespace, such as a quoted
 # `"bad label"` key. Jira refuses it, and apply would only find out after the
 # description write had landed. A misspelled table name is not caught: it just
-# declares no families.
+# declares no families. A phrase no anchor can hold whole stops the run too:
+# more than ten words, more than 120 characters, or a double quote. validate
+# needs the whole phrase inside the label's anchor quote, so such a label
+# could never be stated. A phrase under four words is fine; the quote around
+# it supplies the rest.
 #
 # Commented out because the shipped default declares none:
 # [label_families.capability]

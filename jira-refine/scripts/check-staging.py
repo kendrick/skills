@@ -69,7 +69,10 @@ NOT_DISCUSSED_NAMES = frozenset(name.lower() for name in CONTENT_SECTIONS)
 
 KEY_RE = re.compile(r"^[A-Z][A-Z0-9]+-[0-9]+$")
 PROJECT_RE = re.compile(r"^[A-Z][A-Z0-9]+$")
-ANCHOR_RE = re.compile(r'\(raw: "([^"]{1,120})" (\d\d:\d\d:\d\d|L\d+)\)$')
+ANCHOR_MAX_CHARS = 120
+ANCHOR_RE = re.compile(
+    rf'\(raw: "([^"]{{1,{ANCHOR_MAX_CHARS}}})" (\d\d:\d\d:\d\d|L\d+)\)$'
+)
 DEP_KEY_RE = re.compile(r"^-\s+([A-Z][A-Z0-9]+-[0-9]+)\b")
 SESSION_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 DATETIME_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$")
@@ -88,6 +91,10 @@ EXCERPT_TIMESTAMP_LINE_RE = re.compile(r"^\[\d\d:\d\d:\d\d\]")
 EXCERPT_LINENO_LINE_RE = re.compile(r"^\[L\d+\]")
 ANCHOR_MIN_WORDS = 4
 ANCHOR_MAX_WORDS = 10
+# The longest phrase a Labels anchor can hold whole. segment.py carries the
+# same two numbers as literals, since scripts never import each other.
+PHRASE_MAX_WORDS = ANCHOR_MAX_WORDS
+PHRASE_MAX_CHARS = ANCHOR_MAX_CHARS
 NOT_DISCUSSED_RE = re.compile(r"^- not discussed: (.+)$")
 
 
@@ -222,6 +229,21 @@ def load_label_families(raw, path="config"):
             for ph in phrases:
                 if not isinstance(ph, str) or not ph.strip():
                     fail(f"label `{label}` in family `{fam}` has a non-string or empty phrase")
+                # validate requires a stated label's whole phrase inside its
+                # anchor snippet, so a phrase the anchor rule can't hold makes
+                # the label impossible to state. Refuse it here instead. A short
+                # phrase is fine: the quote around it supplies the other words.
+                spoken = " ".join(ph.split())
+                if (
+                    '"' in spoken
+                    or len(spoken) > PHRASE_MAX_CHARS
+                    or len(spoken.split()) > PHRASE_MAX_WORDS
+                ):
+                    fail(
+                        f"label `{label}` in family `{fam}` has a phrase no anchor can hold "
+                        f"(over {PHRASE_MAX_WORDS} words, over {PHRASE_MAX_CHARS} characters, "
+                        f"or a double quote): {ph!r}"
+                    )
             if label in owner:
                 fail(f"label `{label}` is declared in both `{owner[label]}` and `{fam}`")
             owner[label] = fam
