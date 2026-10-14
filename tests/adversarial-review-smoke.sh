@@ -929,19 +929,24 @@ while IFS=$'\t' read -r sig_n sig_name sig; do
   }
   # The positive line above can't tell a literal `(` from a class like `[()]`,
   # which a review proved by making `round)` match `round(` with this suite
-  # still green (PR #227). So each punctuation char is swapped for every other
-  # printable char, and none of those near-misses may reach the row. They run against a
-  # copy of the table whose row holds only this signal. Against the real row,
-  # `/ 100` made from `* 100` is an honest hit on `/ 100`, and skipping such
-  # lines let both signals compile to `[*/]\ 100` with the suite green (PR
-  # #227 again). `lines` can't settle it either, because it credits only the
-  # row's first matching signal, so a mutated `/ 100` hides behind `* 100`.
-  [[ "$sig" == *[!A-Za-z0-9_\ ]* ]] || continue
+  # still green (PR #227). So each punctuation char and each `_` is swapped for
+  # every other printable char, and none of those near-misses may reach the
+  # row. `_` is a word char, but leaving it unswapped let a `compile_signal`
+  # that turned `_` into `.` match `org-id` for `org_id` and `max-tail` for
+  # `max_` with the suite green (PR #227). Letters, digits, and spaces are
+  # never swapped, so a signal made only of them has nothing to check here.
+  # The near-misses run against a copy of the table whose row holds only this
+  # signal. Against the real row, `/ 100` made from `* 100` is an honest hit
+  # on `/ 100`, and skipping such lines let both signals compile to
+  # `[*/]\ 100` with the suite green (PR #227 again). `lines` can't settle it
+  # either, because it credits only the row's first matching signal, so a
+  # mutated `/ 100` hides behind `* 100`.
+  [[ "$sig" == *[!A-Za-z0-9\ ]* ]] || continue
   near_lines="$(sig="$sig" subs="$near_subs" awk 'BEGIN {
     s = ENVIRON["sig"]; subs = ENVIRON["subs"]
     for (i = 1; i <= length(s); i++) {
       c = substr(s, i, 1)
-      if (c ~ /[A-Za-z0-9_ ]/) continue
+      if (c ~ /[A-Za-z0-9 ]/) continue
       for (j = 1; j <= length(subs); j++) {
         d = substr(subs, j, 1)
         if (d != c) print "+x " substr(s, 1, i - 1) d substr(s, i + 1) " y"
