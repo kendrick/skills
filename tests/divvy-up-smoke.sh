@@ -157,6 +157,19 @@ require_text divvy-up/SKILL.md "A wrapping skill's baseline replaces the run."
 require_text divvy-up/SKILL.md "or says one will be named before Step 5"
 require_text divvy-up/SKILL.md "With no command found, VERIFY_CMD and BASELINE are both \`absent\`"
 
+# With no command, the worker prompt still carries `{{VERIFY_CMD}}` in a shell
+# block, now holding `absent`. Without the sentence after that block a worker
+# runs `absent` as a command and reports its task failed, though Step 6 skips
+# verification (PR #229 review).
+require_text divvy-up/references/worker-prompt.md "Where that command reads \`absent\`, this repo has no verification command:"
+require_text divvy-up/references/worker-prompt.md "run nothing, write \`absent\` in \`verify_output\`, and set \`status\` by the"
+require_text divvy-up/references/worker-prompt.md "The literal \`absent\` goes in when Step 3 found no command"
+# The baseline paragraph claims a command ran and adds its own status rule,
+# both false for a worker handed `absent`, so the template routes it past.
+require_text divvy-up/references/worker-prompt.md "Where the command above reads \`absent\`, skip the baseline below and the"
+require_text divvy-up/references/worker-prompt.md "The worker runs the command before reporting"
+require_text divvy-up/SKILL.md "Both placeholders still go into the worker prompt as the literal \`absent\`, and the template tells a worker handed that to run nothing"
+
 # Step 4's red-baseline clause. Refusing outright on a red baseline would
 # block the plan written to fix that very failure.
 require_text divvy-up/SKILL.md "When BASELINE is red, the same question names each failure BASELINE shows"

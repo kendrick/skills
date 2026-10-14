@@ -782,14 +782,26 @@ require_text work-issue/SKILL.md "Then INSTALL_CMD, then VERIFY_CMD, saved to \`
 require_text work-issue/SKILL.md "and \`RUN_DIR/baseline.txt\` opens with \`exit: <status>\`, VERIFY_CMD's real exit status, followed by its real output."
 require_text work-issue/SKILL.md "\`baseline.txt\`, \`baseline-<wave>.txt\`, \`max_review_rounds\`"
 require_text work-issue/SKILL.md "Each time Step 2 continues \`divvy-up\` at a wave, the first dispatch after a resume included, name instead the \`RUN_DIR/baseline-<wave>.txt\` of the highest-numbered wave already settled, and \`baseline.txt\` only while no wave has settled."
-# A run gated before baseline-<wave>.txt existed has markers and no file;
-# Step 2 falls back rather than naming a file that isn't there, and the probe
-# leaves those files out for the same reason.
-require_text work-issue/SKILL.md "Where that file is missing, as on a run gated before these files existed, name the newest \`baseline-<wave>.txt\` that exists among settled waves, else \`baseline.txt\`, and that run is judged against an older baseline."
-require_text work-issue/references/resume.md "The probe checks \`baseline.txt\` alone, never \`baseline-<wave>.txt\`, because Step 2 falls back to an older baseline when a wave's file is missing"
-require_text work-issue/SKILL.md "Just before the markers, save the verification run that passed the gate to \`RUN_DIR/baseline-<wave>.txt\` in \`baseline.txt\`'s format"
+# A run gated before baseline-<wave>.txt existed has markers and no file.
+# Step 2 measures the settled tree itself rather than falling back to an
+# older file, which would pass a failure a settled wave fixed and the next
+# brought back (PR #229 review). The probe leaves these files out because
+# Step 2 rebuilds a missing one.
+require_text work-issue/SKILL.md "Where VERIFY_CMD is not \`absent\` and that wave's file is missing, which only a run gated before these files existed can leave since Step 3 saves it ahead of any commit or marker, run VERIFY_CMD at HEAD on the clean, committed tree before dispatching"
+require_text work-issue/SKILL.md "That run's output is the baseline the settled wave left, since the tree it reads is the one that wave's gate passed on."
+refute_text work-issue/SKILL.md "name the newest \`baseline-<wave>.txt\` that exists among settled waves"
+require_text work-issue/references/resume.md "The probe checks \`baseline.txt\` alone, never \`baseline-<wave>.txt\`, because Step 3 saves a wave's file before the commit or marker the probe reads"
+# The probe reads a marker as the gate's pass, and a commit too on a run from
+# before markers, so the file has to land before either one, or a crash
+# between them leaves a passed wave with no file (PR #229 review).
+require_text work-issue/SKILL.md "As soon as the gate passes, save the verification run that passed it to \`RUN_DIR/baseline-<wave>.txt\` in \`baseline.txt\`'s format, \`exit: <status>\` and then the output tail, before the wave's commit and before its markers"
+require_text work-issue/SKILL.md "because the resume probe reads a marker as the gate's pass, and a commit too on a run with no \`gated/\` directory,"
 require_text work-issue/SKILL.md "\`RUN_DIR/baseline.txt\` stays the run-start capture, untouched after Step 1, because Step 4's reproducer reads it."
-require_text work-issue/SKILL.md "with a \`gated/<wave>-<task>\` marker for each of its tasks, and a \`baseline-<wave>.txt\` for each wave settled since these files existed, while a wave gated before then may lack one, since Step 2's fallback covers it;"
+require_text work-issue/SKILL.md "with a \`gated/<wave>-<task>\` marker for each of its tasks, and, where VERIFY_CMD is not \`absent\`, a \`baseline-<wave>.txt\` for each wave settled since these files existed, while a wave gated before then may lack one, since Step 2 writes the one it names before it dispatches;"
+# With no verification command there is no gate run to save, so neither the
+# save nor Step 2's lookup can demand a file that never gets written.
+require_text work-issue/SKILL.md "With VERIFY_CMD \`absent\` there is no run to save, and no \`baseline-<wave>.txt\` is written."
+require_text work-issue/SKILL.md "With VERIFY_CMD \`absent\` no wave writes a file and there is nothing to run, so name \`baseline.txt\` at every wave."
 
 # Step 2 names RUN_DIR/baseline.txt as divvy-up's BASELINE (#188). Step 0
 # told divvy-up's Step 3 to skip its own verify run and wait for that name, so
