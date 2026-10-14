@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Walk one opted-in scope and check every v2 note and record against the machine
 # contracts in references/machine-contracts.md. The walk takes in v1 files as
-# well, checking their wiki links and nothing else: a link resolves against every
-# file in the scope, and that resolution never reads the file's own frontmatter.
+# well, checking their wiki links and nothing else. A link resolves as a path
+# from the linking note's dir, then by name or id within the scope, and none of
+# that reads the file's own frontmatter.
 #
 # This ships as a script rather than prose the agent follows because most of what
 # the v2 schema promises is arithmetic: keys in a fixed order, a block that fits
@@ -12,9 +13,10 @@
 # The only check here that touches a v1 file is the link check. Files without a
 # `schema` key predate the contract, they stay legal indefinitely, and a scope
 # holding both generations is a supported state rather than a migration someone
-# abandoned halfway. Links stay on because a target that resolves to no file in
-# scope is broken whichever generation wrote it, and verify-migration.sh already
-# runs that same resolution over the whole scope without ever reading `schema`.
+# abandoned halfway. Links stay on because a target that resolves to no file is
+# broken whichever generation wrote it. verify-migration.sh also sweeps links
+# across the whole scope without reading `schema`, though it skips the path step
+# this check runs first.
 #
 # Requires bash, awk, and yq (brew install yq).
 set -euo pipefail
@@ -372,12 +374,25 @@ check_anchors() {
   return 0
 }
 
-# Files are never renamed, so a link whose literal target is missing is usually a
-# file that moved rather than one that vanished. The id is the last ten characters
-# of the target and it never changes, which is why the fallback resolves before
-# anything gets reported broken.
+# Three tries, first hit wins: path, then name, then id. The path try comes
+# first because SKILL.md allows cross-scope links, and a link like
+# `../working-state` names a file outside $scope that no search of $scope can
+# find. A target holding a `/` skips the name try, since `find -name` never
+# matches a slash. $1 is a cached body file, so the linking note's dir comes from
+# current_file, never from $1. Files are never renamed, so a link that misses by
+# path and by name usually points at a file that moved inside this scope, and
+# that file's trailing id never changes. The id try needs a scaffolded
+# `<slug>-<nanoid>` basename with a hyphen right before its last ten chars.
+# Without the hyphen, ten nanoid-alphabet chars would invent the id `king-state`
+# out of `working-state`. The nanoid alphabet includes `-`, so an id can hold
+# one: `...-prep-zFpm-hfD5u` carries `zFpm-hfD5u`. The id search stays inside
+# $scope, because a vault-wide search would pass a dead link against any
+# unrelated file that shares those ten chars.
 check_links() {
   local target
+  local id_pattern='-([A-Za-z0-9_-]{10})$'
+  local dir
+  dir="$(dirname "$current_file")"
   while IFS= read -r target; do
     [[ -z "$target" ]] && continue
     # An unsubstituted placeholder is not a link. Templates ship with them, and
@@ -385,10 +400,28 @@ check_links() {
     case "$target" in
       *'{{'* | *'<'*) continue ;;
     esac
-    find "$scope" -name "$target.md" -print -quit | grep -q . && continue
-    local id="${target: -10}"
-    find "$scope" -name "*$id*.md" -print -quit | grep -q . && continue
-    fail link-broken "\`$target\` resolves neither by name nor by id \`$id\`"
+    # Authors write `[[note]]` and `[[note.md]]` for the same file.
+    local stem="${target%.md}"
+    [[ -f "$dir/$stem.md" ]] && continue
+    if [[ "$target" != */* ]]; then
+      find "$scope" -name "$stem.md" -print -quit | grep -q . && continue
+    fi
+    local base="${stem##*/}" id=""
+    if [[ "$base" =~ $id_pattern ]]; then
+      id="${BASH_REMATCH[1]}"
+      find "$scope" -name "*$id*.md" -print -quit | grep -q . && continue
+      # Each message names only the tries that ran. Naming a skipped try sends
+      # the reader looking for a match the lint never searched for.
+      if [[ "$target" == */* ]]; then
+        fail link-broken "\`$target\` resolves neither by path nor by id \`$id\`"
+      else
+        fail link-broken "\`$target\` resolves neither by name nor by id \`$id\`"
+      fi
+    elif [[ "$target" == */* ]]; then
+      fail link-broken "\`$target\` does not resolve by path"
+    else
+      fail link-broken "\`$target\` resolves neither by path nor by name"
+    fi
   done < <(grep -oE '\[\[[^]|]*' "$1" | sed 's/^\[\[//' | sort -u || true)
 }
 
