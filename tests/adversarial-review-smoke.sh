@@ -913,8 +913,11 @@ done
 # leaving `_` out let `\.` widen to `[._]` with this suite green (PR #227).
 near_subs="$(awk 'BEGIN { for (i = 32; i < 127; i++) printf "%c", i }')"
 near_checked=0
+adj_checked=0
 while IFS=$'\t' read -r sig_n sig_name sig; do
+  is_unit=0
   if grep -Fqxi -- "$sig" <<<"$table_units"; then
+    is_unit=1
     sig_line="+x = 12$sig"
   elif [[ "$sig" == *_ ]]; then
     sig_line="+x ${sig}tail"
@@ -927,7 +930,59 @@ while IFS=$'\t' read -r sig_n sig_name sig; do
     echo "trigger-table.md row $sig_n signal \`$sig\` does not match its own line: $sig_line" >&2
     exit 1
   }
-  # The positive line above can't tell a literal `(` from a class like `[()]`,
+  # Every negative check below runs against a copy of the table whose row
+  # holds only this signal. Against the real row, `/ 100` made from `* 100` is
+  # an honest hit on `/ 100`, and skipping such lines let both signals compile
+  # to `[*/]\ 100` with the suite green (PR #227). `lines` can't settle it
+  # either, because it credits only the row's first matching signal, so a
+  # mutated `/ 100` hides behind `* 100`. The rest of the table stays
+  # byte-identical, so the unit sentence and header are the shipped ones.
+  solo_table="$tmp/solo-trigger-table.md"
+  sig="$sig" n="$sig_n" name="$sig_name" awk '
+    $0 ~ "^\\| " ENVIRON["n"] " \\| " {
+      print "| " ENVIRON["n"] " | " ENVIRON["name"] " | `" ENVIRON["sig"] "` | - | - |"
+      next
+    }
+    { print }' adversarial-review/references/trigger-table.md >"$solo_table"
+  grep -Fqx -- "| $sig_n | $sig_name | \`$sig\` | - | - |" "$solo_table" || {
+    echo "per-signal guard could not isolate row $sig_n signal \`$sig\` in a table copy" >&2
+    exit 1
+  }
+  (expect_match "$sig_n $sig_name" --only "$sig_n" --table "$solo_table" < <(printf '%s\n' "$sig_line")) || {
+    echo "trigger-table.md row $sig_n signal \`$sig\` does not match its own line once alone in its row" >&2
+    exit 1
+  }
+  # The positive line always puts a space before the signal, so it can't see
+  # a lost word boundary. A review made `compile_signal` drop the left
+  # lookaround on any signal ending in punctuation, `around(` reached row 1
+  # for `round(`, and the suite stayed green (PR #227). So a letter, a digit,
+  # and `_` each go flush against every word-char end, and none may reach the
+  # row. Testing one class alone misses a lookbehind narrowed to that class. A
+  # unit has its own digit rule, and a prefix's trailing `_` takes anything.
+  # Split around the signal rather than `${sig_line/.../...}`: bash 3.2 keeps
+  # quotes in that replacement literally, and 5.2 expands an unquoted `&`.
+  adj_pre="${sig_line%%"$sig"*}"
+  adj_post="${sig_line#*"$sig"}"
+  adj_lines=""
+  if [[ "$is_unit" == 0 ]]; then
+    for w in a 7 _; do
+      if [[ "$sig" == [A-Za-z0-9_]* ]]; then
+        adj_lines+="$adj_pre$w$sig$adj_post"$'\n'
+      fi
+      if [[ "$sig" == *[A-Za-z0-9] ]]; then
+        adj_lines+="$adj_pre$sig$w$adj_post"$'\n'
+      fi
+    done
+  fi
+  if [[ -n "$adj_lines" ]]; then
+    (expect_match "" --only "$sig_n" --table "$solo_table" < <(printf '%s' "$adj_lines")) || {
+      echo "trigger-table.md row $sig_n signal \`$sig\` matched an adjacent-word line, so its whole-word boundary is not enforced:" >&2
+      python3 "$match_py" lines --only "$sig_n" --table "$solo_table" < <(printf '%s' "$adj_lines") >&2
+      exit 1
+    }
+    adj_checked=$((adj_checked + 1))
+  fi
+  # The positive line can't tell a literal `(` from a class like `[()]`,
   # which a review proved by making `round)` match `round(` with this suite
   # still green (PR #227). So each punctuation char and each `_` is swapped for
   # every other printable char, and none of those near-misses may reach the
@@ -935,12 +990,6 @@ while IFS=$'\t' read -r sig_n sig_name sig; do
   # that turned `_` into `.` match `org-id` for `org_id` and `max-tail` for
   # `max_` with the suite green (PR #227). Letters, digits, and spaces are
   # never swapped, so a signal made only of them has nothing to check here.
-  # The near-misses run against a copy of the table whose row holds only this
-  # signal. Against the real row, `/ 100` made from `* 100` is an honest hit
-  # on `/ 100`, and skipping such lines let both signals compile to
-  # `[*/]\ 100` with the suite green (PR #227 again). `lines` can't settle it
-  # either, because it credits only the row's first matching signal, so a
-  # mutated `/ 100` hides behind `* 100`.
   [[ "$sig" == *[!A-Za-z0-9\ ]* ]] || continue
   near_lines="$(sig="$sig" subs="$near_subs" awk 'BEGIN {
     s = ENVIRON["sig"]; subs = ENVIRON["subs"]
@@ -957,23 +1006,6 @@ while IFS=$'\t' read -r sig_n sig_name sig; do
     echo "trigger-table.md row $sig_n signal \`$sig\`: built no near-miss lines, so its punctuation goes unchecked" >&2
     exit 1
   }
-  # The rest of the table stays byte-identical, so the unit sentence and the
-  # header the script parses are the shipped ones.
-  solo_table="$tmp/solo-trigger-table.md"
-  sig="$sig" n="$sig_n" name="$sig_name" awk '
-    $0 ~ "^\\| " ENVIRON["n"] " \\| " {
-      print "| " ENVIRON["n"] " | " ENVIRON["name"] " | `" ENVIRON["sig"] "` | - | - |"
-      next
-    }
-    { print }' adversarial-review/references/trigger-table.md >"$solo_table"
-  grep -Fqx -- "| $sig_n | $sig_name | \`$sig\` | - | - |" "$solo_table" || {
-    echo "per-signal guard could not isolate row $sig_n signal \`$sig\` in a table copy" >&2
-    exit 1
-  }
-  (expect_match "$sig_n $sig_name" --only "$sig_n" --table "$solo_table" < <(printf '%s\n' "$sig_line")) || {
-    echo "trigger-table.md row $sig_n signal \`$sig\` does not match its own line once alone in its row" >&2
-    exit 1
-  }
   (expect_match "" --only "$sig_n" --table "$solo_table" < <(printf '%s\n' "$near_lines")) || {
     echo "trigger-table.md row $sig_n signal \`$sig\` matched a near-miss, so its punctuation is not literal:" >&2
     python3 "$match_py" lines --only "$sig_n" --table "$solo_table" < <(printf '%s\n' "$near_lines") >&2
@@ -985,6 +1017,11 @@ done <<<"$table_signals"
 # check above ran for nothing.
 [[ "$near_checked" -gt 0 ]] || {
   echo "per-signal guard ran no near-miss check: no punctuation-bearing signal read from trigger-table.md" >&2
+  exit 1
+}
+# Zero would mean the word-char tests above stopped matching any signal.
+[[ "$adj_checked" -gt 0 ]] || {
+  echo "per-signal guard ran no adjacent-word check: no signal with a word-char end read from trigger-table.md" >&2
   exit 1
 }
 # Whole-word at both ends: `index` inside `page_index` is no schema signal, and
