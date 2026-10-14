@@ -908,9 +908,10 @@ for n in 1 2 3 4 5 6; do
     exit 1
   }
 done
-# Every ASCII punctuation char but `_`, which is a word char and changes the
-# boundary rather than the punctuation.
-near_subs='!"#$%&'"'"'()*+,-./:;<=>?@[\]^`{|}~'
+# Every printable ASCII char, `_`, letters, digits, and space included. A
+# `.` that also matches `_` is no more literal than one that matches `,`, and
+# leaving `_` out let `\.` widen to `[._]` with this suite green (PR #227).
+near_subs="$(awk 'BEGIN { for (i = 32; i < 127; i++) printf "%c", i }')"
 near_checked=0
 while IFS=$'\t' read -r sig_n sig_name sig; do
   if grep -Fqxi -- "$sig" <<<"$table_units"; then
@@ -929,7 +930,7 @@ while IFS=$'\t' read -r sig_n sig_name sig; do
   # The positive line above can't tell a literal `(` from a class like `[()]`,
   # which a review proved by making `round)` match `round(` with this suite
   # still green (PR #227). So each punctuation char is swapped for every other
-  # one, and none of those near-misses may reach the row. They run against a
+  # printable char, and none of those near-misses may reach the row. They run against a
   # copy of the table whose row holds only this signal. Against the real row,
   # `/ 100` made from `* 100` is an honest hit on `/ 100`, and skipping such
   # lines let both signals compile to `[*/]\ 100` with the suite green (PR
