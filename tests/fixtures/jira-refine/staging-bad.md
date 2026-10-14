@@ -1,6 +1,6 @@
 ---
 skill: jira-refine
-schema: 2
+schema: 3
 source: refinement-bad-2026-08-30.vtt
 source_path: /Users/example/transcripts/refinement-bad-2026-08-30.vtt
 session: 2026-08-30

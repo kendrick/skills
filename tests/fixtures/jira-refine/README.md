@@ -129,7 +129,7 @@ frontmatter and two entries so no defect's failure can cascade into another:
 
 ```
 $ python3 jira-refine/scripts/check-staging.py validate tests/fixtures/jira-refine/staging-bad.md
-check-staging: frontmatter: schema is '2', expected '1'
+check-staging: frontmatter: schema is '3', expected '1' or '2'
 check-staging: frontmatter: generated '2026-08-30 16:45:00' is not YYYY-MM-DDTHH:MM:SS
 check-staging: entry PROJ-500: status 'pending' is not one of ['staged', 'approved', 'skipped', 'applied', 'conflict']
 check-staging: entry PROJ-500: Acceptance criteria line has no valid anchor: '- [ ] Ship the retry button'
@@ -139,7 +139,7 @@ check-staging: entry PROJ-501: Goal has both content and a not-discussed line
 
 The six, for whoever writes the smoke test:
 
-1. **Frontmatter, wrong schema.** `schema: 2` instead of `1`.
+1. **Frontmatter, wrong schema.** `schema: 3`, which is neither `1` nor `2`.
 2. **Frontmatter, malformed `generated`.** A space instead of `T` between
    date and time.
 3. **`PROJ-500`, illegal status.** `status: pending`, not one of the five
@@ -152,6 +152,46 @@ The six, for whoever writes the smoke test:
    Goal section holds a real anchored line, and Open questions *also* carries
    `- not discussed: goal` — a section is either filled or marked empty,
    never both.
+
+## Stated Labels: `jira-refine-labels.toml`, `refinement-labels.vtt`, `staging-labels.md`
+
+These three files cover the schema-2 path, where the room says a label out loud and the staging file records it under `### Labels`. They stay apart from the files above so that `refinement.{vtt,srt,txt}` keep staging byte-identically at `schema: 1` against `jira-refine.toml`.
+
+`jira-refine-labels.toml` is `jira-refine.toml` copied verbatim with two `[label_families]` tables appended, the ones issue #233 names. Each family has `max = 1`:
+
+| Family | Label | Phrases |
+|---|---|---|
+| `capability` | `cap-export-timeouts` | `export timeout`, `the nightly export` |
+| `capability` | `cap-safari-tiles` | `safari tiles`, `the dashboard tiles` |
+| `outcome` | `mo-q4-export-sla` | `export sla`, `the q4 export outcome` |
+
+`refinement-labels.vtt` is a five-cue session. With this config and `--session-date 2026-09-07`, `segment.py` keeps two entries, and both clear the default `min_segment_words` of 40:
+
+- `PROJ-412`, 00:00:15 to 00:00:45, 56 words. Priya says "this is the nightly export work" at 00:00:15, a `capability` phrase. Neither of its two turns names an `outcome` phrase.
+- `PROJ-413`, 00:01:30 to 00:02:15, 59 words. One turn at 00:01:30 names both families: "The safari tiles on the main page" and "lands the export sla for q4".
+
+`staging-labels.md` is that segmentation filled in by hand, the way an agent fills a skeleton. It has `schema: 2`, and every entry carries nine sections with `### Labels` between `### Goal` and `### Open questions`:
+
+- `PROJ-412` is `approved`. Its Labels section holds `- cap-export-timeouts (raw: "this is the nightly export work" 00:00:15)`. Open questions carries `- not discussed: labels/outcome` because nobody named an outcome.
+- `PROJ-413` is `staged`, so `entries --status approved` and `jira-apply.py update` see only `PROJ-412`. It carries one label from each family and no `labels/` not-discussed line.
+
+Every label snippet sits inside the turn its clock names, runs 4 to 10 words, and contains one of its label's phrases after casefolding. `PROJ-412` and `PROJ-413` are both seeded in `issues.json`, so `jira-apply.py update --dry-run` can run the approved entry against the REST fake.
+
+The `config:` line reads `/Users/example/jira-refine-labels.toml`, a placeholder like the other staging fixtures use. `check-staging.py` requires an absolute path and reads the label families from it, and a committed file can't hold one machine's path. So the smoke test copies the file to a temp directory and rewrites that line to this directory's real `jira-refine-labels.toml` before it runs `validate`.
+
+## Schema-1 Snapshots: `golden/refinement.{vtt,srt,txt}.refine.md`
+
+These three files pin issue #233's schema-1 criterion: with no `[label_families]` in the config, the transcripts stage byte-identically to `main`, at `schema: 1`. Each one is main's `segment.py` output for one transcript, made with `jira-refine.toml` and `--session-date 2026-09-07`:
+
+```
+git show main:jira-refine/scripts/segment.py > seg.py
+python3 seg.py --config tests/fixtures/jira-refine/jira-refine.toml --session-date 2026-09-07 \
+  tests/fixtures/jira-refine/refinement.vtt \
+  | sed -E 's/^(generated|source_path|config): .*/\1: NORMALIZED/' \
+  > tests/fixtures/jira-refine/golden/refinement.vtt.refine.md
+```
+
+The `sed` replaces the three frontmatter values that change from run to run or from machine to machine: the clock time and two absolute paths. The smoke test stages each transcript with the working copy's `segment.py`, applies the same `sed`, and `cmp`s the result against its snapshot. Regenerate a snapshot only when a change to schema-1 output is intended.
 
 ## `issues.json`
 

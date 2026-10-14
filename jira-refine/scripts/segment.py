@@ -141,6 +141,50 @@ def read_text_file(path, label):
         raise SystemExit(3)
 
 
+def load_label_families(raw, path="config"):
+    """Validate and normalize `[label_families]` into an ordered list of
+    (family, max_or_None, {label: [phrases]}). Strict on purpose: a misspelled
+    table (`label_familes`, a family with no `labels`) would otherwise quietly
+    turn the feature off, and the entries would stage at schema 1 with no
+    sign anything was dropped. check-staging.py carries its own copy of this
+    function — scripts never import each other — so the two must agree on
+    what a valid config is. Config order is preserved because the skeleton's
+    per-family `not discussed` lines follow it."""
+
+    def fail(msg):
+        sys.stderr.write(f"segment: {path}: label_families: {msg}\n")
+        raise SystemExit(3)
+
+    if raw is None:
+        return []
+    if not isinstance(raw, dict):
+        fail("must be a table of families")
+    families = []
+    owner = {}
+    for fam, body in raw.items():
+        if not isinstance(body, dict):
+            fail(f"family `{fam}` must be a table")
+        cap = body.get("max")
+        if "max" in body and (not isinstance(cap, int) or isinstance(cap, bool) or cap < 1):
+            fail(f"family `{fam}`: `max` must be an integer >= 1")
+        labels = body.get("labels")
+        if not isinstance(labels, dict) or not labels:
+            fail(f"family `{fam}` declares no labels")
+        norm = {}
+        for label, phrases in labels.items():
+            if not isinstance(phrases, list) or not phrases:
+                fail(f"label `{label}` in family `{fam}` has no phrases")
+            for ph in phrases:
+                if not isinstance(ph, str) or not ph.strip():
+                    fail(f"label `{label}` in family `{fam}` has a non-string or empty phrase")
+            if label in owner:
+                fail(f"label `{label}` is declared in both `{owner[label]}` and `{fam}`")
+            owner[label] = fam
+            norm[label] = list(phrases)
+        families.append((fam, cap, norm))
+    return families
+
+
 def load_config(path):
     """Parse the TOML config and fold in defaults. `projects` is the one key
     with no default — the pattern that finds a key in the transcript is
@@ -168,6 +212,7 @@ def load_config(path):
     cfg.update(raw)
     cfg["projects"] = list(projects)
     cfg["spoken_aliases"] = raw.get("spoken_aliases", {})
+    cfg["label_families"] = load_label_families(raw.get("label_families"), path)
     return cfg
 
 
@@ -841,7 +886,7 @@ def mentions_str(keys):
     return "[" + ", ".join(keys) + "]" if keys else "[]"
 
 
-def build_entry_lines(entry, source, session, has_clock):
+def build_entry_lines(entry, source, session, has_clock, families=()):
     if has_clock:
         segment_str = f"{entry['start']} - {entry['end']}"
         duration_str = seconds_to_duration(entry["duration_seconds"])
@@ -864,7 +909,13 @@ def build_entry_lines(entry, source, session, has_clock):
     # `not discussed` line; Open questions is therefore never itself empty.
     for heading in ("Context", "Acceptance criteria", "Out of scope", "Dependencies", "Goal"):
         lines += section_block(f"### {heading}", [])
+    # Schema 2 only: Labels sits between Goal and Open questions, and each
+    # family gets its own `not discussed` line rather than one for the section,
+    # because a room can name a capability and say nothing of the outcome.
+    if families:
+        lines += section_block("### Labels", [])
     not_discussed = [f"- not discussed: {name}" for name in CONTENT_SECTIONS]
+    not_discussed += [f"- not discussed: labels/{fam}" for fam, _cap, _labels in families]
     lines += section_block("### Open questions", not_discussed)
     provenance = [
         f"- source: {source}",
@@ -903,7 +954,7 @@ def build_passing_bullets(passing, min_words):
     return bullets
 
 
-def build_skeleton(result, frontmatter, source, session, min_words, long_factor):
+def build_skeleton(result, frontmatter, source, session, min_words, long_factor, families=()):
     lines = ["---"]
     for k in ("skill", "schema", "source", "source_path", "session", "label", "config", "projects", "generated"):
         v = frontmatter[k]
@@ -914,7 +965,7 @@ def build_skeleton(result, frontmatter, source, session, min_words, long_factor)
     lines.append("")
 
     for entry in result["entries"]:
-        lines += build_entry_lines(entry, source, session, result["has_clock"])
+        lines += build_entry_lines(entry, source, session, result["has_clock"], families)
 
     lines.append("## Summary")
     lines.append("")
@@ -1029,7 +1080,9 @@ def main(argv=None):
     label = args.label or f"{cfg['label_prefix']}{args.session_date}"
     frontmatter = {
         "skill": "jira-refine",
-        "schema": 1,
+        # Schema 2 exactly when the config declares a family; otherwise the
+        # bytes stay what they were so existing stagings keep validating.
+        "schema": 2 if cfg["label_families"] else 1,
         "source": os.path.basename(args.transcript),
         "source_path": os.path.abspath(args.transcript),
         "session": args.session_date,
@@ -1043,7 +1096,7 @@ def main(argv=None):
         print(json.dumps(build_json(result, frontmatter, min_words, cfg["long_factor"]), indent=2))
     else:
         print(
-            build_skeleton(result, frontmatter, frontmatter["source"], args.session_date, min_words, cfg["long_factor"]),
+            build_skeleton(result, frontmatter, frontmatter["source"], args.session_date, min_words, cfg["long_factor"], cfg["label_families"]),
             end="",
         )
     return 0

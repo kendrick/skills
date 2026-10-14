@@ -123,3 +123,39 @@ token_env = "JIRA_API_TOKEN"
 # id = "customfield_10001"
 # cli_name = "Team"
 # value = "1b4b76c3-0000-0000-0000-000000000000"
+
+# --- Label families -------------------------------------------------------
+
+# Labels the room states aloud, for a team that traces work through them —
+# one capability label and one outcome label on every story, say. Each family
+# lists its allowed labels, and each label lists the phrases the room says for
+# it, the same idea as [spoken_aliases]: nobody says `cap-export-timeouts` out
+# loud, they say "this is the nightly export work".
+#
+# A label lands under an entry's `### Labels` only where a speaker said one of
+# its phrases, anchored like a Goal line. A family nobody named gets
+# `- not discussed: labels/<family>` instead. Apply adds stated labels next to
+# the batch label in one union write, so labels already on the issue stay.
+#
+# `max` is optional: a family without it takes any number of labels per entry.
+#
+# Declaring any family switches new staging files to `schema: 2`, which adds
+# the Labels section. With none declared, staging files stay `schema: 1`,
+# byte for byte what they were before this table existed, and old files still
+# validate. The table is checked strictly at load: a family with no labels, a
+# label with no phrases, a phrase that is empty or not a string, a `max` that
+# is not an integer or is below 1, or one label in two families stops the run,
+# because a misspelled table would otherwise turn the feature off without a
+# word.
+#
+# Commented out because the shipped default declares none:
+# [label_families.capability]
+# max = 1
+# [label_families.capability.labels]
+# cap-export-timeouts = ["export timeout", "the nightly export"]
+# cap-safari-tiles = ["safari tiles", "the dashboard tiles"]
+#
+# [label_families.outcome]
+# max = 1
+# [label_families.outcome.labels]
+# mo-q4-export-sla = ["export sla", "the q4 export outcome"]

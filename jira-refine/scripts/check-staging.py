@@ -30,6 +30,13 @@ frontmatter fences at all — the last case means the file cannot be parsed as a
 staging file, as opposed to being one with rule violations. Argparse supplies
 2 for a mistyped flag.
 
+Schema 2 adds a `### Labels` section between Goal and Open questions, and
+only a schema-2 file makes this script read the `config:` TOML, for its
+`[label_families]`. A schema-1 file never opens the config, so every staging
+file written before labels existed validates exactly as it always did. A
+config that can't be read or declares a malformed family exits 3, since the
+grammar can't be graded without it.
+
 Stdlib only, so the skill stays copy-in portable.
 """
 import argparse
@@ -51,7 +58,7 @@ CONTENT_SECTIONS = (
     "Context", "Acceptance criteria", "Out of scope", "Dependencies",
     "Goal", "Open questions",
 )
-ALL_SECTIONS = CONTENT_SECTIONS + ("Provenance", "Source excerpt")
+TRAILING_SECTIONS = ("Provenance", "Source excerpt")
 SUMMARY_SUBSECTIONS = (
     "Spike candidates", "Mentioned in passing", "Gaps to file", "Apply log",
 )
@@ -81,6 +88,16 @@ EXCERPT_TIMESTAMP_LINE_RE = re.compile(r"^\[\d\d:\d\d:\d\d\]")
 EXCERPT_LINENO_LINE_RE = re.compile(r"^\[L\d+\]")
 ANCHOR_MIN_WORDS = 4
 ANCHOR_MAX_WORDS = 10
+NOT_DISCUSSED_RE = re.compile(r"^- not discussed: (.+)$")
+
+
+def expected_sections(schema):
+    """The '###' headings an entry must carry, in order. Anything but '2'
+    gets the schema-1 list, the shape a file with a bad schema value most
+    likely has."""
+    if schema == "2":
+        return CONTENT_SECTIONS[:5] + ("Labels",) + CONTENT_SECTIONS[5:] + TRAILING_SECTIONS
+    return CONTENT_SECTIONS + TRAILING_SECTIONS
 
 
 def group_clock_turns(content):
@@ -153,6 +170,70 @@ def strip_bullet(line):
 # ---------------------------------------------------------------------------
 # I/O
 # ---------------------------------------------------------------------------
+
+
+def load_label_families(raw, path="config"):
+    """Validate and normalize `[label_families]` into an ordered list of
+    (family, max_or_None, {label: [phrases]}). segment.py carries its own
+    copy of this function, since scripts never import each other, and the
+    two must agree on what a valid config is: if segment.py stages a label
+    this validator then rejects, or the reverse, the room's words never
+    reach the tracker. Strict for the same reason segment.py is: a family
+    with no labels would otherwise load as an empty family and switch off
+    its checks without a word."""
+
+    def fail(msg):
+        sys.stderr.write(f"check-staging: {path}: label_families: {msg}\n")
+        raise SystemExit(3)
+
+    if raw is None:
+        return []
+    if not isinstance(raw, dict):
+        fail("must be a table of families")
+    families = []
+    owner = {}
+    for fam, body in raw.items():
+        if not isinstance(body, dict):
+            fail(f"family `{fam}` must be a table")
+        cap = body.get("max")
+        if "max" in body and (not isinstance(cap, int) or isinstance(cap, bool) or cap < 1):
+            fail(f"family `{fam}`: `max` must be an integer >= 1")
+        labels = body.get("labels")
+        if not isinstance(labels, dict) or not labels:
+            fail(f"family `{fam}` declares no labels")
+        norm = {}
+        for label, phrases in labels.items():
+            if not isinstance(phrases, list) or not phrases:
+                fail(f"label `{label}` in family `{fam}` has no phrases")
+            for ph in phrases:
+                if not isinstance(ph, str) or not ph.strip():
+                    fail(f"label `{label}` in family `{fam}` has a non-string or empty phrase")
+            if label in owner:
+                fail(f"label `{label}` is declared in both `{owner[label]}` and `{fam}`")
+            owner[label] = fam
+            norm[label] = list(phrases)
+        families.append((fam, cap, norm))
+    return families
+
+
+def load_config_families(path):
+    """Read the frontmatter's config and return its label families, or exit
+    3. Only a schema-2 file reaches this; see the module docstring."""
+    import tomllib  # deferred so a schema-1 run never needs the 3.11 floor
+
+    try:
+        with open(path, "rb") as f:
+            raw = tomllib.load(f)
+    except OSError as e:
+        sys.stderr.write(f"check-staging: {path}: {e}\n")
+        raise SystemExit(3)
+    except UnicodeDecodeError as e:
+        sys.stderr.write(f"check-staging: {path}: not valid UTF-8: {e}\n")
+        raise SystemExit(3)
+    except tomllib.TOMLDecodeError as e:
+        sys.stderr.write(f"check-staging: {path}: not valid TOML: {e}\n")
+        raise SystemExit(3)
+    return load_label_families(raw.get("label_families"), path)
 
 
 def load_staging(path):
@@ -271,8 +352,8 @@ def check_frontmatter(fm):
 
     if "skill" in fm and fm["skill"] != "jira-refine":
         problems.append(f"frontmatter: skill is {fm['skill']!r}, expected 'jira-refine'")
-    if "schema" in fm and fm["schema"] != "1":
-        problems.append(f"frontmatter: schema is {fm['schema']!r}, expected '1'")
+    if "schema" in fm and fm["schema"] not in ("1", "2"):
+        problems.append(f"frontmatter: schema is {fm['schema']!r}, expected '1' or '2'")
     if "session" in fm and not SESSION_RE.match(fm["session"]):
         problems.append(f"frontmatter: session {fm['session']!r} is not YYYY-MM-DD")
     if "generated" in fm and not DATETIME_RE.match(fm["generated"]):
@@ -372,13 +453,17 @@ def check_entry_kv(key, kv_lines):
     return kv, mentions, problems
 
 
-def check_sections(key, sections, fm, projects):
+def check_sections(key, sections, fm, projects, families=None):
     """Every Sections/Anchors/Not-discussed/Provenance rule for one entry.
-    Returns (problems, fields, not_discussed) — `fields` and `not_discussed`
-    are the values `entries` needs for its JSON line, computed here rather
-    than re-walked later so the two commands never disagree about what a
-    section's body says."""
+    Returns (problems, fields, not_discussed, labels) — the last three are
+    the values `entries` needs for its JSON line, computed here rather than
+    re-walked later so the two commands never disagree about what a
+    section's body says. `labels` is None on schema 1. `families` is the
+    config's label families on schema 2, or None when `config:` is missing
+    or relative, which is already a frontmatter problem; the Labels anchors
+    are still checked then, but not the family rules."""
     problems = []
+    schema2 = fm.get("schema") == "2"
 
     # Source excerpt first: every anchor check below needs its normalized
     # text, and the excerpt is script-filled last in the file's own layout
@@ -533,6 +618,67 @@ def check_sections(key, sections, fm, projects):
         check_anchor(goal_content[0], "Goal")
         goal_field = strip_anchor(goal_content[0])
 
+    labels = None
+    family_tally = {}
+    if schema2:
+        labels = []
+        label_family = {
+            label: fam
+            for fam, _cap, fam_labels in (families or [])
+            for label in fam_labels
+        }
+        phrases_for = {
+            label: phrases
+            for _fam, _cap, fam_labels in (families or [])
+            for label, phrases in fam_labels.items()
+        }
+        for line in (l for l in sections.get("Labels", []) if l.strip()):
+            if not line.startswith("- "):
+                problems.append(f"entry {key}: Labels line does not start with '- ': {line!r}")
+                continue
+            check_anchor(line, "Labels")
+            m = ANCHOR_RE.search(line)
+            if not m:
+                continue
+            # Jira labels can't hold spaces, so the whole text before the
+            # anchor is the label, and a multi-word one reports as undeclared.
+            label = strip_anchor(line[2:])
+            if label in labels:
+                problems.append(f"entry {key}: Labels lists {label!r} twice")
+                continue
+            labels.append(label)
+            if families is None:
+                continue
+            fam = label_family.get(label)
+            if fam is None:
+                problems.append(
+                    f"entry {key}: Labels label {label!r} is not declared in any label family"
+                )
+                continue
+            family_tally[fam] = family_tally.get(fam, 0) + 1
+            # The anchor proves someone spoke at that time. The phrase match
+            # proves they named this label; without it, a label could ride on
+            # any nearby quote, and Labels holds only what the room said.
+            snippet = normalize_ws(m.group(1)).casefold()
+            if not any(normalize_ws(ph).casefold() in snippet for ph in phrases_for[label]):
+                problems.append(
+                    f"entry {key}: Labels anchor snippet {m.group(1)!r} holds none of "
+                    f"the phrases configured for {label!r}"
+                )
+        for fam, cap, _labels in families or []:
+            if cap is not None and family_tally.get(fam, 0) > cap:
+                problems.append(
+                    f"entry {key}: Labels has {family_tally[fam]} labels from family "
+                    f"{fam!r}, max is {cap}"
+                )
+
+    if not schema2:
+        allowed_names = NOT_DISCUSSED_NAMES
+    elif families is None:
+        allowed_names = None
+    else:
+        allowed_names = NOT_DISCUSSED_NAMES | {f"labels/{fam}" for fam, _c, _l in families}
+
     oq_content = [l for l in sections.get("Open questions", []) if l.strip()]
     not_discussed = set()
     oq_fields = []
@@ -541,11 +687,18 @@ def check_sections(key, sections, fm, projects):
             problems.append(f"entry {key}: Open questions line does not start with '- ': {line!r}")
             continue
         oq_fields.append(strip_bullet(line))
-        m = re.match(r"^- not discussed: (.+)$", line)
+        m = NOT_DISCUSSED_RE.match(line)
         if not m:
             continue
         name = m.group(1)
-        if name not in NOT_DISCUSSED_NAMES:
+        # With no usable `config:` path there's no family list to check a
+        # `labels/<family>` name against, and the path is already reported
+        # as a frontmatter problem, so any such name passes.
+        if allowed_names is None:
+            ok = name in NOT_DISCUSSED_NAMES or name.startswith("labels/")
+        else:
+            ok = name in allowed_names
+        if not ok:
             problems.append(f"entry {key}: not-discussed names {name!r}, not a content section")
         elif name in not_discussed:
             problems.append(f"entry {key}: duplicate not-discussed line for {name!r}")
@@ -575,6 +728,22 @@ def check_sections(key, sections, fm, projects):
             problems.append(f"entry {key}: {label} has both content and a not-discussed line")
         elif not has_content and not has_marker:
             problems.append(f"entry {key}: {label} has neither content nor a not-discussed line")
+
+    # Labels has no section-level not-discussed line: a family can be named
+    # in one entry and silent in the next, so each family carries its own
+    # `labels/<family>` marker and an empty Labels section is fine as long as
+    # every family has one.
+    for fam, _cap, _labels in (families or []) if schema2 else []:
+        has_content = fam in family_tally
+        has_marker = f"labels/{fam}" in not_discussed
+        if has_content and has_marker:
+            problems.append(
+                f"entry {key}: Labels family {fam!r} has both a label and a not-discussed line"
+            )
+        elif not has_content and not has_marker:
+            problems.append(
+                f"entry {key}: Labels family {fam!r} has neither a label nor a not-discussed line"
+            )
 
     prov_lines = [l for l in sections.get("Provenance", []) if l.strip()]
     prov_values = {}
@@ -620,18 +789,19 @@ def check_sections(key, sections, fm, projects):
             if len(prov_values) == 3 else ""
         ),
     }
-    return problems, fields, sorted(not_discussed)
+    return problems, fields, sorted(not_discussed), labels
 
 
-def parse_entry(key, region):
+def parse_entry(key, region, schema):
     """Split one entry's body (everything between its '## KEY' header and the
     next top-level header) into its key-value block and its '###' sections."""
     sub_headers = find_headers(region, "###")
     names = tuple(name for _, name in sub_headers)
     problems = []
-    if names != ALL_SECTIONS:
+    expected = expected_sections(schema)
+    if names != expected:
         problems.append(
-            f"entry {key}: sections are {list(names)}, expected {list(ALL_SECTIONS)} in order"
+            f"entry {key}: sections are {list(names)}, expected {list(expected)} in order"
         )
 
     kv_end = sub_headers[0][0] if sub_headers else len(region)
@@ -695,10 +865,10 @@ def split_body(lines, body_start, projects):
 # ---------------------------------------------------------------------------
 
 
-def run_validation(lines, body_start, fm, projects):
+def run_validation(lines, body_start, fm, projects, families=None):
     """Every semantic check both commands need, run once. Returns (problems,
-    parsed) where `parsed` is one (key, kv, fields, not_discussed) tuple per
-    entry found — `entries` reuses these instead of re-walking the file, so
+    parsed) where `parsed` is one (key, kv, fields, not_discussed, labels)
+    tuple per entry found — `entries` reuses these instead of re-walking the file, so
     what it emits is guaranteed to be exactly what `validate` graded rather
     than a second, possibly-diverging read of the same text."""
     problems = []
@@ -707,11 +877,13 @@ def run_validation(lines, body_start, fm, projects):
 
     parsed = []
     for key, _lineno, region in entries:
-        kv, _mentions, sections, entry_problems = parse_entry(key, region)
+        kv, _mentions, sections, entry_problems = parse_entry(key, region, fm.get("schema"))
         problems.extend(entry_problems)
-        section_problems, fields, not_discussed = check_sections(key, sections, fm, projects)
+        section_problems, fields, not_discussed, labels = check_sections(
+            key, sections, fm, projects, families
+        )
         problems.extend(section_problems)
-        parsed.append((key, kv, fields, not_discussed))
+        parsed.append((key, kv, fields, not_discussed, labels))
 
     if summary_region is not None:
         names = tuple(name for _, name in find_headers(summary_region, "###"))
@@ -723,6 +895,25 @@ def run_validation(lines, body_start, fm, projects):
     return problems, parsed
 
 
+def check_all(lines, body_start, fm, fm_line_problems):
+    """Frontmatter, config, and body checks in one pass, shared by both
+    commands. The config is opened only for schema 2 with an absolute
+    `config:`; a missing or relative path is already a frontmatter problem,
+    and guessing what it is relative to would grade against the wrong file."""
+    fm_value_problems, projects = check_frontmatter(fm)
+    problems = fm_line_problems + fm_value_problems
+    families = None
+    config = fm.get("config", "")
+    if fm.get("schema") == "2" and config.startswith("/"):
+        families = load_config_families(config)
+        if not families:
+            problems.append(
+                f"frontmatter: schema is '2' but config {config!r} declares no label families"
+            )
+    validation_problems, parsed = run_validation(lines, body_start, fm, projects, families)
+    return problems + validation_problems, parsed
+
+
 def cmd_validate(args):
     lines = load_staging(args.staging).splitlines()
     fm, body_start, fatal, fm_line_problems = parse_frontmatter(lines)
@@ -730,9 +921,7 @@ def cmd_validate(args):
         sys.stderr.write(f"check-staging: {fatal}\n")
         return 3
 
-    fm_value_problems, projects = check_frontmatter(fm)
-    validation_problems, parsed = run_validation(lines, body_start, fm, projects)
-    problems = fm_line_problems + fm_value_problems + validation_problems
+    problems, parsed = check_all(lines, body_start, fm, fm_line_problems)
 
     if problems:
         for problem in problems:
@@ -755,16 +944,14 @@ def cmd_entries(args):
     # and, on any problem, emits no JSON at all rather than fields read from
     # a broken parse. A truncated stream still feeds the pipe; the staging
     # gate exists so nothing unreviewed reaches a real ticket.
-    fm_value_problems, projects = check_frontmatter(fm)
-    validation_problems, parsed = run_validation(lines, body_start, fm, projects)
-    problems = fm_line_problems + fm_value_problems + validation_problems
+    problems, parsed = check_all(lines, body_start, fm, fm_line_problems)
 
     if problems:
         for problem in problems:
             sys.stderr.write(f"check-staging: {problem}\n")
         return 1
 
-    for key, kv, fields, not_discussed in parsed:
+    for key, kv, fields, not_discussed, labels in parsed:
         status = kv.get("status")
         if args.status and status != args.status:
             continue
@@ -775,9 +962,13 @@ def cmd_entries(args):
             "session": fm.get("session", ""),
             "source": fm.get("source", ""),
             "label": fm.get("label", ""),
-            "fields": fields,
-            "not_discussed": not_discussed,
         }
+        # Schema 1 gets no `labels` key at all, so its JSON stays
+        # byte-identical to what jira-apply.py read before labels existed.
+        if labels is not None:
+            obj["labels"] = labels
+        obj["fields"] = fields
+        obj["not_discussed"] = not_discussed
         print(json.dumps(obj))
 
     return 0

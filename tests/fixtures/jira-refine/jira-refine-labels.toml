@@ -1,0 +1,82 @@
+# jira-refine.toml plus the [label_families] tables at the bottom; everything
+# above them is a verbatim copy, so segmentation runs the same either way.
+#
+# Test config for jira-refine's fixtures. Every value that matters for a
+# test run is set explicitly here rather than left to segment.py's or
+# jira-apply.py's defaults, so a reader never has to cross-check the shipped
+# example to know what a fixture run actually does.
+#
+# TOML puts every bare key under the table header above it, so every scalar
+# setting below has to come before the first [table] — [spoken_aliases],
+# [fields], and [auth] all follow them for that reason, not for tidiness.
+
+# --- Segmentation: read by segment.py -------------------------------------
+
+# Matches the two projects spoken across refinement.vtt / .srt / .txt.
+projects = ["PROJ", "PLAT"]
+
+# Left at segment.py's own default (40): every kept entry in the transcripts
+# was written to clear it comfortably, so the fixture never has to special-
+# case a --min-words override to stay stable.
+
+# --- Tracker: read by jira-apply.py ---------------------------------------
+
+transport = "rest"
+link_type = "Blocks"
+
+# Expands ${ENV} per tracker-contract.md's Auth section, so a test points
+# this same file at whichever fake it started without editing it. The REST
+# fake (fake-jira-rest.py) is what's listening on the other end; see the
+# README's "Transport fakes" section for the port and seed it needs.
+site = "${JIRA_REFINE_TEST_SITE}"
+
+[spoken_aliases]
+PROJ = ["project", "proj"]
+PLAT = ["platform", "plat"]
+
+# --- Custom fields ----------------------------------------------------------
+
+# A real-looking custom field id, so a run against this config exercises the
+# Goal-applied path rather than always taking the description-block fallback
+# the shipped example's empty `goal` would force.
+[fields]
+goal = "customfield_10057"
+goal_cli_name = "Goal"
+
+# --- Credentials ----------------------------------------------------------
+
+# Left at jira-apply.py's own defaults; the fixtures don't need a client that
+# renames these.
+[auth]
+email_env = "JIRA_EMAIL"
+token_env = "JIRA_API_TOKEN"
+
+# --- Extra fields on create -------------------------------------------------
+
+# A stand-in for the Team field a board filter tests, declared so a create run
+# against this config exercises the extra-field path on both transports rather
+# than only the empty-table case the shipped example would give. `id` is the
+# real Jira Cloud Advanced Roadmaps id, and `cli_name` is what jira-cli's own
+# config would declare the same field under — the two halves the fixture's
+# FAKE_JIRA_CUSTOM_FIELDS map is derived from.
+[extra_fields.team]
+id = "customfield_10001"
+cli_name = "Team"
+value = "team-a"
+
+# --- Stated labels: read by segment.py and check-staging.py ----------------
+
+# The two families from issue #233, verbatim. Declaring any family moves
+# segment.py to schema 2, which is why they live in this copy and not in
+# jira-refine.toml: the schema-1 transcripts keep their byte-identical golden
+# output, and only refinement-labels.vtt runs against this file.
+[label_families.capability]
+max = 1
+[label_families.capability.labels]
+cap-export-timeouts = ["export timeout", "the nightly export"]
+cap-safari-tiles = ["safari tiles", "the dashboard tiles"]
+
+[label_families.outcome]
+max = 1
+[label_families.outcome.labels]
+mo-q4-export-sla = ["export sla", "the q4 export outcome"]

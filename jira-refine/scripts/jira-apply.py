@@ -732,20 +732,29 @@ def plan_update_ops(entry, issue, cfg):
     existing_labels = [str(item) for item in (issue_fields.get("labels") or [])]
     if not label:
         outcomes["unmapped"].append({"field": "label", "fallback": FALLBACK_BLOCK})
-    elif label in existing_labels:
-        outcomes["label"] = "already-present"
     else:
-        outcomes["label"] = "applied"
-        # Rule 6 PUTs the union rather than the one new label, because a PUT of
-        # `labels` replaces the array and would drop everything the team set.
-        ops.append(
-            {
-                "op": "add_labels",
-                "key": key,
-                "labels": existing_labels + [label],
-                "added": [label],
-            }
-        )
+        # A schema-2 entry carries `labels` the room stated aloud. They ride in
+        # the same op as the batch label so the issue gets one write, not two.
+        wanted = [label] + [str(item) for item in (entry.get("labels") or [])]
+        added = []
+        for item in wanted:
+            if item not in existing_labels and item not in added:
+                added.append(item)
+        if not added:
+            outcomes["label"] = "already-present"
+        else:
+            outcomes["label"] = "applied"
+            # Rule 6 PUTs the union rather than only the new labels, because a
+            # PUT of `labels` replaces the array and would drop everything the
+            # team set.
+            ops.append(
+                {
+                    "op": "add_labels",
+                    "key": key,
+                    "labels": existing_labels + added,
+                    "added": added,
+                }
+            )
 
     if not goal:
         # No goal to write, so the tracker already reflects the entry.
@@ -1485,6 +1494,7 @@ def read_entries(required):
         if missing:
             die(f"stdin line {lineno}: entry is missing {', '.join(missing)}")
         _check_extra_fields(entry, lineno)
+        _check_labels(entry, lineno)
         entries.append(entry)
     return entries
 
@@ -1514,6 +1524,24 @@ def _check_extra_fields(entry, lineno):
                 f"stdin line {lineno}: extra_fields.{name} must be a string; "
                 "jira-cli writes custom fields as --custom name=value"
             )
+
+
+def _check_labels(entry, lineno):
+    """Exit 3 on a `labels` key that create cannot send or that is malformed.
+
+    Stated labels are an update-only feature: a create entry has no issue to
+    union them with, and silently dropping them would read on the report as a
+    label that landed. `check-staging.py entries` emits the key only on a
+    schema-2 update entry, so anything else here is a hand-built line."""
+    if "labels" not in entry:
+        return
+    if "project" in entry:
+        die(f"stdin line {lineno}: labels is update-only; create writes no stated labels")
+    raw = entry["labels"]
+    if not isinstance(raw, list) or not all(
+        isinstance(item, str) and item.strip() for item in raw
+    ):
+        die(f"stdin line {lineno}: labels must be a list of non-empty strings")
 
 
 def _apply(args, required, dry_run):

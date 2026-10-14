@@ -1,0 +1,21 @@
+WEBVTT
+
+1
+00:00:00.000 --> 00:00:14.000
+Dan: Alright, thanks for joining, two tickets on the list today so this should be quick.
+
+2
+00:00:15.000 --> 00:00:44.000
+Priya: Okay, PROJ dash four twelve. So this is the nightly export work, the job that times out for our biggest customers once a report passes fifty thousand rows.
+
+3
+00:00:45.000 --> 00:01:29.000
+Dan: Right, and the bar for done is that a fifty thousand row report finishes without a timeout, because that is the number support keeps quoting back to us.
+
+4
+00:01:30.000 --> 00:02:14.000
+Priya: Next, PROJ 413, the Safari rendering bug. The safari tiles on the main page render blank after a resize, and fixing them along with the export work lands the export sla for q4.
+
+5
+00:02:15.000 --> 00:02:59.000
+Dan: Agreed, so acceptance is that every tile repaints within one second of a resize in Safari, and we should check the older Safari release as well.

@@ -34,6 +34,8 @@ For `update`:
  "not_discussed": []}
 ```
 
+An entry from a schema-2 staging file also carries `"labels": ["cap-export-timeouts"]` directly after `label`. An entry from a schema-1 file has no `labels` key at all, so its bytes match what `entries` emitted before label families existed.
+
 For `create`:
 
 ```json
@@ -55,6 +57,7 @@ Field types and provenance:
 | `status` | string | Always `approved` in practice; `entries --status approved` is the filter |
 | `on_conflict` | string or null | `append`, `replace`, or null when the human set nothing |
 | `session`, `source`, `label` | string | Copied from the staging frontmatter |
+| `labels` | array of string | `update` only, and only from a schema-2 file. The labels stated under the entry's `### Labels`, in file order, anchors stripped. Absent, not empty, on schema 1. On a `create` entry, or as anything but a list of non-empty strings, it exits 3 |
 | `fields.context`, `fields.out_of_scope`, `fields.provenance` | string | The section body, empty string when the section is empty |
 | `fields.acceptance_criteria`, `fields.open_questions` | array of string | One entry per bullet |
 | `fields.dependencies` | array of string | Issue keys only |
@@ -86,6 +89,7 @@ Field types and provenance:
 - `goal: conflict` means the value did not reach the field — Jira holds a different one, or the write failed — and the entry-level `conflict` says which. A failed goal write never appears in `unmapped`: the block was rendered before the failure, so it carries no Goal section to claim.
 - A refused `create` reports every field it would have written as `skipped`, the same word `description` takes, because the entry was abandoned before any write. A `goal` or an extra field left reading `applied` would name a field on a ticket nobody created, and no `unmapped` entry claims a description-block fallback, since no block was written.
 - `extra_fields` is empty on every `update`. On a `create` it carries one verdict per field the config declares or the entry names: `skipped` means the create was refused, so the field landed nowhere; `conflict` means the create itself failed.
+- `label` covers the batch label and every stated label together, because they go out in one write. It reads `applied` when that write added anything, `already-present` when every one was already on the issue, and `unmapped` only when the entry has no batch label. An entry with no batch label plans no label write at all, so its stated labels stay off the issue too.
 - `writes` counts mutations actually sent — HTTP writes under `rest`, subprocess invocations that mutate under `jira-cli`. A dry run always reports `0`.
 - On a `create` dry run, `key` is null.
 
@@ -125,6 +129,7 @@ This table is the single authoritative statement of where each template field la
 | Dependencies | issue links, `link_type` (default `Blocks`), this issue inward | an `h5. Dependencies` section holding the comma-joined keys; reported `unmapped`. An explicitly empty `link_type` is the only signal that selects this fallback. An absent key still means `Blocks`, because `plan_ops` is pure and nothing else about link support is knowable before the block is rendered |
 | Goal | custom field `fields.goal` | an `h5. Goal` section, first in the block; reported `unmapped`. Plan time only: the section goes in while the block is still being rendered, so a write that fails afterwards reports `conflict` instead |
 | Provenance | last section of the block + label `refined-<session>` | block only; label reported `unmapped` |
+| Labels (schema 2) | added to the issue's labels in the same write as the batch label | none. An entry with no batch label plans no label write, so its stated labels go unsent with it, under the same `unmapped` |
 | Extra fields (`create` only) | the field id each `[extra_fields.<name>]` declares | none. The create is refused; see below |
 
 ## Extra fields on create
@@ -207,7 +212,7 @@ Under the jira-cli transport a Goal is mapped only when both `fields.goal` and `
 3. An existing block from a different `source`, or non-block text with no block at all, is a `conflict` unless `on_conflict` is set. `append` keeps the existing text and adds the block after it. `replace` removes every jira-refine block and writes only the new one. A block with no end sentinel gets the same verdict, whatever removed it—a hand-deleted sentinel, or Jira Cloud folding a block written under the older markup into its own last bullet on a round trip (issue #93). `find_blocks` marks it with `end: None` instead of a line number, and `plan_description` refuses it the same way it refuses an unmatched source: `(None, "conflict", reason)`, unless `on_conflict` is `append` or `replace`. Its extent is unknowable, so claiming the rest of the description as its body would silently overwrite whatever a human wrote below it. The reason names the missing sentinel through the `END_LINE` constant rather than hardcoded text, and tells the human to restore the line or set `on_conflict`. An entry whose field body carries a line shaped like either sentinel is refused before anything is sent, on both `update` and `create`, because the rendered block would read back as two blocks and no scanning rule separates that from a stale block with one appended after it. The refusal names the line and asks for it to be reworded; escaping it would rewrite what a person wrote. A begin sentinel is unterminated whenever the next sentinel below it is another begin, not only when no end line exists at all—`append` leaves precisely that shape, and pairing the stale begin with the appended block's end would splice over both and everything between them on the following apply.
 4. An empty description — null, whitespace, or holding only a stale same-source block — is written.
 5. Links read `fields.issuelinks`. Dependency D of X is present when X's list holds an entry with `type.name == link_type` and `inwardIssue.key == D` (D blocks X: D outward, X inward). Create the link only when it is absent. A D that is not on the tracker reports `missing-issue`, performs no write, and exits 1.
-6. Labels are added only when absent, by PUTting the union of the existing labels and the new one.
+6. Labels are added only when absent, by PUTting the union of the existing labels and the new ones. One `add_labels` op carries the batch label and every stated label: its `labels` is the issue's existing labels followed by whichever of those are absent, and its `added` holds exactly the absent ones. Nothing is ever removed, so a label the team set by hand survives every apply.
 7. Goal is written when the custom field is empty or already equal. A different non-empty value is a `conflict` on that field alone; the rest of the entry still applies. A write that fails is the same verdict for the same reason — the value is not on the field — and rerunning once the config is fixed is safe, because rule 8 holds.
 8. A second run over the same input performs zero writes and reports `already-present` everywhere. The smoke test asserts this on both transports. `append` holds this on its own rather than through rule 2: an entry that keeps `on_conflict: append` reports `already-present` once a terminated block already carries the same bytes, because an unterminated block stays in the description and never lets rule 2's in-place replacement take over.
 
@@ -217,7 +222,7 @@ Under the jira-cli transport a Goal is mapped only when both `fields.goal` and `
 |---|---|---|
 | get_issue | `GET issue/{key}?fields=summary,description,labels,issuelinks,<goal id>` | `jira issue view KEY --raw` |
 | update_description | `PUT issue/{key}` `{"fields":{"description":text}}` | `jira issue edit KEY -b "<text>" --no-input` |
-| add_labels | `PUT issue/{key}` `{"fields":{"labels":[union]}}` | `jira issue edit KEY --label L --no-input` |
+| add_labels | `PUT issue/{key}` `{"fields":{"labels":[union]}}` | `jira issue edit KEY --label L --no-input`, once per label in `added` |
 | set_field | `PUT issue/{key}` `{"fields":{id:value}}` | `jira issue edit KEY --custom name=value --no-input` |
 | create_link | `POST issueLink` `{type:{name},inwardIssue:{key:X},outwardIssue:{key:D}}` | `jira issue link D X "<link_type>"` |
 | create_issue | `POST issue`, extra fields as `fields[id]` | `jira issue create -pPROJ -tTask -s"…" -b"…" -lL --no-input`, one `--custom name=value` per extra field, key parsed from the output |

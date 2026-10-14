@@ -1,0 +1,184 @@
+---
+skill: jira-refine
+schema: 1
+source: refinement.srt
+source_path: NORMALIZED
+session: 2026-09-07
+label: refined-2026-09-07
+config: NORMALIZED
+projects: [PROJ, PLAT]
+generated: NORMALIZED
+---
+
+## PROJ-412
+
+status: staged
+segment: 00:01:00 - 00:03:00
+duration: 2m0s
+words: 149
+revisited: 0
+mentions: [PROJ-398]
+
+### Context
+
+### Acceptance criteria
+
+### Out of scope
+
+### Dependencies
+
+### Goal
+
+### Open questions
+- not discussed: context
+- not discussed: acceptance criteria
+- not discussed: out of scope
+- not discussed: dependencies
+- not discussed: goal
+
+### Provenance
+- source: refinement.srt
+- session: 2026-09-07
+- segment: 00:01:00 - 00:03:00
+
+### Source excerpt
+```text
+[00:01:00] Dan: Okay, PROJ dash four twelve, so the export thing again. The nightly export times out for our largest customers whenever a report crosses fifty thousand rows, and support has escalated it three times this month, so we really need to fix this one properly this quarter.
+[00:01:20] Priya: Got it. I think the acceptance bar here is that the export has to complete for a fifty thousand row report without timing out, since that is the number support keeps citing back to us.
+[00:02:10] Dan: Also, this can't move forward until proj three ninety eight lands, since that data migration is a hard blocker on the export path.
+[00:02:40] Priya: Understood, I will go ping the migration team and see where that one actually stands this week.
+[00:03:00] Dan: One more thing, we also don't have a ticket yet for the retry-backoff work on the export job, so somebody should file one for that after this call.
+```
+
+## PROJ-413
+
+status: staged
+segment: 00:04:00 - 00:05:20
+duration: 1m20s
+words: 93
+revisited: 0
+mentions: []
+
+### Context
+
+### Acceptance criteria
+
+### Out of scope
+
+### Dependencies
+
+### Goal
+
+### Open questions
+- not discussed: context
+- not discussed: acceptance criteria
+- not discussed: out of scope
+- not discussed: dependencies
+- not discussed: goal
+
+### Provenance
+- source: refinement.srt
+- session: 2026-09-07
+- segment: 00:04:00 - 00:05:20
+
+### Source excerpt
+```text
+[00:04:00] Priya: Next, PROJ 413, this is the login flow ticket. The SSO redirect keeps dropping query params whenever a client uses their own identity provider, so folks land on the dashboard instead of wherever they were actually headed.
+[00:04:45] Dan: Right, and the acceptance criterion has to be that a redirect preserves the original query string byte for byte, since that is exactly what broke on us last time.
+[00:05:20] Priya: Also flagging that this one already has a description in Jira from Marcus, so whoever applies this later should be careful not to clobber his existing notes.
+```
+
+## PLAT-77
+
+status: staged
+segment: 00:06:00 - 00:07:20
+duration: 1m20s
+words: 102
+revisited: 1
+mentions: []
+
+### Context
+
+### Acceptance criteria
+
+### Out of scope
+
+### Dependencies
+
+### Goal
+
+### Open questions
+- not discussed: context
+- not discussed: acceptance criteria
+- not discussed: out of scope
+- not discussed: dependencies
+- not discussed: goal
+
+### Provenance
+- source: refinement.srt
+- session: 2026-09-07
+- segment: 00:06:00 - 00:07:20
+
+### Source excerpt
+```text
+[00:06:00] Dan: Okay, platform seventy seven, the auth-service migration. We need to cut the staging environment over before next month's audit, and QA wants a full regression pass on top of that.
+[00:06:40] Priya: Makes sense. I do not think we actually settled on a hard deadline for the cutover itself, so that one is still open.
+[00:07:00] Dan: Okay, back to platform seventy seven for one second, quick follow-up on the auth cutover timeline before we move on to the next item.
+[00:07:20] Priya: Right, and to close that out, the follow-up is just that security still needs to sign off before the cutover can be scheduled at all.
+```
+
+## PROJ-455
+
+status: staged
+segment: 00:08:00 - 00:24:00
+duration: 16m0s
+words: 204
+revisited: 0
+mentions: []
+
+### Context
+
+### Acceptance criteria
+
+### Out of scope
+
+### Dependencies
+
+### Goal
+
+### Open questions
+- not discussed: context
+- not discussed: acceptance criteria
+- not discussed: out of scope
+- not discussed: dependencies
+- not discussed: goal
+
+### Provenance
+- source: refinement.srt
+- session: 2026-09-07
+- segment: 00:08:00 - 00:24:00
+
+### Source excerpt
+```text
+[00:08:00] Dan: Moving on to PROJ four fifty five, the reporting pipeline overhaul. This is the big one, so let's take our time on it, since a lot of teams depend on this pipeline every single night.
+[00:10:00] Priya: Right, the core problem is that the aggregation step reprocesses the entire history on every run instead of just the new rows, which is why nightly runs keep creeping past their window.
+[00:12:30] Dan: So the acceptance criterion I would propose is that a nightly run only reprocesses rows added since the previous successful run, and finishes inside the existing two hour window.
+[00:15:00] Priya: Agreed, and out of scope for this one is backfilling historical data, that is a separate effort we already have a spike ticket open for.
+[00:17:45] Dan: One open question here is whether we snapshot the aggregation state hourly or daily, and nobody on this call actually has a strong opinion either way yet.
+[00:20:00] Priya: Fair, let's leave that one open for now and come back to it once we have looked at the storage cost either way.
+[00:22:15] Dan: One last thing on this ticket, the goal here is that large customers stop filing export tickets altogether once the pipeline is reliable.
+[00:24:00] Priya: Great, I think that covers everything for today, thanks all.
+```
+
+## Summary
+
+### Spike candidates
+- PLAT-77: revisited 1x
+- PROJ-455: long (16m0s > 2x median 1m40s)
+
+### Mentioned in passing
+- PROJ-398 (mentioned only, 1x)
+
+### Gaps to file
+
+### Apply log
