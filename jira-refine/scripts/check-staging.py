@@ -91,15 +91,6 @@ EXCERPT_TIMESTAMP_LINE_RE = re.compile(r"^\[\d\d:\d\d:\d\d\]")
 EXCERPT_LINENO_LINE_RE = re.compile(r"^\[L\d+\]")
 ANCHOR_MIN_WORDS = 4
 ANCHOR_MAX_WORDS = 10
-# The longest phrase a Labels anchor can hold whole. segment.py carries the
-# same three numbers as literals, since scripts never import each other.
-PHRASE_MIN_WORDS = ANCHOR_MIN_WORDS
-PHRASE_MAX_WORDS = ANCHOR_MAX_WORDS
-PHRASE_MAX_CHARS = ANCHOR_MAX_CHARS
-# Jira refuses a single label longer than this. The loaders in segment.py and
-# check-staging.py and the update-input check in jira-apply.py each carry the
-# limit because scripts never import each other; change all three together.
-LABEL_MAX_CHARS = 255
 NOT_DISCUSSED_RE = re.compile(r"^- not discussed: (.+)$")
 
 
@@ -193,18 +184,47 @@ def strip_bullet(line):
 # ---------------------------------------------------------------------------
 
 
-def load_label_families(raw, path="config"):
+# ---------------------------------------------------------------------------
+# Vendored verbatim from jira-refine/scripts/segment.py (lines 150-243, the
+# begin and end markers included). Vendored 2026-10-14 (#233). Upstream is
+# authoritative: fix a bug there first, then re-copy. The docstring travels
+# with the code on purpose: it records why the two loaders must agree, and a
+# reader who trims it will eventually let them drift. This skill installs
+# standalone, so importing from segment.py is not available. The PHRASE_*
+# literals below must stay equal to the ANCHOR_* rule near the top of this
+# file; the smoke suite pins that.
+# ---------------------------------------------------------------------------
+# begin shared: label-family loader
+# The longest phrase a Labels anchor can hold whole. These mirror
+# check-staging.py's anchor rule (ANCHOR_MIN_WORDS, ANCHOR_MAX_WORDS, and
+# ANCHOR_MAX_CHARS, which sizes the capture cap in ANCHOR_RE), so they are
+# literals here rather than derived from it.
+PHRASE_MIN_WORDS = 4
+PHRASE_MAX_WORDS = 10
+PHRASE_MAX_CHARS = 120
+# Jira refuses a single label longer than this. The loaders in segment.py and
+# check-staging.py and the update-input check in jira-apply.py each carry the
+# limit because scripts never import each other; change all three together.
+LABEL_MAX_CHARS = 255
+
+
+def load_label_families(raw, prog, path="config"):
     """Validate and normalize `[label_families]` into an ordered list of
-    (family, max_or_None, {label: [phrases]}). segment.py carries its own
-    copy of this function, since scripts never import each other, and the
-    two must agree on what a valid config is: if segment.py stages a label
-    this validator then rejects, or the reverse, the room's words never
-    reach the tracker. Strict for the same reason segment.py is: a family
-    with no labels would otherwise load as an empty family and switch off
-    its checks without a word."""
+    (family, max_or_None, {label: [phrases]}). Strict on purpose: a malformed
+    table inside `[label_families]` (a family with no `labels`, a label with
+    no phrases, a bad phrase or `max`, a label in two families) would
+    otherwise drop labels with no sign anything was lost. A misspelled
+    top-level table name is not caught; it simply declares no families.
+    segment.py is upstream and check-staging.py carries a vendored copy
+    (scripts never import each other), so the two must agree on what a valid
+    config is: if segment.py stages a label that check-staging.py rejects,
+    the room's words never reach the tracker. `prog` names the caller
+    in the exit-3 message and is the only thing that differs between them.
+    Config order is preserved because the skeleton's per-family `not
+    discussed` lines follow it."""
 
     def fail(msg):
-        sys.stderr.write(f"check-staging: {path}: label_families: {msg}\n")
+        sys.stderr.write(f"{prog}: {path}: label_families: {msg}\n")
         raise SystemExit(3)
 
     if raw is None:
@@ -267,6 +287,7 @@ def load_label_families(raw, path="config"):
             norm[label] = list(phrases)
         families.append((fam, cap, norm))
     return families
+# end shared: label-family loader
 
 
 def load_config_families(path):
@@ -296,7 +317,7 @@ def load_config_families(path):
     except tomllib.TOMLDecodeError as e:
         sys.stderr.write(f"check-staging: {path}: not valid TOML: {e}\n")
         raise SystemExit(3)
-    return load_label_families(raw.get("label_families"), path)
+    return load_label_families(raw.get("label_families"), prog="check-staging", path=path)
 
 
 def load_staging(path):

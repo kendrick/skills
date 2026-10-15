@@ -51,18 +51,6 @@ import statistics
 import sys
 
 MIN_PYTHON = (3, 11)
-# The longest phrase a Labels anchor can hold whole. These mirror
-# check-staging.py's anchor rule (ANCHOR_MIN_WORDS, ANCHOR_MAX_WORDS, and the
-# capture cap in ANCHOR_RE); scripts never import each other, so change all of
-# them together.
-PHRASE_MIN_WORDS = 4
-PHRASE_MAX_WORDS = 10
-PHRASE_MAX_CHARS = 120
-# Jira refuses a single label longer than this. The loaders in segment.py and
-# check-staging.py and the update-input check in jira-apply.py each carry the
-# limit because scripts never import each other; change all three together.
-LABEL_MAX_CHARS = 255
-
 # Every key below matches the same-named default in jira-refine.example.toml.
 # A user's config only has to state what it overrides.
 DEFAULTS = {
@@ -152,20 +140,44 @@ def read_text_file(path, label):
         raise SystemExit(3)
 
 
-def load_label_families(raw, path="config"):
+# ---------------------------------------------------------------------------
+# This block is upstream for check-staging.py's vendored copy. Change it here
+# first, then re-copy everything between the begin and end markers, header
+# excluded, byte for byte. Vendored 2026-10-14 (#233). The docstring travels
+# with the code on purpose: it records why the two loaders must agree, and a
+# reader who trims it will eventually let them drift.
+# ---------------------------------------------------------------------------
+# begin shared: label-family loader
+# The longest phrase a Labels anchor can hold whole. These mirror
+# check-staging.py's anchor rule (ANCHOR_MIN_WORDS, ANCHOR_MAX_WORDS, and
+# ANCHOR_MAX_CHARS, which sizes the capture cap in ANCHOR_RE), so they are
+# literals here rather than derived from it.
+PHRASE_MIN_WORDS = 4
+PHRASE_MAX_WORDS = 10
+PHRASE_MAX_CHARS = 120
+# Jira refuses a single label longer than this. The loaders in segment.py and
+# check-staging.py and the update-input check in jira-apply.py each carry the
+# limit because scripts never import each other; change all three together.
+LABEL_MAX_CHARS = 255
+
+
+def load_label_families(raw, prog, path="config"):
     """Validate and normalize `[label_families]` into an ordered list of
     (family, max_or_None, {label: [phrases]}). Strict on purpose: a malformed
     table inside `[label_families]` (a family with no `labels`, a label with
     no phrases, a bad phrase or `max`, a label in two families) would
     otherwise drop labels with no sign anything was lost. A misspelled
     top-level table name is not caught; it simply declares no families.
-    check-staging.py carries its own copy of this
-    function (scripts never import each other), so the two must agree on
-    what a valid config is. Config order is preserved because the skeleton's
-    per-family `not discussed` lines follow it."""
+    segment.py is upstream and check-staging.py carries a vendored copy
+    (scripts never import each other), so the two must agree on what a valid
+    config is: if segment.py stages a label that check-staging.py rejects,
+    the room's words never reach the tracker. `prog` names the caller
+    in the exit-3 message and is the only thing that differs between them.
+    Config order is preserved because the skeleton's per-family `not
+    discussed` lines follow it."""
 
     def fail(msg):
-        sys.stderr.write(f"segment: {path}: label_families: {msg}\n")
+        sys.stderr.write(f"{prog}: {path}: label_families: {msg}\n")
         raise SystemExit(3)
 
     if raw is None:
@@ -228,6 +240,7 @@ def load_label_families(raw, path="config"):
             norm[label] = list(phrases)
         families.append((fam, cap, norm))
     return families
+# end shared: label-family loader
 
 
 def load_config(path):
@@ -257,7 +270,7 @@ def load_config(path):
     cfg.update(raw)
     cfg["projects"] = list(projects)
     cfg["spoken_aliases"] = raw.get("spoken_aliases", {})
-    cfg["label_families"] = load_label_families(raw.get("label_families"), path)
+    cfg["label_families"] = load_label_families(raw.get("label_families"), prog="segment", path=path)
     return cfg
 
 

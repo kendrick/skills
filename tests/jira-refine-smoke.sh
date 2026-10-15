@@ -2688,4 +2688,39 @@ for fn in ast.walk(tree):
             sys.exit(f"{fn.name}: a preflight TransportError must exit 3, not 1")
 PY
 
+# The label-family loader is vendored from segment.py into check-staging.py
+# (AGENTS.md "Vendoring"). The behavioral cases above only see inputs someone
+# thought to write; byte identity of the marked block catches the drift they
+# miss. The PHRASE_* literals inside the block cannot be derived from
+# check-staging's ANCHOR_* rule, so tie them here.
+python3 - jira-refine/scripts/segment.py jira-refine/scripts/check-staging.py <<'PY' || exit 1
+import re, sys
+
+BEGIN = "# begin shared: label-family loader\n"
+END = "# end shared: label-family loader\n"
+
+
+def block(path):
+    src = open(path, encoding="utf-8").read()
+    if src.count(BEGIN) != 1 or src.count(END) != 1:
+        sys.exit(f"vendored label-family loader: {path} needs exactly one begin and one end marker")
+    start = src.index(BEGIN)
+    return src[start:src.index(END) + len(END)], src
+
+
+upstream, _ = block(sys.argv[1])
+vendored, staging_src = block(sys.argv[2])
+if upstream != vendored:
+    sys.exit("vendored label-family loader: check-staging.py's block differs from segment.py's; re-copy it from segment.py")
+
+def literal(name):
+    return int(re.search(rf"^{name} = (\d+)$", staging_src, re.M).group(1))
+
+for phrase, anchor in (("PHRASE_MIN_WORDS", "ANCHOR_MIN_WORDS"),
+                       ("PHRASE_MAX_WORDS", "ANCHOR_MAX_WORDS"),
+                       ("PHRASE_MAX_CHARS", "ANCHOR_MAX_CHARS")):
+    if literal(phrase) != literal(anchor):
+        sys.exit(f"vendored label-family loader: {phrase} no longer equals {anchor} in check-staging.py")
+PY
+
 echo "jira-refine smoke: OK"
