@@ -99,6 +99,12 @@ require_text jira-refine/SKILL.md "**NEVER invent acceptance criteria.**"
 require_text jira-refine/SKILL.md "A criterion that follows logically from what was said is still not something anyone said."
 require_text jira-refine/references/ticket-template.md "**only what the room stated goes in.**"
 require_text jira-refine/references/ticket-template.md "Never derive a criterion."
+# Step 2 sends the fill pass to the template, and the skeleton's per-family
+# not-discussed lines pass validate on their own, so a template with no Labels
+# slot lets a spoken label go unstaged without a single failure.
+require_text jira-refine/references/ticket-template.md "## Labels"
+require_text jira-refine/references/ticket-template.md "Every entry carries seven fields, plus Labels on a \`schema: 2\` file."
+require_text jira-refine/references/ticket-template.md "Check the excerpt for every configured phrase before you leave a family's line in place."
 
 # A blank section and a section nobody discussed look identical unless the file
 # says which one it is. The literal line is what the validator cross-checks.
@@ -730,6 +736,18 @@ cap-export-timeouts = ["export sla"]' 'label `cap-export-timeouts` is declared i
 # description write has landed.
 bad_families_config spaced-label '[label_families.capability.labels]
 "bad label" = ["spoken phrase"]' 'label `bad label` in family `capability` is empty, holds whitespace, or runs past 255 characters, which a Jira label cannot'
+# A quoted TOML key decodes escapes, so a family key can arrive holding a
+# newline. Stage would split its `labels/<family>` not-discussed line in two and
+# then fail its own validator, so both loaders refuse the name at load. A space
+# breaks the same line. The newline case prints across two lines, so each half
+# of the message is pinned on its own.
+bad_families_config newline-family '[label_families."capability\nbad".labels]
+cap-export-timeouts = ["the nightly export"]' 'family `capability'
+for which in segment staging; do
+  require_text "$tmp/families-newline-family-$which.err" 'bad` is empty or holds whitespace, which a `labels/<family>` line cannot carry'
+done
+bad_families_config spaced-family '[label_families."capability bad".labels]
+cap-export-timeouts = ["the nightly export"]' 'family `capability bad` is empty or holds whitespace, which a `labels/<family>` line cannot carry'
 # Jira caps a label at 255 characters. 256 must stop both loaders; 255 must
 # still load, so the boundary is pinned from both sides.
 long_label_255=$(python3 -c "print('x' * 255)")

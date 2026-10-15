@@ -153,7 +153,7 @@ Close by telling the user which entries conflicted and why, that setting `on_con
 
 ## Further Reading
 
-- [references/ticket-template.md](references/ticket-template.md) — read at stage Step 2, for what each of the seven fields holds and what counts as stated
+- [references/ticket-template.md](references/ticket-template.md) — read at stage Step 2, for what each field holds (seven, plus Labels on a schema-2 file) and what counts as stated
 - [references/staging-format.md](references/staging-format.md) — read when `validate` fails, or when editing a staging file by hand
 - [references/tracker-contract.md](references/tracker-contract.md) — read when an apply run reports anything other than `applied`, for the entry and report shapes, the exit codes, and all eight idempotency rules
 - [scripts/segment.py](scripts/segment.py) — stage Step 1: transcript to staging skeleton

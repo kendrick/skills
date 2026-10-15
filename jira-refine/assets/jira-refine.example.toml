@@ -148,7 +148,10 @@ token_env = "JIRA_API_TOKEN"
 # stops the run, because each would otherwise drop labels without a word. So
 # does a label name that is empty, holds whitespace, or runs past 255
 # characters, such as a quoted `"bad label"` key. Jira refuses it, and apply
-# would only find out after the description write had landed. A misspelled table name is not caught: it just
+# would only find out after the description write had landed. A family name
+# that is empty or holds whitespace stops it as well, such as a quoted
+# `"capability\nbad"` key, whose escape decodes to a newline that splits the
+# `labels/<family>` line stage writes. A misspelled table name is not caught: it just
 # declares no families. A phrase no anchor can hold whole stops the run too:
 # more than ten words, a double quote, or a length no anchor can hold, counting
 # the words a snippet must add to reach four (a lone 115-character word fails). validate

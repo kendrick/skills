@@ -175,6 +175,12 @@ def load_label_families(raw, path="config"):
     families = []
     owner = {}
     for fam, body in raw.items():
+        # A quoted TOML key decodes escapes, so `"capability\nbad"` arrives
+        # here as a two-line name. Stage would then write a `labels/<family>`
+        # line its own validator splits and rejects; a space breaks the same
+        # line. Refuse it at load, before any file is written.
+        if not fam or any(c.isspace() for c in fam):
+            fail(f"family `{fam}` is empty or holds whitespace, which a `labels/<family>` line cannot carry")
         if not isinstance(body, dict):
             fail(f"family `{fam}` must be a table")
         cap = body.get("max")
