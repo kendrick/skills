@@ -191,8 +191,8 @@ def load_label_families(raw, prog, path="config"):
         # here as a two-line name. Stage would then write a `labels/<family>`
         # line its own validator splits and rejects; a space breaks the same
         # line. Refuse it at load, before any file is written.
-        if not fam or any(c.isspace() for c in fam):
-            fail(f"family `{fam}` is empty or holds whitespace, which a `labels/<family>` line cannot carry")
+        if not fam or any(c.isspace() or not c.isprintable() for c in fam):
+            fail(f"family `{fam}` is empty or holds whitespace or a control character, which a `labels/<family>` line cannot carry")
         if not isinstance(body, dict):
             fail(f"family `{fam}` must be a table")
         # A misspelled setting such as `maxx` would otherwise read as "no cap"
@@ -211,8 +211,10 @@ def load_label_families(raw, prog, path="config"):
             # A quoted TOML key can hold anything, and Jira refuses a label
             # with a space in it or past LABEL_MAX_CHARS. Rejecting it at load stops the run before
             # apply lands the description write and then fails the label write.
-            if not label or len(label) > LABEL_MAX_CHARS or any(c.isspace() for c in label):
-                fail(f"label `{label}` in family `{fam}` is empty, holds whitespace, or runs past {LABEL_MAX_CHARS} characters, which a Jira label cannot")
+            # A control character such as a decoded NUL is as fatal as a space:
+            # the jira-cli argv refuses it, after the description has landed.
+            if not label or len(label) > LABEL_MAX_CHARS or any(c.isspace() or not c.isprintable() for c in label):
+                fail(f"label `{label}` in family `{fam}` is empty, holds whitespace or a control character, or runs past {LABEL_MAX_CHARS} characters, which a Jira label cannot")
             if not isinstance(phrases, list) or not phrases:
                 fail(f"label `{label}` in family `{fam}` has no phrases")
             for ph in phrases:

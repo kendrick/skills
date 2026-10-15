@@ -754,6 +754,10 @@ cap-export-timeouts = ["the nightly export"]
 
 [label_families.outcome.labels]
 cap-export-timeouts = ["export sla"]' 'label `cap-export-timeouts` is declared in both `capability` and `outcome`'
+# A TOML escape can decode a label to a NUL, which jira-cli's argv refuses
+# after the description write has landed.
+bad_families_config nul-label '[label_families.capability.labels]
+"bad\u0000label" = ["the nightly export"]' 'label `bad'
 # A misspelled `max` must not read as an uncapped family, which would let a
 # second capability label through to Jira.
 bad_families_config unknown-setting '[label_families.capability]
@@ -764,7 +768,7 @@ cap-export-timeouts = ["the nightly export"]' "family \`capability\` has unknown
 # Rejecting it at load keeps apply's label write from failing after the
 # description write has landed.
 bad_families_config spaced-label '[label_families.capability.labels]
-"bad label" = ["spoken phrase"]' 'label `bad label` in family `capability` is empty, holds whitespace, or runs past 255 characters, which a Jira label cannot'
+"bad label" = ["spoken phrase"]' 'label `bad label` in family `capability` is empty, holds whitespace or a control character, or runs past 255 characters, which a Jira label cannot'
 # A quoted TOML key decodes escapes, so a family key can arrive holding a
 # newline. Stage would split its `labels/<family>` not-discussed line in two and
 # then fail its own validator, so both loaders refuse the name at load. A space
@@ -773,16 +777,16 @@ bad_families_config spaced-label '[label_families.capability.labels]
 bad_families_config newline-family '[label_families."capability\nbad".labels]
 cap-export-timeouts = ["the nightly export"]' 'family `capability'
 for which in segment staging; do
-  require_text "$tmp/families-newline-family-$which.err" 'bad` is empty or holds whitespace, which a `labels/<family>` line cannot carry'
+  require_text "$tmp/families-newline-family-$which.err" 'bad` is empty or holds whitespace or a control character, which a `labels/<family>` line cannot carry'
 done
 bad_families_config spaced-family '[label_families."capability bad".labels]
-cap-export-timeouts = ["the nightly export"]' 'family `capability bad` is empty or holds whitespace, which a `labels/<family>` line cannot carry'
+cap-export-timeouts = ["the nightly export"]' 'family `capability bad` is empty or holds whitespace or a control character, which a `labels/<family>` line cannot carry'
 # Jira caps a label at 255 characters. 256 must stop both loaders; 255 must
 # still load, so the boundary is pinned from both sides.
 long_label_255=$(python3 -c "print('x' * 255)")
 long_label_256=$(python3 -c "print('x' * 256)")
 bad_families_config overlong-label "[label_families.capability.labels]
-$long_label_256 = [\"spoken phrase\"]" "label \`$long_label_256\` in family \`capability\` is empty, holds whitespace, or runs past 255 characters, which a Jira label cannot"
+$long_label_256 = [\"spoken phrase\"]" "label \`$long_label_256\` in family \`capability\` is empty, holds whitespace or a control character, or runs past 255 characters, which a Jira label cannot"
 {
   echo 'projects = ["PROJ", "PLAT"]'
   echo '[label_families.capability.labels]'
@@ -1813,7 +1817,27 @@ set -e
   cat "$tmp/update-labels-spaced.err" >&2
   exit 1
 }
-require_text "$tmp/update-labels-spaced.err" "labels must not hold whitespace, which a Jira label cannot: 'bad label'"
+require_text "$tmp/update-labels-spaced.err" "labels must not hold whitespace or a control character, which a Jira label cannot: 'bad label'"
+
+# The same predicate refuses a control character on a hand-built line, which
+# jira-cli's argv would otherwise reject after the description landed.
+python3 - "$tmp/labels-entries.jsonl" > "$tmp/update-labels-nul.jsonl" <<'PY' || exit 1
+import json, sys
+entry = json.loads(open(sys.argv[1], encoding="utf-8").readline())
+entry["labels"] = ["bad\u0000label"]
+print(json.dumps(entry))
+PY
+set +e
+JIRA_REFINE_TEST_SITE="$labels_site" python3 "$apply" update --config "$labels_config" --dry-run \
+  < "$tmp/update-labels-nul.jsonl" > /dev/null 2> "$tmp/update-labels-nul.err"
+nul_status=$?
+set -e
+[[ "$nul_status" == 3 ]] || {
+  echo "an update entry with a NUL in a label should exit 3, got $nul_status" >&2
+  cat "$tmp/update-labels-nul.err" >&2
+  exit 1
+}
+require_text "$tmp/update-labels-nul.err" "labels must not hold whitespace or a control character"
 
 # Jira's 255-character label cap, enforced on a hand-built update line too.
 python3 - "$tmp/labels-entries.jsonl" > "$tmp/update-labels-overlong.jsonl" <<'PY' || exit 1

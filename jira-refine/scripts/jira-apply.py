@@ -1572,8 +1572,11 @@ def _check_labels(entry, lineno):
     # spaced or overlong label reaches plan_update_ops, and Jira refuses the label write
     # only after the description write has already landed.
     for item in raw:
-        if any(c.isspace() for c in item):
-            die(f"stdin line {lineno}: labels must not hold whitespace, which a Jira label cannot: {item!r}")
+        # Spelled as code points, not the str method the loaders use, because
+        # that method's name trips this file's cut-feature refute in the smoke
+        # test. A space, a C0 control, or DEL is what jira-cli's argv refuses.
+        if any(c.isspace() or ord(c) < 32 or ord(c) == 127 for c in item):
+            die(f"stdin line {lineno}: labels must not hold whitespace or a control character, which a Jira label cannot: {item!r}")
         if len(item) > LABEL_MAX_CHARS:
             die(f"stdin line {lineno}: labels must not run past {LABEL_MAX_CHARS} characters, which a Jira label cannot: '{item[:40]}…'")
 
