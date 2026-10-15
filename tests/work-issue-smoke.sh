@@ -828,7 +828,22 @@ require_text _maintenance/work-issue/RATIONALE.md "| 149 | With VERIFY_CMD \`abs
 require_text work-issue/SKILL.md "Continue \`divvy-up\` at its Step 5, in the work tree, naming \`RUN_DIR/baseline.txt\` as its BASELINE"
 require_text work-issue/SKILL.md "\`divvy-up\`'s Step 4 never runs here, so a red baseline adds no question."
 require_text work-issue/SKILL.md "Where the baseline is red and verification fails with either the wave's output or the baseline naming no individual failures, the gate stops the run with \"Verification failed without naming individual failures, so this wave's failures can't be told from the baseline's.\", followed by both outputs quoted."
-require_text work-issue/SKILL.md "| Verification fails on a red baseline, and the wave's output or the baseline names no individual failures | 2, 3 | \"Verification failed without naming individual failures, so this wave's failures can't be told from the baseline's.\", followed by BASELINE and the failing output, both quoted |"
+require_text work-issue/SKILL.md "| Verification fails on a red baseline, and the wave's output or the baseline names no individual failures | 2, 3, 4, 5, 7, 8 | \"Verification failed without naming individual failures, so this wave's failures can't be told from the baseline's.\", followed by BASELINE and the failing output, both quoted |"
+# Every gate after the waves reads VERIFY_CMD against the latest baseline,
+# not its raw exit (PR #229 review, r4273125359). Raw green left a run whose
+# plan never fixed an inherited failure with no route at publish: the waves
+# passed over the failure and Step 5's Done-when then demanded it gone.
+require_text work-issue/SKILL.md "Once Step 2's first wave settles, **VERIFY_CMD green** means a run showing no failure the latest baseline does not show, the latest baseline being the newest \`RUN_DIR/baseline-<wave>.txt\`, else \`baseline.txt\`, with each failure attributed by the rule \`divvy-up\`'s Step 6 applies, and red means it shows one."
+require_text work-issue/SKILL.md "With VERIFY_CMD \`absent\` nothing runs, and there is no green or red to read."
+require_text work-issue/SKILL.md "VERIFY_CMD green against the latest baseline at that SHA, or VERIFY_CMD \`absent\`;"
+require_text work-issue/SKILL.md "Then run VERIFY_CMD and read it by VERIFY_CMD green. Red here means the rebase brought a failure the latest baseline lacks:"
+require_text work-issue/SKILL.md "then VERIFY_CMD green—then commit."
+require_text work-issue/SKILL.md "over the repair's reported \`files_changed\`, VERIFY_CMD green, then \`code-review\` against BASE_SHA"
+require_text work-issue/SKILL.md "rebase, rewrite \`RUN_DIR/base_sha\`, verify to VERIFY_CMD green, write \`pushed_at\`, push"
+refute_text work-issue/SKILL.md "VERIFY_CMD green at that SHA"
+refute_text work-issue/SKILL.md "Red here after a green Step 4"
+require_text work-issue/README.md "From the first wave to the push, a verification counts as green when it shows no failure the newest baseline lacks."
+require_text _maintenance/work-issue/RATIONALE.md "| 150 | Once Step 2's first wave settles, VERIFY_CMD green means a run showing no failure the latest baseline does not show"
 
 # --- The cut features. Each sounds reasonable on its own, and each has a row
 # in the RATIONALE ledger's Deliberately Not Built table. Applied across
@@ -2200,7 +2215,7 @@ require_text work-issue/SKILL.md 'm="$(git merge-base origin/DEFAULT issue-N)" &
 # repair_diff_triggers probe runs, or a resume after item 2's rebase re-fires
 # adversarial-review over upstream code the probe already ignores.
 require_text work-issue/SKILL.md "A \`repair-base-<k>\` that is no longer an ancestor of HEAD leaves this condition unmet too"
-require_text work-issue/SKILL.md "rebase, rewrite \`RUN_DIR/base_sha\`, verify, write \`pushed_at\`, push — Step 5 items 1 through 4, the \`base_sha\` rewrite in item 2 included."
+require_text work-issue/SKILL.md "rebase, rewrite \`RUN_DIR/base_sha\`, verify to VERIFY_CMD green, write \`pushed_at\`, push — Step 5 items 1 through 4, the \`base_sha\` rewrite in item 2 included."
 require_text work-issue/references/resume.md "answers \`stop\` naming the mismatch"
 require_text work-issue/SKILL.md "answers \`stop\` naming the mismatch"
 require_text _maintenance/work-issue/EVALS.md "A Rebase Mid-Run Moves the Fixed Point With It"
