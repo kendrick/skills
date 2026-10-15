@@ -143,7 +143,7 @@ token_env = "JIRA_API_TOKEN"
 # the Labels section. With none declared, staging files stay `schema: 1`,
 # byte for byte what they were before this table existed, and old files still
 # validate. The inside of the table is checked strictly at load: a family with
-# no labels, a label with no phrases, a phrase that is empty or not a string, a
+# a setting other than `max` and `labels`, a family with no labels, a label with no phrases, a phrase that is empty or not a string, a
 # `max` that is not an integer or is below 1, or one label in two families
 # stops the run, because each would otherwise drop labels without a word. So
 # does a label name that is empty, holds whitespace, or runs past 255

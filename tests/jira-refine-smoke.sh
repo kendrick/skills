@@ -754,6 +754,12 @@ cap-export-timeouts = ["the nightly export"]
 
 [label_families.outcome.labels]
 cap-export-timeouts = ["export sla"]' 'label `cap-export-timeouts` is declared in both `capability` and `outcome`'
+# A misspelled `max` must not read as an uncapped family, which would let a
+# second capability label through to Jira.
+bad_families_config unknown-setting '[label_families.capability]
+maxx = 1
+[label_families.capability.labels]
+cap-export-timeouts = ["the nightly export"]' "family \`capability\` has unknown settings ['maxx']"
 # TOML accepts a quoted key with a space in it, and Jira refuses that label.
 # Rejecting it at load keeps apply's label write from failing after the
 # description write has landed.

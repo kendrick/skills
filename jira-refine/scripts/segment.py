@@ -195,6 +195,11 @@ def load_label_families(raw, prog, path="config"):
             fail(f"family `{fam}` is empty or holds whitespace, which a `labels/<family>` line cannot carry")
         if not isinstance(body, dict):
             fail(f"family `{fam}` must be a table")
+        # A misspelled setting such as `maxx` would otherwise read as "no cap"
+        # and let a second label from the family through to Jira.
+        unknown = sorted(set(body) - {"max", "labels"})
+        if unknown:
+            fail(f"family `{fam}` has unknown settings {unknown}; only `max` and `labels` are allowed")
         cap = body.get("max")
         if "max" in body and (not isinstance(cap, int) or isinstance(cap, bool) or cap < 1):
             fail(f"family `{fam}`: `max` must be an integer >= 1")
