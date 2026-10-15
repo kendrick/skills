@@ -1681,6 +1681,18 @@ if {"field": "label", "fallback": ja.FALLBACK_BLOCK} not in unmapped:
     sys.exit(f"the batch label should keep its description-block fallback, got {unmapped}")
 if {"field": "labels", "values": ["cap-export-timeouts"], "fallback": None} not in unmapped:
     sys.exit(f"the stated label should be reported lost with no fallback, got {unmapped}")
+
+# One string can be the batch label and a stated label at once. Splitting by
+# value dropped the stated role, so the failure read as fully covered by the
+# block. Both entries have to survive.
+same = dict(entry, labels=[entry["label"]])
+ops, outcomes = ja.plan_update_ops(same, issue, cfg)
+ja.execute(ops, outcomes, LabelWriteFails(), dry_run=False)
+unmapped = outcomes["unmapped"]
+if {"field": "label", "fallback": ja.FALLBACK_BLOCK} not in unmapped:
+    sys.exit(f"a stated label equal to the batch label should keep the batch fallback, got {unmapped}")
+if {"field": "labels", "values": [entry["label"]], "fallback": None} not in unmapped:
+    sys.exit(f"a stated label equal to the batch label should still be reported lost, got {unmapped}")
 PY
 
 # The plan only predicts what the tracker ends up holding, so the real run is

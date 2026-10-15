@@ -739,7 +739,8 @@ def plan_update_ops(entry, issue, cfg):
     else:
         # A schema-2 entry carries `labels` the room stated aloud. They ride in
         # the same op as the batch label so the issue gets one write, not two.
-        wanted = [label] + [str(item) for item in (entry.get("labels") or [])]
+        stated_labels = [str(item) for item in (entry.get("labels") or [])]
+        wanted = [label] + stated_labels
         added = []
         for item in wanted:
             if item not in existing_labels and item not in added:
@@ -759,8 +760,11 @@ def plan_update_ops(entry, issue, cfg):
                     "added": added,
                     # A failed write has to report these apart from the batch
                     # label: the batch label's provenance is in the block, but
-                    # a stated label has no fallback and is simply lost.
-                    "stated": [item for item in added if item != label],
+                    # a stated label has no fallback and is simply lost. Both
+                    # roles are kept by membership, not by value, because one
+                    # string can be the batch label and a stated label at once.
+                    "batch": label in added,
+                    "stated": [item for item in added if item in stated_labels],
                 }
             )
 
@@ -1383,7 +1387,7 @@ def _record_failure(outcomes, op, reason):
     elif name == "add_labels":
         outcomes["label"] = "unmapped"
         stated = op.get("stated") or []
-        if any(item not in stated for item in op["added"]):
+        if op.get("batch"):
             outcomes["unmapped"].append({"field": "label", "fallback": FALLBACK_BLOCK})
         # Stated labels rode the same write but have no block to fall back to.
         # Folding them into the batch label's entry told the human they had
