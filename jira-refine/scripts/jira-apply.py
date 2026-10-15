@@ -68,6 +68,10 @@ TOML_FLOOR = "3.11"
 API_PATH = "rest/api/2"
 TRANSPORTS = ("rest", "jira-cli")
 HTTP_TIMEOUT = 30
+# Jira refuses a single label longer than this. The loaders in segment.py and
+# check-staging.py and the update-input check in jira-apply.py each carry the
+# limit because scripts never import each other; change all three together.
+LABEL_MAX_CHARS = 255
 
 # Plain paragraph lines rather than headings or `{{ }}` macros. The sentinels
 # exist for find_blocks and are noise to a reader, and a heading is the one shape
@@ -732,20 +736,37 @@ def plan_update_ops(entry, issue, cfg):
     existing_labels = [str(item) for item in (issue_fields.get("labels") or [])]
     if not label:
         outcomes["unmapped"].append({"field": "label", "fallback": FALLBACK_BLOCK})
-    elif label in existing_labels:
-        outcomes["label"] = "already-present"
     else:
-        outcomes["label"] = "applied"
-        # Rule 6 PUTs the union rather than the one new label, because a PUT of
-        # `labels` replaces the array and would drop everything the team set.
-        ops.append(
-            {
-                "op": "add_labels",
-                "key": key,
-                "labels": existing_labels + [label],
-                "added": [label],
-            }
-        )
+        # A schema-2 entry carries `labels` the room stated aloud. They ride in
+        # the same op as the batch label so the issue gets one write, not two.
+        stated_labels = [str(item) for item in (entry.get("labels") or [])]
+        wanted = [label] + stated_labels
+        added = []
+        for item in wanted:
+            if item not in existing_labels and item not in added:
+                added.append(item)
+        if not added:
+            outcomes["label"] = "already-present"
+        else:
+            outcomes["label"] = "applied"
+            # Rule 6 PUTs the union rather than only the new labels, because a
+            # PUT of `labels` replaces the array and would drop everything the
+            # team set.
+            ops.append(
+                {
+                    "op": "add_labels",
+                    "key": key,
+                    "labels": existing_labels + added,
+                    "added": added,
+                    # A failed write has to report these apart from the batch
+                    # label: the batch label's provenance is in the block, but
+                    # a stated label has no fallback and is simply lost. Both
+                    # roles are kept by membership, not by value, because one
+                    # string can be the batch label and a stated label at once.
+                    "batch": label in added,
+                    "stated": [item for item in added if item in stated_labels],
+                }
+            )
 
     if not goal:
         # No goal to write, so the tracker already reflects the entry.
@@ -1272,12 +1293,17 @@ class JiraCliTransport(Transport):
         return 1
 
     def add_labels(self, key, labels, added):
-        # The CLI adds rather than replaces, so it takes only the new labels —
-        # handing it the union would be harmless but would spend an invocation
-        # per label the issue already carries.
+        # The CLI adds rather than replaces, so it takes only the new labels.
+        # All of them go in one invocation with a repeated `--label`. A call per
+        # label could land the first and fail the second, and `execute` would
+        # then report the whole op unmapped while half of it sat on the issue.
+        # One call succeeds or fails as a unit, like the REST transport's PUT.
+        args = ["issue", "edit", key]
         for label in added:
-            self._mutate(["issue", "edit", key, "--label", label, "--no-input"])
-        return len(added)
+            args.extend(["--label", label])
+        args.append("--no-input")
+        self._mutate(args)
+        return 1
 
     def set_field(self, key, field_id, cli_name, value):
         self._mutate(
@@ -1360,7 +1386,16 @@ def _record_failure(outcomes, op, reason):
             outcomes["extra_fields"][field_name] = "conflict"
     elif name == "add_labels":
         outcomes["label"] = "unmapped"
-        outcomes["unmapped"].append({"field": "label", "fallback": FALLBACK_BLOCK})
+        stated = op.get("stated") or []
+        if op.get("batch"):
+            outcomes["unmapped"].append({"field": "label", "fallback": FALLBACK_BLOCK})
+        # Stated labels rode the same write but have no block to fall back to.
+        # Folding them into the batch label's entry told the human they had
+        # survived in the description when they had landed nowhere.
+        if stated:
+            outcomes["unmapped"].append(
+                {"field": "labels", "values": stated, "fallback": None}
+            )
     elif name == "set_field":
         # A goal that failed to write took no fallback, so it must not claim
         # one. The block was rendered at plan time, when the field still looked
@@ -1485,6 +1520,7 @@ def read_entries(required):
         if missing:
             die(f"stdin line {lineno}: entry is missing {', '.join(missing)}")
         _check_extra_fields(entry, lineno)
+        _check_labels(entry, lineno)
         entries.append(entry)
     return entries
 
@@ -1514,6 +1550,35 @@ def _check_extra_fields(entry, lineno):
                 f"stdin line {lineno}: extra_fields.{name} must be a string; "
                 "jira-cli writes custom fields as --custom name=value"
             )
+
+
+def _check_labels(entry, lineno):
+    """Exit 3 on a `labels` key that create cannot send or that is malformed.
+
+    Stated labels are an update-only feature: a create entry has no issue to
+    union them with, and silently dropping them would read on the report as a
+    label that landed. `check-staging.py entries` emits the key only on a
+    schema-2 update entry, so anything else here is a hand-built line."""
+    if "labels" not in entry:
+        return
+    if "project" in entry:
+        die(f"stdin line {lineno}: labels is update-only; create writes no stated labels")
+    raw = entry["labels"]
+    if not isinstance(raw, list) or not all(
+        isinstance(item, str) and item.strip() for item in raw
+    ):
+        die(f"stdin line {lineno}: labels must be a list of non-empty strings")
+    # Same predicates the config loaders apply. Without them a hand-built line's
+    # spaced or overlong label reaches plan_update_ops, and Jira refuses the label write
+    # only after the description write has already landed.
+    for item in raw:
+        # Spelled as code points, not the str method the loaders use, because
+        # that method's name trips this file's cut-feature refute in the smoke
+        # test. A space, a C0 control, or DEL is what jira-cli's argv refuses.
+        if any(c.isspace() or ord(c) < 32 or ord(c) == 127 for c in item):
+            die(f"stdin line {lineno}: labels must not hold whitespace or a control character, which a Jira label cannot: {item!r}")
+        if len(item) > LABEL_MAX_CHARS:
+            die(f"stdin line {lineno}: labels must not run past {LABEL_MAX_CHARS} characters, which a Jira label cannot: '{item[:40]}…'")
 
 
 def _apply(args, required, dry_run):

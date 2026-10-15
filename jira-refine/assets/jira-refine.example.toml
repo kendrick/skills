@@ -123,3 +123,52 @@ token_env = "JIRA_API_TOKEN"
 # id = "customfield_10001"
 # cli_name = "Team"
 # value = "1b4b76c3-0000-0000-0000-000000000000"
+
+# --- Label families -------------------------------------------------------
+
+# Labels the room states aloud, for a team that traces work through them,
+# for example one capability label and one outcome label on every story. Each family
+# lists its allowed labels, and each label lists the phrases the room says for
+# it, the same idea as [spoken_aliases]: nobody says `cap-export-timeouts` out
+# loud, they say "this is the nightly export work".
+#
+# A label lands under an entry's `### Labels` only where a speaker said one of
+# its phrases, anchored like a Goal line. A family nobody named gets
+# `- not discussed: labels/<family>` instead. Apply adds stated labels next to
+# the batch label in one union write, so labels already on the issue stay.
+#
+# `max` is optional: a family without it takes any number of labels per entry.
+#
+# Declaring any family switches new staging files to `schema: 2`, which adds
+# the Labels section. With none declared, staging files stay `schema: 1`,
+# byte for byte what they were before this table existed, and old files still
+# validate. The inside of the table is checked strictly at load: a family with
+# a setting other than `max` and `labels`, a family with no labels, a label with no phrases, a phrase that is empty or not a string, a
+# `max` that is not an integer or is below 1, or one label in two families
+# stops the run, because each would otherwise drop labels without a word. So
+# does a label name that is empty, holds whitespace or a control character,
+# or runs past 255
+# characters, such as a quoted `"bad label"` key. Jira refuses it, and apply
+# would only find out after the description write had landed. A family name
+# that is empty or holds whitespace or a control character stops it as well,
+# such as a quoted
+# `"capability\nbad"` key, whose escape decodes to a newline that splits the
+# `labels/<family>` line stage writes. A misspelled table name is not caught: it just
+# declares no families. A phrase no anchor can hold whole stops the run too:
+# more than ten words, a double quote, or a length no anchor can hold, counting
+# the words a snippet must add to reach four (a lone 115-character word fails). validate
+# needs the whole phrase inside the label's anchor quote, so such a label
+# could never be stated. A phrase under four words is fine; the quote around
+# it supplies the rest.
+#
+# Commented out because the shipped default declares none:
+# [label_families.capability]
+# max = 1
+# [label_families.capability.labels]
+# cap-export-timeouts = ["export timeout", "the nightly export"]
+# cap-safari-tiles = ["safari tiles", "the dashboard tiles"]
+#
+# [label_families.outcome]
+# max = 1
+# [label_families.outcome.labels]
+# mo-q4-export-sla = ["export sla", "the q4 export outcome"]

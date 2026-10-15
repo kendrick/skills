@@ -93,7 +93,7 @@ Writes one GitHub issue and files it with `gh`. Most issue tooling checks that y
 
 #### [jira-refine](jira-refine/README.md)
 
-Turns a recorded backlog-refinement transcript into enriched Jira issues. It segments by the project keys spoken aloud, fills a fixed seven-field template only from what was actually said, and anchors every acceptance criterion to a verbatim quote—a slot the room never reached gets a `- not discussed` line instead of a guess. Nothing reaches Jira until you mark a staged ticket `approved`.
+Turns a recorded backlog-refinement transcript into enriched Jira issues. It segments by the project keys spoken aloud, fills a fixed seven-field template, plus a Labels slot when the config declares label families, only from what was actually said, and anchors every acceptance criterion to a verbatim quote—a slot the room never reached gets a `- not discussed` line instead of a guess. Nothing reaches Jira until you mark a staged ticket `approved`.
 
 #### [eli5](eli5/README.md)
 

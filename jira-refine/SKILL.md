@@ -44,7 +44,7 @@ Exit 4 means the transcript names no ticket keys at all, typed or spoken. That i
 
 Read [`references/ticket-template.md`](references/ticket-template.md) once, then work entry by entry. The rules that decide what gets written are these, and they apply on every run:
 
-Every non-empty line under Acceptance criteria, Dependencies, and Goal ends in `(raw: "four to ten verbatim words" HH:MM:SS)`. The snippet is authoritative and quoted exactly from the excerpt — `check-staging.py` fails the line unless those words appear in that entry's Source excerpt, whitespace aside. Use `L<n>` in place of the timestamp only for a plain-text transcript that carries no clock.
+Every non-empty line under Acceptance criteria, Dependencies, Goal, and Labels ends in `(raw: "four to ten verbatim words" HH:MM:SS)`. The snippet is authoritative and quoted exactly from the excerpt: `check-staging.py` fails the line unless those words appear in that entry's Source excerpt, whitespace aside. Use `L<n>` in place of the timestamp only for a plain-text transcript that carries no clock.
 
 **NEVER invent acceptance criteria.** Write a criterion only where someone stated a condition, a number, a behavior, or a case, or where the excerpt admits no other reading. A criterion that follows logically from what was said is still not something anyone said. A section the room never reached stays empty and takes a `- not discussed: <section>` line under Open questions instead — one per empty content section, always, and never alongside content in the same section.
 
@@ -52,7 +52,9 @@ Every non-empty line under Acceptance criteria, Dependencies, and Goal ends in `
 
 A Dependency is a key from the entry's `mentions:` list or an explicit blocked-by statement, and nothing else. A key someone said while discussing something else is a mention, not a blocker; each dependency becomes a real Jira issue link, so a wrong one costs somebody a conversation. A Goal goes in only where a product owner named one — inferring it from the acceptance criteria is exactly the failure this step guards against. Provenance is script-filled and is not edited by hand; its values are checked against the frontmatter.
 
-**Done when:** every entry has all eight sections, every anchored snippet appears verbatim in that entry's own excerpt, and every empty content section carries its `not discussed` line.
+A `### Labels` section exists only on a `schema: 2` file, which `segment.py` writes when CONFIG declares `[label_families]`. A label is stated, like a Goal: write `- <label> (raw: "…" HH:MM:SS)` only where a speaker said one of that label's configured phrases, and quote a snippet that holds the phrase, since `validate` checks it against that label's list. Keep each family within its `max`. A family the room never named keeps the `- not discussed: labels/<family>` line the skeleton wrote; delete that line when you add a label from its family. A Labels line carries the room's words and nothing else: a ticket's subject, its epic, and its acceptance criteria are never a source for one, because a wrong label files the ticket under somebody else's capability.
+
+**Done when:** every entry has every section its `schema:` calls for (eight on schema 1, nine on schema 2), every anchored snippet appears verbatim in that entry's own excerpt, every empty content section carries its `not discussed` line, and every label family has either a stated label or its `labels/<family>` line.
 
 ### Step 3 — Summary
 
@@ -151,7 +153,7 @@ Close by telling the user which entries conflicted and why, that setting `on_con
 
 ## Further Reading
 
-- [references/ticket-template.md](references/ticket-template.md) — read at stage Step 2, for what each of the seven fields holds and what counts as stated
+- [references/ticket-template.md](references/ticket-template.md) — read at stage Step 2, for what each field holds (seven, plus Labels on a schema-2 file) and what counts as stated
 - [references/staging-format.md](references/staging-format.md) — read when `validate` fails, or when editing a staging file by hand
 - [references/tracker-contract.md](references/tracker-contract.md) — read when an apply run reports anything other than `applied`, for the entry and report shapes, the exit codes, and all eight idempotency rules
 - [scripts/segment.py](scripts/segment.py) — stage Step 1: transcript to staging skeleton

@@ -51,7 +51,6 @@ import statistics
 import sys
 
 MIN_PYTHON = (3, 11)
-
 # Every key below matches the same-named default in jira-refine.example.toml.
 # A user's config only has to state what it overrides.
 DEFAULTS = {
@@ -141,6 +140,116 @@ def read_text_file(path, label):
         raise SystemExit(3)
 
 
+# ---------------------------------------------------------------------------
+# This block is upstream for check-staging.py's vendored copy. Change it here
+# first, then re-copy everything between the begin and end markers, header
+# excluded, byte for byte. Vendored 2026-10-14 (#233). The docstring travels
+# with the code on purpose: it records why the two loaders must agree, and a
+# reader who trims it will eventually let them drift.
+# ---------------------------------------------------------------------------
+# begin shared: label-family loader
+# The longest phrase a Labels anchor can hold whole. These mirror
+# check-staging.py's anchor rule (ANCHOR_MIN_WORDS, ANCHOR_MAX_WORDS, and
+# ANCHOR_MAX_CHARS, which sizes the capture cap in ANCHOR_RE), so they are
+# literals here rather than derived from it.
+PHRASE_MIN_WORDS = 4
+PHRASE_MAX_WORDS = 10
+PHRASE_MAX_CHARS = 120
+# Jira refuses a single label longer than this. The loaders in segment.py and
+# check-staging.py and the update-input check in jira-apply.py each carry the
+# limit because scripts never import each other; change all three together.
+LABEL_MAX_CHARS = 255
+
+
+def load_label_families(raw, prog, path="config"):
+    """Validate and normalize `[label_families]` into an ordered list of
+    (family, max_or_None, {label: [phrases]}). Strict on purpose: a malformed
+    table inside `[label_families]` (a family with no `labels`, a label with
+    no phrases, a bad phrase or `max`, a label in two families) would
+    otherwise drop labels with no sign anything was lost. A misspelled
+    top-level table name is not caught; it simply declares no families.
+    segment.py is upstream and check-staging.py carries a vendored copy
+    (scripts never import each other), so the two must agree on what a valid
+    config is: if segment.py stages a label that check-staging.py rejects,
+    the room's words never reach the tracker. `prog` names the caller
+    in the exit-3 message and is the only thing that differs between them.
+    Config order is preserved because the skeleton's per-family `not
+    discussed` lines follow it."""
+
+    def fail(msg):
+        sys.stderr.write(f"{prog}: {path}: label_families: {msg}\n")
+        raise SystemExit(3)
+
+    if raw is None:
+        return []
+    if not isinstance(raw, dict):
+        fail("must be a table of families")
+    families = []
+    owner = {}
+    for fam, body in raw.items():
+        # A quoted TOML key decodes escapes, so `"capability\nbad"` arrives
+        # here as a two-line name. Stage would then write a `labels/<family>`
+        # line its own validator splits and rejects; a space breaks the same
+        # line. Refuse it at load, before any file is written.
+        if not fam or any(c.isspace() or not c.isprintable() for c in fam):
+            fail(f"family `{fam}` is empty or holds whitespace or a control character, which a `labels/<family>` line cannot carry")
+        if not isinstance(body, dict):
+            fail(f"family `{fam}` must be a table")
+        # A misspelled setting such as `maxx` would otherwise read as "no cap"
+        # and let a second label from the family through to Jira.
+        unknown = sorted(set(body) - {"max", "labels"})
+        if unknown:
+            fail(f"family `{fam}` has unknown settings {unknown}; only `max` and `labels` are allowed")
+        cap = body.get("max")
+        if "max" in body and (not isinstance(cap, int) or isinstance(cap, bool) or cap < 1):
+            fail(f"family `{fam}`: `max` must be an integer >= 1")
+        labels = body.get("labels")
+        if not isinstance(labels, dict) or not labels:
+            fail(f"family `{fam}` declares no labels")
+        norm = {}
+        for label, phrases in labels.items():
+            # A quoted TOML key can hold anything, and Jira refuses a label
+            # with a space in it or past LABEL_MAX_CHARS. Rejecting it at load stops the run before
+            # apply lands the description write and then fails the label write.
+            # A control character such as a decoded NUL is as fatal as a space:
+            # the jira-cli argv refuses it, after the description has landed.
+            if not label or len(label) > LABEL_MAX_CHARS or any(c.isspace() or not c.isprintable() for c in label):
+                fail(f"label `{label}` in family `{fam}` is empty, holds whitespace or a control character, or runs past {LABEL_MAX_CHARS} characters, which a Jira label cannot")
+            if not isinstance(phrases, list) or not phrases:
+                fail(f"label `{label}` in family `{fam}` has no phrases")
+            for ph in phrases:
+                if not isinstance(ph, str) or not ph.strip():
+                    fail(f"label `{label}` in family `{fam}` has a non-string or empty phrase")
+                # validate requires a stated label's whole phrase inside its
+                # anchor snippet, so a phrase the anchor rule can't hold makes
+                # the label impossible to state. Refuse it here instead. A short
+                # phrase is fine: the quote around it supplies the other words.
+                spoken = " ".join(ph.split())
+                # Each word the snippet must add to reach PHRASE_MIN_WORDS
+                # costs at least a space and one character, hence 2 apiece. A
+                # lone 120-character word fits the cap but no four-word anchor.
+                words = len(spoken.split())
+                shortest_snippet = len(spoken) + 2 * max(0, PHRASE_MIN_WORDS - words)
+                if (
+                    '"' in spoken
+                    or shortest_snippet > PHRASE_MAX_CHARS
+                    or words > PHRASE_MAX_WORDS
+                ):
+                    fail(
+                        f"label `{label}` in family `{fam}` has a phrase no anchor can hold "
+                        f"(over {PHRASE_MAX_WORDS} words, over {PHRASE_MAX_CHARS} characters "
+                        f"once a snippet adds the words it needs to reach {PHRASE_MIN_WORDS}, "
+                        f"or a double quote): {ph!r}"
+                    )
+            if label in owner:
+                fail(f"label `{label}` is declared in both `{owner[label]}` and `{fam}`")
+            owner[label] = fam
+            norm[label] = list(phrases)
+        families.append((fam, cap, norm))
+    return families
+# end shared: label-family loader
+
+
 def load_config(path):
     """Parse the TOML config and fold in defaults. `projects` is the one key
     with no default — the pattern that finds a key in the transcript is
@@ -168,6 +277,7 @@ def load_config(path):
     cfg.update(raw)
     cfg["projects"] = list(projects)
     cfg["spoken_aliases"] = raw.get("spoken_aliases", {})
+    cfg["label_families"] = load_label_families(raw.get("label_families"), prog="segment", path=path)
     return cfg
 
 
@@ -841,7 +951,7 @@ def mentions_str(keys):
     return "[" + ", ".join(keys) + "]" if keys else "[]"
 
 
-def build_entry_lines(entry, source, session, has_clock):
+def build_entry_lines(entry, source, session, has_clock, families=()):
     if has_clock:
         segment_str = f"{entry['start']} - {entry['end']}"
         duration_str = seconds_to_duration(entry["duration_seconds"])
@@ -864,7 +974,13 @@ def build_entry_lines(entry, source, session, has_clock):
     # `not discussed` line; Open questions is therefore never itself empty.
     for heading in ("Context", "Acceptance criteria", "Out of scope", "Dependencies", "Goal"):
         lines += section_block(f"### {heading}", [])
+    # Schema 2 only: Labels sits between Goal and Open questions, and each
+    # family gets its own `not discussed` line rather than one for the section,
+    # because a room can name a capability and say nothing of the outcome.
+    if families:
+        lines += section_block("### Labels", [])
     not_discussed = [f"- not discussed: {name}" for name in CONTENT_SECTIONS]
+    not_discussed += [f"- not discussed: labels/{fam}" for fam, _cap, _labels in families]
     lines += section_block("### Open questions", not_discussed)
     provenance = [
         f"- source: {source}",
@@ -903,7 +1019,7 @@ def build_passing_bullets(passing, min_words):
     return bullets
 
 
-def build_skeleton(result, frontmatter, source, session, min_words, long_factor):
+def build_skeleton(result, frontmatter, source, session, min_words, long_factor, families=()):
     lines = ["---"]
     for k in ("skill", "schema", "source", "source_path", "session", "label", "config", "projects", "generated"):
         v = frontmatter[k]
@@ -914,7 +1030,7 @@ def build_skeleton(result, frontmatter, source, session, min_words, long_factor)
     lines.append("")
 
     for entry in result["entries"]:
-        lines += build_entry_lines(entry, source, session, result["has_clock"])
+        lines += build_entry_lines(entry, source, session, result["has_clock"], families)
 
     lines.append("## Summary")
     lines.append("")
@@ -1029,7 +1145,9 @@ def main(argv=None):
     label = args.label or f"{cfg['label_prefix']}{args.session_date}"
     frontmatter = {
         "skill": "jira-refine",
-        "schema": 1,
+        # Schema 2 exactly when the config declares a family; otherwise the
+        # bytes stay what they were so existing stagings keep validating.
+        "schema": 2 if cfg["label_families"] else 1,
         "source": os.path.basename(args.transcript),
         "source_path": os.path.abspath(args.transcript),
         "session": args.session_date,
@@ -1043,7 +1161,7 @@ def main(argv=None):
         print(json.dumps(build_json(result, frontmatter, min_words, cfg["long_factor"]), indent=2))
     else:
         print(
-            build_skeleton(result, frontmatter, frontmatter["source"], args.session_date, min_words, cfg["long_factor"]),
+            build_skeleton(result, frontmatter, frontmatter["source"], args.session_date, min_words, cfg["long_factor"], cfg["label_families"]),
             end="",
         )
     return 0
