@@ -594,6 +594,29 @@ python3 "$staging" validate "$tmp/labels.md" >/dev/null || {
   exit 1
 }
 
+# Below Python 3.11 the deferred `import tomllib` raised an uncaught
+# ModuleNotFoundError on a schema-2 file instead of the documented exit 3. A
+# None in sys.modules makes the import fail the same way on a newer interpreter.
+# The schema-1 run under the same blocker pins the deferral: it must never
+# reach the import at all.
+tomllib_blocked() {  # <staging file>
+  python3 -c 'import runpy, sys; sys.modules["tomllib"] = None; sys.argv = [sys.argv[1], "validate", sys.argv[2]]; runpy.run_path(sys.argv[0], run_name="__main__")' "$staging" "$1"
+}
+set +e
+floor_err="$(tomllib_blocked "$tmp/labels.md" 2>&1 >/dev/null)"
+floor_status=$?
+set -e
+[[ "$floor_status" == 3 ]] \
+  && grep -Fq "check-staging: a schema-2 file needs Python 3.11 or newer for tomllib" <<<"$floor_err" \
+  && ! grep -q Traceback <<<"$floor_err" || {
+  echo "a schema-2 validate without tomllib should exit 3 with the floor message, got $floor_status: $floor_err" >&2
+  exit 1
+}
+tomllib_blocked "$fixtures/staging-good.md" >/dev/null || {
+  echo "a schema-1 validate must still pass with tomllib unavailable" >&2
+  exit 1
+}
+
 # Each variant breaks one Labels rule in PROJ-412 and must exit 1 naming it.
 # Every stderr line has to stay inside PROJ-412's Labels rules, so a variant
 # that tripped some unrelated check cannot pass for the rule it was built for.
@@ -1617,6 +1640,41 @@ if set(got) != want or len(got) != len(want):
     sys.exit(f"the label write should PUT the union {sorted(want)}, got {got}")
 if sorted(label_ops[0]["added"]) != ["cap-export-timeouts", "refined-2026-09-07"]:
     sys.exit(f"added should name only the labels new to the issue, got {label_ops[0]['added']}")
+PY
+
+# A failed label write reported one `label` entry claiming the description
+# fallback for the whole op, so a stated label read as saved in the block when
+# it was lost. The real execute runs against a transport whose label write
+# fails, and the report has to split the batch label from the stated one.
+python3 - "$apply" "$tmp/labels-entries.jsonl" "$tmp/labels-issue.json" <<'PY' || exit 1
+import importlib.util, json, sys
+spec = importlib.util.spec_from_file_location("jira_apply", sys.argv[1])
+ja = importlib.util.module_from_spec(spec); spec.loader.exec_module(ja)
+entry = json.loads(open(sys.argv[2], encoding="utf-8").readline())
+issue = json.load(open(sys.argv[3], encoding="utf-8"))
+cfg = {"transport": "rest", "link_type": "Blocks", "fields": {}, "extra_fields": {}}
+ops, outcomes = ja.plan_update_ops(entry, issue, cfg)
+
+class LabelWriteFails:
+    def get_issue(self, key):
+        return issue
+    def update_description(self, key, text):
+        return 1
+    def add_labels(self, key, labels, added):
+        raise ja.TransportError("forced label failure")
+    def set_field(self, key, field_id, cli_name, value):
+        return 1
+    def create_link(self, key, depends_on, link_type):
+        return 1
+
+ja.execute(ops, outcomes, LabelWriteFails(), dry_run=False)
+unmapped = outcomes["unmapped"]
+if outcomes["label"] != "unmapped":
+    sys.exit(f"a failed label write should report label unmapped, got {outcomes['label']}")
+if {"field": "label", "fallback": ja.FALLBACK_BLOCK} not in unmapped:
+    sys.exit(f"the batch label should keep its description-block fallback, got {unmapped}")
+if {"field": "labels", "values": ["cap-export-timeouts"], "fallback": None} not in unmapped:
+    sys.exit(f"the stated label should be reported lost with no fallback, got {unmapped}")
 PY
 
 # The plan only predicts what the tracker ends up holding, so the real run is

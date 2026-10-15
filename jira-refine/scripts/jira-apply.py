@@ -757,6 +757,10 @@ def plan_update_ops(entry, issue, cfg):
                     "key": key,
                     "labels": existing_labels + added,
                     "added": added,
+                    # A failed write has to report these apart from the batch
+                    # label: the batch label's provenance is in the block, but
+                    # a stated label has no fallback and is simply lost.
+                    "stated": [item for item in added if item != label],
                 }
             )
 
@@ -1378,7 +1382,16 @@ def _record_failure(outcomes, op, reason):
             outcomes["extra_fields"][field_name] = "conflict"
     elif name == "add_labels":
         outcomes["label"] = "unmapped"
-        outcomes["unmapped"].append({"field": "label", "fallback": FALLBACK_BLOCK})
+        stated = op.get("stated") or []
+        if any(item not in stated for item in op["added"]):
+            outcomes["unmapped"].append({"field": "label", "fallback": FALLBACK_BLOCK})
+        # Stated labels rode the same write but have no block to fall back to.
+        # Folding them into the batch label's entry told the human they had
+        # survived in the description when they had landed nowhere.
+        if stated:
+            outcomes["unmapped"].append(
+                {"field": "labels", "values": stated, "fallback": None}
+            )
     elif name == "set_field":
         # A goal that failed to write took no fallback, so it must not claim
         # one. The block was rendered at plan time, when the field still looked

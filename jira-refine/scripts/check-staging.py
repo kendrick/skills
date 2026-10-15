@@ -272,7 +272,17 @@ def load_label_families(raw, path="config"):
 def load_config_families(path):
     """Read the frontmatter's config and return its label families, or exit
     3. Only a schema-2 file reaches this; see the module docstring."""
-    import tomllib  # deferred so a schema-1 run never needs the 3.11 floor
+    # Deferred so a schema-1 run never needs the 3.11 floor. Below it the
+    # import raises, and an uncaught traceback is not the exit 3 the module
+    # docstring promises for an unusable config.
+    try:
+        import tomllib
+    except ImportError:
+        sys.stderr.write(
+            "check-staging: a schema-2 file needs Python 3.11 or newer for "
+            f"tomllib to read its config; this is {sys.version.split()[0]}\n"
+        )
+        raise SystemExit(3)
 
     try:
         with open(path, "rb") as f:
