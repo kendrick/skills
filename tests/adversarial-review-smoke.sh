@@ -959,13 +959,17 @@ while IFS=$'\t' read -r sig_n sig_name sig; do
   # and `_` each go flush against every word-char end, and none may reach the
   # row. Testing one class alone misses a lookbehind narrowed to that class. A
   # unit has its own digit rule, and a prefix's trailing `_` takes anything.
+  # `é` and Arabic-Indic `٣` join them because the matcher's `\w` is Unicode:
+  # with lookarounds narrowed to `[A-Za-z0-9_]`, every ASCII case still passed
+  # and `érate` reached the `rate` row with the suite green (PR #227). bash 3.2
+  # sees both as plain bytes, which is fine, because they're only spliced in.
   # Split around the signal rather than `${sig_line/.../...}`: bash 3.2 keeps
   # quotes in that replacement literally, and 5.2 expands an unquoted `&`.
   adj_pre="${sig_line%%"$sig"*}"
   adj_post="${sig_line#*"$sig"}"
   adj_lines=""
   if [[ "$is_unit" == 0 ]]; then
-    for w in a 7 _; do
+    for w in a 7 _ é ٣; do
       if [[ "$sig" == [A-Za-z0-9_]* ]]; then
         adj_lines+="$adj_pre$w$sig$adj_post"$'\n'
       fi
