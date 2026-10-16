@@ -780,7 +780,7 @@ require_text work-issue/SKILL.md "A baseline captured before any worker runs is 
 # failure an earlier wave fixed and a later one brought back.
 require_text work-issue/SKILL.md "Then INSTALL_CMD, then VERIFY_CMD, saved to \`RUN_DIR/baseline.txt\` as a first line \`exit: <status>\` holding its exit status, then its output tail."
 require_text work-issue/SKILL.md "and \`RUN_DIR/baseline.txt\` opens with \`exit: <status>\`, VERIFY_CMD's real exit status, followed by its real output, or, where VERIFY_CMD is \`absent\`, holds the single line \`absent\`."
-require_text work-issue/SKILL.md "\`baseline.txt\`, \`baseline-<wave>.txt\`, \`max_review_rounds\`"
+require_text work-issue/SKILL.md "\`baseline.txt\`, \`baseline-<wave>.txt\`, \`baseline-repair-<n>.txt\`, \`max_review_rounds\`"
 require_text work-issue/SKILL.md "Each time Step 2 continues \`divvy-up\` at a wave, the first dispatch after a resume included, name instead the \`RUN_DIR/baseline-<wave>.txt\` of the highest-numbered wave already settled, and \`baseline.txt\` only while no wave has settled."
 # A run gated before baseline-<wave>.txt existed has markers and no file.
 # Step 2 measures the settled tree itself rather than falling back to an
@@ -833,7 +833,7 @@ require_text work-issue/SKILL.md "| Verification fails on a red baseline, and th
 # not its raw exit (PR #229 review, r4273125359). Raw green left a run whose
 # plan never fixed an inherited failure with no route at publish: the waves
 # passed over the failure and Step 5's Done-when then demanded it gone.
-require_text work-issue/SKILL.md "Once Step 2's first wave settles, **VERIFY_CMD green** means a run showing no failure the latest baseline does not show, the latest baseline being the newest \`RUN_DIR/baseline-<wave>.txt\`, else \`baseline.txt\`, with each failure attributed by the rule \`divvy-up\`'s Step 6 applies, and red means it shows one."
+require_text work-issue/SKILL.md "Once Step 2's first wave settles, **VERIFY_CMD green** means a run showing no failure the latest baseline does not show, the latest baseline being the highest-numbered \`RUN_DIR/baseline-repair-<n>.txt\`, else the newest \`RUN_DIR/baseline-<wave>.txt\`, else \`baseline.txt\`, with each failure attributed by the rule \`divvy-up\`'s Step 6 applies, and red means it shows one."
 require_text work-issue/SKILL.md "With VERIFY_CMD \`absent\` nothing runs, and there is no green or red to read."
 require_text work-issue/SKILL.md "VERIFY_CMD green against the latest baseline at that SHA, or VERIFY_CMD \`absent\`;"
 require_text work-issue/SKILL.md "Then run VERIFY_CMD and read it by VERIFY_CMD green. Red here means the rebase brought a failure the latest baseline lacks:"
@@ -844,6 +844,16 @@ refute_text work-issue/SKILL.md "VERIFY_CMD green at that SHA"
 refute_text work-issue/SKILL.md "Red here after a green Step 4"
 require_text work-issue/README.md "From the first wave to the push, a verification counts as green when it shows no failure the newest baseline lacks."
 require_text _maintenance/work-issue/RATIONALE.md "| 150 | Once Step 2's first wave settles, VERIFY_CMD green means a run showing no failure the latest baseline does not show"
+# Repair gates advance the baseline too (PR #229 review, r4290396470). With
+# only wave gates writing files, a failure one repair fixed and a later
+# repair brought back still sat in the last wave file, so the later gate
+# passed the regression and the run pushed it.
+require_text work-issue/SKILL.md "Between that green run and the commit, save the run to \`RUN_DIR/baseline-repair-<n>.txt\` in \`baseline.txt\`'s format, \`exit: <status>\` and then the output tail, n one past the highest number already present, 1 where none is."
+require_text work-issue/SKILL.md "Every repair gate does this, Step 4's, Step 5 item 2's, and Step 7's included, and with VERIFY_CMD \`absent\` it writes nothing."
+require_text work-issue/SKILL.md "Save the green VERIFY_CMD run as the next \`baseline-repair-<n>.txt\`, as Step 3's repair gate does, then commit."
+require_text work-issue/references/resume.md "It never reads \`baseline-repair-<n>.txt\` either"
+require_text work-issue/README.md "Each wave's gate and each repair's gate saves the verification run that passed it as the new baseline"
+require_text _maintenance/work-issue/RATIONALE.md "| 151 | Every repair gate that passes VERIFY_CMD green, at Steps 3, 4, 5 item 2, and 7, saves that run to \`baseline-repair-<n>.txt\` before its commit"
 
 # --- The cut features. Each sounds reasonable on its own, and each has a row
 # in the RATIONALE ledger's Deliberately Not Built table. Applied across
@@ -1766,7 +1776,7 @@ done
 # the probe only through Step 0's write, and a missing file silently reads 2.
 require_text work-issue/SKILL.md "\`--max-review-rounds N\` caps the post-PR review loop at N triage rounds, default 2, and Step 0 writes it to \`RUN_DIR/max_review_rounds\`"
 require_text work-issue/SKILL.md "Write the \`--max-review-rounds\` value, \`2\` where the flag is absent, to \`RUN_DIR/max_review_rounds\`."
-require_text work-issue/SKILL.md "\`baseline-<wave>.txt\`, \`max_review_rounds\`, \`pushed_at\`"
+require_text work-issue/SKILL.md "\`baseline-repair-<n>.txt\`, \`max_review_rounds\`, \`pushed_at\`"
 # N is a positive integer: 0 would cap round 1, so no post-PR finding ever got
 # a repair, and nothing downstream checks the file's value. A resume skips
 # Step 0, so the flag it passes changes nothing; the file is the lever.
