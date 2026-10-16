@@ -111,7 +111,7 @@ require_text divvy-up/SKILL.md "fable"
 # plan.
 require_text divvy-up/SKILL.md "/agent-guild:job"
 
-# Reference contracts: the eight placeholders every dispatch substitutes, and
+# Reference contracts: the nine placeholders every dispatch substitutes, and
 # the JSON-only rule that keeps the gate from having to arbitrate between a
 # report and a summary paragraph sitting next to it.
 require_text divvy-up/references/worker-prompt.md "{{TASK}}"
@@ -132,6 +132,111 @@ require_text divvy-up/references/worker-prompt.md "{{CALLER_NOTES}}"
 # whether to run wave 0 answers it here on the user's behalf instead of
 # asking a second time in the same turn.
 require_text divvy-up/SKILL.md "answers it here on the user's behalf"
+
+# kendrick/skills#188: the verify baseline. Without it, a suite already red
+# before the run fails the first task to meet it, fails the retry one rung up,
+# and stops the run naming a healthy task.
+
+# This pin greps only the template. The Placeholders list names {{BASELINE}}
+# too, so a file-wide grep would stay green after the template lost the slot
+# and workers stopped seeing the baseline.
+baseline_template="$(awk '/^## Template$/{f=1; next} /^## Placeholders$/{f=0} f' divvy-up/references/worker-prompt.md)"
+grep -Fq -- "{{BASELINE}}" <<<"$baseline_template" || {
+  echo "missing expected text in divvy-up/references/worker-prompt.md's template: {{BASELINE}}" >&2
+  exit 1
+}
+require_text divvy-up/references/worker-prompt.md "- \`{{BASELINE}}\` — BASELINE as it stands when the wave dispatches: a first line \`exit: <n>\` with its exit status, then its output tail verbatim."
+require_text divvy-up/references/worker-prompt.md "for every later wave it is the refresh Step 6 made from the last passing wave's verification."
+require_text divvy-up/references/worker-prompt.md "The same command ran on this tree before this wave started, and printed"
+
+# Step 3's capture, and the two cases that skip running it. A wrapper's
+# baseline has to replace the run: work-issue reaches Step 3 before its
+# worktree exists, so a capture there would run on the wrong tree.
+require_text divvy-up/SKILL.md "Then capture **BASELINE**, which starts as the verify command's output before any task runs"
+require_text divvy-up/SKILL.md "A wrapping skill's baseline replaces the run."
+require_text divvy-up/SKILL.md "or says one will be named before Step 5"
+require_text divvy-up/SKILL.md "With no command found, VERIFY_CMD and BASELINE are both \`absent\`"
+
+# With no command, the worker prompt still carries `{{VERIFY_CMD}}` in a shell
+# block, now holding `absent`. Without the sentence after that block a worker
+# runs `absent` as a command and reports its task failed, though Step 6 skips
+# verification (PR #229 review).
+require_text divvy-up/references/worker-prompt.md "Where that command reads \`absent\`, this repo has no verification command:"
+require_text divvy-up/references/worker-prompt.md "run nothing, write \`absent\` in \`verify_output\`, and set \`status\` by the"
+require_text divvy-up/references/worker-prompt.md "The literal \`absent\` goes in when Step 3 found no command"
+# The baseline paragraph claims a command ran and adds its own status rule,
+# both false for a worker handed `absent`, so the template routes it past.
+require_text divvy-up/references/worker-prompt.md "Where the command above reads \`absent\`, skip the baseline below and the"
+require_text divvy-up/references/worker-prompt.md "The worker runs the command before reporting"
+require_text divvy-up/SKILL.md "Both placeholders still go into the worker prompt as the literal \`absent\`, and the template tells a worker handed that to run nothing"
+
+# Step 4's red-baseline clause. Refusing outright on a red baseline would
+# block the plan written to fix that very failure.
+require_text divvy-up/SKILL.md "When BASELINE is red, the same question names each failure BASELINE shows"
+require_text divvy-up/SKILL.md "A red baseline does not stop the run on its own"
+require_text divvy-up/SKILL.md "When a red BASELINE names no individual failures, the question says so in their place"
+# Decision 36 cut ralph-grind's refuse-on-a-red-gate preflight. A red BASELINE
+# goes into Step 4's question instead, since the plan may exist to fix it.
+refute_text divvy-up/SKILL.md "red BASELINE stops the run"
+# refute_text is case-sensitive, so the line above misses "a red baseline
+# stops the run". This check is case-blind. Step 4's "A red baseline does not
+# stop the run on its own" doesn't match it.
+if grep -iFq -- "red BASELINE stops the run" divvy-up/SKILL.md; then
+  echo "unexpected text in divvy-up/SKILL.md: red BASELINE stops the run (any case)" >&2
+  exit 1
+fi
+
+# The README tells the user the same rules: the baseline is captured before
+# the go-ahead, the gate judges each failure against it, and the stop fires
+# only on a red baseline. When the README's stop once lost that scope, every
+# suite stayed green.
+require_text divvy-up/README.md "it runs the repo's verification command once on the untouched tree and keeps the output as a baseline"
+require_text divvy-up/README.md "found on disk rather than asked for, and checks each failure against the baseline."
+require_text divvy-up/README.md "When the baseline is red and either output names no individual failures, the gate can't tell new failures from old ones, so it stops the run and shows you both outputs."
+
+# A wrapper's file replaces the run but not the lookup, since Step 6 still
+# runs VERIFY_CMD, and it has to come from the HEAD the run starts at. Its
+# status comes from an `exit:` first line (PR #229 review): read off the
+# output, a suite that exited non-zero without printing a failure read as
+# green. A file without the line reads red.
+require_text divvy-up/SKILL.md "Resolve VERIFY_CMD all the same, because Step 6 runs it."
+require_text divvy-up/SKILL.md "The wrapper must have recorded the run-start file at the HEAD this run starts from, and a later wave's file at the HEAD that wave's gate passed on"
+require_text divvy-up/SKILL.md "keep its exit status and the tail of its output as a first line \`exit: <n>\` followed by the tail, the shape a wrapper's file has and \`{{BASELINE}}\` hands workers."
+require_text divvy-up/SKILL.md "A wrapping skill that continues the run at a later wave can name another file, and that file replaces BASELINE from then on."
+require_text divvy-up/SKILL.md "A named file's first line \`exit: <n>\` gives its status: green on 0, red otherwise."
+require_text divvy-up/SKILL.md "That line is a status, not a failure, so attribution reads failures from the rest of the file."
+require_text divvy-up/SKILL.md "A named file with no \`exit:\` first line reads as red, because a status nobody recorded can't be called green"
+require_text divvy-up/README.md "A handed-over file states the command's exit status on its first line, and a file without that line counts as red"
+# Decision 37 cut reading a named file's status from its output text.
+refute_text divvy-up/SKILL.md "read it as red when its output reports a failure"
+
+# The refresh (PR #229 review). Judged against the run-start BASELINE, a
+# failure wave 0 fixed and wave 1 brings back still shows in BASELINE, so
+# wave 1 passes and the final diff ships broken.
+require_text divvy-up/SKILL.md "Step 6 refreshes it after each passing wave."
+require_text divvy-up/SKILL.md "Once the wave passes its gate, BASELINE becomes the exit status and output tail of the verification run that passed it, the run after any retries, and every later wave's workers and gate read that refreshed BASELINE"
+require_text divvy-up/SKILL.md "a failure an earlier wave fixed and a later wave brings back must count against the later wave."
+require_text divvy-up/SKILL.md "A wave that changed nothing refreshes the same way."
+require_text divvy-up/SKILL.md "Step 4's question reads the run-start BASELINE alone"
+require_text divvy-up/SKILL.md "With VERIFY_CMD \`absent\`, skip this check, and nothing refreshes."
+require_text divvy-up/SKILL.md "Once the wave passes, BASELINE holds its gate's last verification run."
+require_text divvy-up/README.md "Once a wave passes, the gate's own verification run becomes the baseline for the next wave."
+
+# The attribution rule, at the gate and in the worker's own contract. Drop
+# either half and a pre-existing failure gets charged to a task again.
+require_text divvy-up/SKILL.md "Run VERIFY_CMD, the command Step 3 resolved, so the gate verifies with the same command BASELINE ran."
+require_text divvy-up/SKILL.md "a failure routes a task as \`failed\` only when BASELINE does not show that same test or check."
+require_text divvy-up/references/worker-prompt.md "A failure that also appears in this baseline is not yours."
+require_text divvy-up/references/worker-prompt.md "a failure the baseline already shows aside"
+
+# Output that names no individual failures can't be attributed, so the gate
+# stops the run. work-issue's stop table quotes this message, so the wording
+# is pinned byte for byte. The stop is scoped to a red BASELINE: on a green or
+# absent one every failure is the wave's and retries one rung up.
+require_text divvy-up/SKILL.md "With a green or \`absent\` BASELINE every failure belongs to the wave and routes as \`failed\`."
+require_text divvy-up/SKILL.md "With a red BASELINE, where verification fails and either this wave's output or BASELINE names no individual failures, nothing can be attributed"
+require_text divvy-up/SKILL.md "| Verification failed on a red BASELINE, and this wave's output or BASELINE names no individual failures |"
+require_text divvy-up/SKILL.md "Verification failed without naming individual failures, so this wave's failures can't be told from the baseline's."
 
 # The constraint mechanism and the coupling question are each one deleted
 # paragraph from being gone, and this smoke test is the only thing that would

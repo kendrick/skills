@@ -4,7 +4,7 @@ Read this at Step 2, and again at Step 7. It holds two things: the **preamble** 
 
 The preamble reaches a wave worker through `divvy-up`'s `{{CALLER_NOTES}}` placeholder, which is the seam a wrapping skill is given for exactly this — it goes across ahead of everything else, so a worker meets the issue before it meets its task. Under herdr there is no template to fold into, and the preamble heads the whole prompt instead.
 
-`divvy-up`'s own placeholders (`{{TASK}}`, `{{OWNS}}`, `{{CONTRACT}}`, `{{DONE_WHEN}}`, `{{CONSTRAINTS}}`, `{{VERIFY_CMD}}`, `{{PRIOR}}`) pass through untouched; `divvy-up` substitutes them. Substitute only the five below.
+`divvy-up`'s own placeholders (`{{TASK}}`, `{{OWNS}}`, `{{CONTRACT}}`, `{{DONE_WHEN}}`, `{{CONSTRAINTS}}`, `{{VERIFY_CMD}}`, `{{BASELINE}}`, `{{PRIOR}}`) pass through untouched; `divvy-up` substitutes them. Substitute only the five below.
 
 ## The preamble
 

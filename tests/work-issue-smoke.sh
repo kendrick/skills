@@ -749,8 +749,8 @@ awk -v h="$stops_header" '
   on { exit }
 ' work-issue/SKILL.md > "$tmp/stops.txt"
 stops_rows="$(wc -l < "$tmp/stops.txt" | tr -d ' ')"
-[[ "$stops_rows" -eq 26 ]] || {
-  echo "Where a Run Stops lists $stops_rows stops, expected 26" >&2
+[[ "$stops_rows" -eq 27 ]] || {
+  echo "Where a Run Stops lists $stops_rows stops, expected 27" >&2
   exit 1
 }
 while IFS= read -r row; do
@@ -768,6 +768,92 @@ while IFS= read -r row; do
     }
   done < <(grep -oE '"[^"]+"' <<<"$msg" || true)
 done < "$tmp/stops.txt"
+
+# Step 1's baseline serves three readers. A sentence that names fewer lets
+# an edit drop the gate's or Step 4's use and still read as complete.
+require_text work-issue/SKILL.md "A baseline captured before any worker runs is what tells the first wave's workers and gate, and Step 4, whether a red suite belongs to this run or was already red."
+
+# The baseline files carry their exit status, because divvy-up reads status
+# from an `exit:` first line and reads a file without one as red (PR #229
+# review). Each passing wave's gate run is saved too: a resumed session has
+# lost divvy-up's in-memory refresh, and the run-start file would pass a
+# failure an earlier wave fixed and a later one brought back.
+require_text work-issue/SKILL.md "Then INSTALL_CMD, then VERIFY_CMD, saved to \`RUN_DIR/baseline.txt\` as a first line \`exit: <status>\` holding its exit status, then its output tail."
+require_text work-issue/SKILL.md "and \`RUN_DIR/baseline.txt\` opens with \`exit: <status>\`, VERIFY_CMD's real exit status, followed by its real output, or, where VERIFY_CMD is \`absent\`, holds the single line \`absent\`."
+require_text work-issue/SKILL.md "\`baseline.txt\`, \`baseline-<wave>.txt\`, \`baseline-repair-<n>.txt\`, \`max_review_rounds\`"
+require_text work-issue/SKILL.md "Each time Step 2 continues \`divvy-up\` at a wave, the first dispatch after a resume included, name instead the \`RUN_DIR/baseline-<wave>.txt\` of the highest-numbered wave already settled, and \`baseline.txt\` only while no wave has settled."
+# A run gated before baseline-<wave>.txt existed has markers and no file.
+# Step 2 measures the settled tree itself rather than falling back to an
+# older file, which would pass a failure a settled wave fixed and the next
+# brought back (PR #229 review). The probe leaves these files out because
+# Step 2 rebuilds a missing one.
+require_text work-issue/SKILL.md "Where VERIFY_CMD is not \`absent\` and that wave's file is missing, which only a run gated before these files existed can leave since Step 3 saves it ahead of any commit or marker, run VERIFY_CMD at HEAD on the clean, committed tree before dispatching"
+require_text work-issue/SKILL.md "That run's output is the baseline the settled wave left, since the tree it reads is the one that wave's gate passed on."
+refute_text work-issue/SKILL.md "name the newest \`baseline-<wave>.txt\` that exists among settled waves"
+require_text work-issue/references/resume.md "The probe checks \`baseline.txt\` alone, never \`baseline-<wave>.txt\`, because Step 3 saves a wave's file before the commit or marker the probe reads"
+# The probe reads a marker as the gate's pass, and a commit too on a run from
+# before markers, so the file has to land before either one, or a crash
+# between them leaves a passed wave with no file (PR #229 review).
+require_text work-issue/SKILL.md "As soon as the gate passes, save the verification run that passed it to \`RUN_DIR/baseline-<wave>.txt\` in \`baseline.txt\`'s format, \`exit: <status>\` and then the output tail, before the wave's commit and before its markers"
+require_text work-issue/SKILL.md "because the resume probe reads a marker as the gate's pass, and a commit too on a run with no \`gated/\` directory,"
+require_text work-issue/SKILL.md "\`RUN_DIR/baseline.txt\` stays the run-start capture, untouched after Step 1, because Step 4's reproducer reads it."
+require_text work-issue/SKILL.md "with a \`gated/<wave>-<task>\` marker for each of its tasks, and, where VERIFY_CMD is not \`absent\`, a \`baseline-<wave>.txt\` for each wave settled since these files existed, while a wave gated before then may lack one, since Step 2 writes the one it names before it dispatches;"
+# With no verification command there is no gate run to save, so neither the
+# save nor Step 2's lookup can demand a file that never gets written.
+require_text work-issue/SKILL.md "With VERIFY_CMD \`absent\` there is no run to save, and no \`baseline-<wave>.txt\` is written."
+# With no command, Step 1 still writes baseline.txt, holding the word
+# `absent`: the probe checks only that the file exists, and row 7 would send a
+# run without it back to Step 1 on every resume. Step 2 hands divvy-up the word
+# rather than the file, because divvy-up reads a named file with no `exit:`
+# line as red (#188 red team, round 5).
+require_text work-issue/SKILL.md "With VERIFY_CMD \`absent\`, run nothing and write \`RUN_DIR/baseline.txt\` holding the single line \`absent\`, because the resume probe reads the file's existence as Step 1 finished."
+require_text work-issue/SKILL.md "With VERIFY_CMD \`absent\`, name no baseline file at any wave and tell \`divvy-up\` its BASELINE is \`absent\`, so its Step 3 \`absent\` rule holds rather than its named-file rule, which reads a file with no \`exit:\` line as red."
+require_text work-issue/SKILL.md "and Step 2 names the file, or, where VERIFY_CMD is \`absent\`, tells it its BASELINE is \`absent\` instead."
+require_text work-issue/SKILL.md "A \`baseline.txt\` reading \`absent\` means the repo has no verification command, so nothing ran before this run and nothing was already failing."
+require_text work-issue/references/redteam.md "A file reading \`absent\` means the repo has no verification command, so nothing ran before this run and nothing was already failing"
+# The README and ledger state the same `absent` rule for a human reader. Left
+# unpinned, an edit to SKILL.md's rule can leave either one describing the old
+# behavior with the suite still green (#188 red team, round 6).
+require_text work-issue/README.md "A repo with no verification command gets a baseline file holding the single word \`absent\`."
+require_text _maintenance/work-issue/RATIONALE.md "| 149 | With VERIFY_CMD \`absent\`, Step 1 runs nothing and writes \`baseline.txt\` holding the single line \`absent\`."
+
+# Step 2 names RUN_DIR/baseline.txt as divvy-up's BASELINE (#188). Step 0
+# told divvy-up's Step 3 to skip its own verify run and wait for that name, so
+# a Step 2 that drops the sentence leaves the gate with no baseline, and it
+# charges a wave's workers with failures the suite showed before they ran.
+# Each spelling of the stop message is pinned where it's written; the
+# quoted-message check above counts copies and can't tell which one went.
+# Both pins carry the red-baseline scope: on a green baseline every failure
+# is the wave's and retries one rung up, as it did before #188.
+require_text work-issue/SKILL.md "Continue \`divvy-up\` at its Step 5, in the work tree, naming \`RUN_DIR/baseline.txt\` as its BASELINE"
+require_text work-issue/SKILL.md "\`divvy-up\`'s Step 4 never runs here, so a red baseline adds no question."
+require_text work-issue/SKILL.md "Where the baseline is red and verification fails with either the wave's output or the baseline naming no individual failures, the gate stops the run with \"Verification failed without naming individual failures, so this wave's failures can't be told from the baseline's.\", followed by both outputs quoted."
+require_text work-issue/SKILL.md "| Verification fails on a red baseline, and the wave's output or the baseline names no individual failures | 2, 3, 4, 5, 7, 8 | \"Verification failed without naming individual failures, so this wave's failures can't be told from the baseline's.\", followed by BASELINE and the failing output, both quoted |"
+# Every gate after the waves reads VERIFY_CMD against the latest baseline,
+# not its raw exit (PR #229 review, r4273125359). Raw green left a run whose
+# plan never fixed an inherited failure with no route at publish: the waves
+# passed over the failure and Step 5's Done-when then demanded it gone.
+require_text work-issue/SKILL.md "Once Step 2's first wave settles, **VERIFY_CMD green** means a run showing no failure the latest baseline does not show, the latest baseline being the highest-numbered \`RUN_DIR/baseline-repair-<n>.txt\`, else the newest \`RUN_DIR/baseline-<wave>.txt\`, else \`baseline.txt\`, with each failure attributed by the rule \`divvy-up\`'s Step 6 applies, and red means it shows one."
+require_text work-issue/SKILL.md "With VERIFY_CMD \`absent\` nothing runs, and there is no green or red to read."
+require_text work-issue/SKILL.md "VERIFY_CMD green against the latest baseline at that SHA, or VERIFY_CMD \`absent\`;"
+require_text work-issue/SKILL.md "Then run VERIFY_CMD and read it by VERIFY_CMD green. Red here means the rebase brought a failure the latest baseline lacks:"
+require_text work-issue/SKILL.md "then VERIFY_CMD green—then commit."
+require_text work-issue/SKILL.md "over the repair's reported \`files_changed\`, VERIFY_CMD green, then \`code-review\` against BASE_SHA"
+require_text work-issue/SKILL.md "rebase, rewrite \`RUN_DIR/base_sha\`, verify to VERIFY_CMD green, write \`pushed_at\`, push"
+refute_text work-issue/SKILL.md "VERIFY_CMD green at that SHA"
+refute_text work-issue/SKILL.md "Red here after a green Step 4"
+require_text work-issue/README.md "From the first wave to the push, a verification counts as green when it shows no failure the newest baseline lacks."
+require_text _maintenance/work-issue/RATIONALE.md "| 150 | Once Step 2's first wave settles, VERIFY_CMD green means a run showing no failure the latest baseline does not show"
+# Repair gates advance the baseline too (PR #229 review, r4290396470). With
+# only wave gates writing files, a failure one repair fixed and a later
+# repair brought back still sat in the last wave file, so the later gate
+# passed the regression and the run pushed it.
+require_text work-issue/SKILL.md "Between that green run and the commit, save the run to \`RUN_DIR/baseline-repair-<n>.txt\` in \`baseline.txt\`'s format, \`exit: <status>\` and then the output tail, n one past the highest number already present, 1 where none is."
+require_text work-issue/SKILL.md "Every repair gate does this, Step 4's, Step 5 item 2's, and Step 7's included, and with VERIFY_CMD \`absent\` it writes nothing."
+require_text work-issue/SKILL.md "Save the green VERIFY_CMD run as the next \`baseline-repair-<n>.txt\`, as Step 3's repair gate does, then commit."
+require_text work-issue/references/resume.md "It never reads \`baseline-repair-<n>.txt\` either"
+require_text work-issue/README.md "Each wave's gate and each repair's gate saves the verification run that passed it as the new baseline"
+require_text _maintenance/work-issue/RATIONALE.md "| 151 | Every repair gate that passes VERIFY_CMD green, at Steps 3, 4, 5 item 2, and 7, saves that run to \`baseline-repair-<n>.txt\` before its commit"
 
 # --- The cut features. Each sounds reasonable on its own, and each has a row
 # in the RATIONALE ledger's Deliberately Not Built table. Applied across
@@ -1690,7 +1776,7 @@ done
 # the probe only through Step 0's write, and a missing file silently reads 2.
 require_text work-issue/SKILL.md "\`--max-review-rounds N\` caps the post-PR review loop at N triage rounds, default 2, and Step 0 writes it to \`RUN_DIR/max_review_rounds\`"
 require_text work-issue/SKILL.md "Write the \`--max-review-rounds\` value, \`2\` where the flag is absent, to \`RUN_DIR/max_review_rounds\`."
-require_text work-issue/SKILL.md "\`baseline.txt\`, \`max_review_rounds\`, \`pushed_at\`"
+require_text work-issue/SKILL.md "\`baseline-repair-<n>.txt\`, \`max_review_rounds\`, \`pushed_at\`"
 # N is a positive integer: 0 would cap round 1, so no post-PR finding ever got
 # a repair, and nothing downstream checks the file's value. A resume skips
 # Step 0, so the flag it passes changes nothing; the file is the lever.
@@ -2139,7 +2225,7 @@ require_text work-issue/SKILL.md 'm="$(git merge-base origin/DEFAULT issue-N)" &
 # repair_diff_triggers probe runs, or a resume after item 2's rebase re-fires
 # adversarial-review over upstream code the probe already ignores.
 require_text work-issue/SKILL.md "A \`repair-base-<k>\` that is no longer an ancestor of HEAD leaves this condition unmet too"
-require_text work-issue/SKILL.md "rebase, rewrite \`RUN_DIR/base_sha\`, verify, write \`pushed_at\`, push — Step 5 items 1 through 4, the \`base_sha\` rewrite in item 2 included."
+require_text work-issue/SKILL.md "rebase, rewrite \`RUN_DIR/base_sha\`, verify to VERIFY_CMD green, write \`pushed_at\`, push — Step 5 items 1 through 4, the \`base_sha\` rewrite in item 2 included."
 require_text work-issue/references/resume.md "answers \`stop\` naming the mismatch"
 require_text work-issue/SKILL.md "answers \`stop\` naming the mismatch"
 require_text _maintenance/work-issue/EVALS.md "A Rebase Mid-Run Moves the Fixed Point With It"
