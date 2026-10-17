@@ -221,6 +221,9 @@ require_text adversarial-review/references/trigger-table.md "| 6 | representatio
 require_text adversarial-review/references/trigger-table.md "| 7 | general |"
 require_text adversarial-review/references/trigger-table.md "An assertion that recomputes the implementation rather than observing the result."
 require_text adversarial-review/references/trigger-table.md "A unit suffix matches against the number in front of it"
+# The rule that keeps `round(` and `.query(` from reading as regex syntax
+# (#114); the per-signal guard below holds the script to it.
+require_text adversarial-review/references/trigger-table.md "A signal's punctuation is literal"
 # Step 2 matches through the script, which reads the table's own signals
 # (RATIONALE row 41). The recipe it replaced, rebuilt by hand each run, exits 2
 # on the `round(` signal (#114), so the refutes pin that recipe's sentence and
@@ -866,9 +869,174 @@ expect_match() {
 }
 expect_match "1 money" --only 1 <"$diffs/money-round-paren.diff"
 expect_match "1 money" --only 1 < <(printf '+total = round(amount, 2)\n')
-# Whole-word: `index` inside `page_index` is no schema signal, and a bare
-# `CREATE INDEX` is. A substring matcher prints `4 schema` for both.
+# Every signal rows 1-6 ship must match through the script, or a signal added
+# to the table could pass the suite while matching nothing (#114). The suite
+# reads the table with its own awk, never match-triggers.py's parser, so a
+# parser that drops or mangles a signal can't hide it from this check. The awk
+# walks the signals cell a character at a time and ends it at the first `|`
+# outside backticks, because a `|` inside a signal is part of the signal.
+# Units come from the table's own "The unit suffixes are" sentence, the list
+# the script reads too (row 42): a list hardcoded here would go stale the day
+# a unit is added, and the guard would then build a whole-word line for it.
+table_units="$(grep -o 'The unit suffixes are `[^.]*\.' adversarial-review/references/trigger-table.md | grep -o '`[^`]*`' | tr -d '`')"
+[[ -n "$table_units" ]] || {
+  echo "trigger-table.md: no unit suffixes read from 'The unit suffixes are' for the per-signal guard" >&2
+  exit 1
+}
+table_signals="$(awk '
+  /^\| [1-6] \| / {
+    n = $2; name = $4
+    rest = $0
+    sub(/^\| [0-9]+ \| [^|]* \| /, "", rest)
+    cell = ""; tick = 0
+    for (i = 1; i <= length(rest); i++) {
+      c = substr(rest, i, 1)
+      if (c == "`") tick = !tick
+      if (c == "|" && !tick) break
+      cell = cell c
+    }
+    while (match(cell, /`[^`]+`/)) {
+      printf "%s\t%s\t%s\n", n, name, substr(cell, RSTART + 1, RLENGTH - 2)
+      cell = substr(cell, RSTART + RLENGTH)
+    }
+  }' adversarial-review/references/trigger-table.md)"
+# A row that yields nothing means the extraction broke, and an empty loop
+# below would pass without checking a single signal.
+for n in 1 2 3 4 5 6; do
+  grep -q "^$n	" <<<"$table_signals" || {
+    echo "per-signal guard read no signals from trigger-table.md row $n" >&2
+    exit 1
+  }
+done
+# Every printable ASCII char, `_`, letters, digits, and space included. A
+# `.` that also matches `_` is no more literal than one that matches `,`, and
+# leaving `_` out let `\.` widen to `[._]` with this suite green (PR #227).
+near_subs="$(awk 'BEGIN { for (i = 32; i < 127; i++) printf "%c", i }')"
+near_checked=0
+adj_checked=0
+while IFS=$'\t' read -r sig_n sig_name sig; do
+  is_unit=0
+  if grep -Fqxi -- "$sig" <<<"$table_units"; then
+    is_unit=1
+    sig_line="+x = 12$sig"
+  elif [[ "$sig" == *_ ]]; then
+    sig_line="+x ${sig}tail"
+  else
+    sig_line="+x $sig y"
+  fi
+  # A subshell, because expect_match exits on failure and its message names
+  # only the line, not which table signal produced it.
+  (expect_match "$sig_n $sig_name" --only "$sig_n" < <(printf '%s\n' "$sig_line")) || {
+    echo "trigger-table.md row $sig_n signal \`$sig\` does not match its own line: $sig_line" >&2
+    exit 1
+  }
+  # Every negative check below runs against a copy of the table whose row
+  # holds only this signal. Against the real row, `/ 100` made from `* 100` is
+  # an honest hit on `/ 100`, and skipping such lines let both signals compile
+  # to `[*/]\ 100` with the suite green (PR #227). `lines` can't settle it
+  # either, because it credits only the row's first matching signal, so a
+  # mutated `/ 100` hides behind `* 100`. The rest of the table stays
+  # byte-identical, so the unit sentence and header are the shipped ones.
+  solo_table="$tmp/solo-trigger-table.md"
+  sig="$sig" n="$sig_n" name="$sig_name" awk '
+    $0 ~ "^\\| " ENVIRON["n"] " \\| " {
+      print "| " ENVIRON["n"] " | " ENVIRON["name"] " | `" ENVIRON["sig"] "` | - | - |"
+      next
+    }
+    { print }' adversarial-review/references/trigger-table.md >"$solo_table"
+  grep -Fqx -- "| $sig_n | $sig_name | \`$sig\` | - | - |" "$solo_table" || {
+    echo "per-signal guard could not isolate row $sig_n signal \`$sig\` in a table copy" >&2
+    exit 1
+  }
+  (expect_match "$sig_n $sig_name" --only "$sig_n" --table "$solo_table" < <(printf '%s\n' "$sig_line")) || {
+    echo "trigger-table.md row $sig_n signal \`$sig\` does not match its own line once alone in its row" >&2
+    exit 1
+  }
+  # The positive line always puts a space before the signal, so it can't see
+  # a lost word boundary. A review made `compile_signal` drop the left
+  # lookaround on any signal ending in punctuation, `around(` reached row 1
+  # for `round(`, and the suite stayed green (PR #227). So a letter, a digit,
+  # and `_` each go flush against every word-char end, and none may reach the
+  # row. Testing one class alone misses a lookbehind narrowed to that class. A
+  # unit has its own digit rule, and a prefix's trailing `_` takes anything.
+  # `é` and Arabic-Indic `٣` join them because the matcher's `\w` is Unicode:
+  # with lookarounds narrowed to `[A-Za-z0-9_]`, every ASCII case still passed
+  # and `érate` reached the `rate` row with the suite green (PR #227). bash 3.2
+  # sees both as plain bytes, which is fine, because they're only spliced in.
+  # Split around the signal rather than `${sig_line/.../...}`: bash 3.2 keeps
+  # quotes in that replacement literally, and 5.2 expands an unquoted `&`.
+  adj_pre="${sig_line%%"$sig"*}"
+  adj_post="${sig_line#*"$sig"}"
+  adj_lines=""
+  if [[ "$is_unit" == 0 ]]; then
+    for w in a 7 _ é ٣; do
+      if [[ "$sig" == [A-Za-z0-9_]* ]]; then
+        adj_lines+="$adj_pre$w$sig$adj_post"$'\n'
+      fi
+      if [[ "$sig" == *[A-Za-z0-9] ]]; then
+        adj_lines+="$adj_pre$sig$w$adj_post"$'\n'
+      fi
+    done
+  fi
+  if [[ -n "$adj_lines" ]]; then
+    (expect_match "" --only "$sig_n" --table "$solo_table" < <(printf '%s' "$adj_lines")) || {
+      echo "trigger-table.md row $sig_n signal \`$sig\` matched an adjacent-word line, so its whole-word boundary is not enforced:" >&2
+      python3 "$match_py" lines --only "$sig_n" --table "$solo_table" < <(printf '%s' "$adj_lines") >&2
+      exit 1
+    }
+    adj_checked=$((adj_checked + 1))
+  fi
+  # The positive line can't tell a literal `(` from a class like `[()]`,
+  # which a review proved by making `round)` match `round(` with this suite
+  # still green (PR #227). So each punctuation char and each `_` is swapped for
+  # every other printable char, and none of those near-misses may reach the
+  # row. `_` is a word char, but leaving it unswapped let a `compile_signal`
+  # that turned `_` into `.` match `org-id` for `org_id` and `max-tail` for
+  # `max_` with the suite green (PR #227). Letters, digits, and spaces are
+  # never swapped, so a signal made only of them has nothing to check here.
+  [[ "$sig" == *[!A-Za-z0-9\ ]* ]] || continue
+  near_lines="$(sig="$sig" subs="$near_subs" awk 'BEGIN {
+    s = ENVIRON["sig"]; subs = ENVIRON["subs"]
+    for (i = 1; i <= length(s); i++) {
+      c = substr(s, i, 1)
+      if (c ~ /[A-Za-z0-9 ]/) continue
+      for (j = 1; j <= length(subs); j++) {
+        d = substr(subs, j, 1)
+        if (d != c) print "+x " substr(s, 1, i - 1) d substr(s, i + 1) " y"
+      }
+    }
+  }')"
+  [[ -n "$near_lines" ]] || {
+    echo "trigger-table.md row $sig_n signal \`$sig\`: built no near-miss lines, so its punctuation goes unchecked" >&2
+    exit 1
+  }
+  (expect_match "" --only "$sig_n" --table "$solo_table" < <(printf '%s\n' "$near_lines")) || {
+    echo "trigger-table.md row $sig_n signal \`$sig\` matched a near-miss, so its punctuation is not literal:" >&2
+    python3 "$match_py" lines --only "$sig_n" --table "$solo_table" < <(printf '%s\n' "$near_lines") >&2
+    exit 1
+  }
+  near_checked=$((near_checked + 1))
+done <<<"$table_signals"
+# Zero would mean the punctuation filter or the awk broke, and the negative
+# check above ran for nothing.
+[[ "$near_checked" -gt 0 ]] || {
+  echo "per-signal guard ran no near-miss check: no punctuation-bearing signal read from trigger-table.md" >&2
+  exit 1
+}
+# Zero would mean the word-char tests above stopped matching any signal.
+[[ "$adj_checked" -gt 0 ]] || {
+  echo "per-signal guard ran no adjacent-word check: no signal with a word-char end read from trigger-table.md" >&2
+  exit 1
+}
+# Whole-word at both ends: `index` inside `page_index` is no schema signal, and
+# a bare `CREATE INDEX` is. A substring matcher prints `4 schema` for both. The
+# left end is the fixture. The right end has no fixture, so a word char or `_`
+# straight after a signal is checked inline, for a row 4 and a row 1 signal.
 expect_match "" <"$diffs/schema-page-index.diff"
+expect_match "" --only 4 < <(printf '+x indexed y\n')
+expect_match "" --only 4 < <(printf '+x index_name y\n')
+expect_match "" --only 1 < <(printf '+x rated y\n')
+expect_match "" --only 1 < <(printf '+x rate_x y\n')
 expect_match "4 schema" <"$diffs/schema-create-index.diff"
 # Unit suffix: `px` matches after a digit, never as an identifier.
 expect_match "6 representation" <"$diffs/unit-12px.diff"
