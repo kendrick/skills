@@ -1818,8 +1818,8 @@ require_text work-issue/README.md "The out-of-scope ones go to a queue carrying 
 # The queue reason, which the Step 8 reply and the deferred-findings comment
 # both carry to the reviewer, so it has to be the one string the issue names.
 require_text work-issue/SKILL.md "Each in-scope row's Scope cell reads \`in scope; queued: review round cap reached (N)\`, and the row is appended to \`queue.md\` with Outside-because \`review round cap reached (N)\`."
-require_text work-issue/references/triage.md "An in-scope row gets queued for two reasons: the review round cap, and a human's deferral at the cap stop or the budget stop."
-require_text work-issue/SKILL.md "When the user defers an in-scope row at the review round cap's stop or at the budget stop, write \`in scope; queued: <reason>\` in its Scope cell and append the row to \`queue.md\` with that reason as Outside-because."
+require_text work-issue/references/triage.md "An in-scope row gets queued for two reasons: the review round cap, and a human's deferral at the cap stop or row 16's budget stop."
+require_text work-issue/SKILL.md "When the user defers an in-scope row at the review round cap's stop or at row 16's budget stop, write \`in scope; queued: <reason>\` in its Scope cell and append the row to \`queue.md\` with that reason as Outside-because."
 require_text work-issue/SKILL.md "At row 16's budget stop, whose newest triage round has in-scope rows not yet queued and no repair yet, the user can also defer any of them."
 require_text _maintenance/work-issue/RATIONALE.md "| 152 | A Scope cell that begins \`in scope; queued:\` marks a row as deferred"
 require_text work-issue/references/triage.md "each in-scope row's Scope cell reads \`in scope; queued: review round cap reached (N)\`, and the row is appended to \`queue.md\` with Outside-because \`review round cap reached (N)\`"
