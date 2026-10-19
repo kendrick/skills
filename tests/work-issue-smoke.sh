@@ -2944,7 +2944,9 @@ rm "$tr/redteam/trigger-repair-2.txt"
 echo "UNVERIFIED: 0" >"$tr/redteam/ar-state-repair-2.txt"
 expect_field "with UNVERIFIED: 0 in ar-state-repair-2.txt" repair_ar_settled true "$tr" "$lab_repo"
 printf '# Triage round 3\n\n| # | Source | Finding | Severity | Scope | Reply |\n|---|---|---|---|---|---|\n| 1 | https://github.com/o/r/pull/9#discussion_r30 | "Name it." | P2 | in scope; queued: review round cap reached (2) | |\n| 2 | https://github.com/o/r/pull/9#discussion_r31 | "Later." | P2 | out of scope: not in the diff | |\n' >"$tr/triage/round-3.md"
-expect_field "on a capped round's queued in-scope cell" triage_inscope_rows 1 "$tr" "$lab_repo"
+# 0, not 1 (#238): a `queued:` cell is deferred, not owed a repair, so the
+# gatherer skips it and row 17's all-queued leg takes the round.
+expect_field "on a capped round's queued in-scope cell" triage_inscope_rows 0 "$tr" "$lab_repo"
 cp tests/fixtures/work-issue/triage/round-noscope.md "$tr/triage/round-3.md"
 expect_field "on a round with no Scope column" triage_inscope_rows null "$tr" "$lab_repo"
 sed 's/| Reply |$/|/; s/|---|---|---|---|---|$/|---|---|---|---|/; s/| in scope | |$/| in scope |/' tests/fixtures/work-issue/triage-noseverity/round-1.md >"$tr/triage/round-3.md"
@@ -3010,6 +3012,42 @@ for stop_case in "round-3:0" "round-noscope:null"; do
   cp "tests/fixtures/work-issue/triage/${stop_case%%:*}.md" "$tri_dir/triage/round-1.md"
   expect_field "on triage/${stop_case%%:*}.md" triage_stop_rows "${stop_case##*:}" "$tri_dir" "$lab_repo"
 done
+
+# #238: a Scope cell that starts `in scope; queued:` is deferred and counted by
+# neither gatherer. Only that cell is the key.
+q_round() { # SEVERITY SCOPE REPLY FINDING [EXTRA_ROW]
+  printf '# Triage round 1, since 2026-01-01T00:00:00Z\n\n| # | Source | Finding | Severity | Scope | Reply |\n|---|---|---|---|---|---|\n| 1 | https://example.com/t/1 | "%s" | %s | %s | %s |\n%s' "$4" "$1" "$2" "$3" "${5:-}" >"$q_dir/triage/round-1.md"
+}
+q_dir="$(new_run queued-key)"
+mkdir -p "$q_dir/triage"
+q_round P0 "in scope; queued: deferred by user" "" "a finding"
+expect_field "on a queued P0 row" triage_stop_rows 0 "$q_dir" "$lab_repo"
+expect_field "on a queued P0 row" triage_inscope_rows 0 "$q_dir" "$lab_repo"
+q_round P0 "in scope" "" "a finding"
+expect_field "on the same P0 row, bare in scope" triage_stop_rows 1 "$q_dir" "$lab_repo"
+expect_field "on the same P0 row, bare in scope" triage_inscope_rows 1 "$q_dir" "$lab_repo"
+q_round P1 "in scope; queued: deferred by user" "" "a finding"
+expect_field "on a queued row re-scored P1" triage_stop_rows 0 "$q_dir" "$lab_repo"
+expect_field "on a queued row re-scored P1" triage_inscope_rows 0 "$q_dir" "$lab_repo"
+q_round P0 "in scope; queued: deferred by user" "https://example.com/r/1" "a finding"
+expect_field "on a queued row with a reply" triage_stop_rows 0 "$q_dir" "$lab_repo"
+expect_field "on a queued row with a reply" triage_inscope_rows 0 "$q_dir" "$lab_repo"
+q_round P0 "in scope; queued: deferred by user" "" "reworded entirely"
+expect_field "on a queued row with a new Finding" triage_stop_rows 0 "$q_dir" "$lab_repo"
+expect_field "on a queued row with a new Finding" triage_inscope_rows 0 "$q_dir" "$lab_repo"
+q_round P0 "in scope" "" "a finding"
+printf '| Source | Finding | Outside-because | Status |\n|---|---|---|---|\n| https://example.com/t/1 | "a finding" | deferred by user | queued |\n' >"$q_dir/queue.md"
+expect_field "on a bare in scope cell with a matching queue.md row" triage_stop_rows 1 "$q_dir" "$lab_repo"
+expect_field "on a bare in scope cell with a matching queue.md row" triage_inscope_rows 1 "$q_dir" "$lab_repo"
+rm "$q_dir/queue.md"
+q_round P0 "in scope; queued: deferred by user" "" "a finding" '| 2 | https://example.com/t/2 | "small" | P2 | in scope | |
+'
+expect_field "on a mixed round, queued P0 plus bare P2" triage_inscope_rows 1 "$q_dir" "$lab_repo"
+expect_field "on a mixed round, queued P0 plus bare P2" triage_stop_rows 0 "$q_dir" "$lab_repo"
+expect_phase "row-16-cap-blocker" "phase: stop reason: row 16: the newest triage round is at the review round cap" \
+  "$(python3 "$run_state" phase --probe "$probes_dir/row-16-cap-blocker.json")"
+expect_phase "row-17-review-cap" "phase: 8 reason: row 17:" \
+  "$(python3 "$run_state" phase --probe "$probes_dir/row-17-review-cap.json")"
 
 m="$(new_run rounds)"
 expect_field "with no max_review_rounds file" max_review_rounds 2 "$m" "$lab_repo"

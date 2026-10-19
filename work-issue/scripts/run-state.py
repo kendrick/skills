@@ -1340,6 +1340,18 @@ def cell(fields, index):
     return squeeze(fields[index]) if index < len(fields) else ""
 
 
+def owed_scope(text):
+    """True when a Scope cell, squeezed as `cell()` squeezes it, begins `inscope`
+    and not `inscope;queued:`. A queued row is deferred, by the review round cap
+    or by a human at a stop, so Step 7 owes it no repair and the cap has no
+    blocker to ship in it. Only the Scope cell decides: a reply lands at Step 8,
+    after row 16 has already read the round, and `queue.md` also holds
+    out-of-scope and worker rows. Both gatherers that read Scope call this, so
+    their readings can't drift apart."""
+    text = squeeze(text)
+    return text.startswith("inscope") and not text.startswith("inscope;queued:")
+
+
 def waves_rows(ctx):
     """The `## Waves` table's lines and no others. The table ends at its first
     non-table line, where the vendored parser ends it."""
@@ -1794,16 +1806,18 @@ def newest_round_table(ctx, by_k):
 
 @gatherer("triage_inscope_rows")
 def g_triage_inscope_rows(ctx):
-    """Rows of the newest round, by number, whose Scope cell begins `in scope`.
-    A capped round's `in scope; queued: review round cap reached (N)` counts,
-    and row 17 reads that round as all-queued anyway. No Scope column is null."""
+    """Rows of the newest round, by number, that Step 7 still owes: Scope cell
+    begins `in scope` and not `in scope; queued:`. A queued cell, whether the
+    cap's `review round cap reached (N)` or a human's deferral, is not counted,
+    so row 16 skips an all-queued round and row 17's all-queued leg takes it.
+    No Scope column is null."""
     table = newest_round_table(ctx, by_k=True)
     if table is None:
         return 0
     columns, rows = table
     if "Scope" not in columns:
         return None
-    return sum(1 for r in rows if cell(r, columns["Scope"]).startswith("inscope"))
+    return sum(1 for r in rows if owed_scope(cell(r, columns["Scope"])))
 
 
 @gatherer("repair_reports")
@@ -1888,7 +1902,7 @@ def count_rows(table, severities, need_scope):
     for r in rows:
         if cell(r, columns["Severity"]) not in severities:
             continue
-        if need_scope and not cell(r, columns["Scope"]).startswith("inscope"):
+        if need_scope and not owed_scope(cell(r, columns["Scope"])):
             continue
         total += 1
     return total
@@ -1922,7 +1936,10 @@ def g_triage_stop_rows(ctx):
     """In-scope rows of the newest round, by file time, whose Severity is P0
     or blocking. Narrower than `triage_blocking_rows` because a capped round
     holding P1 rows has to reach Step 8, and in-scope only because the cap
-    queues only in-scope rows. No Severity or no Scope column is null."""
+    queues only in-scope rows. A `queued:` Scope cell is not counted: the cap
+    or a human already deferred that row, so it is no blocker the cap would
+    ship, and counting it stopped every resume at row 16 again. No Severity or
+    no Scope column is null."""
     return count_rows(newest_round_table(ctx, by_k=False), ("P0", "blocking"), True)
 
 
