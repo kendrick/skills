@@ -1710,6 +1710,19 @@ grep -Fq "phase: stop reason: row 16: review time is over budget" <<<"$over_reas
   echo "a row-16 probe over budget should stop at row 16, got: $over_reason" >&2
   exit 1
 }
+# Deferral is row 16's answer alone (#240): rows 10 and 11 stop before any
+# triage round exists, and row 17's round is already repaired.
+grep -Fq "or defer the newest round's in-scope rows not yet queued" <<<"$over_reason" || {
+  echo "row 16's budget stop should offer deferral, got: $over_reason" >&2
+  exit 1
+}
+for gated in 10 11 17; do
+  gated_reason="$(python3 "$run_state" phase --probe "$probes_dir/row-$gated-over-budget.json")"
+  if grep -Fq "defer" <<<"$gated_reason"; then
+    echo "row $gated's budget stop has no unrepaired triage row to defer, yet offers it: $gated_reason" >&2
+    exit 1
+  fi
+done
 # #238: the same over-budget round with every in-scope row queued owes no repair,
 # so row 16's guard skips it and the budget stop never fires; row 17 answers the
 # replies still owed. The counter-case flips only triage_inscope_rows back to 2,
@@ -1807,7 +1820,7 @@ require_text work-issue/README.md "The out-of-scope ones go to a queue carrying 
 require_text work-issue/SKILL.md "Each in-scope row's Scope cell reads \`in scope; queued: review round cap reached (N)\`, and the row is appended to \`queue.md\` with Outside-because \`review round cap reached (N)\`."
 require_text work-issue/references/triage.md "An in-scope row gets queued for two reasons: the review round cap, and a human's deferral at the cap stop or the budget stop."
 require_text work-issue/SKILL.md "When the user defers an in-scope row at the review round cap's stop or at the budget stop, write \`in scope; queued: <reason>\` in its Scope cell and append the row to \`queue.md\` with that reason as Outside-because."
-require_text work-issue/SKILL.md "ask the user to stop here, raise the ratio, or, where the newest triage round has in-scope rows not yet queued, defer any of them."
+require_text work-issue/SKILL.md "At row 16's budget stop, whose newest triage round has in-scope rows not yet queued and no repair yet, the user can also defer any of them."
 require_text _maintenance/work-issue/RATIONALE.md "| 152 | A Scope cell that begins \`in scope; queued:\` marks a row as deferred"
 require_text work-issue/references/triage.md "each in-scope row's Scope cell reads \`in scope; queued: review round cap reached (N)\`, and the row is appended to \`queue.md\` with Outside-because \`review round cap reached (N)\`"
 require_text work-issue/SKILL.md "A capped round (Step 6) skips this step: it gets no dispatch, no \`repair-base-<k>\`, and no \`repair-<k>.json\`"

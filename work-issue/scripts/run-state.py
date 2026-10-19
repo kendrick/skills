@@ -832,14 +832,19 @@ def budget_stop(row):
     """Row `row`'s answer when review time has passed its budget.
 
     The probe carries only the verdict, so the reason names the command that
-    prints both totals rather than the totals themselves."""
+    prints both totals rather than the totals themselves. Only row 16 offers
+    deferral: rows 10 and 11 stop before any triage round exists, and row 17's
+    round is already repaired, so neither has an unrepaired row to defer (#240)."""
+    defer = (
+        ", or defer the newest round's in-scope rows not yet queued"
+        if row == 16 else ""
+    )
     return (
         "stop",
         f"row {row}: review time is over budget against build time; print "
         "`run-state.py budget --timing RUN_DIR/timing.log` for both totals and "
-        "ask whether to stop here, raise the ratio (appends "
-        "`budget-raised <ratio>` to timing.log), or defer the newest round's "
-        "in-scope rows not yet queued",
+        "ask whether to stop here or raise the ratio (appends "
+        f"`budget-raised <ratio>` to timing.log){defer}",
     )
 
 
