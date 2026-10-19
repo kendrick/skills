@@ -1825,6 +1825,7 @@ require_text work-issue/SKILL.md "At row 16's budget stop, whose newest triage r
 # Step 7 must leave the deferred ones alone (#240 round 2).
 require_text work-issue/SKILL.md "One dispatch carrying every in-scope row not yet queued, each finding quoted with its URL."
 require_text work-issue/SKILL.md "every in-scope row not yet queued is fixed and committed, or sits in \`left\`"
+require_text work-issue/references/worker-prompt.md "at Step 7, one block per in-scope triage row not yet queued"
 require_text _maintenance/work-issue/RATIONALE.md "| 152 | A Scope cell that begins \`in scope; queued:\` marks a row as deferred"
 require_text work-issue/references/triage.md "each in-scope row's Scope cell reads \`in scope; queued: review round cap reached (N)\`, and the row is appended to \`queue.md\` with Outside-because \`review round cap reached (N)\`"
 require_text work-issue/SKILL.md "A capped round (Step 6) skips this step: it gets no dispatch, no \`repair-base-<k>\`, and no \`repair-<k>.json\`"
