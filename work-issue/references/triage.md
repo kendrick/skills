@@ -59,13 +59,15 @@ The resume probe decides whether the newest round is current by comparing this r
 
 ## The review round cap
 
-The review round cap is the one reason an in-scope row gets queued. Round k is capped once k reaches N, the value `--max-review-rounds` set and Step 0 wrote to `RUN_DIR/max_review_rounds` (`2` where the file is absent). In a capped round, each in-scope row's Scope cell reads `in scope; queued: review round cap reached (N)`, and the row is appended to `queue.md` with Outside-because `review round cap reached (N)`. The cell keeps `in scope` at its head because the finding was in scope and the record should say so. The resume probe's `triage_inscope_rows` still counts the row, and the Resume table's row 17 reads a capped round as all-queued anyway.
+An in-scope row gets queued for two reasons: the review round cap, and a human's deferral at the cap stop or row 16's budget stop. Round k is capped once k reaches N, the value `--max-review-rounds` set and Step 0 wrote to `RUN_DIR/max_review_rounds` (`2` where the file is absent). In a capped round, each in-scope row's Scope cell reads `in scope; queued: review round cap reached (N)`, and the row is appended to `queue.md` with Outside-because `review round cap reached (N)`. The cell keeps `in scope` at its head because the finding was in scope and the record should say so. The resume probe's `triage_inscope_rows` and `triage_stop_rows` skip a cell that begins `in scope; queued:`, so a queued row is owed no repair and stops nothing.
 
 An in-scope row whose Severity is `P0` or `blocking` is never queued this way. Its Scope cell stays `in scope`, and the resume probe's `triage_stop_rows`, which counts in-scope rows alone, stops the run on it with a reason naming the cap and the blocker. Queueing it ships a known blocker, and repairing it breaks the cap, so the call goes to a human. An out-of-scope `P0` is queued like any other out-of-scope row and stops nothing: the cap never decided its fate.
 
+A human's deferral is written the same way. When the user defers an in-scope row at the cap stop or row 16's budget stop, its Scope cell reads `in scope; queued: <reason>`, and the row is appended to `queue.md` with that reason as Outside-because. Step 8 answers it like any other queued row. The Scope cell is the only record the resume probe reads: the reply lands at Step 8, after row 16 has already read the round, and `queue.md` also holds out-of-scope and worker rows.
+
 ## The queue
 
-Out-of-scope rows, and a capped round's in-scope rows, append to `RUN_DIR/queue.md`:
+Out-of-scope rows, a capped round's in-scope rows, and a human's deferrals append to `RUN_DIR/queue.md`:
 
 ```
 | # | Source | Finding | Outside because | Recommendation | Status |

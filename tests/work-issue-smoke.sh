@@ -1527,7 +1527,7 @@ declare -a probe_cases=(
   "row-14:6" "row-15:6" "row-16:7" "row-17:8" "row-17-queued:8" "row-17-postpush:8"
   "row-10-repair-unverified:4" "row-10-repair-needed:4" "row-10-failed-twice:stop" "row-13-prepr-repair-clean:5" "row-16-earlier-queued:8" "row-17-review-repair-unpushed:8" "row-17-deferred-owed:8" "row-17-worker-queue:8" "row-18-answered:done" "row-18:done"
   "row-17-repair-advisory-only:8" "row-17-repair-blocking:8" "row-17-repair-blocking-settled:8" "row-17-repair-diff-trigger:8"
-  "row-10-over-budget:stop" "row-11-over-budget:stop" "row-16-over-budget:stop" "row-17-over-budget:stop"
+  "row-10-over-budget:stop" "row-11-over-budget:stop" "row-16-over-budget:stop" "row-16-over-budget-queued:8" "row-17-over-budget:stop"
   "row-16-under-cap:7" "row-17-review-cap:8" "row-16-cap-blocker:stop" "row-17-cap-replies-owed:8"
   "row-12-stale-base:5" "row-12-stale-base-rebasing:5" "base-sha-not-merge-base:stop" "base-sha-not-ancestor:stop"
 )
@@ -1710,6 +1710,35 @@ grep -Fq "phase: stop reason: row 16: review time is over budget" <<<"$over_reas
   echo "a row-16 probe over budget should stop at row 16, got: $over_reason" >&2
   exit 1
 }
+# Deferral is row 16's answer alone (#240): rows 10 and 11 stop before any
+# triage round exists, and row 17's round is already repaired.
+grep -Fq "or defer the newest round's in-scope rows not yet queued" <<<"$over_reason" || {
+  echo "row 16's budget stop should offer deferral, got: $over_reason" >&2
+  exit 1
+}
+for gated in 10 11 17; do
+  gated_reason="$(python3 "$run_state" phase --probe "$probes_dir/row-$gated-over-budget.json")"
+  if grep -Fq "defer" <<<"$gated_reason"; then
+    echo "row $gated's budget stop has no unrepaired triage row to defer, yet offers it: $gated_reason" >&2
+    exit 1
+  fi
+done
+# #238: the same over-budget round with every in-scope row queued owes no repair,
+# so row 16's guard skips it and the budget stop never fires; row 17 answers the
+# replies still owed. The counter-case flips only triage_inscope_rows back to 2,
+# so the budget stop's return can't be credited to any other field.
+queued_over="$(python3 "$run_state" phase --probe "$probes_dir/row-16-over-budget-queued.json")"
+grep -Fq "phase: 8 reason: row 17:" <<<"$queued_over" || {
+  echo "an over-budget round with all in-scope rows queued should reach row 17, got: $queued_over" >&2
+  exit 1
+}
+python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); d["triage_inscope_rows"]=2; json.dump(d,open(sys.argv[2],"w"))' \
+  "$probes_dir/row-16-over-budget-queued.json" "$tmp/owed-over-budget.json"
+owed_over="$(python3 "$run_state" phase --probe "$tmp/owed-over-budget.json")"
+grep -Fq "phase: stop reason: row 16: review time is over budget" <<<"$owed_over" || {
+  echo "the same over-budget round with an in-scope row not yet queued should hit row 16's budget stop, got: $owed_over" >&2
+  exit 1
+}
 grep -Fq "phase: 7 reason: row 16:" <<<"$(python3 "$run_state" phase --probe "$probes_dir/row-16.json")" || {
   echo "the same row-16 probe under budget should resume at Step 7" >&2
   exit 1
@@ -1789,7 +1818,15 @@ require_text work-issue/README.md "The out-of-scope ones go to a queue carrying 
 # The queue reason, which the Step 8 reply and the deferred-findings comment
 # both carry to the reviewer, so it has to be the one string the issue names.
 require_text work-issue/SKILL.md "Each in-scope row's Scope cell reads \`in scope; queued: review round cap reached (N)\`, and the row is appended to \`queue.md\` with Outside-because \`review round cap reached (N)\`."
-require_text work-issue/references/triage.md "The review round cap is the one reason an in-scope row gets queued."
+require_text work-issue/references/triage.md "An in-scope row gets queued for two reasons: the review round cap, and a human's deferral at the cap stop or row 16's budget stop."
+require_text work-issue/SKILL.md "When the user defers an in-scope row at the review round cap's stop or at row 16's budget stop, write \`in scope; queued: <reason>\` in its Scope cell and append the row to \`queue.md\` with that reason as Outside-because."
+require_text work-issue/SKILL.md "At row 16's budget stop, whose newest triage round has in-scope rows not yet queued and no repair yet, the user can also defer any of them."
+# A partial deferral leaves rows owed, and row 16 sends the run to Step 7, so
+# Step 7 must leave the deferred ones alone (#240 round 2).
+require_text work-issue/SKILL.md "One dispatch carrying every in-scope row not yet queued, each finding quoted with its URL."
+require_text work-issue/SKILL.md "every in-scope row not yet queued is fixed and committed, or sits in \`left\`"
+require_text work-issue/references/worker-prompt.md "at Step 7, one block per in-scope triage row not yet queued"
+require_text _maintenance/work-issue/RATIONALE.md "| 152 | A Scope cell that begins \`in scope; queued:\` marks a row as deferred"
 require_text work-issue/references/triage.md "each in-scope row's Scope cell reads \`in scope; queued: review round cap reached (N)\`, and the row is appended to \`queue.md\` with Outside-because \`review round cap reached (N)\`"
 require_text work-issue/SKILL.md "A capped round (Step 6) skips this step: it gets no dispatch, no \`repair-base-<k>\`, and no \`repair-<k>.json\`"
 require_text work-issue/SKILL.md "the rows the review round cap queued with \`review round cap reached (N)\`"
@@ -2944,7 +2981,9 @@ rm "$tr/redteam/trigger-repair-2.txt"
 echo "UNVERIFIED: 0" >"$tr/redteam/ar-state-repair-2.txt"
 expect_field "with UNVERIFIED: 0 in ar-state-repair-2.txt" repair_ar_settled true "$tr" "$lab_repo"
 printf '# Triage round 3\n\n| # | Source | Finding | Severity | Scope | Reply |\n|---|---|---|---|---|---|\n| 1 | https://github.com/o/r/pull/9#discussion_r30 | "Name it." | P2 | in scope; queued: review round cap reached (2) | |\n| 2 | https://github.com/o/r/pull/9#discussion_r31 | "Later." | P2 | out of scope: not in the diff | |\n' >"$tr/triage/round-3.md"
-expect_field "on a capped round's queued in-scope cell" triage_inscope_rows 1 "$tr" "$lab_repo"
+# 0, not 1 (#238): a `queued:` cell is deferred, not owed a repair, so the
+# gatherer skips it and row 17's all-queued leg takes the round.
+expect_field "on a capped round's queued in-scope cell" triage_inscope_rows 0 "$tr" "$lab_repo"
 cp tests/fixtures/work-issue/triage/round-noscope.md "$tr/triage/round-3.md"
 expect_field "on a round with no Scope column" triage_inscope_rows null "$tr" "$lab_repo"
 sed 's/| Reply |$/|/; s/|---|---|---|---|---|$/|---|---|---|---|/; s/| in scope | |$/| in scope |/' tests/fixtures/work-issue/triage-noseverity/round-1.md >"$tr/triage/round-3.md"
@@ -3010,6 +3049,42 @@ for stop_case in "round-3:0" "round-noscope:null"; do
   cp "tests/fixtures/work-issue/triage/${stop_case%%:*}.md" "$tri_dir/triage/round-1.md"
   expect_field "on triage/${stop_case%%:*}.md" triage_stop_rows "${stop_case##*:}" "$tri_dir" "$lab_repo"
 done
+
+# #238: a Scope cell that starts `in scope; queued:` is deferred and counted by
+# neither gatherer. Only that cell is the key.
+q_round() { # SEVERITY SCOPE REPLY FINDING [EXTRA_ROW]
+  printf '# Triage round 1, since 2026-01-01T00:00:00Z\n\n| # | Source | Finding | Severity | Scope | Reply |\n|---|---|---|---|---|---|\n| 1 | https://example.com/t/1 | "%s" | %s | %s | %s |\n%s' "$4" "$1" "$2" "$3" "${5:-}" >"$q_dir/triage/round-1.md"
+}
+q_dir="$(new_run queued-key)"
+mkdir -p "$q_dir/triage"
+q_round P0 "in scope; queued: deferred by user" "" "a finding"
+expect_field "on a queued P0 row" triage_stop_rows 0 "$q_dir" "$lab_repo"
+expect_field "on a queued P0 row" triage_inscope_rows 0 "$q_dir" "$lab_repo"
+q_round P0 "in scope" "" "a finding"
+expect_field "on the same P0 row, bare in scope" triage_stop_rows 1 "$q_dir" "$lab_repo"
+expect_field "on the same P0 row, bare in scope" triage_inscope_rows 1 "$q_dir" "$lab_repo"
+q_round P1 "in scope; queued: deferred by user" "" "a finding"
+expect_field "on a queued row re-scored P1" triage_stop_rows 0 "$q_dir" "$lab_repo"
+expect_field "on a queued row re-scored P1" triage_inscope_rows 0 "$q_dir" "$lab_repo"
+q_round P0 "in scope; queued: deferred by user" "https://example.com/r/1" "a finding"
+expect_field "on a queued row with a reply" triage_stop_rows 0 "$q_dir" "$lab_repo"
+expect_field "on a queued row with a reply" triage_inscope_rows 0 "$q_dir" "$lab_repo"
+q_round P0 "in scope; queued: deferred by user" "" "reworded entirely"
+expect_field "on a queued row with a new Finding" triage_stop_rows 0 "$q_dir" "$lab_repo"
+expect_field "on a queued row with a new Finding" triage_inscope_rows 0 "$q_dir" "$lab_repo"
+q_round P0 "in scope" "" "a finding"
+printf '| Source | Finding | Outside-because | Status |\n|---|---|---|---|\n| https://example.com/t/1 | "a finding" | deferred by user | queued |\n' >"$q_dir/queue.md"
+expect_field "on a bare in scope cell with a matching queue.md row" triage_stop_rows 1 "$q_dir" "$lab_repo"
+expect_field "on a bare in scope cell with a matching queue.md row" triage_inscope_rows 1 "$q_dir" "$lab_repo"
+rm "$q_dir/queue.md"
+q_round P0 "in scope; queued: deferred by user" "" "a finding" '| 2 | https://example.com/t/2 | "small" | P2 | in scope | |
+'
+expect_field "on a mixed round, queued P0 plus bare P2" triage_inscope_rows 1 "$q_dir" "$lab_repo"
+expect_field "on a mixed round, queued P0 plus bare P2" triage_stop_rows 0 "$q_dir" "$lab_repo"
+expect_phase "row-16-cap-blocker" "phase: stop reason: row 16: the newest triage round is at the review round cap" \
+  "$(python3 "$run_state" phase --probe "$probes_dir/row-16-cap-blocker.json")"
+expect_phase "row-17-review-cap" "phase: 8 reason: row 17:" \
+  "$(python3 "$run_state" phase --probe "$probes_dir/row-17-review-cap.json")"
 
 m="$(new_run rounds)"
 expect_field "with no max_review_rounds file" max_review_rounds 2 "$m" "$lab_repo"

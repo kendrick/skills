@@ -120,7 +120,7 @@ Review findings to repair, each quoted with its source URL:
 - `{{CRITERIA}}` — the CRITERIA lines out of `RUN_DIR/issue.md`, verbatim, checkboxes included. Copied rather than paraphrased: a criterion reworded in the dispatch is a criterion the gate and the worker now disagree about.
 - `{{TREE}}` — the absolute path of the tree this run works in: WORKTREE where Step 1 took one, ROOT where it skipped.
 - `{{REPORT_PATH}}` — herdr only: the absolute path `RUN_DIR/reports/<task>.json`. On a plain subagent dispatch the whole line comes out along with the placeholder, because the returned JSON is already the record. Under herdr it is the only copy that survives, since an agent drawing on the alternate screen leaves nothing in scrollback.
-- `{{FINDINGS}}` — at Step 7, one block per in-scope triage row: the finding quoted, its thread or comment URL, and what makes it in scope. At Step 2 it substitutes the literal `none`, so the preamble goes across unchanged rather than growing a conditional paragraph somebody has to decide about.
+- `{{FINDINGS}}` — at Step 7, one block per in-scope triage row not yet queued: the finding quoted, its thread or comment URL, and what makes it in scope. At Step 2 it substitutes the literal `none`, so the preamble goes across unchanged rather than growing a conditional paragraph somebody has to decide about.
 
 ## Why the output is only JSON
 
