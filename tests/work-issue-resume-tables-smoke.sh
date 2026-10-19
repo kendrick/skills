@@ -22,6 +22,7 @@ header='| # | Probe | Resume at |'
 # reviewer can check against the fixture itself.
 allowlist=(
   "row-16-earlier-queued.json:17:row 16's guard case: a queued round then a repaired one has two rounds and one report, so it must skip row 16 and land on row 17"
+  "row-16-over-budget-queued.json:17:#238: row 16's over-budget probe with every in-scope row queued owes no repair, so it skips row 16's budget stop and lands on row 17"
 )
 
 failures=0

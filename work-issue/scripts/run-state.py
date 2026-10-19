@@ -837,8 +837,9 @@ def budget_stop(row):
         "stop",
         f"row {row}: review time is over budget against build time; print "
         "`run-state.py budget --timing RUN_DIR/timing.log` for both totals and "
-        "ask whether to stop here or raise the ratio, which appends "
-        "`budget-raised <ratio>` to timing.log",
+        "ask whether to stop here, raise the ratio (appends "
+        "`budget-raised <ratio>` to timing.log), or defer the newest round's "
+        "in-scope rows not yet queued",
     )
 
 

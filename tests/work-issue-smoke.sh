@@ -1527,7 +1527,7 @@ declare -a probe_cases=(
   "row-14:6" "row-15:6" "row-16:7" "row-17:8" "row-17-queued:8" "row-17-postpush:8"
   "row-10-repair-unverified:4" "row-10-repair-needed:4" "row-10-failed-twice:stop" "row-13-prepr-repair-clean:5" "row-16-earlier-queued:8" "row-17-review-repair-unpushed:8" "row-17-deferred-owed:8" "row-17-worker-queue:8" "row-18-answered:done" "row-18:done"
   "row-17-repair-advisory-only:8" "row-17-repair-blocking:8" "row-17-repair-blocking-settled:8" "row-17-repair-diff-trigger:8"
-  "row-10-over-budget:stop" "row-11-over-budget:stop" "row-16-over-budget:stop" "row-17-over-budget:stop"
+  "row-10-over-budget:stop" "row-11-over-budget:stop" "row-16-over-budget:stop" "row-16-over-budget-queued:8" "row-17-over-budget:stop"
   "row-16-under-cap:7" "row-17-review-cap:8" "row-16-cap-blocker:stop" "row-17-cap-replies-owed:8"
   "row-12-stale-base:5" "row-12-stale-base-rebasing:5" "base-sha-not-merge-base:stop" "base-sha-not-ancestor:stop"
 )
@@ -1708,6 +1708,22 @@ grep -Fq "phase: stop reason: row 17: review time is over budget" <<<"$(python3 
 over_reason="$(python3 "$run_state" phase --probe "$probes_dir/row-16-over-budget.json")"
 grep -Fq "phase: stop reason: row 16: review time is over budget" <<<"$over_reason" || {
   echo "a row-16 probe over budget should stop at row 16, got: $over_reason" >&2
+  exit 1
+}
+# #238: the same over-budget round with every in-scope row queued owes no repair,
+# so row 16's guard skips it and the budget stop never fires; row 17 answers the
+# replies still owed. The counter-case flips only triage_inscope_rows back to 2,
+# so the budget stop's return can't be credited to any other field.
+queued_over="$(python3 "$run_state" phase --probe "$probes_dir/row-16-over-budget-queued.json")"
+grep -Fq "phase: 8 reason: row 17:" <<<"$queued_over" || {
+  echo "an over-budget round with all in-scope rows queued should reach row 17, got: $queued_over" >&2
+  exit 1
+}
+python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); d["triage_inscope_rows"]=2; json.dump(d,open(sys.argv[2],"w"))' \
+  "$probes_dir/row-16-over-budget-queued.json" "$tmp/owed-over-budget.json"
+owed_over="$(python3 "$run_state" phase --probe "$tmp/owed-over-budget.json")"
+grep -Fq "phase: stop reason: row 16: review time is over budget" <<<"$owed_over" || {
+  echo "the same over-budget round with an in-scope row not yet queued should hit row 16's budget stop, got: $owed_over" >&2
   exit 1
 }
 grep -Fq "phase: 7 reason: row 16:" <<<"$(python3 "$run_state" phase --probe "$probes_dir/row-16.json")" || {
