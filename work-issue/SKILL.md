@@ -248,11 +248,11 @@ A capped round (Step 6) skips this step: it gets no dispatch, no `repair-base-<k
 
 Before the dispatch, write `git rev-parse HEAD` to `RUN_DIR/redteam/repair-base-<k>`, k the triage round this repair answers, unless that file already exists. Write it once and never overwrite it: a resumed Step 7 keeps the first base, so the diff from it to HEAD still covers every commit the repair made. Step 8 item 1 reads the repair's own diff from this SHA. Step 8 item 2's rebase orphans it afterwards, and the probe reads an orphaned base as no repair-diff hit, since item 1 has already evaluated the repair by then.
 
-One dispatch carrying every in-scope row, each finding quoted with its URL. Under herdr that is `herdr agent prompt issue-N …` on the same agent; otherwise a fresh subagent with the build report as `{{PRIOR}}`. Same preamble, same report contract.
+One dispatch carrying every in-scope row not yet queued, each finding quoted with its URL. A row whose Scope cell reads `in scope; queued:` was deferred and stays out of the dispatch, so a user who defers some of a round's rows at row 16's budget stop gets the rest repaired and those left alone. Under herdr that is `herdr agent prompt issue-N …` on the same agent; otherwise a fresh subagent with the build report as `{{PRIOR}}`. Same preamble, same report contract.
 
 Gate it the way Step 3 gates: the format pass from `divvy-up`'s Step 6 over the repair's reported `files_changed`, VERIFY_CMD green, then `code-review` against BASE_SHA, with findings routed the same way. Save the green VERIFY_CMD run as the next `baseline-repair-<n>.txt`, as Step 3's repair gate does, then commit. The report lands at `RUN_DIR/reports/repair-<k>.json`.
 
-**Done when:** `repair-base-<k>` holds the HEAD SHA from before the first dispatch for round k; every in-scope row is fixed and committed, or sits in `left` with a reason the orchestrator accepted and recorded on the row; where VERIFY_CMD is not `absent`, each repair commit has the `baseline-repair-<n>.txt` its green gate saved; `code-review` ran on the repaired diff; `repair-<k>.json` exists.
+**Done when:** `repair-base-<k>` holds the HEAD SHA from before the first dispatch for round k; every in-scope row not yet queued is fixed and committed, or sits in `left` with a reason the orchestrator accepted and recorded on the row; where VERIFY_CMD is not `absent`, each repair commit has the `baseline-repair-<n>.txt` its green gate saved; `code-review` ran on the repaired diff; `repair-<k>.json` exists.
 
 ## Step 8 — Close
 
