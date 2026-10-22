@@ -196,6 +196,9 @@ require_text work-issue/references/worker-prompt.md "run \`rm -f <copy>/.git\` b
 require_text work-issue/references/worker-prompt.md "\`git -C <copy> rev-parse --git-dir\` fails."
 require_text work-issue/references/worker-prompt.md "fails. The one other safe answer is"
 require_text work-issue/references/worker-prompt.md "outside every checkout and repeat the check."
+# Deliberately Not Built (#216): `git archive HEAD` exports committed HEAD
+# only, so a copy made mid-wave silently drops the worker's uncommitted edits.
+refute_text work-issue/references/worker-prompt.md "git archive"
 
 # An unattended run holds a push grant. The one thing it must never be able to
 # do is write over the branch everybody else builds on.
@@ -642,6 +645,12 @@ grep -Fq -- "make the copy again under a fresh \`mktemp -d\` outside every check
   echo "work-issue/references/redteam.md: the prompt block no longer tells the reproducer to repeat the check on the remade copy" >&2
   exit 1
 }
+# Deliberately Not Built (#216): the reproducer copies the tree to test edits
+# that aren't committed yet, which a `git archive HEAD` export leaves out.
+if grep -Fq -- "git archive" <<<"$prompt_block"; then
+  echo "work-issue/references/redteam.md: the prompt block offers git archive as a scratch-copy route again, which drops uncommitted edits" >&2
+  exit 1
+fi
 
 # --- `reproduced_at` on a claim nothing ran for. Two claims land there. The
 # report contract sends a claim with no command to `UNVERIFIABLE`, which Step 4
