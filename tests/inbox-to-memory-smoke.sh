@@ -1106,6 +1106,16 @@ require_text inbox-to-memory/assets/note.template.md "[contradicts accepted: [[<
 require_text inbox-to-memory/README.md "nanoid"
 require_text inbox-to-memory/README.md "brew install yq"
 
+# AGENTS.md tells a reviewer to check a README's lists against the directory
+# tree, but no test ran that check, so the README's scripts tree fell behind
+# inbox-to-memory/scripts unnoticed (#207). The diff below is #207's done-when
+# command verbatim. A script added without a README line fails it.
+if ! scripts_tree_drift="$(diff <(ls inbox-to-memory/scripts) <(sed -n '/├── scripts\//,/^└──/p' inbox-to-memory/README.md | grep -oE '[a-z_-]+\.(sh|py)' | sort))"; then
+  echo "inbox-to-memory/README.md scripts tree disagrees with inbox-to-memory/scripts:" >&2
+  echo "$scripts_tree_drift" >&2
+  exit 1
+fi
+
 # ---------------------------------------------------------------------------
 # Migration, Tier 1
 # ---------------------------------------------------------------------------
