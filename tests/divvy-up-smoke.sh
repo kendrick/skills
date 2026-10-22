@@ -360,6 +360,9 @@ require_text divvy-up/references/worker-prompt.md "a file pointing at the origin
 require_text divvy-up/references/worker-prompt.md "\`git -C <copy> rev-parse --git-dir\` fails."
 require_text divvy-up/references/worker-prompt.md "fails. The one other safe answer is"
 require_text divvy-up/references/worker-prompt.md "outside every checkout and repeat the check."
+# Deliberately Not Built (#216): `git archive HEAD` exports committed HEAD
+# only, so a copy made mid-wave silently drops the worker's uncommitted edits.
+refute_text divvy-up/references/worker-prompt.md "git archive"
 # PR #213 review: `git diff --stat HEAD` never lists an untracked file, so a
 # wave whose only output is a new file would read as unchanged.
 require_text divvy-up/SKILL.md "Take any other read of what the wave changed from \`git diff --stat HEAD\` plus the untracked paths the manifest comparison above finds, rather than \`git status\`"
