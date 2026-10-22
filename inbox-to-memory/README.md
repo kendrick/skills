@@ -59,7 +59,7 @@ inbox-to-memory/
 │   ├── bench-fixture.sh    # builds a qmd bench fixture from accepted records
 │   ├── reflow-raw.sh       # repairs transcripts groomed before turns were blank-line separated
 │   ├── stamp-confirmed.sh  # stamps a note's date onto the records it confirms
-│   └── verify-migration.sh # checks a migration against git history: links resolve, nothing lost
+│   └── verify-migration.sh # checks a migration against git history: links resolve, nothing renamed or deleted
 └── references/       # progressive-disclosure reading
     ├── extraction-heuristics.md
     ├── scope-decisions.md
