@@ -130,9 +130,6 @@ anything else in the copy. Then confirm that
 `rm -f` leaves in place as the copy's own repository. Any other path means git
 walked up from the copy and found a repository above it, so make the copy
 again under a fresh `mktemp -d` outside every checkout and repeat the check.
-`git archive HEAD | tar -x -C <copy>` also works, but the extracted tree has
-no repository root, so a script that walks up for `.git`, such as
-`check-waves.py validate`, runs its reduced checks there.
 
 Paste real output. A command's output you summarized is a command nobody ran.
 
