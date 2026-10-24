@@ -102,14 +102,15 @@ BARE_APPROVALS = frozenset(
 #
 # Codex later began writing the verdict behind a leading
 # `<!-- codex-review-receipt:v1 -->` marker, so a cleared review on
-# long-term-memory-kit#78 scored `findings` (#237). The verdict is matched
-# against the visible opening, after any leading HTML comments, rather than
-# that one marker, so Codex's next marker doesn't reopen the bug. The status
-# marker stays on the raw opening, since that HTML comment is the identity.
+# long-term-memory-kit#78 scored `findings` (#237). `classify` matches the
+# verdict against the visible opening, after any leading HTML comments, rather
+# than against that one marker, so Codex's next marker doesn't reopen the bug.
+# `STATUS_MARKER` is matched against the raw opening, because that HTML comment
+# is what marks a status comment.
 # In a repo with no Codex cloud environment, `@codex review` gets the setup
-# notice instead, which scored `findings` on PR #219 (#221). It scores nothing,
-# like the status comment, and is matched by its link text so a moved settings
-# URL doesn't break it.
+# notice instead, which scored `findings` on PR #219 (#221). The notice scores
+# nothing, like the status comment. `SETUP_NOTICE_OPENING` stops at the link
+# text, so a moved settings URL doesn't break the match.
 STATUS_MARKER = "<!-- codex-pull-request-review-summary -->"
 NO_ISSUES_OPENING = "Codex Review: Didn't find any major issues"
 SETUP_NOTICE_OPENING = "To use Codex here, [create an environment for this repo]"
@@ -557,7 +558,7 @@ def visible_opening(body):
 
     GitHub renders no `<!-- ... -->`, so Codex can put a machine marker ahead
     of its verdict and the reader still sees the verdict first (#237). An
-    unterminated `<!--` stops the strip and stays in place: that text then
+    unterminated `<!--` stops the strip and stays in place. The comment then
     opens with no known string and scores as a finding, which costs one triage
     round rather than silently approving a malformed comment."""
     if not isinstance(body, str):

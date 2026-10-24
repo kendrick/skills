@@ -1488,7 +1488,7 @@ set -e
 # is that comment, and it fails if the verdict is read from the raw opening.
 # `receipt-finding` puts a P1 behind the same marker, so stripping the marker
 # can't turn a finding into an approval. `receipt-only` is the marker alone; it
-# pins today's `findings` score so treating an empty visible opening as an
+# pins the `findings` score so treating an empty visible opening as an
 # approval has to be a deliberate change. `status-only` above fails if the
 # status marker is read from the visible opening instead of the raw one.
 # #221: Codex's create-an-environment notice scored `findings` on PR #219.
