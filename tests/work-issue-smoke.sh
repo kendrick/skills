@@ -701,8 +701,8 @@ require_text _maintenance/work-issue/RATIONALE.md "Excluding the claim's path fr
 # `findings` outranks `cleared` for a reason: a reviewer can leave an approving
 # reaction and a blocking thread in one pass. A dropped row here is a state the
 # triage step can no longer reach.
-require_text work-issue/SKILL.md "| findings | any unresolved review thread whose root comment, or whose latest comment from a login other than the author, is newer than SINCE; or a \`CHANGES_REQUESTED\` review newer than SINCE; or a pull-request-level or issue comment newer than SINCE from a login other than the author that is not a bare approval and does not open with Codex's review-summary marker comment or its no-issues verdict |"
-require_text work-issue/SKILL.md "| cleared | no findings, and either an \`APPROVED\` review newer than SINCE, or a \`+1\` reaction on the pull request (\`gh api repos/{owner}/{repo}/issues/<pr>/reactions\`) newer than SINCE from a login other than the author, or a comment newer than SINCE from a login other than the author that opens with Codex's no-issues verdict |"
+require_text work-issue/SKILL.md "| findings | any unresolved review thread whose root comment, or whose latest comment from a login other than the author, is newer than SINCE; or a \`CHANGES_REQUESTED\` review newer than SINCE; or a pull-request-level or issue comment newer than SINCE from a login other than the author that is not a bare approval, does not open with Codex's review-summary marker comment, and, read after any leading HTML comments, does not open with Codex's no-issues verdict or its create-an-environment setup notice |"
+require_text work-issue/SKILL.md "| cleared | no findings, and either an \`APPROVED\` review newer than SINCE, or a \`+1\` reaction on the pull request (\`gh api repos/{owner}/{repo}/issues/<pr>/reactions\`) newer than SINCE from a login other than the author, or a comment newer than SINCE from a login other than the author that opens with Codex's no-issues verdict, read after any leading HTML comments |"
 require_text work-issue/SKILL.md "| pending | neither |"
 
 # Marking a thread resolved is the reviewer's own signal that somebody read
@@ -1483,6 +1483,20 @@ set -e
 # so keying either rule to Codex's login fails the suite.
 # `finding-comment` is a Codex comment that quotes both openings mid-body, so
 # neither an author rule nor a substring match passes it.
+# #237: Codex moved its verdict behind `<!-- codex-review-receipt:v1 -->`, and
+# long-term-memory-kit#78 scored `findings` on a clean review. `no-issues-receipt`
+# is that comment, and it fails if the verdict is read from the raw opening.
+# `receipt-finding` puts a P1 behind the same marker, so stripping the marker
+# can't turn a finding into an approval. `receipt-only` is the marker alone; it
+# pins the `findings` score so treating an empty visible opening as an
+# approval has to be a deliberate change. `status-only` above fails if the
+# status marker is read from the visible opening instead of the raw one.
+# #221: Codex's create-an-environment notice scored `findings` on PR #219.
+# `setup-notice` is that comment and fails if the notice's opening stops
+# matching. `setup-notice-human-author` posts it as a human, so an author rule
+# fails. `receipt-setup-notice` puts it behind a receipt marker, so it fails if
+# the notice is read from the raw opening. `finding-quotes-notice` is a P1 that
+# quotes the notice mid-body, so it fails if the notice matches anywhere.
 pr_bundles_dir=tests/fixtures/work-issue/pr-bundles
 declare -a codex_comment_cases=(
   "codex-status-only.json:pending"
@@ -1492,6 +1506,13 @@ declare -a codex_comment_cases=(
   "codex-status-unmarked.json:findings"
   "codex-status-human-author.json:pending"
   "codex-finding-comment.json:findings"
+  "codex-no-issues-receipt.json:cleared"
+  "codex-receipt-finding.json:findings"
+  "codex-receipt-only.json:findings"
+  "codex-setup-notice.json:pending"
+  "codex-setup-notice-human-author.json:pending"
+  "codex-receipt-setup-notice.json:pending"
+  "codex-finding-quotes-notice.json:findings"
 )
 for case in "${codex_comment_cases[@]}"; do
   fixture="${case%%:*}"
@@ -1514,6 +1535,11 @@ grep -Fq "comment approval by chatgpt-codex-connector[bot] 2026-10-09T03:01:33Z 
   echo "a no-issues verdict should print a comment approval line with its URL" >&2
   exit 1
 }
+grep -Fq "comment approval by chatgpt-codex-connector[bot] 2026-10-16T14:25:14Z https://github.com/kendrick/long-term-memory-kit/pull/78#issuecomment-6217615501" \
+  <<<"$(python3 "$run_state" review 202 --since 2026-10-09T02:55:20Z --author kendrick --input "$pr_bundles_dir/codex-no-issues-receipt.json")" || {
+  echo "a receipt-marked no-issues verdict should print a comment approval line with its URL" >&2
+  exit 1
+}
 
 # Ledger row 143 keys the rule on the comment's opening, never its author, and
 # #204's Non-Goals keep the summary table's Status column out of scoring. Both
@@ -1524,6 +1550,12 @@ refute_text work-issue/scripts/run-state.py '== "chatgpt-codex-connector"'
 refute_text work-issue/scripts/run-state.py "Completed"
 require_text _maintenance/work-issue/RATIONALE.md "Keying the status and no-issues rules on the comment's author"
 require_text _maintenance/work-issue/RATIONALE.md "Pinned by a \`refute_text\` on \`Completed\` in \`scripts/run-state.py\`"
+require_text _maintenance/work-issue/RATIONALE.md "| 154 | \`run-state.py\` matches Codex's no-issues verdict against a comment's visible opening"
+require_text _maintenance/work-issue/RATIONALE.md "| 155 | A comment whose visible opening starts with \`SETUP_NOTICE_OPENING\`"
+require_text _maintenance/work-issue/RATIONALE.md "| Parsing the status comment's \`codex-review-state:v1\` JSON |"
+require_text work-issue/references/triage.md "The verdict is matched by the comment's opening, read after any leading HTML comments, never by who posted it."
+# Deliberately Not Built: no parsing the status comment's codex-review-state:v1 JSON (row 154, #237's Non-Goals).
+refute_text work-issue/scripts/run-state.py "codex-review-state"
 
 # One case per row of the Resume table, in the table's own order, because first
 # match wins. Rows 4, 5, and 6 all resume at Step 0, and rows 1 and 18 both end

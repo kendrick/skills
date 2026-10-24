@@ -91,7 +91,7 @@ BARE_APPROVALS = frozenset(
     )
 )
 
-# Codex posts two PR-level comments that are neither a finding nor a bare "yes".
+# Codex posts PR-level comments that are neither a finding nor a bare "yes".
 # The status comment opens with this marker, lands seconds after `@codex
 # review`, and is edited in place. The no-issues verdict opens with the second
 # string and is Codex's approval. Both scored `findings` on every wave-1 PR
@@ -99,8 +99,21 @@ BARE_APPROVALS = frozenset(
 # body's opening, never its author: a finding comment can quote either string
 # and must still count, and a human comment opening with the marker is still a
 # status display.
+#
+# Codex later began writing the verdict behind a leading
+# `<!-- codex-review-receipt:v1 -->` marker, so a cleared review on
+# long-term-memory-kit#78 scored `findings` (#237). `classify` matches the
+# verdict against the visible opening, after any leading HTML comments, rather
+# than against that one marker, so Codex's next marker doesn't reopen the bug.
+# `STATUS_MARKER` is matched against the raw opening, because that HTML comment
+# is what marks a status comment.
+# In a repo with no Codex cloud environment, `@codex review` gets the setup
+# notice instead, which scored `findings` on PR #219 (#221). The notice scores
+# nothing, like the status comment. `SETUP_NOTICE_OPENING` stops at the link
+# text, so a moved settings URL doesn't break the match.
 STATUS_MARKER = "<!-- codex-pull-request-review-summary -->"
 NO_ISSUES_OPENING = "Codex Review: Didn't find any major issues"
+SETUP_NOTICE_OPENING = "To use Codex here, [create an environment for this repo]"
 
 _STRIPPABLE = "*_`~#>!.,:;?()[]\"' \t\n👍✅🎉"
 
@@ -540,6 +553,25 @@ def normalize_login(login):
     return name.lower()
 
 
+def visible_opening(body):
+    """The body as a reader sees it start, past any leading HTML comments.
+
+    GitHub renders no `<!-- ... -->`, so Codex can put a machine marker ahead
+    of its verdict and the reader still sees the verdict first (#237). An
+    unterminated `<!--` stops the strip and stays in place. The comment then
+    opens with no known string and scores as a finding, which costs one triage
+    round rather than silently approving a malformed comment."""
+    if not isinstance(body, str):
+        return ""
+    text = body.lstrip()
+    while text.startswith("<!--"):
+        end = text.find("-->", 4)
+        if end < 0:
+            break
+        text = text[end + 3 :].lstrip()
+    return text
+
+
 def is_bare_approval(body):
     if not isinstance(body, str):
         return False
@@ -726,12 +758,15 @@ def classify(bundle, since, author):
         opening = comment["body"].lstrip() if isinstance(comment["body"], str) else ""
         if opening.startswith(STATUS_MARKER):
             continue
-        if opening.startswith(NO_ISSUES_OPENING):
+        visible = visible_opening(comment["body"])
+        if visible.startswith(NO_ISSUES_OPENING):
             approving = True
             lines.append(
                 f"comment approval by {comment['author']} {show_ts(created)} "
                 f"{show_or_unknown(comment.get('url'))}"
             )
+            continue
+        if visible.startswith(SETUP_NOTICE_OPENING):
             continue
         if is_bare_approval(comment["body"]):
             continue
