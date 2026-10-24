@@ -1483,6 +1483,20 @@ set -e
 # so keying either rule to Codex's login fails the suite.
 # `finding-comment` is a Codex comment that quotes both openings mid-body, so
 # neither an author rule nor a substring match passes it.
+# #237: Codex moved its verdict behind `<!-- codex-review-receipt:v1 -->`, and
+# long-term-memory-kit#78 scored `findings` on a clean review. `no-issues-receipt`
+# is that comment, and it fails if the verdict is read from the raw opening.
+# `receipt-finding` puts a P1 behind the same marker, so stripping the marker
+# can't turn a finding into an approval. `receipt-only` is the marker alone; it
+# pins today's `findings` score so treating an empty visible opening as an
+# approval has to be a deliberate change. `status-only` above fails if the
+# status marker is read from the visible opening instead of the raw one.
+# #221: Codex's create-an-environment notice scored `findings` on PR #219.
+# `setup-notice` is that comment and fails if the notice's opening stops
+# matching. `setup-notice-human-author` posts it as a human, so an author rule
+# fails. `receipt-setup-notice` puts it behind a receipt marker, so it fails if
+# the notice is read from the raw opening. `finding-quotes-notice` is a P1 that
+# quotes the notice mid-body, so it fails if the notice matches anywhere.
 pr_bundles_dir=tests/fixtures/work-issue/pr-bundles
 declare -a codex_comment_cases=(
   "codex-status-only.json:pending"
@@ -1492,6 +1506,13 @@ declare -a codex_comment_cases=(
   "codex-status-unmarked.json:findings"
   "codex-status-human-author.json:pending"
   "codex-finding-comment.json:findings"
+  "codex-no-issues-receipt.json:cleared"
+  "codex-receipt-finding.json:findings"
+  "codex-receipt-only.json:findings"
+  "codex-setup-notice.json:pending"
+  "codex-setup-notice-human-author.json:pending"
+  "codex-receipt-setup-notice.json:pending"
+  "codex-finding-quotes-notice.json:findings"
 )
 for case in "${codex_comment_cases[@]}"; do
   fixture="${case%%:*}"
@@ -1512,6 +1533,11 @@ done
 grep -Fq "comment approval by chatgpt-codex-connector[bot] 2026-10-09T03:01:33Z https://github.com/kendrick/skills/pull/200#issuecomment-6073368317" \
   <<<"$(python3 "$run_state" review 202 --since 2026-10-09T02:55:20Z --author kendrick --input "$pr_bundles_dir/codex-no-issues.json")" || {
   echo "a no-issues verdict should print a comment approval line with its URL" >&2
+  exit 1
+}
+grep -Fq "comment approval by chatgpt-codex-connector[bot] 2026-10-16T14:25:14Z https://github.com/kendrick/long-term-memory-kit/pull/78#issuecomment-6217615501" \
+  <<<"$(python3 "$run_state" review 202 --since 2026-10-09T02:55:20Z --author kendrick --input "$pr_bundles_dir/codex-no-issues-receipt.json")" || {
+  echo "a receipt-marked no-issues verdict should print a comment approval line with its URL" >&2
   exit 1
 }
 
