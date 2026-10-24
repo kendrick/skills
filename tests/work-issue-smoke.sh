@@ -701,8 +701,8 @@ require_text _maintenance/work-issue/RATIONALE.md "Excluding the claim's path fr
 # `findings` outranks `cleared` for a reason: a reviewer can leave an approving
 # reaction and a blocking thread in one pass. A dropped row here is a state the
 # triage step can no longer reach.
-require_text work-issue/SKILL.md "| findings | any unresolved review thread whose root comment, or whose latest comment from a login other than the author, is newer than SINCE; or a \`CHANGES_REQUESTED\` review newer than SINCE; or a pull-request-level or issue comment newer than SINCE from a login other than the author that is not a bare approval and does not open with Codex's review-summary marker comment or its no-issues verdict |"
-require_text work-issue/SKILL.md "| cleared | no findings, and either an \`APPROVED\` review newer than SINCE, or a \`+1\` reaction on the pull request (\`gh api repos/{owner}/{repo}/issues/<pr>/reactions\`) newer than SINCE from a login other than the author, or a comment newer than SINCE from a login other than the author that opens with Codex's no-issues verdict |"
+require_text work-issue/SKILL.md "| findings | any unresolved review thread whose root comment, or whose latest comment from a login other than the author, is newer than SINCE; or a \`CHANGES_REQUESTED\` review newer than SINCE; or a pull-request-level or issue comment newer than SINCE from a login other than the author that is not a bare approval, does not open with Codex's review-summary marker comment, and, read after any leading HTML comments, does not open with Codex's no-issues verdict or its create-an-environment setup notice |"
+require_text work-issue/SKILL.md "| cleared | no findings, and either an \`APPROVED\` review newer than SINCE, or a \`+1\` reaction on the pull request (\`gh api repos/{owner}/{repo}/issues/<pr>/reactions\`) newer than SINCE from a login other than the author, or a comment newer than SINCE from a login other than the author that opens with Codex's no-issues verdict, read after any leading HTML comments |"
 require_text work-issue/SKILL.md "| pending | neither |"
 
 # Marking a thread resolved is the reviewer's own signal that somebody read
@@ -1550,6 +1550,12 @@ refute_text work-issue/scripts/run-state.py '== "chatgpt-codex-connector"'
 refute_text work-issue/scripts/run-state.py "Completed"
 require_text _maintenance/work-issue/RATIONALE.md "Keying the status and no-issues rules on the comment's author"
 require_text _maintenance/work-issue/RATIONALE.md "Pinned by a \`refute_text\` on \`Completed\` in \`scripts/run-state.py\`"
+require_text _maintenance/work-issue/RATIONALE.md "| 154 | \`run-state.py\` matches Codex's no-issues verdict against a comment's visible opening"
+require_text _maintenance/work-issue/RATIONALE.md "| 155 | A comment whose visible opening starts with \`SETUP_NOTICE_OPENING\`"
+require_text _maintenance/work-issue/RATIONALE.md "| Parsing the status comment's \`codex-review-state:v1\` JSON |"
+require_text work-issue/references/triage.md "The verdict is matched by the comment's opening, read after any leading HTML comments, never by who posted it."
+# Deliberately Not Built: no parsing the status comment's codex-review-state:v1 JSON (row 154, #237's Non-Goals).
+refute_text work-issue/scripts/run-state.py "codex-review-state"
 
 # One case per row of the Resume table, in the table's own order, because first
 # match wins. Rows 4, 5, and 6 all resume at Step 0, and rows 1 and 18 both end
