@@ -138,6 +138,10 @@ require_text technical-writing/SKILL.md "invoke it formally via the Skill tool"
 require_text technical-writing/SKILL.md "**Layer the house rules.**"
 require_text technical-writing/SKILL.md "**Self-check.**"
 
+# STE's one-thought rule alone drives drafts into runs of clipped sentences, so
+# the join rule sits beside it. Losing it brings the staccato back silently.
+require_text technical-writing/SKILL.md "Join short neighbors that share a subject or a cause"
+
 # The skill ships to people who have neither humanizer nor the author's private
 # ~/.claude files. The body may name them as the setup it was built against, but
 # the description must not: a hardcoded personal path there reads as a hard
