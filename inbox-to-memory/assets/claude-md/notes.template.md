@@ -27,11 +27,11 @@ When the user asks to groom the inbox (or invokes "process the inbox"), for each
 4. **Extract summary sections** (see "Body structure" below).
 5. **Flag journal candidates inline** in the raw content as you read them.
 6. **Apply transcription corrections** if the root `CLAUDE.md` Deltas section lists known sound-alike mappings. Record what you applied in the note's frontmatter as `transcript_corrections: [Saatchi→Shachi, Lince→Lancey]`.
-7. **Assemble the groomed file:** frontmatter, then extracted body sections, then `## Raw Content` with the verbatim original.
+7. **Assemble the groomed file:** write the verbatim original to `notes/raw/<id>.md` first, then the note: frontmatter with `raw_file: raw/<id>.md`, extracted body sections, then `## Raw Content` with the one pointer line `In [raw/<id>.md](raw/<id>.md). Open it only to verify a quote.`
 8. **Rename and move:** `YYYY-MM-DD[-HHMM]-<slug>-<nanoid>.md`, out of `_inbox/` into `notes/`.
 9. **Clean up the source file.** The inbox is a queue — nothing stays after grooming.
-   - **Text sources** (`.md`, `.txt`, `.vtt`): delete from `_inbox/`. Raw content is preserved in the groomed note.
-   - **Binary sources** (`.pdf`, `.docx`, `.pptx`): move to `notes/attachments/`. Extraction is lossy; keep the original. Set `source_file: attachments/filename.ext` in the groomed note.
+   - **Text sources** (`.md`, `.txt`, `.vtt`): delete from `_inbox/`. Raw content is preserved in the note's raw sidecar.
+   - **Binary sources** (`.pdf`, `.docx`, `.pptx`): move to `notes/attachments/`. Extraction is lossy; keep the original. Set `source_file: attachments/filename.ext` in the groomed note. The extracted text goes to the raw sidecar.
 10. **Summarize what was groomed and extracted.** Do not auto-commit. The user reviews extractions before committing.
 
 ## Direct Authoring
@@ -64,12 +64,14 @@ When the user asks to create a fresh note (not an import):
 
 ## Raw Content
 
-<verbatim original, may contain inline [journal candidate:] markers>
+In [raw/<id>.md](raw/<id>.md). Open it only to verify a quote.
 ```
 
-Order matters. Summary sections come first for human scan-ability and cheap agent retrieval. Raw content stays the source of truth at the bottom.
+`notes/raw/<id>.md` holds the verbatim original, which may contain inline `[journal candidate:]` markers, with no frontmatter. Keeping it out of the note lets a search index exclude `notes/raw/`, so transcript text never crowds out the extracted sections.
 
-**Reading a note, stop at `## Raw Content`.** The extracted sections above it are the reviewed layer and are what you came for. Raw content is for a human reading back, and for verifying a quote you have specific reason to doubt. Reading it by default pulls a whole transcript into context to answer something the sections already answered.
+Order matters. Summary sections come first for human scan-ability and cheap agent retrieval. Raw content stays the source of truth, in the sidecar the last section points to.
+
+**Reading a note, don't open `raw_file` unless verifying a quote.** The extracted sections are the reviewed layer and are what you came for. Raw content is for a human reading back, and for verifying a quote you have specific reason to doubt. Opening it by default pulls a whole transcript into context to answer something the sections already answered. A note with no `raw_file` still holds its raw content inline, so read it down to `## Raw Content` and no further.
 
 ## Frontmatter Schema
 
@@ -85,6 +87,7 @@ tags: [] # from controlled vocabulary in root CLAUDE.md
 topics: [] # from controlled vocabulary in root CLAUDE.md
 entities: [] # canonical names of people and systems this note touches
 # source_file: attachments/<filename>          # binary sources only
+# raw_file: raw/<id>.md                        # raw text in the notes/raw/ sidecar
 # transcript_corrections: [Shachi <- Saatchi]  # applied aliases
 open_questions: 0
 resolved_questions: 0

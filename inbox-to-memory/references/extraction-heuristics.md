@@ -16,7 +16,7 @@ Pull 6-12 quotes per file. Skew the selection toward statements that are:
 
 What to skip: throat-clearing, scheduling logistics, polite pleasantries, repeated phrasing of the same point. A quote that just summarizes what was said elsewhere has no extra value.
 
-Format each quote with the speaker and a line ref back to Raw Content:
+Format each quote with the speaker and a line ref back to the raw text. On a note carrying `raw_file`, the line counts in the `notes/raw/<id>.md` sidecar; otherwise it counts in the note, below `## Raw Content`:
 
 ```
 1. "We just don't have headcount to support a third pillar." — Andrew (raw: L142)
@@ -114,7 +114,7 @@ Capture with:
 
 - **Owner**: who, by name. If unclear, mark `@unknown` and treat as an Open Question.
 - **Priority**: high (blocks other work), medium (needs to happen this sprint), low (eventually).
-- **Source ref**: line in Raw Content where the item was committed.
+- **Source ref**: line in the raw text where the item was committed, counted in the sidecar when the note carries `raw_file`.
 
 ```
 - [ ] @Andrew (priority: high) — share the EDO Operating Architect chart by EOD Friday (raw: L312)

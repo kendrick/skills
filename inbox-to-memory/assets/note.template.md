@@ -9,6 +9,7 @@ tags: []
 topics: []
 entities: []
 # source_file: attachments/<filename>          # binary-extracted notes only
+# raw_file: raw/<id>.md                        # whenever the raw text is in the notes/raw/ sidecar
 # transcript_corrections: [Shachi <- Saatchi]  # applied aliases, extracted sections only
 open_questions: 0
 resolved_questions: 0
@@ -21,8 +22,9 @@ unpromoted_candidates: 0
 
 <!--
 6-12 quotes, prioritizing surprising, contradictory, or unstated-assumption-revealing statements.
-Anchor each with 4-6 verbatim words from Raw Content. The snippet is what survives
-a reflow; the line number is a convenience and optional.
+Anchor each with 4-6 verbatim words from the raw text. The snippet is what survives
+a reflow; the line number is a convenience and optional, and counts lines in the
+raw_file sidecar when the note has one.
 
 1. "<quote>" — <speaker> (raw: "<4-6 verbatim words>" L<line>)
 2. ...
@@ -91,4 +93,7 @@ Memory candidates (inline, in the section where the triggering passage lives):
 
 ## Raw Content
 
-<!-- Verbatim original (text sources) or extracted text (binary sources). Always last. -->
+<!-- Always last. With raw_file set, this section is the one pointer line
+from the "Raw Sidecar" section of machine-contracts.md, and the verbatim
+original (text sources) or extracted text (binary sources) lives in
+notes/raw/<id>.md. Without it, the raw text goes here. -->

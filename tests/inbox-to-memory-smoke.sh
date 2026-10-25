@@ -619,9 +619,14 @@ require_text inbox-to-memory/SKILL.md "canonical forms only, never the variants"
 # operating rules it reads first, the scaffold a scope teaches from, and the funnel
 # stage where the cost actually gets paid.
 funnel=inbox-to-memory/references/retrieval-funnel.md
-require_text inbox-to-memory/SKILL.md "Stop at \`## Raw Content\`."
-require_text inbox-to-memory/assets/claude-md/notes.template.md "stop at \`## Raw Content\`"
-require_text "$funnel" "**Stop at \`## Raw Content\`.**"
+require_text inbox-to-memory/SKILL.md "**Don't open \`raw_file\` unless verifying a quote.**"
+require_text inbox-to-memory/assets/claude-md/notes.template.md "don't open \`raw_file\` unless verifying a quote."
+require_text "$funnel" "**Don't open \`raw_file\` unless verifying a quote.**"
+# Notes groomed before the sidecar keep their raw text inline and the probe
+# still meets them, so each copy keeps the old boundary as a fallback clause.
+for rule_home in inbox-to-memory/SKILL.md inbox-to-memory/assets/claude-md/notes.template.md "$funnel"; do
+  require_text "$rule_home" "read it down to \`## Raw Content\` and no further"
+done
 require_text "$funnel" "## Stage 4 — Read Full Body"
 
 require_text inbox-to-memory/SKILL.md "Never rename, resolve by id."
@@ -1410,10 +1415,12 @@ YAML
 # has to land in the diff block for the file it belongs to, not float free at
 # the end of the report where it could be approved against the wrong note.
 batched_dry="$(bash "$migrator" "$batched_scope" --tier2 "$batched_proposals" 2>&1)"
-seam_block="$(printf '%s\n' "$batched_dry" | awk -v hdr="--- $batched_scope/$seam_note" \
-  '$0 == hdr { grab = 1; next } grab && /^--- / { exit } grab { print }')"
-other_block="$(printf '%s\n' "$batched_dry" | awk -v hdr="--- $batched_scope/$other_note" \
-  '$0 == hdr { grab = 1; next } grab && /^--- / { exit } grab { print }')"
+# A here-string, not a printf pipe: awk exits at the next header, and under
+# pipefail a printf still writing into that closed pipe fails the suite on load.
+seam_block="$(awk -v hdr="--- $batched_scope/$seam_note" \
+  '$0 == hdr { grab = 1; next } grab && /^--- / { exit } grab { print }' <<<"$batched_dry")"
+other_block="$(awk -v hdr="--- $batched_scope/$other_note" \
+  '$0 == hdr { grab = 1; next } grab && /^--- / { exit } grab { print }' <<<"$batched_dry")"
 [[ -n "$(printf '%s\n' "$seam_block" | grep -F '+summary:' || true)" ]] || {
   echo "the seam note's tier2 proposal did not appear grouped under its own file" >&2
   printf '%s\n' "$batched_dry" >&2
@@ -2431,6 +2438,19 @@ cmp "$split_fx/$unsplit_note" "$sc/$unsplit_note"
   echo "split-raw overwrote an existing sidecar" >&2
   exit 1
 }
+
+# Phase 4 deletes a text source on the strength of the sidecar, so the skill
+# has to name it as where the words survive.
+require_text inbox-to-memory/SKILL.md "Their words survive in the note's raw sidecar"
+require_text inbox-to-memory/references/migration.md "split-raw.sh"
+
+# Reflow can't follow a pointer into the sidecar, so a split note is skipped
+# and counted on its own line rather than miscounted as a zone judged not-VTT.
+sc="$(split_case reflow-split)"
+sc_out="$(bash "$reflow" "$sc" 2>&1)"
+require_line "$sc_out" "split notes skipped: 1" "reflow-raw over $sc"
+require_line "$sc_out" "v1 bodies skipped: 1" "reflow-raw over $sc"
+require_line "$sc_out" "left alone: 0" "reflow-raw over $sc"
 
 rm -rf "$split_tmp"
 

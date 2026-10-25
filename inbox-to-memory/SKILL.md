@@ -90,9 +90,13 @@ Emit one note per input at `<scope-root>/notes/YYYY-MM-DD-<slug>-<nanoid>.md`. T
 
 Three zones, always in this order:
 
-1. **Frontmatter** — `id`, `date`, `type`, `attendees`, `tags`, `topics`, optional `source_file` (binary sources only), optional `raw_file` (only when the raw text lives in the `notes/raw/<id>.md` sidecar), optional `related`.
+1. **Frontmatter** — `id`, `date`, `type`, `attendees`, `tags`, `topics`, optional `source_file` (binary sources only), `raw_file: raw/<id>.md` (whenever the note has raw text, which then lives in the sidecar), optional `related`.
 2. **Extracted sections** — `## Notable Quotes`, `## Tensions`, `## Stated Assumptions`, `## Unstated Assumptions`, `## Open Questions`, `## Action Items / Memory Candidates`.
-3. **Raw Content** — `## Raw Content` followed by the verbatim original (text sources) or extracted text (binary sources). Always last.
+3. **Raw Content** — `## Raw Content`, a blank line, and the pointer line `In [raw/<id>.md](raw/<id>.md). Open it only to verify a quote.` Always last.
+
+The raw text itself, the verbatim original (text sources) or extracted text (binary sources), goes in the sidecar `<scope-root>/notes/raw/<id>.md`, where `<id>` is the note's `id`. The sidecar has no frontmatter and holds every line that would otherwise follow the `## Raw Content` heading, so note and sidecar together reproduce the raw text byte for byte. Keeping it out of the note lets an embedding index exclude `notes/raw/`, so a transcript's chunks never outnumber the reviewed sections above it. `L<n>` in a quote anchor counts lines in the sidecar. The full rule is in [references/machine-contracts.md](references/machine-contracts.md), under "The Raw Sidecar".
+
+Write the sidecar first, creating `notes/raw/` if it is missing, then the note with `raw_file` set. A run that stops between the two leaves an orphan sidecar, which nothing reads. The other order leaves a note pointing at nothing, which the lint fails as `raw-file`. A note with no raw text at all, such as a directly authored one, keeps an empty `## Raw Content` section and no `raw_file`.
 
 Inside the extracted sections, flag candidates **inline** using the taxonomy below. Don't hide candidates in a separate file or section — keep them where the triggering passage lives, so the user can read both together.
 
@@ -133,9 +137,9 @@ Use the heuristics in [references/scope-decisions.md](references/scope-decisions
 
 ### Phase 4 — Dispose Source
 
-Text sources (`.md`, `.txt`, `.vtt`) get deleted from `_inbox/` — the verbatim content is preserved in the note's Raw Content zone.
+Text sources (`.md`, `.txt`, `.vtt`) get deleted from `_inbox/`. Their words survive in the note's raw sidecar, so confirm `notes/raw/<id>.md` exists and is non-empty before deleting.
 
-Binary sources (`.pdf`, `.docx`, `.pptx`) move to `<scope-root>/notes/attachments/<original-filename>`. Set `source_file: attachments/<filename>` in the note's frontmatter so the original is referenceable.
+Binary sources (`.pdf`, `.docx`, `.pptx`) move to `<scope-root>/notes/attachments/<original-filename>`. Set `source_file: attachments/<filename>` in the note's frontmatter so the original is referenceable. Their extracted text goes to the sidecar like any other raw text.
 
 Never leave a file in `_inbox/` after grooming. The inbox is a queue, not a library.
 
@@ -495,11 +499,11 @@ The scope's `CLAUDE.md` declares the mode in its top frontmatter blockquote. Rea
 
 - **Stage, never auto-commit.** Outputs are proposals. Never run `git commit` unless the user asks.
 - **Preserve raw content as the source of truth.** Memory records cite notes; they don't replace them.
-- **One groomed note per input.** No four-file fragmentation. Sections, not separate files.
+- **One groomed note per input.** No four-file fragmentation. Sections, not separate files. The raw sidecar under `notes/raw/` is not a second note: it holds the unreviewed raw text and nothing from the reviewed layer.
 - **Never auto-promote across scopes.** Scope is decided at flagging time, confirmed at sign-off, sticky after crystallization. If a record needs to move, the user moves it by hand. (This trades convenience for audit safety — at high enough volume, v2 may add a guarded `promote` mode.)
 - **`last_confirmed` is written without sign-off.** The gate on `_memory/` — no file written until the user approves that item — has one exception, and this is it. When an input confirms a claim an `accepted` record already makes, the run stamps the confirming note's date onto the record and names it in the phase 6 report instead of asking. Everything else stays gated: creating a record, amending one, superseding one, changing a word of what one claims. What the stamp touches is metadata rather than content — a date recording when the claim was last seen to hold, never the claim itself — which is what makes it safe to leave ungated. It stays that narrow on purpose. A prompt whose answer is always yes, in front of every input, teaches the user to approve without reading, and the gate is then worth nothing on the writes it exists for.
 - **Cross-scope references are fine.** A project note can wiki-link to a client-scope record. A client record can list project note ids in its `source_refs`. The record's _home_ (which `_memory/` it lives in) defines its scope, not its references.
-- **Stop at `## Raw Content`.** When reading a note to answer a question, read down to the raw content heading and no further. The extracted sections above it are the reviewed layer and are what you came for. Raw content is for a human reading back, and for verifying a quote you have specific reason to doubt. Reading it by default pulls a whole transcript into context to answer something the sections already answered.
+- **Don't open `raw_file` unless verifying a quote.** When reading a note to answer a question, read its extracted sections and leave the sidecar closed. Those sections are the reviewed layer and are what you came for. The raw text is for a human reading back, and for verifying a quote you have specific reason to doubt. Opening it by default pulls a whole transcript into context to answer something the sections already answered. A note with no `raw_file` still holds its raw text inline, so read it down to `## Raw Content` and no further.
 - **Never rename, resolve by id.** Files keep the name they were created with and ids never regenerate. Resolve a wiki link as a path from the linking note's directory first, which is how a cross-scope link resolves, then, where the target holds no `/`, by filename within the scope. When both miss, resolve by id. A `<slug>-<nanoid>` name carries its id as the ten characters that end the basename, with a hyphen right before them. The nanoid alphabet includes `-`, so the id can hold a hyphen of its own: `atlas-dry-run-prep-zFpm-hfD5u` carries `zFpm-hfD5u`, not the `hfD5u` after its last hyphen. The id search stays within the linking note's scope. A target whose basename lacks that suffix carries no id and has no id step. Report a link broken only after every step fails.
 - **VTT raw content is collapsed, not verbatim.** Cues get merged into speaker turns with timestamps kept at turn boundaries, via `scripts/collapse-vtt.sh`. This is the one sanctioned exception to preserving raw content exactly as captured. A wall of two-second cues is unreadable to the human the zone exists for, and the words themselves are unchanged. A blank line separates the turns, because markdown runs consecutive non-blank lines together as one paragraph; `scripts/reflow-raw.sh` repairs notes groomed before that separator existed ([references/migration.md](references/migration.md)). Captions carrying no speaker label collapse one turn per cue under `@unknown`, the same token an open question uses for a resolver nobody named. Attribute unlabelled speech to `@unknown` even when a neighbouring turn makes a name look obvious. When the collapser exits nonzero it has refused the file and written no usable output: report the line it names, leave the source in `_inbox/`, and groom nothing from it.
 
