@@ -149,7 +149,7 @@ done
 require_file tests/fixtures/work-issue/triage/round-2.md
 require_file tests/fixtures/work-issue/triage/round-3.md
 require_file tests/fixtures/work-issue/triage/round-noscope.md
-for timing in build30-review61 build30-review59 poll-excluded poll-nested budget-raised open-start-closed-at-poll open-review build-25s crash-closed-at-latest open-earlier-step crash-open-other-step crash-open-poll bad-label end-with-no-start; do
+for timing in build30-review61 build30-review59 poll-excluded poll-nested budget-raised open-start-closed-at-poll open-review build-25s crash-closed-at-latest open-earlier-step crash-open-other-step crash-open-poll bad-label end-with-no-start stop-resume-wait stop-resume-short-wait stop-resume-more-work; do
   require_file "tests/fixtures/work-issue/timing/$timing.txt"
 done
 require_file tests/fixtures/work-issue/review/pr-comment-finding.json
@@ -1898,6 +1898,10 @@ require_text _maintenance/work-issue/RATIONALE.md "rather than reusing \`triage_
 # into triage, where no new poll triggers the close-first rule. The next `6`
 # start ends it too; left open it covered the 61 min of triage after it and
 # printed `review: 0m over: no`.
+# The stop-resume cases guard #232: a stop closes its step and the resume
+# reopens it, so the wait between the two counts as nothing. Moving the
+# resume 60 min earlier leaves review at 10m, and 10 more min of work after
+# it reads 20m. One unbroken `8` over the same span read 100m and `over: yes`.
 timing_dir=tests/fixtures/work-issue/timing
 declare -a budget_cases=(
   "build30-review61:build: 30m review: 61m ratio: 2.03 over: yes"
@@ -1911,6 +1915,9 @@ declare -a budget_cases=(
   "open-earlier-step:build: 20m review: 210m ratio: 10.50 over: yes"
   "crash-open-other-step:build: 30m review: 40m ratio: 1.33 over: no"
   "crash-open-poll:build: 30m review: 61m ratio: 2.03 over: yes"
+  "stop-resume-wait:build: 10m review: 10m ratio: 1.00 over: no"
+  "stop-resume-short-wait:build: 10m review: 10m ratio: 1.00 over: no"
+  "stop-resume-more-work:build: 10m review: 20m ratio: 2.00 over: no"
 )
 for case in "${budget_cases[@]}"; do
   fixture="${case%%:*}"
@@ -1982,6 +1989,12 @@ refute_text work-issue/references/resume.md "budget --timing <RUN_DIR>/timing.lo
 # The close-first rule, which ends a crashed interval at the log's newest stamp.
 require_text work-issue/SKILL.md "append \`<n> end <latest>\` first"
 require_text work-issue/SKILL.md "awk 'NF == 3 { print \$3 }' RUN_DIR/timing.log | sort | tail -1"
+# #232: a stop closes the open step and a resume reopens it. Without both, the
+# wait for the user's answer reads as review; issue-55 counted 90 min of it.
+require_text work-issue/SKILL.md "Before printing the stop, append \`<n> end \$(date -u +%FT%TZ)\` for that step."
+require_text work-issue/SKILL.md "Every resume into step \`<n>\` reopens it with that step's own \`start\` line"
+require_text work-issue/SKILL.md "Before its message, each stop also appends \`<n> end\` to \`RUN_DIR/timing.log\` for the step this invocation still has open"
+require_text _maintenance/work-issue/RATIONALE.md "| 156 | Every stop closes the step its invocation still has open"
 require_text work-issue/references/resume.md "Passing \`--ratio <r>\` to one \`budget\` command outranks every \`budget-raised\` line"
 require_text work-issue/SKILL.md "the queue, the \`budget\` line,"
 
