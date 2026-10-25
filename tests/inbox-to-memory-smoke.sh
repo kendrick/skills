@@ -1165,13 +1165,15 @@ require_text inbox-to-memory/SKILL.md "scripts/verify-migration.sh"
 refute_text inbox-to-memory/references/migration.md "is not implemented here"
 
 # Both key orders are duplicated by hand into the lint, the templates, and now the
-# migrator. The only thing keeping the four copies honest is that a drift fails here.
+# migrator, and the note order into split-raw.sh too. The only thing keeping the
+# copies honest is that a drift fails here.
 migrator_note_order="schema body_schema id date type summary attendees tags topics entities source_file raw_file transcript_corrections open_questions resolved_questions deferred_tensions unpromoted_candidates related"
 migrator_record_order="schema body_schema id memory_type title status date effective_from effective_to last_confirmed source_refs applies_to owners tags themes related exception_to supersedes superseded_by"
 require_text "$migrator" "$migrator_note_order"
 require_text "$migrator" "$migrator_record_order"
 require_text "$lint" "$migrator_note_order"
 require_text "$lint" "$migrator_record_order"
+require_text inbox-to-memory/scripts/split-raw.sh "NOTE_KEY_ORDER=\"$migrator_note_order\""
 
 # Stand up a throwaway git repo from the old-only fixture. Everything below reads
 # `git status` and `git diff` to check the promises, so the fixture has to be a
@@ -2303,6 +2305,13 @@ sc="$(split_case sidecar-gone)"
 rm "$sc/$split_sidecar"
 sc_out="$(run_lint "$sc")"
 require_failure "$sc_out" "FAIL $sc/$split_note: raw-file: \`raw_file: raw/Kp3vR8sNq2.md\` does not resolve"
+require_line "$sc_out" "failures: 1" "$sc"
+
+# An emptied sidecar resolves but holds none of the bytes the note pointed at.
+sc="$(split_case sidecar-empty)"
+: >"$sc/$split_sidecar"
+sc_out="$(run_lint "$sc")"
+require_failure "$sc_out" "FAIL $sc/$split_note: raw-file: \`raw_file: raw/Kp3vR8sNq2.md\` resolves to an empty file"
 require_line "$sc_out" "failures: 1" "$sc"
 
 # The pointer section with no key is a note claiming its raw text lives

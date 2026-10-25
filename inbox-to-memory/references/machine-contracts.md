@@ -150,11 +150,11 @@ In [raw/<id>.md](raw/<id>.md). Open it only to verify a quote.
 
 The sidecar exists so an embedding index can exclude `notes/raw/`. Left inline, a two-hour transcript becomes dozens of chunks competing with the three or four reviewed ones above it.
 
-A note carrying `body_schema: 1` is never split, and its raw text stays inline.
+A v1-body note, meaning one with no `schema` key or one carrying `body_schema: 1`, is never split, and its raw text stays inline.
 
 Nothing reads a sidecar as a note. The lint and the migrator walk `notes/*.md`, which doesn't recurse, and the lint's link resolution and the link sweep in [scripts/verify-migration.sh](../scripts/verify-migration.sh) both prune `notes/raw/`. Without the prune, a sidecar named `<id>.md` would satisfy the name and id tries for a link to a note that no longer exists.
 
-The lint enforces the rule on v2-body notes as `raw-file`, whose two cases are in the table below. Both mean the raw text may be gone: a pointer that resolves nowhere is no evidence it survived.
+The lint enforces the rule on v2-body notes as `raw-file`, whose three cases are in the table below. All three mean the raw text may be gone: a pointer that resolves nowhere, or to an empty file, is no evidence it survived. A split never writes an empty sidecar, since `split-raw.sh` skips a note whose raw zone is empty.
 
 ## Derived Counts
 
@@ -188,7 +188,7 @@ Each failure names the file and the check that caught it, so a defect whose caus
 | `frontmatter-key-domain`    | The block carries both `tags` and `themes`.                          |
 | `token-grammar`             | A bracketed token in the body is absent from the grammar table.      |
 | `contradiction-fields`      | A contradiction names no record, or never states what that record claims. |
-| `raw-file`                  | A v2-body note's `raw_file` doesn't resolve, or its `## Raw Content` links into `raw/` with no `raw_file`. |
+| `raw-file`                  | A v2-body note's `raw_file` doesn't resolve or resolves to an empty file, or its `## Raw Content` links into `raw/` with no `raw_file`. |
 
 `frontmatter-key-domain` is checked ahead of the budget on purpose. A record carrying both keys plus most of the order runs past line 20, and the budget failure would report that overrun without ever naming the mixup underneath it.
 

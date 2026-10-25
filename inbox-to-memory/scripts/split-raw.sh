@@ -18,6 +18,10 @@
 # 3 usage or an unreadable scope.
 set -euo pipefail
 
+# Copied from lint-scope.sh, which the smoke test pins this copy against. The
+# split only needs the keys after raw_file, but a partial copy would drift unseen.
+NOTE_KEY_ORDER="schema body_schema id date type summary attendees tags topics entities source_file raw_file transcript_corrections open_questions resolved_questions deferred_tensions unpromoted_candidates related"
+
 mode=""
 scope=""
 
@@ -165,10 +169,10 @@ for file in "$scope"/notes/*.md; do
   # or last if none is present, which keeps lint's key-order check passing.
   # Each `L<n>` above the heading drops by the heading's line number; one that
   # never pointed into the raw zone is reported rather than made negative.
-  head -n "$heading" "$file" | awk -v rf="raw/$id.md" -v h="$heading" -v f="$file" '
+  head -n "$heading" "$file" | awk -v rf="raw/$id.md" -v h="$heading" -v f="$file" -v order="$NOTE_KEY_ORDER" '
     BEGIN {
-      n = split("transcript_corrections open_questions resolved_questions deferred_tensions unpromoted_candidates related", later, " ")
-      for (i = 1; i <= n; i++) after[later[i]] = 1
+      n = split(order, keys, " ")
+      for (i = 1; i <= n; i++) { if (seen) after[keys[i]] = 1; if (keys[i] == "raw_file") seen = 1 }
     }
     NR == 1 && $0 == "---" { in_fm = 1; print; next }
     in_fm && !done && ($0 == "---" || (match($0, /^[A-Za-z_][A-Za-z0-9_]*:/) && (substr($0, 1, RLENGTH - 1) in after))) {

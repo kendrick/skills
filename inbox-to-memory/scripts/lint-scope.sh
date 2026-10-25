@@ -21,9 +21,9 @@
 # Requires bash, awk, and yq (brew install yq).
 set -euo pipefail
 
-# Contract key orders. Duplicated by hand into the templates and, later, the
-# migrator; the smoke test pins all three copies to the same string so a drift
-# fails there before it reaches a scope.
+# Contract key orders. Duplicated by hand into the templates, the migrator, and
+# (note order only) split-raw.sh; the smoke test pins every copy to the same
+# string so a drift fails there before it reaches a scope.
 NOTE_KEY_ORDER="schema body_schema id date type summary attendees tags topics entities source_file raw_file transcript_corrections open_questions resolved_questions deferred_tensions unpromoted_candidates related"
 RECORD_KEY_ORDER="schema body_schema id memory_type title status date effective_from effective_to last_confirmed source_refs applies_to owners tags themes related exception_to supersedes superseded_by"
 
@@ -428,9 +428,10 @@ check_links() {
 }
 
 # A note's raw text lives inline or in `raw/<id>.md`, and `raw_file` is the
-# only thing saying which. A key pointing at nothing, or a pointer section with
-# no key, both mean the raw text may be gone, and the reviewed layer above it is
-# then unverifiable. Resolved from the note's own dir, as `source_file` is.
+# only thing saying which. A key pointing at nothing or at an empty file, or a
+# pointer section with no key, all mean the raw text may be gone, and the
+# reviewed layer above it is then unverifiable. Resolved from the note's own
+# dir, as `source_file` is.
 check_raw_file() {
   local file="$1" raw_file
   raw_file="$(awk '
@@ -439,8 +440,13 @@ check_raw_file() {
     in_fm && /^raw_file:/ { sub(/^raw_file:[[:space:]]*/, ""); sub(/[[:space:]]+$/, ""); gsub(/^["\047]|["\047]$/, ""); print; exit }
   ' "$file")"
   if [[ -n "$raw_file" ]]; then
-    [[ -f "$(dirname "$file")/$raw_file" ]] ||
+    if [[ ! -f "$(dirname "$file")/$raw_file" ]]; then
       fail raw-file "\`raw_file: $raw_file\` does not resolve from the note's directory"
+    # split-raw.sh skips an empty raw zone, so an empty sidecar never came from
+    # a split: it means the bytes the note pointed at are gone.
+    elif [[ ! -s "$(dirname "$file")/$raw_file" ]]; then
+      fail raw-file "\`raw_file: $raw_file\` resolves to an empty file"
+    fi
   elif awk 'f && /\]\(raw\//{ found = 1; exit } /^## Raw Content/ { f = 1 } END { exit (found ? 0 : 1) }' "$file"; then
     fail raw-file "\`## Raw Content\` links into raw/ but the note carries no \`raw_file\`"
   fi
