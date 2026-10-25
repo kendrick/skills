@@ -169,7 +169,7 @@ require_text work-issue/SKILL.md "name: work-issue"
 # from siblings too—a wave reaches it once per lane. Refuted on the bare
 # key so `: false` fails here as loudly as `: true`.
 refute_text work-issue/SKILL.md "disable-model-invocation"
-require_text work-issue/SKILL.md "argument-hint: '<issue number or URL> [plan path] [--isolate | --no-isolate] [--deep] [--max-review-rounds N] [--dry-run]'"
+require_text work-issue/SKILL.md "argument-hint: '<issue number or URL> [plan path] [--isolate | --no-isolate] [--deep] [--max-review-rounds N] [--no-publish] [--dry-run]'"
 
 # A description that summarizes the steps becomes the shortcut the model takes
 # instead of reading the body, which is how a nine-step skill collapses into
@@ -1878,6 +1878,15 @@ require_text work-issue/references/triage.md "An in-scope row whose Severity is 
 require_text _maintenance/work-issue/RATIONALE.md "| 106 | \`--max-review-rounds N\`, default 2, caps the post-PR review loop"
 require_text _maintenance/work-issue/RATIONALE.md "\`P0\` and \`blocking\` are the exception because queueing one ships a known blocker, and repairing it breaks the cap"
 require_text _maintenance/work-issue/RATIONALE.md "rather than reusing \`triage_blocking_rows\` as the issue proposed"
+
+# --no-publish (#224) puts work-wave's withheld push into the command a build
+# lane runs, so the hold doesn't rest on the lane reading the grant right.
+# A fresh run and a resume past Step 4 both end at the one withheld-grant stop.
+require_text work-issue/SKILL.md "\`--no-publish\` ends the run at the withheld-grant stop once Step 4 is done, so no step past Step 4 runs: no \`git push\`, no \`gh pr create\`, and no \`pushed_at\` write"
+require_text work-issue/SKILL.md "| The push half of the grant is withheld, or \`--no-publish\` is set | after 4, Resume |"
+require_text work-issue/SKILL.md "With \`--no-publish\` set, a \`phase:\` of 5, 6, 7, or 8 meets the withheld-grant stop in place of that step"
+require_text work-issue/README.md "\`--no-publish\` ends the run after the red-team with nothing pushed"
+require_text _maintenance/work-issue/RATIONALE.md "| 157 | \`--no-publish\` ends a run at the withheld-grant stop once Step 4 is done"
 
 # Each timing fixture through the real `budget`. poll-excluded is the
 # falsifier for what counts as review: counting wall-clock time since the

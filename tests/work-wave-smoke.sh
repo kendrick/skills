@@ -147,7 +147,7 @@ require_text "$skill" "Name LANE_MODEL on every dispatch."
 
 # --isolate keeps an unattended lane off work-issue's isolation ask row, which
 # nobody is there to answer.
-require_text "$skill" "told to invoke \`work-issue\` by name with \`<N> <PLAN[N]> --isolate\`"
+require_text "$skill" "told to invoke \`work-issue\` by name with \`<N> <PLAN[N]> --isolate --no-publish\`"
 
 # Step 3's collision check refuses before dispatch rather than letting a lane
 # meet the ask row, and the exemption keeps a wave that includes an
@@ -190,9 +190,11 @@ require_text "$skill" "A lane already started (Step 0 item 4) is proved on its \
 # the half of this rule that does the work.
 require_text "$skill" "Where it has none yet, derive \`footprint/issue-<N>.md\` from the copy's \`Files:\` lines and pass that file instead, never the tableless copy"
 
-# The withheld grant is honored, not enforced, and this route row is the one
-# check that sees a lane that published early.
-require_text "$skill" "| \`pr\` non-null on a \`build\` report | The lane published before the merge test, against its withheld grant. Stop the wave"
+# The lane fills in pr itself, so a check on the field alone passes a lane
+# that opened a pull request and reported pr as null. gh pr list asks GitHub
+# instead (#224, ledger row 40).
+require_text "$skill" "| a \`build\` report whose \`pr\` is non-null, or for which \`gh pr list --head issue-<N> --state all --json url --jq '.[].url'\` prints a URL | The lane published before the merge test"
+require_text "$skill" "gh pr list --head issue-<N> --state all"
 
 # The orchestrator writes its merge-test line into its own facts file. Writing
 # into a lane's file breaks the single-writer rule the facts log rests on.
@@ -215,7 +217,7 @@ require_text "$skill" "Enter when every unheld lane has returned, every build re
 # failed re-check straight to Step 6. The route row and the recorded-stop
 # definition make what the record says count.
 require_text "$skill" "| the footprint re-check (item 2) exited non-zero | Stop the wave with the script's stderr lines quoted, the way Step 1 stops on a non-zero exit. Nothing proceeds to Step 6. |"
-require_text "$skill" "A gate record whose route is the \`pr\` non-null stop or the failed re-check stop is a recorded stop, and the resume probe stops the wave again on it."
+require_text "$skill" "A gate record whose route is the early-publish stop or the failed re-check stop is a recorded stop, and the resume probe stops the wave again on it."
 
 # Resume row 4 reads any check.txt as a passed proof, so a failing Step 1
 # must never write one.
@@ -277,6 +279,12 @@ require_text "$brief" "\`refused\` (work-issue's Step 0 refused the plan or the 
 # Without --isolate a lane meets work-issue's isolation ask row, and nobody is
 # there to answer it.
 require_text "$brief" "\`--isolate\` is not optional: your siblings are"
+
+# #224: the build line's --no-publish holds the withheld push when a lane
+# misreads the grant. The publish line has to go without it, or no lane ever
+# reaches work-issue's Step 5.
+require_text "$brief" "    work-issue {{N}} {{PLAN}} --isolate --no-publish"
+require_text "$brief" "In the publish phase, exactly as:"
 
 # A lane that ends its turn with background workers running hands back a wave nobody gated, as issue-165's lane did in #198.
 require_text "$brief" "Do not end your turn while any worker or repair dispatch you made is outstanding."
@@ -364,8 +372,9 @@ refute_text "$skill" "gh pr merge"
 # refusal itself is the pin.
 require_text "$skill" "Plan them first: \`writing-plans\`, then \`work-wave <ISSUES> --plan N=PATH\`."
 
-# #113's first Non-Goal: the flag belongs in its own issue against work-issue.
-refute_text "$skill" "--no-publish"
+# #224's first Non-Goal: whether an early pull request stays open is the
+# user's call, so the wave stops and leaves it open.
+refute_text "$skill" "gh pr close"
 
 # A description that lists the workflow becomes the shortcut the model takes
 # instead of reading the body.
@@ -384,6 +393,7 @@ require_text "$ledger" "## Where This Came From"
 require_text "$ledger" "## Decision Ledger"
 require_text "$ledger" "## Deliberately Not Built"
 require_text "$ledger" "## Known Limitations"
+require_text "$ledger" "| 40 | The build dispatch runs \`work-issue <N> <PLAN> --isolate --no-publish\`, and Step 5 runs \`gh pr list --head issue-<N> --state all\` for every build report"
 # The root README carries this skill's own install flag, in the map table's
 # third column. The command form around it is pinned once, in
 # repo-docs-smoke.sh.
