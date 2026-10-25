@@ -14,14 +14,20 @@ You are one lane in a wave of parallel work-issue runs. {{SIBLINGS}}
 Your issue: {{ISSUE}}
 Your plan, by absolute path: {{PLAN}}
 
-Invoke the `work-issue` skill by name, exactly as:
+Invoke the `work-issue` skill by name. In the build phase, exactly as:
+
+    work-issue {{N}} {{PLAN}} --isolate --no-publish
+
+In the publish phase, exactly as:
 
     work-issue {{N}} {{PLAN}} --isolate
 
-and follow it as written. `--isolate` is not optional: your siblings are
+Your phase is named below. Follow work-issue as written. `--isolate` is not optional: your siblings are
 taking worktrees at this same moment, and the flag is what makes your
 isolation decision take a worktree without asking a question nobody is here
-to answer. Your worktree will be {{WORKTREE}} and your run directory
+to answer. `--no-publish` is what holds the build phase's withheld push even
+if the grant below is misread: work-issue stops once Step 4's Done-when holds,
+with nothing pushed. Your worktree will be {{WORKTREE}} and your run directory
 {{RUN_DIR}}; work-issue makes both. Do not make either yourself.
 
 Phase: {{PHASE}}.
@@ -118,7 +124,7 @@ Thirteen substitutions. Twelve stand for a single value; `{{GRANT}}` stands for 
 - `{{SIBLINGS}}` — one line naming the wave's other lanes: the rest of ISSUES and their titles, read off `lanes.md`. It puts the other issues in front of a lane before its first command, the way `{{ISSUE}}` puts its own.
 - `{{ISSUE}}` — `issue-<N>`, its title, and its URL, from the `gh issue view` call at Step 0.
 - `{{PLAN}}` — PLAN[N], the absolute path Step 0 resolved for this issue.
-- `{{N}}` — the lane's bare issue number. It stands alone in the invocation line and the facts-file line, and joins `issue-` everywhere else the brief names the branch.
+- `{{N}}` — the lane's bare issue number. It stands alone in the two invocation lines and the facts-file line, and joins `issue-` everywhere else the brief names the branch.
 - `{{WORKTREE}}` — LANE[N]'s WORKTREE, absolute: `<ROOT>/../<PROJECT>-issue-<N>/`.
 - `{{RUN_DIR}}` — LANE[N]'s RUN_DIR, absolute: `<COMMON>/work-issue/issue-<N>/`.
 - `{{PHASE}}` — `build` at Step 4, `publish` at Step 7.
@@ -161,6 +167,6 @@ Each field answers a step that reads it:
 - `files_changed` — read at Step 5 item 3: any path in it under CONTRACT_PATHS triggers the contract-change merge test. The footprint re-check at Step 5 item 2 reads the lane's `RUN_DIR/plan.md` table, never this field.
 - `contract_changed` — read at Step 5 item 3 beside `files_changed`: any path in it triggers the same merge test, because the lane knows which paths its wave-0 tasks owned and CONTRACT_PATHS is only the orchestrator's pre-dispatch reading of the plans.
 - `facts` — checked against `{{WAVE_DIR}}/facts/issue-{{N}}.md`; where the two differ, the file the lane wrote as it went is the one that wins.
-- `pr` — null on a build report, which is the withheld grant's own evidence that it held; the pull-request URL once a publish report opens one.
+- `pr` — null on a build report; the pull-request URL once a publish report opens one. Step 5 stops the wave on a build report whose `pr` is non-null, and asks `gh pr list` as well, because the lane fills this field itself.
 - `detail` — quoted verbatim in the wave's final report for any lane that stops, fails, or is refused.
 - `question` — held for the user with the wave's next message; empty on `done`.

@@ -60,7 +60,7 @@ Type its name, or let a wave reach it one lane at a time—see the Gotchas for w
 > /work-issue https://github.com/you/repo/issues/42 --no-isolate
 ```
 
-Type the same invocation again to resume, plan path included if you passed one. The run probes the world, works out where it stopped, and picks up there. Without a plan path it looks under `docs/plans/` in this repo, then for a path linked from the issue, then for the approved plan in the conversation. It finds a plan you keep anywhere else only if you pass the path or the issue links it, so a resume that drops the path can reach the plan gate with nothing to satisfy it. `--isolate` and `--no-isolate` pin the isolation decision, `--deep` forces `adversarial-review`, `--max-review-rounds N` sets the review round cap (2 by default), and `--dry-run` runs every gate and every derivation while dispatching nothing and pushing nothing.
+Type the same invocation again to resume, plan path included if you passed one. The run probes the world, works out where it stopped, and picks up there. Without a plan path it looks under `docs/plans/` in this repo, then for a path linked from the issue, then for the approved plan in the conversation. It finds a plan you keep anywhere else only if you pass the path or the issue links it, so a resume that drops the path can reach the plan gate with nothing to satisfy it. `--isolate` and `--no-isolate` pin the isolation decision, `--deep` forces `adversarial-review`, `--max-review-rounds N` sets the review round cap (2 by default), `--no-publish` ends the run after the red-team with nothing pushed, and `--dry-run` runs every gate and every derivation while dispatching nothing and pushing nothing.
 
 ## What's Here
 
