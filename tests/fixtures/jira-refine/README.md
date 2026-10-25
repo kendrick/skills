@@ -76,8 +76,7 @@ than an env var for its seed, and serves the REST endpoints on that port for
 `site = "${JIRA_REFINE_TEST_SITE}"` to point at.
 
 `fake-jira` has no file extension and carries the executable bit, but putting
-this fixtures directory on `PATH` does not make it resolve as `jira` —
-`shutil.which` (and `JiraCliTransport.__init__`, which looks the binary up
+this fixtures directory on `PATH` does not make it resolve as `jira`—`shutil.which` (and `JiraCliTransport.__init__`, which looks the binary up
 the same way) matches on filename, and the file is named `fake-jira`. What
 the design enables instead is symlinking the fixture into a scratch directory
 under the name `jira`, then putting that directory on `PATH`, the way
@@ -118,8 +117,7 @@ Five entries, three statuses:
 - `skipped`: `PLAT-14`—reviewed and declined.
 
 `entries --status approved` on this file emits exactly the three approved
-keys above, in order, as the JSON lines `tracker-contract.md` specifies —
-the input `jira-apply.py update` expects on stdin.
+keys above, in order, as the JSON lines `tracker-contract.md` specifies—the input `jira-apply.py update` expects on stdin.
 
 ## `staging-bad.md`
 
@@ -208,8 +206,7 @@ v2 API returns it:
   `staging-good.md`'s own `PROJ-398` entry, resolve against a real issue
   instead of reporting `missing-issue`.
 
-This is the interface both fixture-owning tasks in this wave build against —
-the fake transports read exactly this shape, keyed by issue key.
+This is the interface both fixture-owning tasks in this wave build against—the fake transports read exactly this shape, keyed by issue key.
 
 ## jira-cli configs: `jira-cli-config-healthy.yml`, `jira-cli-config-no-types.yml`
 
