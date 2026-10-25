@@ -93,15 +93,17 @@ gh api repos/{owner}/{repo}/pulls/<pr>/comments/<comment-id>/replies -f body='Fi
 
 Review-level and issue-level findings have no thread to reply into; those get a pull-request comment naming the finding they answer.
 
-A finding the run checked and changed nothing for, replied on the thread:
-
-The body opens on its verdict by name, as `technical-writing`'s review-correspondence profile gives it, then names what was checked and what it showed. It carries no SHA, because no commit answers it, and HEAD answers nothing. This covers a refused finding, an in-scope row the repair left in `left`, and every reply in a round where each finding was refused.
-
-A queued row, replied the same way:
+A queued row that names no change, posted through the same `gh api` call as an in-scope fix:
 
 ```
 deferred: <Outside because>; tracked in the deferred-findings comment
 ```
+
+A queued row somebody fixed anyway names that change, so it gets the in-scope fix's reply above, `<sha>` included.
+
+A finding the run checked and changed nothing for, replied on the thread:
+
+The body opens on its verdict by name, as `technical-writing`'s review-correspondence profile gives it, then names what was checked and what it showed. It carries no SHA, because no commit answers it, and HEAD answers nothing. This covers a refused finding, an in-scope row the repair left in `left`, and every reply in a round where each finding was refused. A queued row takes the deferred template above in place of a verdict.
 
 Replies go through `technical-writing`, and they carry no attribution trailer or footer.
 

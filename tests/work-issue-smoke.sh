@@ -718,6 +718,11 @@ require_text work-issue/SKILL.md "A reply that names a change of its own cites t
 require_text work-issue/SKILL.md "cites no SHA and never reaches for HEAD"
 require_text work-issue/references/triage.md "A finding the run checked and changed nothing for, replied on the thread:"
 refute_text work-issue/SKILL.md "Reply to every finding thread with what changed and the commit SHA"
+# The queued-row sentence is more specific than the SHA rule, so left
+# unconditioned it outranks it and a queued row fixed anyway loses its SHA.
+require_text work-issue/SKILL.md "A queued row that names no change gets"
+require_text work-issue/SKILL.md "A queued row somebody fixed anyway names that change and cites its SHA"
+refute_text work-issue/README.md "saying what changed and at which commit"
 # A line-number locator into a sibling's SKILL.md goes stale on the next
 # insert above it, the shape review-correspondence.md warns against. Cite
 # the step by name instead.
