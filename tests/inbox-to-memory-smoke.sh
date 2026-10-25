@@ -2353,6 +2353,85 @@ rm "$sc/$split_note"
 sc_out="$(bash inbox-to-memory/scripts/verify-migration.sh "$sc" --since HEAD 2>&1 || true)"
 require_output "$sc_out" "verify-link: \`$split_link\` resolves neither by name nor by id \`Kp3vR8sNq2\`"
 
+# split-raw.sh is the one-time migrator onto the sidecar, and the issue's
+# acceptance bar is cmp, not lint: lint proves a pointer resolves, never that
+# the bytes behind it are the ones the note held.
+split=inbox-to-memory/scripts/split-raw.sh
+unsplit_note=notes/2026-07-14-pier-lighting-followup-Wd7hT2xLm9.md
+unsplit_sidecar=notes/raw/Wd7hT2xLm9.md
+v1_note=notes/2025-11-04-pier-survey-Bq4nV6cZr1.md
+require_file "$split"
+
+# A dry run lists the unsplit v2 note and leaves the scope exactly as committed.
+sc="$(split_case split-dry)"
+git -C "$sc" init -q
+git -C "$sc" add -A
+git -C "$sc" -c user.email=t@t -c user.name=t commit -qm baseline
+sc_out="$(bash "$split" --dry-run "$sc" 2>&1)"
+require_output "$sc_out" "split: $sc/$unsplit_note -> $sc/$unsplit_sidecar"
+require_line "$sc_out" "split: 1" "split-raw --dry-run on $sc"
+[[ -z "$(git -C "$sc" status --porcelain --untracked-files=all)" ]] || {
+  echo "split-raw --dry-run wrote under the scope:" >&2
+  git -C "$sc" status --porcelain --untracked-files=all >&2
+  exit 1
+}
+
+# The raw zone is every line after the heading, read off the untouched fixture
+# rather than from anything split-raw.sh computes.
+sc="$(split_case split-apply)"
+heading="$(grep -nx '## Raw Content' "$split_fx/$unsplit_note" | head -1 | cut -d: -f1)"
+tail -n "+$((heading + 1))" "$split_fx/$unsplit_note" >"$split_tmp/raw-before"
+[[ -s "$split_tmp/raw-before" ]] || {
+  echo "the unsplit fixture note has an empty raw zone" >&2
+  exit 1
+}
+bash "$split" --apply "$sc" >/dev/null
+cmp "$split_tmp/raw-before" "$sc/$unsplit_sidecar"
+cmp "$split_fx/$v1_note" "$sc/$v1_note"
+cmp "$split_fx/$split_note" "$sc/$split_note"
+require_text "$sc/$unsplit_note" "raw_file: raw/Wd7hT2xLm9.md"
+require_text "$sc/$unsplit_note" "In [raw/Wd7hT2xLm9.md](raw/Wd7hT2xLm9.md). Open it only to verify a quote."
+refute_text "$sc/$unsplit_note" "[00:00:04]"
+sc_out="$(run_lint "$sc")"
+require_line "$sc_out" "failures: 0" "$sc after split-raw --apply"
+
+# Each anchor's line in the sidecar holds its snippet's words.
+anchors=0
+while IFS=$'\t' read -r snippet lineno; do
+  anchors=$((anchors + 1))
+  sed -n "${lineno}p" "$sc/$unsplit_sidecar" | grep -Fq -- "$snippet" || {
+    echo "anchor \"$snippet\" L$lineno does not land on its words in the sidecar" >&2
+    exit 1
+  }
+done < <(grep -oE '\(raw: "[^"]*" L[0-9]+\)' "$sc/$unsplit_note" | sed -E 's/^\(raw: "([^"]*)" L([0-9]+)\)$/\1\t\2/')
+[[ "$anchors" -eq 2 ]] || {
+  echo "expected 2 anchors in the split note, checked $anchors" >&2
+  exit 1
+}
+
+# A second run finds nothing left to split.
+sc_out="$(bash "$split" --apply "$sc" 2>&1)"
+require_line "$sc_out" "split: 0" "a second split-raw --apply on $sc"
+require_line "$sc_out" "already split: 2" "a second split-raw --apply on $sc"
+
+# An existing sidecar is never overwritten: exit 1, note and sidecar untouched.
+sc="$(split_case split-clash)"
+mkdir -p "$sc/notes/raw"
+printf 'someone else wrote this\n' >"$sc/$unsplit_sidecar"
+sc_rc=0
+sc_out="$(bash "$split" --apply "$sc" 2>&1)" || sc_rc=$?
+[[ "$sc_rc" == 1 ]] || {
+  echo "split-raw exited $sc_rc over an existing sidecar (want 1)" >&2
+  printf '%s\n' "$sc_out" >&2
+  exit 1
+}
+require_output "$sc_out" "$sc/$unsplit_sidecar already exists; left alone"
+cmp "$split_fx/$unsplit_note" "$sc/$unsplit_note"
+[[ "$(cat "$sc/$unsplit_sidecar")" == "someone else wrote this" ]] || {
+  echo "split-raw overwrote an existing sidecar" >&2
+  exit 1
+}
+
 rm -rf "$split_tmp"
 
 # The checked-in fixtures are never migrated or stamped in place. Every

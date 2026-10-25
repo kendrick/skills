@@ -58,6 +58,7 @@ inbox-to-memory/
 │   ├── collapse-vtt.sh     # merges VTT cues into speaker turns
 │   ├── bench-fixture.sh    # builds a qmd bench fixture from accepted records
 │   ├── reflow-raw.sh       # repairs transcripts groomed before turns were blank-line separated
+│   ├── split-raw.sh        # moves a note's raw text into its notes/raw/ sidecar
 │   ├── stamp-confirmed.sh  # stamps a note's date onto the records it confirms
 │   └── verify-migration.sh # checks a migration against git history: links resolve, nothing renamed or deleted
 └── references/       # progressive-disclosure reading
