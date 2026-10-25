@@ -195,6 +195,10 @@ require_text "$skill" "Where it has none yet, derive \`footprint/issue-<N>.md\` 
 # instead (#224, ledger row 40).
 require_text "$skill" "| a \`build\` report whose \`pr\` is non-null, or for which \`gh pr list --head issue-<N> --state all --json url --jq '.[].url'\` prints a URL | The lane published before the merge test"
 require_text "$skill" "gh pr list --head issue-<N> --state all"
+# A failed gh call recorded as a stop would re-stop every resume under a label
+# saying a pull request exists. With no gate record the resume re-runs the
+# check instead (ledger row 40).
+require_text "$skill" "A non-zero exit stops the wave with its stderr quoted and writes no gate record for that report"
 
 # The orchestrator writes its merge-test line into its own facts file. Writing
 # into a lane's file breaks the single-writer rule the facts log rests on.
