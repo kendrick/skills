@@ -1992,9 +1992,10 @@ require_text work-issue/SKILL.md "awk 'NF == 3 { print \$3 }' RUN_DIR/timing.log
 # #232: a stop closes the open step and a resume reopens it. Without both, the
 # wait for the user's answer reads as review; issue-55 counted 90 min of it.
 require_text work-issue/SKILL.md "Before printing the stop, append \`<n> end \$(date -u +%FT%TZ)\` for that step."
+require_text work-issue/SKILL.md "finds the step balanced and adds nothing, since a second \`end\` makes \`budget\` exit 3."
 require_text work-issue/SKILL.md "Every resume into step \`<n>\` reopens it with that step's own \`start\` line"
-require_text work-issue/SKILL.md "Before its message, each stop also appends \`<n> end\` to \`RUN_DIR/timing.log\` for the step this invocation still has open"
-require_text _maintenance/work-issue/RATIONALE.md "| 156 | Every stop closes the step its invocation still has open"
+require_text work-issue/SKILL.md "Before its message, each stop also appends \`<n> end\` to \`RUN_DIR/timing.log\` for its step wherever that step's \`start\` lines outnumber its \`end\` lines"
+require_text _maintenance/work-issue/RATIONALE.md "| 156 | A stop appends \`<n> end\` stamped with the current time for its step wherever that step's \`start\` lines outnumber its \`end\` lines"
 require_text work-issue/references/resume.md "Passing \`--ratio <r>\` to one \`budget\` command outranks every \`budget-raised\` line"
 require_text work-issue/SKILL.md "the queue, the \`budget\` line,"
 
