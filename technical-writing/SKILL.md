@@ -20,7 +20,7 @@ Four public standards stacked under four house rules, aimed at prose a tired eng
 
 **Google developer style** decides how sentences address the reader. Talk to them as "you", in the present tense, and say who does what—"the compiler checks", not "is checked". Write instructions as commands, condition first, common case before the exception. Applies everywhere.
 
-**STE principles** decide how much one sentence carries. One instruction per sentence and one thought everywhere else, split past about 20 words for instructions and 25 otherwise, with the condition ahead of the step it guards. Keep the articles—"remove backup file" reads two ways. Applies everywhere; principles only, no dictionary or numbered-rule conformance.
+**STE principles** decide how much one sentence carries. One instruction per sentence and one thought everywhere else, split past about 20 words for instructions and 25 otherwise, with the condition ahead of the step it guards. Join short neighbors that share a subject or a cause, since a run of clipped sentences reads as staccato. Keep the articles—"remove backup file" reads two ways. Applies everywhere; principles only, no dictionary or numbered-rule conformance.
 
 **Global English** decides whether a sentence can be read two ways. Keep "only" and "not" against the word they change. Make every "it" and "this" point at one obvious thing. Break up long noun strings. Call each thing by one name. Applies everywhere, and does the most work in comments.
 
