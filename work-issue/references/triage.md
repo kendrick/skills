@@ -93,6 +93,10 @@ gh api repos/{owner}/{repo}/pulls/<pr>/comments/<comment-id>/replies -f body='Fi
 
 Review-level and issue-level findings have no thread to reply into; those get a pull-request comment naming the finding they answer.
 
+A finding the run checked and changed nothing for, replied on the thread:
+
+The body opens on its verdict by name, as `technical-writing`'s review-correspondence profile gives it, then names what was checked and what it showed. It carries no SHA, because no commit answers it, and HEAD answers nothing. This covers a refused finding, an in-scope row the repair left in `left`, and every reply in a round where each finding was refused.
+
 A queued row, replied the same way:
 
 ```
