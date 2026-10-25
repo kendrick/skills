@@ -289,6 +289,15 @@ require_text "$brief" "\`--isolate\` is not optional: your siblings are"
 # reaches work-issue's Step 5.
 require_text "$brief" "    work-issue {{N}} {{PLAN}} --isolate --no-publish"
 require_text "$brief" "In the publish phase, exactly as:"
+# grep -F matches the build line as a substring, so pin the publish line whole.
+publish_line="$(grep -F -A2 "In the publish phase, exactly as:" "$brief" | tail -1)"
+[ "$publish_line" = "    work-issue {{N}} {{PLAN}} --isolate" ] || {
+  echo "publish line in $brief is not exactly: work-issue {{N}} {{PLAN}} --isolate" >&2
+  exit 1
+}
+require_text "$skill" "again, with \`--no-publish\` dropped"
+# A failed gh check writes no gate record, so resume runs it again rather than reading a record that says none.
+require_text "$skill" "the wave stops with no gate record for that report"
 
 # A lane that ends its turn with background workers running hands back a wave nobody gated, as issue-165's lane did in #198.
 require_text "$brief" "Do not end your turn while any worker or repair dispatch you made is outstanding."
