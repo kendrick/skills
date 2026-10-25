@@ -345,7 +345,7 @@ require_text inbox-to-memory/SKILL.md "scripts/scaffold_digest.py --stamp"
 # templates, the lint, and eventually the migrator, and the only thing keeping
 # those three copies honest is that changing the order fails here first.
 contracts=inbox-to-memory/references/machine-contracts.md
-note_key_order="schema, id, date, type, summary, attendees, tags, topics, entities, source_file, transcript_corrections, open_questions, resolved_questions, deferred_tensions, unpromoted_candidates, related"
+note_key_order="schema, id, date, type, summary, attendees, tags, topics, entities, source_file, raw_file, transcript_corrections, open_questions, resolved_questions, deferred_tensions, unpromoted_candidates, related"
 record_key_order="schema, id, memory_type, title, status, date, effective_from, effective_to, last_confirmed, source_refs, applies_to, owners, tags, themes, related, exception_to, supersedes, superseded_by"
 require_file "$contracts"
 require_text "$contracts" "$note_key_order"
@@ -1080,7 +1080,7 @@ require_text inbox-to-memory/SKILL.md "**A dismissed flag stays in the note perm
 # missing from it ships a failure name that leads nowhere.
 for check in frontmatter-fences frontmatter-parses frontmatter-budget \
   frontmatter-single-line frontmatter-known-keys frontmatter-key-order \
-  frontmatter-key-domain token-grammar contradiction-fields; do
+  frontmatter-key-domain token-grammar contradiction-fields raw-file; do
   require_table_row "$contracts" "$check"
 done
 
@@ -1161,7 +1161,7 @@ refute_text inbox-to-memory/references/migration.md "is not implemented here"
 
 # Both key orders are duplicated by hand into the lint, the templates, and now the
 # migrator. The only thing keeping the four copies honest is that a drift fails here.
-migrator_note_order="schema body_schema id date type summary attendees tags topics entities source_file transcript_corrections open_questions resolved_questions deferred_tensions unpromoted_candidates related"
+migrator_note_order="schema body_schema id date type summary attendees tags topics entities source_file raw_file transcript_corrections open_questions resolved_questions deferred_tensions unpromoted_candidates related"
 migrator_record_order="schema body_schema id memory_type title status date effective_from effective_to last_confirmed source_refs applies_to owners tags themes related exception_to supersedes superseded_by"
 require_text "$migrator" "$migrator_note_order"
 require_text "$migrator" "$migrator_record_order"
@@ -2262,6 +2262,98 @@ if [[ "$(id -u)" != 0 ]]; then
 else
   echo "skipping unreadable-record assertion: running as root" >&2
 fi
+
+# A raw sidecar (#193) moves a note's raw text out of the file an index reads,
+# so the lint is the only thing left proving the text survived. Every case
+# below plants one defect in a copy of the split fixture. Cleaned up explicitly
+# at the end of this section rather than joining the cumulative trap chain.
+split_fx="$fixtures/split"
+split_note=notes/2026-07-07-pier-lighting-review-Kp3vR8sNq2.md
+split_sidecar=notes/raw/Kp3vR8sNq2.md
+split_link=2026-07-07-pier-lighting-review-Kp3vR8sNq2
+require_file "$split_fx/$split_note"
+require_file "$split_fx/$split_sidecar"
+require_file "$split_fx/notes/2026-07-14-pier-lighting-followup-Wd7hT2xLm9.md"
+require_text "$split_fx/notes/2025-11-04-pier-survey-Bq4nV6cZr1.md" "body_schema: 1"
+require_text "$split_fx/$split_note" "raw_file: raw/Kp3vR8sNq2.md"
+require_text "$split_fx/$split_note" "In [raw/Kp3vR8sNq2.md](raw/Kp3vR8sNq2.md). Open it only to verify a quote."
+require_text "$split_fx/notes/2026-07-14-pier-lighting-followup-Wd7hT2xLm9.md" "[[$split_link]]"
+require_text "$contracts" "A note carries \`raw_file\` exactly when its raw text lives in the sidecar."
+require_text "$contracts" "In a note carrying \`raw_file\`, \`L<n>\` counts lines in the sidecar rather than the note."
+
+split_out="$(run_lint "$split_fx")"
+require_line "$split_out" "failures: 0" "$split_fx"
+
+split_tmp="$(mktemp -d "${TMPDIR:-/tmp}/i2m-split-contract.XXXXXX")"
+split_case() {
+  mkdir -p "$split_tmp/$1"
+  cp -R "$split_fx/." "$split_tmp/$1/"
+  printf '%s' "$split_tmp/$1"
+}
+
+# A deleted sidecar fails the note that pointed at it, and nothing else.
+sc="$(split_case sidecar-gone)"
+rm "$sc/$split_sidecar"
+sc_out="$(run_lint "$sc")"
+require_failure "$sc_out" "FAIL $sc/$split_note: raw-file: \`raw_file: raw/Kp3vR8sNq2.md\` does not resolve"
+require_line "$sc_out" "failures: 1" "$sc"
+
+# The pointer section with no key is a note claiming its raw text lives
+# elsewhere without saying where, so it fails whether the sidecar is there or not.
+for gone in keep remove; do
+  sc="$(split_case "no-key-$gone")"
+  grep -v '^raw_file:' "$sc/$split_note" >"$sc/note.tmp"
+  mv "$sc/note.tmp" "$sc/$split_note"
+  [[ "$gone" == remove ]] && rm "$sc/$split_sidecar"
+  refute_text "$sc/$split_note" "raw_file:"
+  sc_out="$(run_lint "$sc")"
+  require_failure "$sc_out" "FAIL $sc/$split_note: raw-file: \`## Raw Content\` links into raw/ but the note carries no \`raw_file\`"
+  require_line "$sc_out" "failures: 1" "$sc"
+done
+
+# A link resolves to the note, never to its sidecar. A note renamed but keeping
+# its id still resolves by id; a deleted note fails even though `raw/<id>.md`
+# matches both the name and the id try, which is what the find prune is for.
+sc="$(split_case renamed)"
+mv "$sc/$split_note" "$sc/notes/2026-07-07-north-arm-lamps-Kp3vR8sNq2.md"
+sc_out="$(run_lint "$sc")"
+require_line "$sc_out" "failures: 0" "$sc"
+
+sc="$(split_case note-gone)"
+rm "$sc/$split_note"
+sc_out="$(run_lint "$sc")"
+require_failure "$sc_out" "link-broken: \`$split_link\` resolves neither by name nor by id \`Kp3vR8sNq2\`"
+
+sc="$(split_case bare-id)"
+# Above `## Raw Content`, since the lint reads no links below it.
+awk '{ print } /^Picks up from/ { print "See also [[Kp3vR8sNq2]]." }' \
+  "$split_fx/notes/2026-07-14-pier-lighting-followup-Wd7hT2xLm9.md" \
+  >"$sc/notes/2026-07-14-pier-lighting-followup-Wd7hT2xLm9.md"
+require_text "$sc/notes/2026-07-14-pier-lighting-followup-Wd7hT2xLm9.md" "See also [[Kp3vR8sNq2]]."
+sc_out="$(run_lint "$sc")"
+require_failure "$sc_out" "link-broken: \`Kp3vR8sNq2\` resolves neither by path nor by name"
+
+# verify-migration.sh reports the same deleted sidecar through its lint sweep,
+# and its own link sweep prunes notes/raw/ the same way.
+sc="$(split_case verify)"
+git -C "$sc" init -q
+git -C "$sc" add -A
+git -C "$sc" -c user.email=t@t -c user.name=t commit -qm baseline
+rm "$sc/$split_sidecar"
+sc_rc=0
+sc_out="$(bash inbox-to-memory/scripts/verify-migration.sh "$sc" --since HEAD 2>&1)" || sc_rc=$?
+[[ "$sc_rc" -ne 0 ]] || {
+  echo "verify-migration passed a scope whose sidecar was deleted" >&2
+  printf '%s\n' "$sc_out" >&2
+  exit 1
+}
+require_output "$sc_out" "verify-lint: FAIL $sc/$split_note: raw-file:"
+git -C "$sc" checkout -q -- "$split_sidecar"
+rm "$sc/$split_note"
+sc_out="$(bash inbox-to-memory/scripts/verify-migration.sh "$sc" --since HEAD 2>&1 || true)"
+require_output "$sc_out" "verify-link: \`$split_link\` resolves neither by name nor by id \`Kp3vR8sNq2\`"
+
+rm -rf "$split_tmp"
 
 # The checked-in fixtures are never migrated or stamped in place. Every
 # migration or write-through test works on a copy, and a test that forgets

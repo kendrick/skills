@@ -90,7 +90,7 @@ Emit one note per input at `<scope-root>/notes/YYYY-MM-DD-<slug>-<nanoid>.md`. T
 
 Three zones, always in this order:
 
-1. **Frontmatter** — `id`, `date`, `type`, `attendees`, `tags`, `topics`, optional `source_file` (binary sources only), optional `related`.
+1. **Frontmatter** — `id`, `date`, `type`, `attendees`, `tags`, `topics`, optional `source_file` (binary sources only), optional `raw_file` (only when the raw text lives in the `notes/raw/<id>.md` sidecar), optional `related`.
 2. **Extracted sections** — `## Notable Quotes`, `## Tensions`, `## Stated Assumptions`, `## Unstated Assumptions`, `## Open Questions`, `## Action Items / Memory Candidates`.
 3. **Raw Content** — `## Raw Content` followed by the verbatim original (text sources) or extracted text (binary sources). Always last.
 
@@ -458,7 +458,7 @@ Full shapes live in the templates, and the rules behind them in [references/mach
 **Groomed note**, in order:
 
 ```
-schema, body_schema, id, date, type, summary, attendees, tags, topics, entities, source_file, transcript_corrections, open_questions, resolved_questions, deferred_tensions, unpromoted_candidates, related
+schema, body_schema, id, date, type, summary, attendees, tags, topics, entities, source_file, raw_file, transcript_corrections, open_questions, resolved_questions, deferred_tensions, unpromoted_candidates, related
 ```
 
 **Memory record** (memory-bank-aligned), in order:

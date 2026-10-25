@@ -21,7 +21,7 @@
 # the transform needs keyed lookups, and the bash that ships on macOS has none.
 set -euo pipefail
 
-NOTE_KEY_ORDER="schema body_schema id date type summary attendees tags topics entities source_file transcript_corrections open_questions resolved_questions deferred_tensions unpromoted_candidates related"
+NOTE_KEY_ORDER="schema body_schema id date type summary attendees tags topics entities source_file raw_file transcript_corrections open_questions resolved_questions deferred_tensions unpromoted_candidates related"
 RECORD_KEY_ORDER="schema body_schema id memory_type title status date effective_from effective_to last_confirmed source_refs applies_to owners tags themes related exception_to supersedes superseded_by"
 
 FRONTMATTER_LINE_BUDGET=20
