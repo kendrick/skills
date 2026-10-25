@@ -260,6 +260,16 @@ require_text divvy-up/SKILL.md "and its constraints, not against whether it soun
 # coupling ships two tasks that silently invalidate each other's work.
 require_text divvy-up/SKILL.md "Disjoint paths prove two tasks cannot lose each other's writes; they do not prove the two tasks are about different things."
 
+# #106: a done-when has to be reachable while peers are still writing. In a
+# schema-widening wave, wave 0's bar was `pnpm typecheck passes`, which every
+# producer kept red until its own wave-1 task landed, so the only route to
+# green was the shortcut the constraint cell forbade. Lose any of these and
+# Step 1 asks only for a bar somebody could fail, so a tree-wide command
+# becomes a task's default done-when again.
+require_text divvy-up/SKILL.md "A done-when also has to be reachable while peers are still writing."
+require_text divvy-up/SKILL.md "the suite belongs to the gate"
+require_text divvy-up/SKILL.md "that the task can reach from its own files while its peers are still writing"
+
 # Maintenance ledger. A rationale doc without its section headings is prose
 # nobody can navigate under time pressure.
 require_text _maintenance/divvy-up/RATIONALE.md "## Decision Ledger"
