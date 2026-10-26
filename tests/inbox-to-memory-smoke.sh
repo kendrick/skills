@@ -622,8 +622,8 @@ funnel=inbox-to-memory/references/retrieval-funnel.md
 require_text inbox-to-memory/SKILL.md "**Don't open \`raw_file\` unless verifying a quote.**"
 require_text inbox-to-memory/assets/claude-md/notes.template.md "don't open \`raw_file\` unless verifying a quote."
 require_text "$funnel" "**Don't open \`raw_file\` unless verifying a quote.**"
-# Notes groomed before the sidecar keep their raw text inline and the probe
-# still meets them, so each copy keeps the old boundary as a fallback clause.
+# Notes groomed before the sidecar keep their raw text inline, and agents still
+# read them, so each copy keeps the old boundary as a fallback clause.
 for rule_home in inbox-to-memory/SKILL.md inbox-to-memory/assets/claude-md/notes.template.md "$funnel"; do
   require_text "$rule_home" "read it down to \`## Raw Content\` and no further"
 done
@@ -1418,7 +1418,7 @@ YAML
 # the end of the report where it could be approved against the wrong note.
 batched_dry="$(bash "$migrator" "$batched_scope" --tier2 "$batched_proposals" 2>&1)"
 # A here-string, not a printf pipe: awk exits at the next header, and under
-# pipefail a printf still writing into that closed pipe fails the suite on load.
+# pipefail a printf still writing into that closed pipe fails the suite under load.
 seam_block="$(awk -v hdr="--- $batched_scope/$seam_note" \
   '$0 == hdr { grab = 1; next } grab && /^--- / { exit } grab { print }' <<<"$batched_dry")"
 other_block="$(awk -v hdr="--- $batched_scope/$other_note" \
@@ -2273,9 +2273,9 @@ else
 fi
 
 # A raw sidecar (#193) moves a note's raw text out of the file an index reads,
-# so the lint is the only thing left proving the text survived. Every case
-# below plants one defect in a copy of the split fixture. Cleaned up explicitly
-# at the end of this section rather than joining the cumulative trap chain.
+# so the lint is what catches a pointer left dangling. Every case below plants
+# one defect in a copy of the split fixture. This section removes $split_tmp
+# itself at the end rather than joining the cumulative trap chain.
 split_fx="$fixtures/split"
 split_note=notes/2026-07-07-pier-lighting-review-Kp3vR8sNq2.md
 split_sidecar=notes/raw/Kp3vR8sNq2.md
@@ -2369,9 +2369,9 @@ rm "$sc/$split_note"
 sc_out="$(bash inbox-to-memory/scripts/verify-migration.sh "$sc" --since HEAD 2>&1 || true)"
 require_output "$sc_out" "verify-link: \`$split_link\` resolves neither by name nor by id \`Kp3vR8sNq2\`"
 
-# split-raw.sh is the one-time migrator onto the sidecar, and the issue's
-# acceptance bar is cmp, not lint: lint proves a pointer resolves, never that
-# the bytes behind it are the ones the note held.
+# split-raw.sh is the one-time migrator onto the sidecar, and cmp proves it
+# where lint can't: lint proves a pointer resolves, never that the bytes behind
+# it are the ones the note held.
 split=inbox-to-memory/scripts/split-raw.sh
 unsplit_note=notes/2026-07-14-pier-lighting-followup-Wd7hT2xLm9.md
 unsplit_sidecar=notes/raw/Wd7hT2xLm9.md

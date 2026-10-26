@@ -30,7 +30,7 @@ When the user asks to groom the inbox (or invokes "process the inbox"), for each
 7. **Assemble the groomed file:** write the verbatim original to `notes/raw/<id>.md` first, then the note: frontmatter with `raw_file: raw/<id>.md`, extracted body sections, then `## Raw Content` with the one pointer line `In [raw/<id>.md](raw/<id>.md). Open it only to verify a quote.`
 8. **Rename and move:** `YYYY-MM-DD[-HHMM]-<slug>-<nanoid>.md`, out of `_inbox/` into `notes/`.
 9. **Clean up the source file.** The inbox is a queue — nothing stays after grooming.
-   - **Text sources** (`.md`, `.txt`, `.vtt`): delete from `_inbox/`. Raw content is preserved in the note's raw sidecar.
+   - **Text sources** (`.md`, `.txt`, `.vtt`): delete from `_inbox/`. The note's raw sidecar keeps the raw content.
    - **Binary sources** (`.pdf`, `.docx`, `.pptx`): move to `notes/attachments/`. Extraction is lossy; keep the original. Set `source_file: attachments/filename.ext` in the groomed note. The extracted text goes to the raw sidecar.
 10. **Summarize what was groomed and extracted.** Do not auto-commit. The user reviews extractions before committing.
 

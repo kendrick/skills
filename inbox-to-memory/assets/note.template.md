@@ -93,8 +93,4 @@ Memory candidates (inline, in the section where the triggering passage lives):
 
 ## Raw Content
 
-<!-- Always last. A note with raw text sets raw_file, and this section is
-the one pointer line from the "Raw Sidecar" section of machine-contracts.md;
-the verbatim original (text sources) or extracted text (binary sources) lives
-in notes/raw/<id>.md. Only a note with no raw text, one authored directly,
-leaves this section empty and carries no raw_file. -->
+<!-- Always last. A note with raw text sets raw_file and holds here only the pointer line from the "Raw Sidecar" section of machine-contracts.md; the verbatim original (text sources) or extracted text (binary sources) lives in notes/raw/<id>.md. A directly authored note has no raw text, so it leaves this section empty and carries no raw_file. -->
