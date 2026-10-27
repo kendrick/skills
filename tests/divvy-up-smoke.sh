@@ -229,6 +229,16 @@ require_text divvy-up/SKILL.md "a failure routes a task as \`failed\` only when 
 require_text divvy-up/references/worker-prompt.md "A failure that also appears in this baseline is not yours."
 require_text divvy-up/references/worker-prompt.md "a failure the baseline already shows aside"
 
+# #106: a worker sets status by its own done-when and its own files. Mid-wave,
+# a peer's half-written file fails the tree-wide command, and the gate that
+# runs after every task lands owns that failure. Holding the worker to it
+# again is the unreachable bar Step 1 now forbids.
+require_text divvy-up/references/worker-prompt.md "Neither is a failure in a file you do not own"
+require_text divvy-up/references/worker-prompt.md "Set \`status\` by your own done-when"
+refute_text divvy-up/references/worker-prompt.md "and set \`status\` by everything else."
+refute_text divvy-up/references/worker-prompt.md "everything else verification printed"
+refute_text divvy-up/references/worker-prompt.md "reports \`done\` with a broken build"
+
 # Output that names no individual failures can't be attributed, so the gate
 # stops the run. work-issue's stop table quotes this message, so the wording
 # is pinned byte for byte. The stop is scoped to a red BASELINE: on a green or
