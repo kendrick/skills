@@ -710,6 +710,24 @@ require_text work-issue/SKILL.md "| pending | neither |"
 # use to check it.
 require_text work-issue/SKILL.md "Answer, never resolve"
 
+# #131, row 158: the SHA keys on whether a reply names a change. A refused
+# finding has no commit, and HEAD cited in its place points the reviewer at
+# code that answers nothing. Scope can't be the key, because a queued row
+# fixed anyway names a change and owes its SHA.
+require_text work-issue/SKILL.md "A reply that names a change of its own cites that change's commit SHA."
+require_text work-issue/SKILL.md "cites no SHA and never reaches for HEAD"
+require_text work-issue/references/triage.md "A finding the run checked and changed nothing for, replied on the thread:"
+refute_text work-issue/SKILL.md "Reply to every finding thread with what changed and the commit SHA"
+# The queued-row sentence is more specific than the SHA rule, so left
+# unconditioned it outranks it and a queued row fixed anyway loses its SHA.
+require_text work-issue/SKILL.md "A queued row that names no change gets"
+require_text work-issue/SKILL.md "A queued row somebody fixed anyway names that change and cites its SHA"
+refute_text work-issue/README.md "saying what changed and at which commit"
+# A line-number locator into a sibling's SKILL.md goes stale on the next
+# insert above it, the shape review-correspondence.md warns against. Cite
+# the step by name instead.
+refute_text _maintenance/technical-writing/RATIONALE.md "work-issue/SKILL.md:204"
+
 # #135: three lanes committed wave 0 and went idle with wave 1 ready,
 # printing nothing. SKILL.md's "next gate and stops" and divvy-up's "move to
 # the next wave" both held at a committed wave, so the opening now defines a
