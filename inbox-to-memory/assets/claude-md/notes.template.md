@@ -8,7 +8,7 @@ scaffold_digest: "{{sha256:<hex> of the filled body—stamped at scaffold time}}
 >
 > **Inherits from:** the scope's root `CLAUDE.md`.
 
-Grooming isn't just filename and frontmatter. It produces a normalized, extracted file: frontmatter on top, summary-style body sections in the middle, raw content verbatim at the bottom. The raw content is the source of truth; the extracted sections are the agent's contribution and require review before commit.
+Grooming isn't just filename and frontmatter. It produces a normalized, extracted file: frontmatter on top, summary-style body sections in the middle, and a `## Raw Content` pointer at the bottom to the verbatim original in `notes/raw/<id>.md`. The raw content is the source of truth; the extracted sections are the agent's contribution and require review before commit.
 
 ## The Inbox
 
@@ -121,7 +121,7 @@ While reading the raw content during grooming, when you notice an observation th
 participants finally spoke up after a ten-second pause. `[journal candidate: deliberate pauses produce non-dominant-voice participation in group sessions]`
 ```
 
-These stay in the raw content zone. Pattern reviews collect them later via `Grep "\[journal candidate:" notes/`. Do not move flagged observations into the top extracted sections — the surrounding context is part of what makes them useful.
+These stay in the raw content, in the sidecar. Pattern reviews collect them later via `Grep "\[journal candidate:" notes/`. Do not move flagged observations into the top extracted sections — the surrounding context is part of what makes them useful.
 
 ## Collision Handling
 
@@ -137,7 +137,7 @@ Nanoids are unique by construction, so collisions are filename-level only.
 
 - Auto-commit groomed files or extractions. The user reviews and commits.
 - Fabricate dates, attendees, quotes, or cross-references.
-- Rewrite or summarize the raw content. Extract from it; preserve it verbatim underneath.
+- Rewrite or summarize the raw content. Extract from it; preserve it verbatim in `notes/raw/<id>.md`.
 - Populate `related` based on topical similarity. Explicit reference only.
 - Put journal entries or memory records in this directory. Those are agent-created elsewhere via promotion.
 - Treat extracted sections as canonical. They are best-effort extraction from raw, subject to user correction.

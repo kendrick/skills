@@ -627,6 +627,17 @@ require_text "$funnel" "**Don't open \`raw_file\` unless verifying a quote.**"
 for rule_home in inbox-to-memory/SKILL.md inbox-to-memory/assets/claude-md/notes.template.md "$funnel"; do
   require_text "$rule_home" "read it down to \`## Raw Content\` and no further"
 done
+# A scaffolded scope's CLAUDE.md is what its agents read, so a scaffold line still
+# putting the transcript inside the note brings back the inline layout the sidecar
+# exists to end (PR #255 review).
+require_text inbox-to-memory/assets/claude-md/notes.template.md "a \`## Raw Content\` pointer at the bottom to the verbatim original in \`notes/raw/<id>.md\`"
+require_text inbox-to-memory/assets/claude-md/notes.template.md "preserve it verbatim in \`notes/raw/<id>.md\`"
+refute_text inbox-to-memory/assets/claude-md/notes.template.md "raw content verbatim at the bottom"
+refute_text inbox-to-memory/assets/claude-md/notes.template.md "preserve it verbatim underneath"
+for scope_template in client project; do
+  require_text "inbox-to-memory/assets/claude-md/$scope_template.template.md" "Raw Content (a pointer to the verbatim sidecar \`notes/raw/<id>.md\`)"
+  refute_text "inbox-to-memory/assets/claude-md/$scope_template.template.md" "Raw Content (verbatim)"
+done
 require_text "$funnel" "## Stage 4 — Read Full Body"
 
 require_text inbox-to-memory/SKILL.md "Never rename, resolve by id."
