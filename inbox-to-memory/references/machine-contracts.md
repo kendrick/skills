@@ -152,7 +152,7 @@ The sidecar exists so an embedding index can exclude `notes/raw/`. Left inline, 
 
 A v1-body note, meaning one with no `schema` key or one carrying `body_schema: 1`, keeps its raw text inline, because `split-raw.sh` skips it.
 
-Nothing reads a sidecar as a note. The lint and the migrator walk `notes/*.md`, which doesn't recurse, and the lint's link resolution and the link sweep in [scripts/verify-migration.sh](../scripts/verify-migration.sh) both prune `notes/raw/`. Without the prune, a sidecar named `<id>.md` would satisfy the name and id tries for a link to a note that no longer exists.
+Nothing reads a sidecar as a note. The lint and the migrator walk `notes/*.md`, which doesn't recurse, and three walks that recurse prune `notes/raw/`: the lint's link resolution, the link sweep in [scripts/verify-migration.sh](../scripts/verify-migration.sh), and note discovery in [scripts/bench-fixture.sh](../scripts/bench-fixture.sh). Without the prune, a sidecar named `<id>.md` would satisfy the name and id tries for a link to a note that no longer exists, and a sidecar whose raw Markdown opens with its own frontmatter `id` would give the bench a second note for that id.
 
 The lint enforces the rule on v2-body notes as `raw-file`, whose three cases are in the table below. All three mean the raw text may be gone: a pointer that resolves nowhere or to an empty file is no evidence the text survived, and a pointer section with no key names no file to check. An empty sidecar never comes from a split, since `split-raw.sh` skips a note whose raw zone is empty.
 

@@ -1122,6 +1122,15 @@ require_text inbox-to-memory/assets/note.template.md "[contradicts accepted: [[<
 require_text inbox-to-memory/README.md "nanoid"
 require_text inbox-to-memory/README.md "brew install yq"
 
+# A note's raw text lives in a notes/raw/ sidecar (#193). A README that still
+# says the note holds it tells a user backing up notes alone that the deleted
+# source survives there.
+refute_text inbox-to-memory/README.md "the verbatim original at the bottom"
+refute_text inbox-to-memory/README.md "the note's Raw Content zone"
+refute_text inbox-to-memory/README.md "The content survives in the notes"
+require_text inbox-to-memory/README.md "their text lives on in \`notes/raw/<id>.md\`, which the note points to"
+require_text inbox-to-memory/README.md "where \`notes/raw/\` keeps each text source verbatim"
+
 # AGENTS.md tells a reviewer to check a README's lists against the directory
 # tree, but no test ran that check, so the README's scripts tree fell behind
 # inbox-to-memory/scripts unnoticed (#207). The diff below is #207's done-when
@@ -2139,6 +2148,24 @@ grep -qx 'source_refs: \[Bn1RbkOwn1, Bn1RbkOwn1\]' "$bench_dir/dupe/$bench_rec_a
 bash "$bench" "$bench_dir/dupe" >"$bench_dir/dupe.json" 2>/dev/null
 bench_assert "$bench_dir/dupe.json" "A's duplicate ref to note1 was not collapsed" \
   'q["record-BnRecA0001"]["expected_files"] == ["'"$bench_note1"'", "'"$bench_rec_a"'"]'
+
+# A raw sidecar holds the source verbatim, so raw Markdown that opens with its
+# own frontmatter carries an id. Read as a note, this one made note1's id
+# resolve to two notes and dropped A's query while still exiting 0 (#255
+# review). Adding it must change nothing about the run. The copy keeps the
+# name `bench` because the output's collection field is the scope's basename.
+mkdir -p "$bench_dir/rawside"
+cp -R "$bench_scope" "$bench_dir/rawside/bench"
+mkdir -p "$bench_dir/rawside/bench/notes/raw"
+printf -- '---\nid: Bn1RbkOwn1\ntitle: pasted doc\n---\n\nraw body\n' >"$bench_dir/rawside/bench/notes/raw/Bn1RbkOwn1.md"
+bench_rc=0; bash "$bench" "$bench_scope" >"$bench_dir/rs-base.out" 2>"$bench_dir/rs-base.err" || bench_rc=$?
+raw_rc=0; bash "$bench" "$bench_dir/rawside/bench" >"$bench_dir/rs-raw.out" 2>"$bench_dir/rs-raw.err" || raw_rc=$?
+if [[ "$bench_rc" != "$raw_rc" ]] || ! cmp -s "$bench_dir/rs-base.out" "$bench_dir/rs-raw.out" \
+  || ! cmp -s "$bench_dir/rs-base.err" "$bench_dir/rs-raw.err"; then
+  echo "bench-fixture read a notes/raw/ sidecar as a note (exit $bench_rc vs $raw_rc):" >&2
+  cat "$bench_dir/rs-raw.err" >&2
+  exit 1
+fi
 
 # Hand-written questions follow the derived ones, numbered from 1.
 cat >"$bench_dir/questions.json" <<'JSON'
