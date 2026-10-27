@@ -16,6 +16,11 @@
 # with no `schema` key, or carrying `body_schema: 1`, is skipped and counted.
 # A raw zone that is not wall-to-wall speaker turns is not collapsed VTT: pasted
 # decks and documents carry their own paragraph breaks and are left alone.
+#
+# A note carrying `raw_file` is split: its raw zone is one pointer line and the
+# transcript sits in notes/raw/<id>.md. Reflow doesn't follow the pointer, so a
+# split note is skipped and counted. references/migration.md runs this script
+# before split-raw.sh for that reason.
 set -euo pipefail
 
 apply=0
@@ -97,6 +102,7 @@ refs_rewritten=0
 already=0
 left_alone=0
 v1_skipped=0
+split_skipped=0
 : >"$work/findings"
 
 # The body generation is what decides whether a body gets touched, so both
@@ -109,6 +115,17 @@ body_is_v1() {
     in_fm && /^schema:/ { has_schema = 1 }
     in_fm && /^body_schema: 1$/ { body_v1 = 1 }
     END { exit ((has_schema && !body_v1) ? 1 : 0) }
+  ' "$1"
+}
+
+# Counted apart from "left alone", which would claim the zone was read and
+# judged not VTT when nobody opened the sidecar.
+note_is_split() {
+  awk '
+    NR == 1 { if ($0 == "---") { in_fm = 1; next } else { exit } }
+    in_fm && $0 == "---" { exit }
+    in_fm && /^raw_file:/ { split_note = 1 }
+    END { exit (split_note ? 0 : 1) }
   ' "$1"
 }
 
@@ -204,6 +221,11 @@ for file in "$scope"/notes/*.md "$scope"/_memory/*/*.md "$scope"/entries/*.md; d
     continue
   fi
 
+  if note_is_split "$file"; then
+    split_skipped=$((split_skipped + 1))
+    continue
+  fi
+
   reflow_file "$file" >"$work/candidate" 2>"$work/events"
 
   awk -F'\t' -v f="$file" '$1 == "finding" { print "  " f ": " $2 }' "$work/events" >>"$work/findings"
@@ -234,6 +256,7 @@ echo "refs rewritten: $refs_rewritten"
 echo "already reflowed: $already"
 echo "left alone: $left_alone"
 echo "v1 bodies skipped: $v1_skipped"
+echo "split notes skipped: $split_skipped"
 
 if [[ -s "$work/findings" ]]; then
   echo

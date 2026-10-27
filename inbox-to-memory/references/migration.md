@@ -147,6 +147,24 @@ The generation rules are the same as Tier 1's, applied to the body instead of th
 
 Anything outside the note that resolves these line numbers — a `<blob-url>#L<n>` source link, most commonly — resolves against the file's real line count, so generate those links after the reflow has run, not before.
 
+## Splitting Raw Zones Into Sidecars
+
+Process mode writes a note's raw text to a `notes/raw/<id>.md` sidecar, and `scripts/split-raw.sh` moves a v2 note groomed before that change onto the same shape. The contract is "The Raw Sidecar" in [machine-contracts.md](machine-contracts.md). Run `reflow-raw.sh` first: reflow skips and counts a split note, because its raw zone is now one pointer line and the transcript reflow would repair sits in the sidecar.
+
+```bash
+# list each note it would split, and the sidecar path
+bash inbox-to-memory/scripts/split-raw.sh --dry-run <scope-root>
+
+# write it
+bash inbox-to-memory/scripts/split-raw.sh --apply <scope-root>
+```
+
+For each note in `notes/*.md`, the sidecar gets every byte after the `## Raw Content` heading line, copied rather than rebuilt. The note keeps the heading, a blank line, and the pointer line, and gains `raw_file` in key order. Each `L<n>` in that note's anchors drops by the heading's line number. The text moved verbatim, so that arithmetic is exact, and the snippet stays as written. An `L<n>` that never pointed below the heading is reported under "needs a human" and left as written.
+
+It skips and counts three kinds of note: a v1 body (no `schema` key, or `body_schema: 1`), a note already carrying `raw_file`, and a note with nothing under the heading or no heading at all. A v1 body stays whole, so its transcript stays in the note. It refuses three more, names each under "needs a human", and leaves it byte-identical: a note whose sidecar already exists, a note with no `id` to name the sidecar after, and a note whose raw zone already links into `raw/` with no `raw_file`, which is the lint's `raw-file` failure and may mean the raw text is gone. Any refusal exits 1, on `--dry-run` as well, so the dry run predicts the apply's exit. Exit 3 is usage or an unreadable scope. A second `--apply` splits nothing.
+
+It runs no git check of its own, so commit or stash first if you mean to read the split as a diff. Then run `lint-scope.sh`: a `raw_file` that resolves nowhere fails as `raw-file`.
+
 ## Verification
 
 ```bash

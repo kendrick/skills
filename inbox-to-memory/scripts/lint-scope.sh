@@ -21,10 +21,10 @@
 # Requires bash, awk, and yq (brew install yq).
 set -euo pipefail
 
-# Contract key orders. Duplicated by hand into the templates and, later, the
-# migrator; the smoke test pins all three copies to the same string so a drift
-# fails there before it reaches a scope.
-NOTE_KEY_ORDER="schema body_schema id date type summary attendees tags topics entities source_file transcript_corrections open_questions resolved_questions deferred_tensions unpromoted_candidates related"
+# Contract key orders. Duplicated by hand into the templates, the migrator, and
+# (note order only) split-raw.sh; the smoke test pins every copy to the same
+# string so a drift fails there before it reaches a scope.
+NOTE_KEY_ORDER="schema body_schema id date type summary attendees tags topics entities source_file raw_file transcript_corrections open_questions resolved_questions deferred_tensions unpromoted_candidates related"
 RECORD_KEY_ORDER="schema body_schema id memory_type title status date effective_from effective_to last_confirmed source_refs applies_to owners tags themes related exception_to supersedes superseded_by"
 
 # The closed token vocabulary, as the prefixes a scan actually produces. A token
@@ -387,7 +387,12 @@ check_anchors() {
 # out of `working-state`. The nanoid alphabet includes `-`, so an id can hold
 # one: `...-prep-zFpm-hfD5u` carries `zFpm-hfD5u`. The id search stays inside
 # $scope, because a vault-wide search would pass a dead link against any
-# unrelated file that shares those ten chars.
+# unrelated file that shares those ten chars. Both find calls prune every
+# notes/raw/ at any depth: a sidecar is named `<id>.md`, so the name and id
+# tries would otherwise pass a link to a deleted note on the strength of its raw
+# text alone. A client scope holds project scopes with sidecars of their own,
+# and `-path` reads its argument as a glob, so the pattern names no scope path:
+# a scope under `g[1]/` made a `$scope/notes/raw` pattern match nothing.
 check_links() {
   local target
   local id_pattern='-([A-Za-z0-9_-]{10})$'
@@ -404,12 +409,12 @@ check_links() {
     local stem="${target%.md}"
     [[ -f "$dir/$stem.md" ]] && continue
     if [[ "$target" != */* ]]; then
-      find "$scope" -name "$stem.md" -print -quit | grep -q . && continue
+      find "$scope" -path '*/notes/raw' -prune -o -name "$stem.md" -print -quit | grep -q . && continue
     fi
     local base="${stem##*/}" id=""
     if [[ "$base" =~ $id_pattern ]]; then
       id="${BASH_REMATCH[1]}"
-      find "$scope" -name "*$id*.md" -print -quit | grep -q . && continue
+      find "$scope" -path '*/notes/raw' -prune -o -name "*$id*.md" -print -quit | grep -q . && continue
       # Each message names only the tries that ran. Naming a skipped try sends
       # the reader looking for a match the lint never searched for.
       if [[ "$target" == */* ]]; then
@@ -423,6 +428,32 @@ check_links() {
       fail link-broken "\`$target\` resolves neither by path nor by name"
     fi
   done < <(grep -oE '\[\[[^]|]*' "$1" | sed 's/^\[\[//' | sort -u || true)
+}
+
+# A note's raw text lives inline or in `raw/<id>.md`, and `raw_file` is the
+# only thing saying which. A key pointing at nothing or at an empty file, or a
+# pointer section with no key, all mean the raw text may be gone, and the
+# reviewed layer above it is then unverifiable. Resolved from the note's own
+# dir, as `source_file` is.
+check_raw_file() {
+  local file="$1" raw_file
+  raw_file="$(awk '
+    NR == 1 { if ($0 == "---") { in_fm = 1; next } else { exit } }
+    in_fm && $0 == "---" { exit }
+    in_fm && /^raw_file:/ { sub(/^raw_file:[[:space:]]*/, ""); sub(/[[:space:]]+$/, ""); gsub(/^["\047]|["\047]$/, ""); print; exit }
+  ' "$file")"
+  if [[ -n "$raw_file" ]]; then
+    if [[ ! -f "$(dirname "$file")/$raw_file" ]]; then
+      fail raw-file "\`raw_file: $raw_file\` does not resolve from the note's directory"
+    # split-raw.sh skips an empty raw zone, so an empty sidecar never came from
+    # a split: it means the bytes the note pointed at are gone.
+    elif [[ ! -s "$(dirname "$file")/$raw_file" ]]; then
+      fail raw-file "\`raw_file: $raw_file\` resolves to an empty file"
+    fi
+  elif awk 'f && /\]\(raw\//{ found = 1; exit } /^## Raw Content/ { f = 1 } END { exit (found ? 0 : 1) }' "$file"; then
+    fail raw-file "\`## Raw Content\` links into raw/ but the note carries no \`raw_file\`"
+  fi
+  return 0
 }
 
 check_counts() {
@@ -509,6 +540,7 @@ for file in ${v2_files[@]+"${v2_files[@]}"}; do
     check_contradictions "$body"
     check_decisions "$body"
     check_anchors "$body"
+    check_raw_file "$file"
   fi
   check_links "$body"
   # Records carry no body tokens and no counts; the four keys are a note contract.

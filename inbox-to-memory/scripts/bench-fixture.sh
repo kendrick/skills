@@ -187,7 +187,7 @@ def frontmatter(path):
     return fm
 
 
-def md_files(root):
+def md_files(root, skip_top=None):
     out = []
     if not os.path.isdir(root):
         return out
@@ -197,7 +197,9 @@ def md_files(root):
         # that reads like a scope with no accepted records.
         die("unreadable directory: %s" % err.filename)
 
-    for dp, _dn, fns in os.walk(root, onerror=unreadable):
+    for dp, dn, fns in os.walk(root, onerror=unreadable):
+        if dp == root and skip_top in dn:
+            dn.remove(skip_top)
         for fn in fns:
             if fn.endswith(".md"):
                 out.append(os.path.join(dp, fn))
@@ -271,7 +273,9 @@ def main():
     rel = lambda p: os.path.relpath(p, scope).replace(os.sep, "/")
 
     notes = {}
-    for p in md_files(os.path.join(scope, "notes")):
+    # A raw sidecar keeps the source verbatim, frontmatter included, so raw
+    # Markdown carrying its own id would count as a second note with that id.
+    for p in md_files(os.path.join(scope, "notes"), skip_top="raw"):
         fm = frontmatter(p)
         if fm and fm.get("id"):
             notes.setdefault(fm["id"], []).append((p, fm))

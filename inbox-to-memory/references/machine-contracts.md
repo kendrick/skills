@@ -26,14 +26,14 @@ Links are the one column that runs the whole way down, because a link resolving 
 
 The reason is grep, not taste. `grep '^tags:'` returns the whole value or it returns nothing, and a diff of a changed tag is one line rather than a moved block.
 
-**The block fits in the first 20 lines of the file.** This is the number that makes a header read a contract: an agent reading 20 lines is guaranteed to have the entire frontmatter, so stage three of the funnel can stop there without ever wondering whether it truncated something. The note order's 17 keys close on line 19, one line to spare. The record order lists 19 names and would close on line 21, but `tags` and `themes` are mutually exclusive, so a record carries at most 18 and closes on exactly line 20, with no margin at all. One commented-out key puts a full record over. Adding a name to the record order means dropping one.
+**The block fits in the first 20 lines of the file.** This is the number that makes a header read a contract: an agent reading 20 lines is guaranteed to have the entire frontmatter, so stage three of the funnel can stop there without ever wondering whether it truncated something. The note order's 18 keys close on exactly line 20. The record order lists 19 names and would close on line 21, but `tags` and `themes` are mutually exclusive, so a record carries at most 18 and also closes on exactly line 20. Neither order has any margin: one commented-out key puts a full note or a full record over, and adding a name to either order means dropping one.
 
 **Fixed key order.** Omit any key you don't need; the order is fixed among the keys that are present. Two orders, one for notes and one for records.
 
 Notes:
 
 ```
-schema, body_schema, id, date, type, summary, attendees, tags, topics, entities, source_file, transcript_corrections, open_questions, resolved_questions, deferred_tensions, unpromoted_candidates, related
+schema, body_schema, id, date, type, summary, attendees, tags, topics, entities, source_file, raw_file, transcript_corrections, open_questions, resolved_questions, deferred_tensions, unpromoted_candidates, related
 ```
 
 Records, including journal entries:
@@ -134,6 +134,28 @@ The snippet is authoritative and the line number is a convenience. A bare `(raw:
 
 V1 notes keep their bare line refs and are never rewritten.
 
+In a note carrying `raw_file`, `L<n>` counts lines in the sidecar rather than the note. The split moves text verbatim, so the sidecar number is the note's old number minus the line number of its `## Raw Content` heading. The snippet stays as written.
+
+## The Raw Sidecar
+
+`raw_file: raw/<id>.md` says a note's raw text lives in a sidecar at `notes/raw/<id>.md`, where `<id>` is the note's own `id`. It mirrors `source_file: attachments/<filename>`: the path resolves from the note's directory, and the key is optional. A note without it keeps its raw text inline under `## Raw Content`.
+
+A note carries `raw_file` exactly when its raw text lives in the sidecar. The sidecar holds every line after the note's `## Raw Content` heading line, exactly as the note held them, and it has no frontmatter, so the note and its sidecar together reproduce the original raw text byte for byte. The note keeps the heading, a blank line, and one pointer line:
+
+```
+## Raw Content
+
+In [raw/<id>.md](raw/<id>.md). Open it only to verify a quote.
+```
+
+The sidecar exists so an embedding index can exclude `notes/raw/`. Left inline, a two-hour transcript becomes dozens of chunks competing with the three or four reviewed ones above it.
+
+A v1-body note, meaning one with no `schema` key or one carrying `body_schema: 1`, keeps its raw text inline, because `split-raw.sh` skips it.
+
+Nothing reads a sidecar as a note. The lint and the migrator walk `notes/*.md`, which doesn't recurse, and three walks that recurse prune `notes/raw/`: the lint's link resolution and the link sweep in [scripts/verify-migration.sh](../scripts/verify-migration.sh) prune every `notes/raw/` at any depth, so a client scope's walk skips its project scopes' sidecars too, and note discovery in [scripts/bench-fixture.sh](../scripts/bench-fixture.sh) prunes the one under `notes/`. Without the prune, a sidecar named `<id>.md` would satisfy the name and id tries for a link to a note that no longer exists, and a sidecar whose raw Markdown opens with its own frontmatter `id` would give the bench a second note for that id.
+
+The lint enforces the rule on v2-body notes as `raw-file`, whose three cases are in the table below. All three mean the raw text may be gone: a pointer that resolves nowhere or to an empty file is no evidence the text survived, and a pointer section with no key names no file to check. An empty sidecar never comes from a split, since `split-raw.sh` skips a note whose raw zone is empty.
+
 ## Derived Counts
 
 Four keys on every v2 note, counted from body tokens and never estimated:
@@ -166,6 +188,7 @@ Each failure names the file and the check that caught it, so a defect whose caus
 | `frontmatter-key-domain`    | The block carries both `tags` and `themes`.                          |
 | `token-grammar`             | A bracketed token in the body is absent from the grammar table.      |
 | `contradiction-fields`      | A contradiction names no record, or never states what that record claims. |
+| `raw-file`                  | A v2-body note's `raw_file` doesn't resolve or resolves to an empty file, or its `## Raw Content` links into `raw/` with no `raw_file`. |
 
 `frontmatter-key-domain` is checked ahead of the budget on purpose. A record carrying both keys plus most of the order runs past line 20, and the budget failure would report that overrun without ever naming the mixup underneath it.
 

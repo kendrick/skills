@@ -345,7 +345,7 @@ require_text inbox-to-memory/SKILL.md "scripts/scaffold_digest.py --stamp"
 # templates, the lint, and eventually the migrator, and the only thing keeping
 # those three copies honest is that changing the order fails here first.
 contracts=inbox-to-memory/references/machine-contracts.md
-note_key_order="schema, id, date, type, summary, attendees, tags, topics, entities, source_file, transcript_corrections, open_questions, resolved_questions, deferred_tensions, unpromoted_candidates, related"
+note_key_order="schema, id, date, type, summary, attendees, tags, topics, entities, source_file, raw_file, transcript_corrections, open_questions, resolved_questions, deferred_tensions, unpromoted_candidates, related"
 record_key_order="schema, id, memory_type, title, status, date, effective_from, effective_to, last_confirmed, source_refs, applies_to, owners, tags, themes, related, exception_to, supersedes, superseded_by"
 require_file "$contracts"
 require_text "$contracts" "$note_key_order"
@@ -619,9 +619,25 @@ require_text inbox-to-memory/SKILL.md "canonical forms only, never the variants"
 # operating rules it reads first, the scaffold a scope teaches from, and the funnel
 # stage where the cost actually gets paid.
 funnel=inbox-to-memory/references/retrieval-funnel.md
-require_text inbox-to-memory/SKILL.md "Stop at \`## Raw Content\`."
-require_text inbox-to-memory/assets/claude-md/notes.template.md "stop at \`## Raw Content\`"
-require_text "$funnel" "**Stop at \`## Raw Content\`.**"
+require_text inbox-to-memory/SKILL.md "**Don't open \`raw_file\` unless verifying a quote.**"
+require_text inbox-to-memory/assets/claude-md/notes.template.md "don't open \`raw_file\` unless verifying a quote."
+require_text "$funnel" "**Don't open \`raw_file\` unless verifying a quote.**"
+# Notes groomed before the sidecar keep their raw text inline, and agents still
+# read them, so each copy keeps the old boundary as a fallback clause.
+for rule_home in inbox-to-memory/SKILL.md inbox-to-memory/assets/claude-md/notes.template.md "$funnel"; do
+  require_text "$rule_home" "read it down to \`## Raw Content\` and no further"
+done
+# A scaffolded scope's CLAUDE.md is what its agents read, so a scaffold line still
+# putting the transcript inside the note brings back the inline layout the sidecar
+# exists to end (PR #255 review).
+require_text inbox-to-memory/assets/claude-md/notes.template.md "a \`## Raw Content\` pointer at the bottom to the verbatim original in \`notes/raw/<id>.md\`"
+require_text inbox-to-memory/assets/claude-md/notes.template.md "preserve it verbatim in \`notes/raw/<id>.md\`"
+refute_text inbox-to-memory/assets/claude-md/notes.template.md "raw content verbatim at the bottom"
+refute_text inbox-to-memory/assets/claude-md/notes.template.md "preserve it verbatim underneath"
+for scope_template in client project; do
+  require_text "inbox-to-memory/assets/claude-md/$scope_template.template.md" "Raw Content (a pointer to the verbatim sidecar \`notes/raw/<id>.md\`)"
+  refute_text "inbox-to-memory/assets/claude-md/$scope_template.template.md" "Raw Content (verbatim)"
+done
 require_text "$funnel" "## Stage 4 — Read Full Body"
 
 require_text inbox-to-memory/SKILL.md "Never rename, resolve by id."
@@ -1080,7 +1096,7 @@ require_text inbox-to-memory/SKILL.md "**A dismissed flag stays in the note perm
 # missing from it ships a failure name that leads nowhere.
 for check in frontmatter-fences frontmatter-parses frontmatter-budget \
   frontmatter-single-line frontmatter-known-keys frontmatter-key-order \
-  frontmatter-key-domain token-grammar contradiction-fields; do
+  frontmatter-key-domain token-grammar contradiction-fields raw-file; do
   require_table_row "$contracts" "$check"
 done
 
@@ -1105,6 +1121,15 @@ require_text inbox-to-memory/assets/note.template.md "[contradicts accepted: [[<
 # to nanoid or the first verify run fails for a confusing reason.
 require_text inbox-to-memory/README.md "nanoid"
 require_text inbox-to-memory/README.md "brew install yq"
+
+# A note's raw text lives in a notes/raw/ sidecar (#193). A README that still
+# says the note holds it tells a user backing up notes alone that the deleted
+# source survives there.
+refute_text inbox-to-memory/README.md "the verbatim original at the bottom"
+refute_text inbox-to-memory/README.md "the note's Raw Content zone"
+refute_text inbox-to-memory/README.md "The content survives in the notes"
+require_text inbox-to-memory/README.md "their text lives on in \`notes/raw/<id>.md\`, which the note points to"
+require_text inbox-to-memory/README.md "where \`notes/raw/\` keeps each text source verbatim"
 
 # AGENTS.md tells a reviewer to check a README's lists against the directory
 # tree, but no test ran that check, so the README's scripts tree fell behind
@@ -1160,13 +1185,15 @@ require_text inbox-to-memory/SKILL.md "scripts/verify-migration.sh"
 refute_text inbox-to-memory/references/migration.md "is not implemented here"
 
 # Both key orders are duplicated by hand into the lint, the templates, and now the
-# migrator. The only thing keeping the four copies honest is that a drift fails here.
-migrator_note_order="schema body_schema id date type summary attendees tags topics entities source_file transcript_corrections open_questions resolved_questions deferred_tensions unpromoted_candidates related"
+# migrator, and the note order into split-raw.sh too. The only thing keeping the
+# copies honest is that a drift fails here.
+migrator_note_order="schema body_schema id date type summary attendees tags topics entities source_file raw_file transcript_corrections open_questions resolved_questions deferred_tensions unpromoted_candidates related"
 migrator_record_order="schema body_schema id memory_type title status date effective_from effective_to last_confirmed source_refs applies_to owners tags themes related exception_to supersedes superseded_by"
 require_text "$migrator" "$migrator_note_order"
 require_text "$migrator" "$migrator_record_order"
 require_text "$lint" "$migrator_note_order"
 require_text "$lint" "$migrator_record_order"
+require_text inbox-to-memory/scripts/split-raw.sh "NOTE_KEY_ORDER=\"$migrator_note_order\""
 
 # Stand up a throwaway git repo from the old-only fixture. Everything below reads
 # `git status` and `git diff` to check the promises, so the fixture has to be a
@@ -1410,10 +1437,12 @@ YAML
 # has to land in the diff block for the file it belongs to, not float free at
 # the end of the report where it could be approved against the wrong note.
 batched_dry="$(bash "$migrator" "$batched_scope" --tier2 "$batched_proposals" 2>&1)"
-seam_block="$(printf '%s\n' "$batched_dry" | awk -v hdr="--- $batched_scope/$seam_note" \
-  '$0 == hdr { grab = 1; next } grab && /^--- / { exit } grab { print }')"
-other_block="$(printf '%s\n' "$batched_dry" | awk -v hdr="--- $batched_scope/$other_note" \
-  '$0 == hdr { grab = 1; next } grab && /^--- / { exit } grab { print }')"
+# A here-string, not a printf pipe: awk exits at the next header, and under
+# pipefail a printf still writing into that closed pipe fails the suite under load.
+seam_block="$(awk -v hdr="--- $batched_scope/$seam_note" \
+  '$0 == hdr { grab = 1; next } grab && /^--- / { exit } grab { print }' <<<"$batched_dry")"
+other_block="$(awk -v hdr="--- $batched_scope/$other_note" \
+  '$0 == hdr { grab = 1; next } grab && /^--- / { exit } grab { print }' <<<"$batched_dry")"
 [[ -n "$(printf '%s\n' "$seam_block" | grep -F '+summary:' || true)" ]] || {
   echo "the seam note's tier2 proposal did not appear grouped under its own file" >&2
   printf '%s\n' "$batched_dry" >&2
@@ -2120,6 +2149,24 @@ bash "$bench" "$bench_dir/dupe" >"$bench_dir/dupe.json" 2>/dev/null
 bench_assert "$bench_dir/dupe.json" "A's duplicate ref to note1 was not collapsed" \
   'q["record-BnRecA0001"]["expected_files"] == ["'"$bench_note1"'", "'"$bench_rec_a"'"]'
 
+# A raw sidecar holds the source verbatim, so raw Markdown that opens with its
+# own frontmatter carries an id. Read as a note, this one made note1's id
+# resolve to two notes and dropped A's query while still exiting 0 (#255
+# review). Adding it must change nothing about the run. The copy keeps the
+# name `bench` because the output's collection field is the scope's basename.
+mkdir -p "$bench_dir/rawside"
+cp -R "$bench_scope" "$bench_dir/rawside/bench"
+mkdir -p "$bench_dir/rawside/bench/notes/raw"
+printf -- '---\nid: Bn1RbkOwn1\ntitle: pasted doc\n---\n\nraw body\n' >"$bench_dir/rawside/bench/notes/raw/Bn1RbkOwn1.md"
+bench_rc=0; bash "$bench" "$bench_scope" >"$bench_dir/rs-base.out" 2>"$bench_dir/rs-base.err" || bench_rc=$?
+raw_rc=0; bash "$bench" "$bench_dir/rawside/bench" >"$bench_dir/rs-raw.out" 2>"$bench_dir/rs-raw.err" || raw_rc=$?
+if [[ "$bench_rc" != "$raw_rc" ]] || ! cmp -s "$bench_dir/rs-base.out" "$bench_dir/rs-raw.out" \
+  || ! cmp -s "$bench_dir/rs-base.err" "$bench_dir/rs-raw.err"; then
+  echo "bench-fixture read a notes/raw/ sidecar as a note (exit $bench_rc vs $raw_rc):" >&2
+  cat "$bench_dir/rs-raw.err" >&2
+  exit 1
+fi
+
 # Hand-written questions follow the derived ones, numbered from 1.
 cat >"$bench_dir/questions.json" <<'JSON'
 [
@@ -2262,6 +2309,254 @@ if [[ "$(id -u)" != 0 ]]; then
 else
   echo "skipping unreadable-record assertion: running as root" >&2
 fi
+
+# A raw sidecar (#193) moves a note's raw text out of the file an index reads,
+# so the lint is what catches a pointer left dangling. Every case below plants
+# one defect in a copy of the split fixture. This section removes $split_tmp
+# itself at the end rather than joining the cumulative trap chain.
+split_fx="$fixtures/split"
+split_note=notes/2026-07-07-pier-lighting-review-Kp3vR8sNq2.md
+split_sidecar=notes/raw/Kp3vR8sNq2.md
+split_link=2026-07-07-pier-lighting-review-Kp3vR8sNq2
+require_file "$split_fx/$split_note"
+require_file "$split_fx/$split_sidecar"
+require_file "$split_fx/notes/2026-07-14-pier-lighting-followup-Wd7hT2xLm9.md"
+require_text "$split_fx/notes/2025-11-04-pier-survey-Bq4nV6cZr1.md" "body_schema: 1"
+require_text "$split_fx/$split_note" "raw_file: raw/Kp3vR8sNq2.md"
+require_text "$split_fx/$split_note" "In [raw/Kp3vR8sNq2.md](raw/Kp3vR8sNq2.md). Open it only to verify a quote."
+require_text "$split_fx/notes/2026-07-14-pier-lighting-followup-Wd7hT2xLm9.md" "[[$split_link]]"
+require_text "$contracts" "A note carries \`raw_file\` exactly when its raw text lives in the sidecar."
+require_text "$contracts" "In a note carrying \`raw_file\`, \`L<n>\` counts lines in the sidecar rather than the note."
+
+split_out="$(run_lint "$split_fx")"
+require_line "$split_out" "failures: 0" "$split_fx"
+
+split_tmp="$(mktemp -d "${TMPDIR:-/tmp}/i2m-split-contract.XXXXXX")"
+split_case() {
+  mkdir -p "$split_tmp/$1"
+  cp -R "$split_fx/." "$split_tmp/$1/"
+  printf '%s' "$split_tmp/$1"
+}
+
+# A deleted sidecar fails the note that pointed at it, and nothing else.
+sc="$(split_case sidecar-gone)"
+rm "$sc/$split_sidecar"
+sc_out="$(run_lint "$sc")"
+require_failure "$sc_out" "FAIL $sc/$split_note: raw-file: \`raw_file: raw/Kp3vR8sNq2.md\` does not resolve"
+require_line "$sc_out" "failures: 1" "$sc"
+
+# An emptied sidecar resolves but holds none of the bytes the note pointed at.
+sc="$(split_case sidecar-empty)"
+: >"$sc/$split_sidecar"
+sc_out="$(run_lint "$sc")"
+require_failure "$sc_out" "FAIL $sc/$split_note: raw-file: \`raw_file: raw/Kp3vR8sNq2.md\` resolves to an empty file"
+require_line "$sc_out" "failures: 1" "$sc"
+
+# The pointer section with no key is a note claiming its raw text lives
+# elsewhere without saying where, so it fails whether the sidecar is there or not.
+for gone in keep remove; do
+  sc="$(split_case "no-key-$gone")"
+  grep -v '^raw_file:' "$sc/$split_note" >"$sc/note.tmp"
+  mv "$sc/note.tmp" "$sc/$split_note"
+  [[ "$gone" == remove ]] && rm "$sc/$split_sidecar"
+  refute_text "$sc/$split_note" "raw_file:"
+  sc_out="$(run_lint "$sc")"
+  require_failure "$sc_out" "FAIL $sc/$split_note: raw-file: \`## Raw Content\` links into raw/ but the note carries no \`raw_file\`"
+  require_line "$sc_out" "failures: 1" "$sc"
+done
+
+# A link resolves to the note, never to its sidecar. A note renamed but keeping
+# its id still resolves by id; a deleted note fails even though `raw/<id>.md`
+# matches both the name and the id try, which is what the find prune is for.
+sc="$(split_case renamed)"
+mv "$sc/$split_note" "$sc/notes/2026-07-07-north-arm-lamps-Kp3vR8sNq2.md"
+sc_out="$(run_lint "$sc")"
+require_line "$sc_out" "failures: 0" "$sc"
+
+sc="$(split_case note-gone)"
+rm "$sc/$split_note"
+sc_out="$(run_lint "$sc")"
+require_failure "$sc_out" "link-broken: \`$split_link\` resolves neither by name nor by id \`Kp3vR8sNq2\`"
+
+sc="$(split_case bare-id)"
+# Above `## Raw Content`, since the lint reads no links below it.
+awk '{ print } /^Picks up from/ { print "See also [[Kp3vR8sNq2]]." }' \
+  "$split_fx/notes/2026-07-14-pier-lighting-followup-Wd7hT2xLm9.md" \
+  >"$sc/notes/2026-07-14-pier-lighting-followup-Wd7hT2xLm9.md"
+require_text "$sc/notes/2026-07-14-pier-lighting-followup-Wd7hT2xLm9.md" "See also [[Kp3vR8sNq2]]."
+sc_out="$(run_lint "$sc")"
+require_failure "$sc_out" "link-broken: \`Kp3vR8sNq2\` resolves neither by path nor by name"
+
+# verify-migration.sh reports the same deleted sidecar through its lint sweep,
+# and its own link sweep prunes notes/raw/ the same way.
+sc="$(split_case verify)"
+git -C "$sc" init -q
+git -C "$sc" add -A
+git -C "$sc" -c user.email=t@t -c user.name=t commit -qm baseline
+rm "$sc/$split_sidecar"
+sc_rc=0
+sc_out="$(bash inbox-to-memory/scripts/verify-migration.sh "$sc" --since HEAD 2>&1)" || sc_rc=$?
+[[ "$sc_rc" -ne 0 ]] || {
+  echo "verify-migration passed a scope whose sidecar was deleted" >&2
+  printf '%s\n' "$sc_out" >&2
+  exit 1
+}
+require_output "$sc_out" "verify-lint: FAIL $sc/$split_note: raw-file:"
+git -C "$sc" checkout -q -- "$split_sidecar"
+rm "$sc/$split_note"
+sc_out="$(bash inbox-to-memory/scripts/verify-migration.sh "$sc" --since HEAD 2>&1 || true)"
+require_output "$sc_out" "verify-link: \`$split_link\` resolves neither by name nor by id \`Kp3vR8sNq2\`"
+
+# The prune covers notes/raw/ at any depth and reads no scope path as a glob
+# (#255 review). A client root holds project scopes with sidecars of their own,
+# and a scope under `g[1]*/` once made `-path "$scope/notes/raw"` match nothing,
+# so in both trees a link to the deleted note passed on a leftover sidecar.
+for raw_case in nested 'glob[1]*'; do
+  sc="$(split_case "$raw_case")"
+  rm "$sc/$split_note"
+  if [[ "$raw_case" == nested ]]; then
+    mkdir -p "$sc/projects/p/notes/raw"
+    mv "$sc/$split_sidecar" "$sc/projects/p/notes/raw/"
+  fi
+  sc_out="$(run_lint "$sc")"
+  require_failure "$sc_out" "link-broken: \`$split_link\` resolves neither by name nor by id \`Kp3vR8sNq2\`"
+  git -C "$sc" init -q
+  git -C "$sc" add -A
+  git -C "$sc" -c user.email=t@t -c user.name=t commit -qm baseline
+  sc_out="$(bash inbox-to-memory/scripts/verify-migration.sh "$sc" --since HEAD 2>&1 || true)"
+  require_output "$sc_out" "verify-link: \`$split_link\` resolves neither by name nor by id \`Kp3vR8sNq2\`"
+done
+
+# split-raw.sh is the one-time migrator onto the sidecar, and cmp proves it
+# where lint can't: lint proves a pointer resolves, never that the bytes behind
+# it are the ones the note held.
+split=inbox-to-memory/scripts/split-raw.sh
+unsplit_note=notes/2026-07-14-pier-lighting-followup-Wd7hT2xLm9.md
+unsplit_sidecar=notes/raw/Wd7hT2xLm9.md
+v1_note=notes/2025-11-04-pier-survey-Bq4nV6cZr1.md
+require_file "$split"
+
+# A dry run lists the unsplit v2 note and leaves the scope exactly as committed.
+sc="$(split_case split-dry)"
+git -C "$sc" init -q
+git -C "$sc" add -A
+git -C "$sc" -c user.email=t@t -c user.name=t commit -qm baseline
+sc_out="$(bash "$split" --dry-run "$sc" 2>&1)"
+require_output "$sc_out" "split: $sc/$unsplit_note -> $sc/$unsplit_sidecar"
+require_line "$sc_out" "split: 1" "split-raw --dry-run on $sc"
+[[ -z "$(git -C "$sc" status --porcelain --untracked-files=all)" ]] || {
+  echo "split-raw --dry-run wrote under the scope:" >&2
+  git -C "$sc" status --porcelain --untracked-files=all >&2
+  exit 1
+}
+
+# The raw zone is every line after the heading, read off the untouched fixture
+# rather than from anything split-raw.sh computes.
+sc="$(split_case split-apply)"
+heading="$(grep -nx '## Raw Content' "$split_fx/$unsplit_note" | head -1 | cut -d: -f1)"
+tail -n "+$((heading + 1))" "$split_fx/$unsplit_note" >"$split_tmp/raw-before"
+[[ -s "$split_tmp/raw-before" ]] || {
+  echo "the unsplit fixture note has an empty raw zone" >&2
+  exit 1
+}
+bash "$split" --apply "$sc" >/dev/null
+cmp "$split_tmp/raw-before" "$sc/$unsplit_sidecar"
+cmp "$split_fx/$v1_note" "$sc/$v1_note"
+cmp "$split_fx/$split_note" "$sc/$split_note"
+require_text "$sc/$unsplit_note" "raw_file: raw/Wd7hT2xLm9.md"
+require_text "$sc/$unsplit_note" "In [raw/Wd7hT2xLm9.md](raw/Wd7hT2xLm9.md). Open it only to verify a quote."
+refute_text "$sc/$unsplit_note" "[00:00:04]"
+sc_out="$(run_lint "$sc")"
+require_line "$sc_out" "failures: 0" "$sc after split-raw --apply"
+
+# Each anchor's line in the sidecar holds its snippet's words.
+anchors=0
+while IFS=$'\t' read -r snippet lineno; do
+  anchors=$((anchors + 1))
+  sed -n "${lineno}p" "$sc/$unsplit_sidecar" | grep -Fq -- "$snippet" || {
+    echo "anchor \"$snippet\" L$lineno does not land on its words in the sidecar" >&2
+    exit 1
+  }
+done < <(grep -oE '\(raw: "[^"]*" L[0-9]+\)' "$sc/$unsplit_note" | sed -E 's/^\(raw: "([^"]*)" L([0-9]+)\)$/\1\t\2/')
+[[ "$anchors" -eq 2 ]] || {
+  echo "expected 2 anchors in the split note, checked $anchors" >&2
+  exit 1
+}
+
+# A second run finds nothing left to split.
+sc_out="$(bash "$split" --apply "$sc" 2>&1)"
+require_line "$sc_out" "split: 0" "a second split-raw --apply on $sc"
+require_line "$sc_out" "already split: 2" "a second split-raw --apply on $sc"
+
+# An existing sidecar is never overwritten: exit 1, note and sidecar untouched.
+sc="$(split_case split-clash)"
+mkdir -p "$sc/notes/raw"
+printf 'someone else wrote this\n' >"$sc/$unsplit_sidecar"
+sc_rc=0
+sc_out="$(bash "$split" --apply "$sc" 2>&1)" || sc_rc=$?
+[[ "$sc_rc" == 1 ]] || {
+  echo "split-raw exited $sc_rc over an existing sidecar (want 1)" >&2
+  printf '%s\n' "$sc_out" >&2
+  exit 1
+}
+require_output "$sc_out" "$sc/$unsplit_sidecar already exists; left alone"
+cmp "$split_fx/$unsplit_note" "$sc/$unsplit_note"
+[[ "$(cat "$sc/$unsplit_sidecar")" == "someone else wrote this" ]] || {
+  echo "split-raw overwrote an existing sidecar" >&2
+  exit 1
+}
+
+# A raw zone past a pipe buffer (~64 KB) used to read as empty, because
+# `tail | grep -q` under pipefail takes tail's SIGPIPE for no match. The long
+# transcripts the sidecar exists for were skipped with exit 0, and the pointer
+# guard misread the same way.
+sc="$(split_case split-big)"
+for i in $(seq 1 3000); do
+  printf '[00:%02d:%02d] Speaker: this is a long transcript line, number %d\n' $((i / 60 % 60)) $((i % 60)) "$i"
+done >>"$sc/$unsplit_note"
+[[ "$(wc -c <"$sc/$unsplit_note")" -gt 131072 ]] || {
+  echo "split-big note is not past two pipe buffers" >&2
+  exit 1
+}
+tail -n "+$((heading + 1))" "$sc/$unsplit_note" >"$split_tmp/raw-big"
+sc_out="$(bash "$split" --apply "$sc" 2>&1)"
+require_line "$sc_out" "split: 1" "split-raw --apply on a raw zone past 64 KB"
+require_line "$sc_out" "empty raw zones skipped: 0" "split-raw --apply on a raw zone past 64 KB"
+cmp "$split_tmp/raw-big" "$sc/$unsplit_sidecar"
+
+sc="$(split_case split-big-pointer)"
+{
+  head -n "$heading" "$split_fx/$unsplit_note"
+  printf 'See [old](raw/Zz99Yy88Xx.md).\n'
+  for i in $(seq 1 3000); do printf 'transcript line %d, padded out past a pipe buffer\n' "$i"; done
+} >"$sc/$unsplit_note"
+sc_rc=0
+sc_out="$(bash "$split" --apply "$sc" 2>&1)" || sc_rc=$?
+[[ "$sc_rc" == 1 ]] || {
+  echo "split-raw exited $sc_rc on a big raw zone already pointing into raw/ (want 1)" >&2
+  printf '%s\n' "$sc_out" >&2
+  exit 1
+}
+require_output "$sc_out" "already links into raw/ with no \`raw_file\`; left alone"
+[[ ! -e "$sc/$unsplit_sidecar" ]] || {
+  echo "split-raw split a big raw zone that already points into raw/" >&2
+  exit 1
+}
+
+# Phase 4 deletes a text source on the strength of the sidecar, so the skill
+# has to name it as where the words survive.
+require_text inbox-to-memory/SKILL.md "Their words survive in the note's raw sidecar"
+require_text inbox-to-memory/references/migration.md "split-raw.sh"
+
+# Reflow can't follow a pointer into the sidecar, so a split note is skipped
+# and counted on its own line rather than miscounted as a zone judged not-VTT.
+sc="$(split_case reflow-split)"
+sc_out="$(bash "$reflow" "$sc" 2>&1)"
+require_line "$sc_out" "split notes skipped: 1" "reflow-raw over $sc"
+require_line "$sc_out" "v1 bodies skipped: 1" "reflow-raw over $sc"
+require_line "$sc_out" "left alone: 0" "reflow-raw over $sc"
+
+rm -rf "$split_tmp"
 
 # The checked-in fixtures are never migrated or stamped in place. Every
 # migration or write-through test works on a copy, and a test that forgets

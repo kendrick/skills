@@ -74,7 +74,7 @@ If the headers answer the question, stop. Don't load the body.
 
 Reserved for the three to five candidates that survived stages 1 through 3.
 
-**Stop at `## Raw Content`.** Everything above it is the extracted, reviewed layer, and it is what the sections exist to give you. Raw content is there for a human reading back, and for verifying a quote you have specific reason to doubt. Reading it by default pulls an entire transcript into context to answer a question the extracted sections already answered, which is the exact cost the whole funnel exists to avoid.
+**Don't open `raw_file` unless verifying a quote.** The sidecar it names holds the raw text, and the note's extracted sections are the reviewed layer, which is what the sections exist to give you. Raw text is there for a human reading back, and for verifying a quote you have specific reason to doubt. Opening it by default pulls an entire transcript into context to answer a question the extracted sections already answered, which is the exact cost the whole funnel exists to avoid. A note with no `raw_file` still holds its raw text inline, so read it down to `## Raw Content` and no further.
 
 ## Materializing an Index
 

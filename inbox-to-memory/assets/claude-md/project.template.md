@@ -55,7 +55,7 @@ Directory-specific conventions live in [`notes/CLAUDE.md`](notes/CLAUDE.md), [`_
 
 ## Conventions Inherited From the Skill
 
-- One groomed note per input. Three zones: frontmatter, extracted sections, Raw Content (verbatim).
+- One groomed note per input. Three zones: frontmatter, extracted sections, Raw Content (a pointer to the verbatim sidecar `notes/raw/<id>.md`).
 - Memory candidates flagged inline as `[memory candidate: <scope>] <claim>`. Journal candidates as `[journal candidate: <pattern>]`. Crystallized only after user sign-off.
 - Memory records follow the {{MEMORY_MODE}} schema ({{MEMORY_TYPES}}; statuses `proposed | accepted | superseded | deprecated | rejected`).
 - IDs come from `nanoid -s 10`. Record filenames are `<slug>-<nanoid>.md`; note filenames are `YYYY-MM-DD-<slug>-<nanoid>.md`.
