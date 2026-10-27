@@ -118,6 +118,13 @@ refuse() {
   refused=$((refused + 1))
 }
 
+# Read the raw zone with awk rather than `tail | grep -q`. Under pipefail,
+# grep's early exit kills tail with SIGPIPE once the zone outgrows a pipe
+# buffer (~64 KB), and the pipeline reads as no match.
+raw_zone_has() {
+  awk -v h="$2" -v re="$3" 'NR > h && $0 ~ re { found = 1; exit } END { exit !found }' "$1"
+}
+
 shopt -s nullglob
 
 for file in "$scope"/notes/*.md; do
@@ -136,15 +143,14 @@ for file in "$scope"/notes/*.md; do
   fi
 
   heading="$(awk '$0 == "## Raw Content" { print NR; exit }' "$file")"
-  if [[ -z "$heading" ]] ||
-     ! tail -n "+$((heading + 1))" "$file" | grep -q '[^[:space:]]'; then
+  if [[ -z "$heading" ]] || ! raw_zone_has "$file" "$heading" '[^[:space:]]'; then
     empty=$((empty + 1))
     continue
   fi
 
   # A pointer with no key is lint's raw-file failure. Splitting it would bury
   # the pointer in a sidecar and make the lint pass on raw text that may be gone.
-  if tail -n "+$((heading + 1))" "$file" | grep -q '](raw/'; then
+  if raw_zone_has "$file" "$heading" '[]][(]raw/'; then
     refuse "$file" "\`## Raw Content\` already links into raw/ with no \`raw_file\`; left alone"
     continue
   fi

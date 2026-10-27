@@ -2448,6 +2448,43 @@ cmp "$split_fx/$unsplit_note" "$sc/$unsplit_note"
   exit 1
 }
 
+# A raw zone past a pipe buffer (~64 KB) used to read as empty, because
+# `tail | grep -q` under pipefail takes tail's SIGPIPE for no match. The long
+# transcripts the sidecar exists for were skipped with exit 0, and the pointer
+# guard misread the same way.
+sc="$(split_case split-big)"
+for i in $(seq 1 3000); do
+  printf '[00:%02d:%02d] Speaker: this is a long transcript line, number %d\n' $((i / 60 % 60)) $((i % 60)) "$i"
+done >>"$sc/$unsplit_note"
+[[ "$(wc -c <"$sc/$unsplit_note")" -gt 131072 ]] || {
+  echo "split-big note is not past two pipe buffers" >&2
+  exit 1
+}
+tail -n "+$((heading + 1))" "$sc/$unsplit_note" >"$split_tmp/raw-big"
+sc_out="$(bash "$split" --apply "$sc" 2>&1)"
+require_line "$sc_out" "split: 1" "split-raw --apply on a raw zone past 64 KB"
+require_line "$sc_out" "empty raw zones skipped: 0" "split-raw --apply on a raw zone past 64 KB"
+cmp "$split_tmp/raw-big" "$sc/$unsplit_sidecar"
+
+sc="$(split_case split-big-pointer)"
+{
+  head -n "$heading" "$split_fx/$unsplit_note"
+  printf 'See [old](raw/Zz99Yy88Xx.md).\n'
+  for i in $(seq 1 3000); do printf 'transcript line %d, padded out past a pipe buffer\n' "$i"; done
+} >"$sc/$unsplit_note"
+sc_rc=0
+sc_out="$(bash "$split" --apply "$sc" 2>&1)" || sc_rc=$?
+[[ "$sc_rc" == 1 ]] || {
+  echo "split-raw exited $sc_rc on a big raw zone already pointing into raw/ (want 1)" >&2
+  printf '%s\n' "$sc_out" >&2
+  exit 1
+}
+require_output "$sc_out" "already links into raw/ with no \`raw_file\`; left alone"
+[[ ! -e "$sc/$unsplit_sidecar" ]] || {
+  echo "split-raw split a big raw zone that already points into raw/" >&2
+  exit 1
+}
+
 # Phase 4 deletes a text source on the strength of the sidecar, so the skill
 # has to name it as where the words survive.
 require_text inbox-to-memory/SKILL.md "Their words survive in the note's raw sidecar"
