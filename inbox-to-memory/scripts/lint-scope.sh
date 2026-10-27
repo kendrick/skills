@@ -387,9 +387,12 @@ check_anchors() {
 # out of `working-state`. The nanoid alphabet includes `-`, so an id can hold
 # one: `...-prep-zFpm-hfD5u` carries `zFpm-hfD5u`. The id search stays inside
 # $scope, because a vault-wide search would pass a dead link against any
-# unrelated file that shares those ten chars. Both find calls prune notes/raw/:
-# a sidecar is named `<id>.md`, so the name and id tries would otherwise pass a
-# link to a deleted note on the strength of its raw text alone.
+# unrelated file that shares those ten chars. Both find calls prune every
+# notes/raw/ at any depth: a sidecar is named `<id>.md`, so the name and id
+# tries would otherwise pass a link to a deleted note on the strength of its raw
+# text alone. A client scope holds project scopes with sidecars of their own,
+# and `-path` reads its argument as a glob, so the pattern names no scope path:
+# a scope under `g[1]/` made a `$scope/notes/raw` pattern match nothing.
 check_links() {
   local target
   local id_pattern='-([A-Za-z0-9_-]{10})$'
@@ -406,12 +409,12 @@ check_links() {
     local stem="${target%.md}"
     [[ -f "$dir/$stem.md" ]] && continue
     if [[ "$target" != */* ]]; then
-      find "$scope" -path "$scope/notes/raw" -prune -o -name "$stem.md" -print -quit | grep -q . && continue
+      find "$scope" -path '*/notes/raw' -prune -o -name "$stem.md" -print -quit | grep -q . && continue
     fi
     local base="${stem##*/}" id=""
     if [[ "$base" =~ $id_pattern ]]; then
       id="${BASH_REMATCH[1]}"
-      find "$scope" -path "$scope/notes/raw" -prune -o -name "*$id*.md" -print -quit | grep -q . && continue
+      find "$scope" -path '*/notes/raw' -prune -o -name "*$id*.md" -print -quit | grep -q . && continue
       # Each message names only the tries that ran. Naming a skipped try sends
       # the reader looking for a match the lint never searched for.
       if [[ "$target" == */* ]]; then

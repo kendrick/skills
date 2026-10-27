@@ -161,9 +161,11 @@ links_checked=0
 links_fallback=0
 for target in ${link_targets[@]+"${link_targets[@]}"}; do
   links_checked=$((links_checked + 1))
-  # Both finds prune notes/raw/. A sidecar is named `<id>.md`, so a link to a
-  # note the migration deleted would otherwise pass on the sidecar it left.
-  by_name="$(find "$scope" -path "$scope/notes/raw" -prune -o -name "$target.md" -print -quit)"
+  # Both finds prune every notes/raw/, nested project scopes' included. A sidecar
+  # is named `<id>.md`, so a link to a note the migration deleted would otherwise
+  # pass on the sidecar it left. The pattern names no scope path because `-path`
+  # reads it as a glob, and a scope path holding `[` or `*` would match nothing.
+  by_name="$(find "$scope" -path '*/notes/raw' -prune -o -name "$target.md" -print -quit)"
   if [[ -n "$by_name" ]]; then
     continue
   fi
@@ -171,7 +173,7 @@ for target in ${link_targets[@]+"${link_targets[@]}"}; do
   # resolve by name and now only resolves by id is a pass, and worth counting
   # separately from one that resolved by name both times.
   id="${target: -10}"
-  by_id="$(find "$scope" -path "$scope/notes/raw" -prune -o -name "*$id*.md" -print -quit)"
+  by_id="$(find "$scope" -path '*/notes/raw' -prune -o -name "*$id*.md" -print -quit)"
   if [[ -n "$by_id" ]]; then
     links_fallback=$((links_fallback + 1))
     continue

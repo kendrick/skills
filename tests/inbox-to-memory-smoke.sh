@@ -2407,6 +2407,26 @@ rm "$sc/$split_note"
 sc_out="$(bash inbox-to-memory/scripts/verify-migration.sh "$sc" --since HEAD 2>&1 || true)"
 require_output "$sc_out" "verify-link: \`$split_link\` resolves neither by name nor by id \`Kp3vR8sNq2\`"
 
+# The prune covers notes/raw/ at any depth and reads no scope path as a glob
+# (#255 review). A client root holds project scopes with sidecars of their own,
+# and a scope under `g[1]*/` once made `-path "$scope/notes/raw"` match nothing,
+# so in both trees a link to the deleted note passed on a leftover sidecar.
+for raw_case in nested 'glob[1]*'; do
+  sc="$(split_case "$raw_case")"
+  rm "$sc/$split_note"
+  if [[ "$raw_case" == nested ]]; then
+    mkdir -p "$sc/projects/p/notes/raw"
+    mv "$sc/$split_sidecar" "$sc/projects/p/notes/raw/"
+  fi
+  sc_out="$(run_lint "$sc")"
+  require_failure "$sc_out" "link-broken: \`$split_link\` resolves neither by name nor by id \`Kp3vR8sNq2\`"
+  git -C "$sc" init -q
+  git -C "$sc" add -A
+  git -C "$sc" -c user.email=t@t -c user.name=t commit -qm baseline
+  sc_out="$(bash inbox-to-memory/scripts/verify-migration.sh "$sc" --since HEAD 2>&1 || true)"
+  require_output "$sc_out" "verify-link: \`$split_link\` resolves neither by name nor by id \`Kp3vR8sNq2\`"
+done
+
 # split-raw.sh is the one-time migrator onto the sidecar, and cmp proves it
 # where lint can't: lint proves a pointer resolves, never that the bytes behind
 # it are the ones the note held.
