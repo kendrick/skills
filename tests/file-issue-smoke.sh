@@ -296,7 +296,8 @@ require_text file-issue/SKILL.md "links the new issue to its parent and blockers
 # body. Writing the failure back into the body is the edit the creation-only
 # rule exists to forbid (Deliberately Not Built): the one body write removes
 # entries whose link landed and never adds a reference back. The only text it
-# writes is the `None` an emptied agent-targeted Blocked by line gets.
+# writes is the `set as native links` an emptied agent-targeted Blocked by line
+# gets.
 refute_text file-issue/SKILL.md "edit the body to add"
 refute_text file-issue/SKILL.md "add it back as text"
 # The phrases above can be reworded around; the command can't. A body edit

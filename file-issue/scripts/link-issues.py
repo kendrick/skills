@@ -376,7 +376,9 @@ def strip_body(body, linked, agent_targeted):
             if kept:
                 out.append(f"{BLOCKED_LINE} {', '.join(kept)}{ending}")
             elif agent_targeted:
-                # An absent list reads as unexamined. Name where the blockers went: strip only empties this line after they linked, so "None" here would be false (#208).
+                # An absent list reads as unexamined. Name where the blockers
+                # went: strip only empties this line after they linked, so
+                # "None" here would be false (#208).
                 out.append(f"{BLOCKED_LINE} set as native links{ending}")
             continue
         out.append(line)
