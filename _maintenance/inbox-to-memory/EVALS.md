@@ -125,7 +125,7 @@ Nothing here is graded on how good the summary reads. A dull summary that is sou
 
 Approve nothing at the phase 5 gate. Nothing in this transcript needs crystallizing, and the stamp does not pass through that gate anyway, which is the behavior under test.
 
-One file in `_memory/` carries a `last_confirmed:` line going in. One should carry it coming out, with a later date on it. Every row below settles off the staged copy except the phase 6 one, so keep the run's report.
+One file in `_memory/` carries a `last_confirmed:` line going in. One should carry it coming out, with a later date on it. Every row below settles off the staged copy except the two that read the phase 6 report, so keep the run's report.
 
 | Expect | Pass condition |
 | --- | --- |
@@ -133,12 +133,13 @@ One file in `_memory/` carries a `last_confirmed:` line going in. One should car
 | The v1 record | `handsets-not-tablets-Ho0R3o1JGL.md` is byte-identical, though Marta restates it in as many words. No `schema:` key appeared and no `last_confirmed:` line did either |
 | The record nobody restated | `harrow-route-sequence-mr1b_3yB4S.md` is byte-identical, still carries no `last_confirmed:`, and is named by no `[contradicts accepted: ...]` flag. Marta spends the middle of the meeting on who builds the day's run, Harrow's overnight job is the subject of the passage before it, and nobody says how that job orders anything |
 | The `proposed` record | `paper-worksheet-until-close-Y_fVVkE5D8.md` is byte-identical and still carries no `last_confirmed:`, though Marta says its title back almost exactly |
-| Phase 6 | Names `harrow-write-window-kQ2MiN7kOA` as stamped, and `handsets-not-tablets-Ho0R3o1JGL` as skipped for its generation. `harrow-route-sequence-mr1b_3yB4S` is in neither list |
+| The restatement reported | Phase 6 names `paper-worksheet-until-close-Y_fVVkE5D8.md` as restated, on a `restated proposed:` line that also names the groomed note for `2026-06-16-ferndale-pilot-review.md`. It appears in neither the stamped list nor the skipped list |
+| Phase 6 | Names `harrow-write-window-kQ2MiN7kOA` as stamped, `handsets-not-tablets-Ho0R3o1JGL` as skipped for its generation, and `paper-worksheet-until-close-Y_fVVkE5D8` as restated. `harrow-route-sequence-mr1b_3yB4S` is on none of those lines |
 | No prompt | Nothing in the run asks whether to move a date, and no `last_confirmed` appears among the candidates put up at the phase 5 gate |
 
 Without the skill: nothing reads `_memory/` before writing, so no record is named anywhere in the output and no date moves. Expect Deshawn's one-to-four window written up as something this meeting established, under a findings or constraints heading of the model's own choosing, and the tablet line filed as a decision this meeting took rather than one it repeated. Diff all four records afterwards and every one is byte-identical, with `harrow-write-window-kQ2MiN7kOA` still reading `last_confirmed: 2026-05-19` and still the only file in the scope carrying the key.
 
-Four of these six rows go green for a run that writes nothing into `_memory/` at all, which is what grading restraint costs. The stamp and the phase 6 report carry the scenario. Missing the confirmation is the cheap failure; the expensive one is a run that stamps `harrow-route-sequence-mr1b_3yB4S` because Harrow, the overnight job, and drive-time sequencing are all in the transcript, and never notices that the record's own claim is the one thing nobody in the room said.
+Four of these seven rows go green for a run that writes nothing into `_memory/` at all, which is what grading restraint costs. The stamp, the restatement line, and the phase 6 report carry the scenario. Missing the confirmation is the cheap failure; the expensive one is a run that stamps `harrow-route-sequence-mr1b_3yB4S` because Harrow, the overnight job, and drive-time sequencing are all in the transcript, and never notices that the record's own claim is the one thing nobody in the room said.
 
 ## Grading
 
