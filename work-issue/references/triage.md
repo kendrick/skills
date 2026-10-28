@@ -105,7 +105,7 @@ A queued row somebody fixed anyway names that change, so it gets the in-scope fi
 
 A finding the run checked and changed nothing for, replied on the thread:
 
-The body opens on its verdict by name, as `technical-writing`'s review-correspondence profile gives it, then names what was checked and what it showed. It carries no SHA, because no commit answers it, and HEAD answers nothing. This covers a refused finding, an in-scope row the repair left in `left`, and every reply in a round where each finding was refused. A queued row takes the deferred template above in place of a verdict.
+The body opens on its verdict by name, as `technical-writing`'s review-correspondence profile gives it, then names what was checked and what it showed. It carries no SHA, because no commit answers it, and HEAD answers nothing. This covers a refused finding, an in-scope row the repair left in `left`, and every reply in a round where each finding was refused. A queued row opens on the deferred template above in place of an opening verdict, and adds the sentence under it where the run checked whether the finding holds.
 
 Replies go through `technical-writing`, and they carry no attribution trailer or footer.
 
