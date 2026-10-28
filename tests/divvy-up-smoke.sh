@@ -288,6 +288,10 @@ require_text divvy-up/SKILL.md "that the task can reach from its own files while
 # the cut judgment route in Step 6 (RATIONALE, Deliberately Not Built).
 require_text divvy-up/SKILL.md "the constraint names that boundary and tells the worker to work inside it"
 require_text divvy-up/SKILL.md "any vocabulary boundary the task's file holds"
+# The opening definition and the empty-cell default have to admit the
+# boundary too, or they exclude what the widening sentence asks for.
+require_text divvy-up/SKILL.md "or the boundary the work stays inside"
+require_text divvy-up/SKILL.md "no such path and no such boundary"
 refute_text divvy-up/SKILL.md "judges the addition excessive"
 
 # Maintenance ledger. A rationale doc without its section headings is prose
