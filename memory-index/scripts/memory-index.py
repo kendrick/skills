@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Register a memory scope's folders with qmd as collections, and refresh the index.
 
-Exit codes follow the repo's validator convention: 0 pass, 1 a qmd command
-failed, 3 usage or unusable input (not a memory scope, qmd missing).
+Exit codes: 0 pass, 1 a qmd command failed, 2 usage error (argparse's own
+code), 3 not a memory scope or qmd not on PATH.
 
 Collections key on folders and the script never opens a record file under
 _memory/<type>/. Frontmatter can drift from the folder a record sits in, and
@@ -68,7 +68,7 @@ def letters(s: str) -> str:
 def type_description(root: Path, folder: str) -> str | None:
     key = letters(folder)
     key = key[:-1] if key.endswith("s") else key
-    body = section_body(read_text(root / "_memory" / "CLAUDE.md"), lambda t: t == "Record Types")
+    body = section_body(read_text(root / "_memory" / "CLAUDE.md"), lambda t: t.startswith("Record Types"))
     for line in (body or "").splitlines():
         if line.startswith("- ") and key in letters(line):
             return line[2:].replace("**", "").strip()

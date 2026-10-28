@@ -126,7 +126,7 @@ EOF
 cat >"$scope/_memory/CLAUDE.md" <<'EOF'
 # Memory
 
-## Record Types
+## Record Types (lightweight mode)
 
 - **Decision** — a choice made and why
 - **Rule** — a standing constraint

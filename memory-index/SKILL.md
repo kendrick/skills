@@ -32,7 +32,7 @@ python3 SCRIPT register SCOPE_ROOT --dry-run
 python3 SCRIPT register SCOPE_ROOT
 ```
 
-The dry run prints one command per line: a `qmd collection add` and a `qmd context add` for each type folder under `_memory/`, then the same pair for `notes/` with `--mask "*.md"` when `notes/` exists. Collections are named `<scope>-<type>` and `<scope>-notes`, where `<scope>` is SCOPE_ROOT's basename lowercased with every other character run turned into `-`. The mask matches files directly in `notes/` only, which keeps `notes/raw/`, `notes/_inbox/`, and `notes/attachments/` out of the index.
+The dry run prints one command per line: a `qmd collection add` and a `qmd context add` for each type folder under `_memory/`, then the same pair for `notes/` with `--mask "*.md"` when `notes/` exists. Collections are named `<scope>-<type>` and `<scope>-notes`, where `<scope>` is SCOPE_ROOT's basename lowercased with every other character run turned into `-`. The mask matches files directly in `notes/` only, which keeps `notes/raw/`, `notes/_inbox/`, and `notes/attachments/` out of the index. After the commands, the dry run prints the same `MCP:` line the real run ends with.
 
 Each context string opens with the paragraph under the `## ... in One Paragraph` heading in SCOPE_ROOT's `CLAUDE.md`. When that paragraph is still an unfilled comment, the string opens with `Memory scope <scope>.` instead. Tell the user the scope paragraph is unfilled when the dry run shows that fallback, since every collection's context inherits it.
 
