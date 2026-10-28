@@ -1,0 +1,10 @@
+[00:00:10] Kendrick: Okay, next thing. The ingest job drops the membership rows whenever the upstream export is late, and nobody notices until the weekly report is short.
+[00:00:40] Priya: Right, and the fix is to hold the run until the export lands, with a timeout that pages someone instead of silently skipping.
+[00:01:10] Sam: The acceptance check is that a late export delays the run and a missing export pages on-call after thirty minutes.
+[00:01:25] Sam: The thirty minute timeout we picked, that one is fine.
+[00:01:40] Priya: And we should backfill the three weeks we already lost, that is part of the same ticket.
+[00:02:00] Kendrick: Okay, so this one will be, it looks like this one will be PROJ-501.
+[00:02:20] Kendrick: All right. Next up, the dashboard tiles render blank on Safari because the chart library needs a polyfill we stopped shipping.
+[00:02:50] Sam: We just add the polyfill back behind the browser check, and the done test is the tiles render on Safari seventeen.
+[00:03:10] Kendrick: Okay, that one is PROJ-502.
+[00:03:20] Priya: Cool, that's it for today.

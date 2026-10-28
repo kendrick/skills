@@ -28,6 +28,12 @@ boundary_window_words = 6
 # The phrases that open a new topic. Matched case-insensitively.
 boundary_cues = ["okay", "ok", "next", "next up", "let's do", "moving on", "on to", "now"]
 
+# The phrases a room says when it files a ticket after talking it through. A
+# key within 4 words after one reads as closing its segment, so a transcript
+# where most keys do this is segmented backward from each key. Matched
+# case-insensitively. An empty list turns this off.
+filing_cues = ["this one will be", "that one will be", "this one is", "that one is", "that's", "i'll assign it"]
+
 # A segment is flagged `long` when its duration exceeds this multiple of the
 # session's median segment duration. Long segments surface as spike candidates.
 long_factor = 2

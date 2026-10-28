@@ -24,6 +24,18 @@ demoted out of the entry list into the "mentioned in passing" summary,
 alongside keys that were only ever mentioned and never opened a segment at
 all.
 
+Keys are read one of two ways, decided once per transcript and never per
+key. A planning session files each ticket after talking it through ("okay,
+that one is PROJ-502"), so its keys trail their discussion. Every key
+occurrence votes: trailing when it lands within four words after a
+`filing_cues` phrase, or in the last `TRAILING_WINDOW_WORDS` words of its
+cue; leading when it qualifies under the window-and-cue rule above. More
+trailing votes than leading ones read the transcript as trailing, and
+anything else, a tie included, reads as leading. In the trailing reading a
+key closes its segment, which runs back to the previous boundary or the start
+of the transcript, and the atoms after the last key are `postamble`, the
+trailing counterpart of preamble. The mode is reported as `stats.key_mode`.
+
 The default output is the staging skeleton: frontmatter, one `## KEY` entry
 per surviving segment with its eight sections (all empty — filling them from
 the excerpt is the next step's job, done by a person or an agent reading the
@@ -57,9 +69,14 @@ DEFAULTS = {
     "min_segment_words": 40,
     "boundary_window_words": 6,
     "boundary_cues": ["okay", "ok", "next", "next up", "let's do", "moving on", "on to", "now"],
+    "filing_cues": ["this one will be", "that one will be", "this one is", "that one is", "that's", "i'll assign it"],
     "long_factor": 2,
     "label_prefix": "refined-",
 }
+
+# A key is "in last position" when at most this many words follow it in its
+# cue. Hard-coded like the 4-word reach after a cue: nothing asks to tune it.
+TRAILING_WINDOW_WORDS = 3
 
 CONTENT_SECTIONS = ["context", "acceptance criteria", "out of scope", "dependencies", "goal"]
 
@@ -438,12 +455,13 @@ def parse_text_transcript(text):
         start = None
         start_line = None
         parts = []
+        cues = []
 
         def flush():
-            nonlocal speaker, parts
+            nonlocal speaker, parts, cues
             if speaker is not None:
-                turns.append(Turn(start, start_line, speaker, " ".join(parts)))
-            speaker, parts = None, []
+                turns.append(Turn(start, start_line, speaker, " ".join(parts), cues))
+            speaker, parts, cues = None, [], []
 
         for lineno, line in numbered:
             if not line.strip():
@@ -459,6 +477,14 @@ def parse_text_transcript(text):
                 if who != speaker:
                     flush()
                     speaker, start, start_line = who, m.group(1), lineno
+                    cues.append((0, start, start_line))
+                else:
+                    # Record the line as its own cue, as parse_captions does
+                    # for a same-speaker cue. Without it the merged turn is
+                    # one atom stamped with its first line's clock, and a
+                    # segment cannot end at one line and the next start at
+                    # the line after (#217).
+                    cues.append((sum(len(p.split()) for p in parts), m.group(1), lineno))
                 parts.append(said)
             else:
                 parts.append(line.strip())
@@ -470,12 +496,13 @@ def parse_text_transcript(text):
         speaker = None
         start_line = None
         parts = []
+        cues = []
 
         def flush():
-            nonlocal speaker, parts
+            nonlocal speaker, parts, cues
             if speaker is not None:
-                turns.append(Turn(None, start_line, speaker, " ".join(parts)))
-            speaker, parts = None, []
+                turns.append(Turn(None, start_line, speaker, " ".join(parts), cues))
+            speaker, parts, cues = None, [], []
 
         for lineno, line in numbered:
             if not line.strip():
@@ -486,6 +513,9 @@ def parse_text_transcript(text):
                 if who != speaker:
                     flush()
                     speaker, start_line = who, lineno
+                    cues.append((0, None, start_line))
+                else:
+                    cues.append((sum(len(p.split()) for p in parts), None, lineno))
                 parts.append(said)
             else:
                 parts.append(line.strip())
@@ -673,7 +703,7 @@ def _enclosing_cue_start(cues, idx):
     return region
 
 
-def analyze_turns(turns, project_regexes, cue_re, boundary_window_words):
+def analyze_turns(turns, project_regexes, cue_re, boundary_window_words, filing_re=None):
     """Walk every turn once, sorting each turn's key matches left to right.
     The plan's rule for two keys in one utterance — first is a boundary,
     a second qualifying one is a 'co-discussed' flag rather than a second
@@ -698,11 +728,17 @@ def analyze_turns(turns, project_regexes, cue_re, boundary_window_words):
     downstream: `build_spans` and `attribute_mentions` place both boundaries
     and mentions onto per-cue atoms, not whole turns, so that a key opened
     by a later cue doesn't inherit an earlier cue's clock, line, or word
-    count."""
-    boundaries = []
-    co_discussed = []
-    mention_events = []
-    all_keys_seen = []
+    count.
+
+    Boundaries are chosen in two passes because the transcript's key mode
+    (see the module docstring) has to be known before any one key can be
+    judged. The first pass collects every key occurrence with the three
+    facts a vote or a boundary needs: in the leading window or after a
+    boundary cue, within four words after a filing cue, in last position of
+    its cue. The vote is cast over all occurrences, revisits included. The
+    second pass applies the winning mode's qualification rule in the same
+    left-to-right order as before. Returns the mode as a fifth value."""
+    occurrences = []
 
     for turn_idx, turn in enumerate(turns):
         text = turn.text
@@ -710,35 +746,70 @@ def analyze_turns(turns, project_regexes, cue_re, boundary_window_words):
         for project, rx in project_regexes.items():
             for m in rx.finditer(text):
                 key = f"{project}-{canonicalize_number(m.group('num'))}"
-                matches.append((m.start(), project, key))
+                matches.append((m.start(), m.end(), project, key))
         if not matches:
             continue
         matches.sort(key=lambda t: t[0])
 
+        total_words = len(text.split())
         cue_end_words = [word_index_at(text, m.end()) for m in cue_re.finditer(text)] if cue_re else []
+        filing_end_words = [word_index_at(text, m.end()) for m in filing_re.finditer(text)] if filing_re else []
 
-        boundary_key_by_cue = {}
-        for start_char, project, key in matches:
+        for start_char, end_char, project, key in matches:
             idx = word_index_at(text, start_char)
             # `turn.cues` is `[(0, ...)]` for an ordinary turn, so this
             # already covers the plain turn-start case; a merged speakerless
             # turn carries one entry per folded-in cue, so a key opening any
             # of them qualifies too — the cue, not the turn, is the unit of
             # utterance once there is no speaker label to mark a fresh turn.
-            qualifies = any(
+            leading = any(
                 cs <= idx < cs + boundary_window_words for cs, _s, _l in turn.cues
             ) or any(ce <= idx < ce + 4 for ce in cue_end_words)
-            all_keys_seen.append(key)
+            filing = any(ce <= idx < ce + 4 for ce in filing_end_words)
             cue_start = _enclosing_cue_start(turn.cues, idx)
-            if qualifies and cue_start not in boundary_key_by_cue:
-                boundaries.append({"turn_idx": turn_idx, "cue_start": cue_start, "key": key, "project": project})
-                boundary_key_by_cue[cue_start] = key
-            elif qualifies:
-                co_discussed.append((turn_idx, boundary_key_by_cue[cue_start], key))
-            else:
-                mention_events.append({"turn_idx": turn_idx, "cue_start": cue_start, "key": key})
+            # The enclosing cue ends where the next one starts, or with the turn.
+            later_starts = [cs for cs, _s, _l in turn.cues if cs > cue_start]
+            cue_word_end = later_starts[0] if later_starts else total_words
+            last = cue_word_end - word_index_at(text, end_char) <= TRAILING_WINDOW_WORDS
+            occurrences.append({
+                "turn_idx": turn_idx, "cue_start": cue_start, "key": key, "project": project,
+                "leading": leading, "trailing": filing or last, "filing": filing,
+            })
 
-    return boundaries, co_discussed, mention_events, all_keys_seen
+    # One vote per occurrence. A filing cue outranks the leading window
+    # because "Okay, that one is PROJ-502." sits in both and only the cue
+    # says which way it reads; a bare "PROJ-412." falls through to leading.
+    trailing_votes = leading_votes = 0
+    for o in occurrences:
+        if o["filing"]:
+            trailing_votes += 1
+        elif o["leading"]:
+            leading_votes += 1
+        elif o["trailing"]:
+            trailing_votes += 1
+    # A tie, or no votes at all, reads as leading, which is what every
+    # refinement transcript did before trailing existed.
+    key_mode = "trailing" if trailing_votes > leading_votes else "leading"
+
+    boundaries = []
+    co_discussed = []
+    mention_events = []
+    all_keys_seen = []
+    boundary_key_by_cue = {}
+    for o in occurrences:
+        qualifies = o[key_mode]
+        turn_idx, cue_start, key = o["turn_idx"], o["cue_start"], o["key"]
+        all_keys_seen.append(key)
+        slot = (turn_idx, cue_start)
+        if qualifies and slot not in boundary_key_by_cue:
+            boundaries.append({"turn_idx": turn_idx, "cue_start": cue_start, "key": key, "project": o["project"]})
+            boundary_key_by_cue[slot] = key
+        elif qualifies:
+            co_discussed.append((turn_idx, boundary_key_by_cue[slot], key))
+        else:
+            mention_events.append({"turn_idx": turn_idx, "cue_start": cue_start, "key": key})
+
+    return boundaries, co_discussed, mention_events, all_keys_seen, key_mode
 
 
 def build_atoms(turns):
@@ -771,7 +842,7 @@ def build_atoms(turns):
     return atoms, atom_index
 
 
-def build_spans(boundaries, atoms, atom_index):
+def build_spans(boundaries, atoms, atom_index, key_mode="leading"):
     """One span per boundary, running to the atom before the next boundary
     (or to the transcript's last atom). A span's 'end' is its own last
     atom's start time/line rather than the next span's first atom — the same
@@ -785,15 +856,26 @@ def build_spans(boundaries, atoms, atom_index):
     in, only that cue's words and timing belong to its segment. An ordinary
     turn has exactly one atom, so a labelled transcript (where two turns
     almost never share a boundary) sees no change in behavior — this is
-    just the old whole-turn slicing at finer grain."""
+    just the old whole-turn slicing at finer grain.
+
+    In the trailing reading the same atoms are cut the other way: a span
+    runs from the atom after the previous boundary (or atom 0) through its
+    own boundary's atom, because the key closes the discussion it follows.
+    The atoms past the last boundary belong to no span."""
     spans = []
     for i, b in enumerate(boundaries):
-        start_atom = atom_index[(b["turn_idx"], b["cue_start"])]
-        if i + 1 < len(boundaries):
-            nb = boundaries[i + 1]
-            end_atom = atom_index[(nb["turn_idx"], nb["cue_start"])] - 1
+        b_atom = atom_index[(b["turn_idx"], b["cue_start"])]
+        if key_mode == "trailing":
+            pb = boundaries[i - 1] if i > 0 else None
+            start_atom = atom_index[(pb["turn_idx"], pb["cue_start"])] + 1 if pb else 0
+            end_atom = b_atom
         else:
-            end_atom = len(atoms) - 1
+            start_atom = b_atom
+            if i + 1 < len(boundaries):
+                nb = boundaries[i + 1]
+                end_atom = atom_index[(nb["turn_idx"], nb["cue_start"])] - 1
+            else:
+                end_atom = len(atoms) - 1
         first_atom = atoms[start_atom]
         last_atom = atoms[end_atom]
         words = sum(a["word_end"] - a["word_start"] for a in atoms[start_atom:end_atom + 1])
@@ -821,7 +903,7 @@ def attribute_mentions(spans, mention_events, atom_index):
         a = atom_index.get((ev["turn_idx"], ev["cue_start"]))
         i = atom_to_span.get(a)
         if i is None:
-            continue  # preamble mention: no open segment to credit it to
+            continue  # preamble or postamble mention: no open segment to credit it to
         span = spans[i]
         if ev["key"] != span["key"]:
             span["mentions"].add(ev["key"])
@@ -842,15 +924,16 @@ def segment_transcript(turns, has_clock, cfg, min_words):
     aliases_cfg = cfg["spoken_aliases"]
     project_regexes = {p: build_project_regex(p, aliases_cfg.get(p, [])) for p in projects}
     cue_re = build_cue_regex(cfg["boundary_cues"])
+    filing_re = build_cue_regex(cfg["filing_cues"])
 
-    boundaries, co_discussed, mention_events, all_keys_seen = analyze_turns(
-        turns, project_regexes, cue_re, cfg["boundary_window_words"]
+    boundaries, co_discussed, mention_events, all_keys_seen, key_mode = analyze_turns(
+        turns, project_regexes, cue_re, cfg["boundary_window_words"], filing_re
     )
     if not boundaries:
         return None
 
     atoms, atom_index = build_atoms(turns)
-    spans = build_spans(boundaries, atoms, atom_index)
+    spans = build_spans(boundaries, atoms, atom_index, key_mode)
     attribute_mentions(spans, mention_events, atom_index)
 
     spans_by_key = {}
@@ -910,17 +993,34 @@ def segment_transcript(turns, has_clock, cfg, min_words):
             e["long"] = False
         median_duration = None
 
-    preamble_end = boundaries[0]["turn_idx"]
-    # Atoms, not turns: the first boundary can now open mid-turn — a later
-    # cue of the very turn it's in — so summing whole turns before it would
-    # miss that turn's own earlier cues, which are preamble too.
-    first_atom = atom_index[(boundaries[0]["turn_idx"], boundaries[0]["cue_start"])]
-    preamble_words = sum(a["word_end"] - a["word_start"] for a in atoms[:first_atom])
+    # The leading reading discards what precedes the first key and the
+    # trailing reading what follows the last. Each keeps its own field so
+    # `preamble` never changes meaning with the mode.
+    preamble = {"turns": 0, "words": 0}
+    postamble = {"turns": 0, "words": 0}
+    if key_mode == "trailing":
+        last = boundaries[-1]
+        last_atom = atom_index[(last["turn_idx"], last["cue_start"])]
+        postamble = {
+            "turns": len(turns) - 1 - last["turn_idx"],
+            "words": sum(a["word_end"] - a["word_start"] for a in atoms[last_atom + 1:]),
+        }
+    else:
+        # Atoms, not turns: the first boundary can now open mid-turn — a later
+        # cue of the very turn it's in — so summing whole turns before it would
+        # miss that turn's own earlier cues, which are preamble too.
+        first_atom = atom_index[(boundaries[0]["turn_idx"], boundaries[0]["cue_start"])]
+        preamble = {
+            "turns": boundaries[0]["turn_idx"],
+            "words": sum(a["word_end"] - a["word_start"] for a in atoms[:first_atom]),
+        }
 
     return {
         "entries": entries,
         "passing": passing,
-        "preamble": {"turns": preamble_end, "words": preamble_words},
+        "preamble": preamble,
+        "postamble": postamble,
+        "key_mode": key_mode,
         "median_duration_seconds": median_duration,
         "has_clock": has_clock,
     }
@@ -1064,7 +1164,9 @@ def build_json(result, frontmatter, min_words, long_factor):
         "entries": entries,
         "passing": passing,
         "preamble": result["preamble"],
+        "postamble": result["postamble"],
         "stats": {
+            "key_mode": result["key_mode"],
             "boundaries": len(result["entries"]),
             "revisited_total": sum(e["revisited"] for e in result["entries"]),
             "mentioned_in_passing": len(passing),
