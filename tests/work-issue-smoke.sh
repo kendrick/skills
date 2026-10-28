@@ -723,6 +723,15 @@ refute_text work-issue/SKILL.md "Reply to every finding thread with what changed
 require_text work-issue/SKILL.md "A queued row that names no change gets"
 require_text work-issue/SKILL.md "A queued row somebody fixed anyway names that change and cites its SHA"
 refute_text work-issue/README.md "saying what changed and at which commit"
+# #130, row 159: a queued reply opens on the unchanged template, so a reply
+# with no verdict stays compliant, and adds a correctness sentence only where
+# the run checked the finding. Queueing turns on scope alone, so a mandatory
+# verdict would assert one nobody checked.
+require_text work-issue/references/triage.md "deferred: <Outside because>; tracked in the deferred-findings comment"
+require_text work-issue/references/triage.md "Where the run checked whether the finding holds, add one sentence after it"
+require_text work-issue/SKILL.md "and a sentence saying whether the finding holds where the run checked it"
+require_text work-issue/references/triage.md "A queued row opens on the deferred template above in place of an opening verdict, and adds the sentence under it"
+refute_text work-issue/references/triage.md "Every queued reply says whether"
 # A line-number locator into a sibling's SKILL.md goes stale on the next
 # insert above it, the shape review-correspondence.md warns against. Cite
 # the step by name instead.

@@ -99,11 +99,13 @@ A queued row that names no change, posted through the same `gh api` call as an i
 deferred: <Outside because>; tracked in the deferred-findings comment
 ```
 
+Where the run checked whether the finding holds, add one sentence after it saying which way the check came out and what showed it. Where it did not check, the reply ends at the template, because `deferred` says where the finding went, not whether it was right.
+
 A queued row somebody fixed anyway names that change, so it gets the in-scope fix's reply above, `<sha>` included.
 
 A finding the run checked and changed nothing for, replied on the thread:
 
-The body opens on its verdict by name, as `technical-writing`'s review-correspondence profile gives it, then names what was checked and what it showed. It carries no SHA, because no commit answers it, and HEAD answers nothing. This covers a refused finding, an in-scope row the repair left in `left`, and every reply in a round where each finding was refused. A queued row takes the deferred template above in place of a verdict.
+The body opens on its verdict by name, as `technical-writing`'s review-correspondence profile gives it, then names what was checked and what it showed. It carries no SHA, because no commit answers it, and HEAD answers nothing. This covers a refused finding, an in-scope row the repair left in `left`, and every reply in a round where each finding was refused. A queued row opens on the deferred template above in place of an opening verdict, and adds the sentence under it where the run checked whether the finding holds.
 
 Replies go through `technical-writing`, and they carry no attribution trailer or footer.
 
