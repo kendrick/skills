@@ -29,8 +29,8 @@ link that fails for any reason leaves its text where it was; `strip` fetches
 the body, removes only the entries whose link landed from the Parent and
 Blocked by lines, and sends one updateIssue. It never adds a reference back,
 never touches another line, and writes nothing when nothing linked. The only
-text it writes is the "None" that --agent-targeted puts on a Blocked by line
-the strip emptied.
+text it writes is the "set as native links" that --agent-targeted puts on a
+Blocked by line the strip emptied.
 
 Exit codes:
     0  resolve printed its JSON; link set every link (or --dry-run listed them);
@@ -376,9 +376,10 @@ def strip_body(body, linked, agent_targeted):
             if kept:
                 out.append(f"{BLOCKED_LINE} {', '.join(kept)}{ending}")
             elif agent_targeted:
-                # An absent list reads as unexamined; "None" says the slot
-                # was considered and emptied on purpose.
-                out.append(f"{BLOCKED_LINE} None{ending}")
+                # An absent list reads as unexamined. Name where the blockers
+                # went: strip only empties this line after they linked, so
+                # "None" here would be false (#208).
+                out.append(f"{BLOCKED_LINE} set as native links{ending}")
             continue
         out.append(line)
     return "".join(out), changed

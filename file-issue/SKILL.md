@@ -173,13 +173,13 @@ python3 <skill-path>/scripts/link-issues.py link --issue <URL> --plan <resolved.
 
 Exit 0 means every link was set. Exit 1 means at least one failed: report the issue URL, each `FAILED` line, and the `retry:` command under it; the failed entry's text is still in the body, so nothing is lost. Exit 3 means a usage error, an unreadable plan, or a new issue that could not be resolved, and no link was sent: report the URL and that no links were set. `strip` still runs and, finding nothing linked, writes nothing.
 
-Then strip the linked entries from the body, passing `--agent-targeted` when the issue is agent-targeted so an emptied Blocked by line reads `None` rather than vanishing:
+Then strip the linked entries from the body, passing `--agent-targeted` when the issue is agent-targeted so an emptied Blocked by line reads `set as native links` rather than vanishing:
 
 ```
 python3 <skill-path>/scripts/link-issues.py strip --issue <URL> --plan <resolved.json> --result <result.json> [--agent-targeted]
 ```
 
-`strip` fetches the body, removes only the entries whose link landed from the Parent and Blocked by lines, and sends one `updateIssue`. A Parent line whose entry linked goes; a Blocked by line left empty becomes `**Blocked by:** None` when agent-targeted and goes otherwise; an entry whose link failed stays where it was. It never adds a reference back and never touches another line, and with nothing linked it writes nothing; the `None` on an emptied agent-targeted Blocked by line is the only text it ever writes. Exit 1 means the body write failed: report the `FAILED strip` line and its `retry:` command and leave the body as filed, since a text entry beside its link is harmless.
+`strip` fetches the body, removes only the entries whose link landed from the Parent and Blocked by lines, and sends one `updateIssue`. A Parent line whose entry linked goes; a Blocked by line left empty becomes `**Blocked by:** set as native links` when agent-targeted and goes otherwise; an entry whose link failed stays where it was. It never adds a reference back and never touches another line, and with nothing linked it writes nothing; the `set as native links` on an emptied agent-targeted Blocked by line is the only text it ever writes. Exit 1 means the body write failed: report the `FAILED strip` line and its `retry:` command and leave the body as filed, since a text entry beside its link is harmless.
 
 Creation only. The rule admits exactly three kinds of write beyond `gh issue create`, each naming the new issue: one `addSubIssue` for the parent, one `addBlockedBy` per blocker, and at most one `updateIssue` that removes only the entries whose link landed from the new issue's own body. It makes no other write to an existing issue, and never edits, closes, relabels, or reassigns one; when that is what the user wants, say that this skill does not do it.
 

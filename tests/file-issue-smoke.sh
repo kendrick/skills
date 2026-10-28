@@ -296,7 +296,8 @@ require_text file-issue/SKILL.md "links the new issue to its parent and blockers
 # body. Writing the failure back into the body is the edit the creation-only
 # rule exists to forbid (Deliberately Not Built): the one body write removes
 # entries whose link landed and never adds a reference back. The only text it
-# writes is the `None` an emptied agent-targeted Blocked by line gets.
+# writes is the `set as native links` an emptied agent-targeted Blocked by line
+# gets.
 refute_text file-issue/SKILL.md "edit the body to add"
 refute_text file-issue/SKILL.md "add it back as text"
 # The phrases above can be reworded around; the command can't. A body edit
@@ -512,13 +513,16 @@ expect_rc 0 "$rc" "strip after every link landed"
 require_count "$FAKE_GH_LOG" "updateIssue" 1
 refute_text "$FAKE_GH_LOG.body" "**Parent:**"
 refute_text "$FAKE_GH_LOG.body" "**Blocked by:**"
+refute_text "$FAKE_GH_LOG.body" "set as native links"
 require_text "$FAKE_GH_LOG.body" "See #7 and #12 in the old trace."
 require_text "$FAKE_GH_LOG.body" "# Title"
-# Agent-targeted keeps an explicit None where the list emptied.
+# Agent-targeted names where the blockers went where the list emptied (#208):
+# "None" there contradicts the native field check-relationships.py reads.
 : > "$FAKE_GH_LOG"
 rc=0; FAKE_GH_BODY="$body_a" run_link strip --issue "$new_issue" --plan "$link_tmp/plan.json" --result "$link_tmp/res-a.json" --agent-targeted > "$link_tmp/out" || rc=$?
 expect_rc 0 "$rc" "strip, agent-targeted"
-require_text "$FAKE_GH_LOG.body" "**Blocked by:** None"
+require_text "$FAKE_GH_LOG.body" "**Blocked by:** set as native links"
+refute_text "$FAKE_GH_LOG.body" "**Blocked by:** None"
 refute_text "$FAKE_GH_LOG.body" "**Parent:**"
 # One blocker fails: its text stays on the line, the linked entries leave.
 body_b="$link_tmp/body-b.md"
@@ -550,6 +554,14 @@ rc=0; FAKE_GH_BODY="$body_a" run_link strip --issue "$new_issue" --plan "$link_t
 expect_rc 0 "$rc" "strip with nothing linked"
 require_count "$FAKE_GH_LOG" "updateIssue" 0
 require_count "$FAKE_GH_LOG" "id body" 0
+# #208: a Blocked by line that already says None is true when nothing linked,
+# so strip --agent-targeted leaves it byte for byte.
+body_none="$link_tmp/body-none.md"
+printf '**Blocked by:** None\n\nBody text.\n' > "$body_none"
+: > "$FAKE_GH_LOG"
+rc=0; FAKE_GH_BODY="$body_none" run_link strip --issue "$new_issue" --plan "$link_tmp/text.json" --result "$link_tmp/res-c.json" --agent-targeted > "$link_tmp/out" || rc=$?
+expect_rc 0 "$rc" "strip --agent-targeted with nothing linked"
+require_count "$FAKE_GH_LOG" "updateIssue" 0
 # A failed strip write leaves the body as filed, and the retry re-runs strip
 # itself, which re-fetches the body: a replayed snapshot would overwrite any
 # edit made between the failure and the retry.

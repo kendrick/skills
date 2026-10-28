@@ -169,7 +169,7 @@ Fails if the skill rewrites the rule instead of asking, if it demands the test r
 | Expect | Pass condition |
 | --- | --- |
 | Confirmation | Lists `parent #P` and `blocked-by #N` beside the rendered body before `gh issue create` |
-| Body | Once the run reports done: no Parent line; no Blocked by line, or `**Blocked by:** None` when the issue is agent-targeted. The body as created carried both lines as text; `strip` removed them after the links landed |
+| Body | Once the run reports done: no Parent line; no Blocked by line, or `**Blocked by:** set as native links` when the issue is agent-targeted. The body as created carried both lines as text; `strip` removed them after the links landed |
 | Blocked by link | `gh api graphql -f query='query{repository(owner:"<o>",name:"<r>"){issue(number:<new>){blockedBy(first:10){nodes{number}}}}}'` returns `#N` |
 | Parent link | The same query on `#P` with `subIssues(first:10){nodes{number}}` includes the new issue |
 | Problem section | The quoted `#N` in the Problem section adds no link of its own: `blockedBy` holds `#N` once, from the slot, and nothing else |
