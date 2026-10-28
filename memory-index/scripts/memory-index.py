@@ -74,7 +74,7 @@ def type_description(root: Path, folder: str) -> str | None:
             continue
         text = line[2:]
         # Match the label only: a description can name another type ("a choice made under standing rules").
-        m = re.search(r"\*\*(.+?)\*\*", text) or re.search(r"`(.+?)`", text) or re.match(r"[A-Za-z /-]+", text)
+        m = re.search(r"\*\*(.+?)\*\*", text) or re.search(r"`(.+?)`", text) or re.match(r"[A-Z][A-Za-z/-]*(?: [A-Z][A-Za-z/-]*)*", text)
         label = m.group(m.lastindex or 0) if m else ""
         if key in letters(label):
             return text.replace("**", "").strip()

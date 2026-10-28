@@ -302,4 +302,16 @@ for shape in 'D — d' 'D—d' 'D. d' 'D (d)'; do
   }
 done
 
+# Plain bullets with no bold, no backticks, and no separator: the label is the
+# leading capitalized words, so the lowercase description can't be read as one.
+plain="$tmp/Plain Scope"
+mkdir -p "$plain/_memory/decisions" "$plain/_memory/rules"
+printf '## Record Types (lightweight mode)\n\n- Decision a choice made under standing rules\n- Rule a standing constraint\n' >"$plain/_memory/CLAUDE.md"
+pdry="$(PATH="$bare_path" python3 "$script" register "$plain" --dry-run)"
+grep -F 'context add qmd://plain-scope-rules ' <<<"$pdry" | grep -Fq 'rules records: Rule a standing constraint' || {
+  echo "case 9 (plain bullets): rules collection did not get the Rule line; got:" >&2
+  echo "$pdry" >&2
+  exit 1
+}
+
 echo "memory-index smoke: OK"
