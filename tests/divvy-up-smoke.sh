@@ -280,6 +280,16 @@ require_text divvy-up/SKILL.md "A done-when also has to be reachable while peers
 require_text divvy-up/SKILL.md "the suite belongs to the gate"
 require_text divvy-up/SKILL.md "that the task can reach from its own files while its peers are still writing"
 
+# #81: work can meet its done-when honestly by widening its file. In #80's
+# build a worker held to "three new require_text calls" added a
+# require_text_joined helper, and the orchestrator deleted it by hand after
+# the gate. A stricter done-when can't catch that, since widening meets any
+# bar, so only a constraint naming the file's boundary does. The refute pins
+# the cut judgment route in Step 6 (RATIONALE, Deliberately Not Built).
+require_text divvy-up/SKILL.md "the constraint names that boundary and tells the worker to work inside it"
+require_text divvy-up/SKILL.md "any vocabulary boundary the task's file holds"
+refute_text divvy-up/SKILL.md "judges the addition excessive"
+
 # Maintenance ledger. A rationale doc without its section headings is prose
 # nobody can navigate under time pressure.
 require_text _maintenance/divvy-up/RATIONALE.md "## Decision Ledger"
