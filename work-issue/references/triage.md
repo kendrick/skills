@@ -99,6 +99,8 @@ A queued row that names no change, posted through the same `gh api` call as an i
 deferred: <Outside because>; tracked in the deferred-findings comment
 ```
 
+Where the run checked whether the finding holds, add one sentence after it saying which way the check came out and what showed it. Where it did not check, the reply ends at the template, because `deferred` says where the finding went, not whether it was right.
+
 A queued row somebody fixed anyway names that change, so it gets the in-scope fix's reply above, `<sha>` included.
 
 A finding the run checked and changed nothing for, replied on the thread:
