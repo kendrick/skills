@@ -277,4 +277,29 @@ grep -Fxq "qmd collection add '$abs/notes' --name acme-pursuit-notes --mask '*.m
   exit 1
 }
 
+# Case 9: a description that names another type must not win the match. The
+# Decision bullet says "rules", so a whole-line match gave the rules collection
+# the Decision context. Each shape is a legal way to write the label: spaced
+# dash, flush dash (house style), period after the bold, parenthetical.
+n=0
+for shape in 'D — d' 'D—d' 'D. d' 'D (d)'; do
+  n=$((n + 1))
+  gamma="$tmp/Gamma Scope $n"
+  mkdir -p "$gamma/_memory/decisions" "$gamma/_memory/rules"
+  dec="${shape/D/**Decision**}"
+  dec="${dec/d/a choice made under standing rules}"
+  printf '## Record Types (lightweight mode)\n\n- %s\n- **Rule** — a standing constraint\n' "$dec" >"$gamma/_memory/CLAUDE.md"
+  gdry="$(PATH="$bare_path" python3 "$script" register "$gamma" --dry-run)"
+  grep -F "context add qmd://gamma-scope-$n-rules " <<<"$gdry" | grep -Fq 'rules records: Rule — a standing constraint' || {
+    echo "case 9 ($shape): rules collection did not get the Rule line; got:" >&2
+    echo "$gdry" >&2
+    exit 1
+  }
+  grep -F "context add qmd://gamma-scope-$n-decisions " <<<"$gdry" | grep -Fq 'decisions records: Decision' || {
+    echo "case 9 ($shape): decisions collection did not get the Decision line; got:" >&2
+    echo "$gdry" >&2
+    exit 1
+  }
+done
+
 echo "memory-index smoke: OK"

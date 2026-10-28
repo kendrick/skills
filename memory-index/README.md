@@ -41,7 +41,7 @@ It needs Python 3 and [qmd](https://github.com/tobi/qmd) on your `PATH`. The scr
 
 - Registering a scope twice fails at the first collection, because qmd refuses a duplicate name. Remove the scope's collections with `qmd collection remove` before you register it again.
 - A note in the older v1 body format keeps its transcript inline, so the `notes/` mask can't keep that text out of the index. `register` doesn't detect v1 notes.
-- `[journal candidate:]` markers live in `notes/raw/`, which the index skips. To find them, grep `notes/` recursively.
+- A `[journal candidate:]` marker that appears only in the raw source text lives in `notes/raw/`, which the index skips. Markers that `inbox-to-memory` flags inside the extracted sections stay in the top-level note, so the index does see them. To find the raw-only ones, grep `notes/` recursively.
 - `notes/CLAUDE.md` and `notes/README.md` sit directly in `notes/`, so the mask indexes them along with the notes.
 
 The decision ledger behind these choices is [`_maintenance/memory-index/RATIONALE.md`](../_maintenance/memory-index/RATIONALE.md).

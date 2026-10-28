@@ -70,8 +70,14 @@ def type_description(root: Path, folder: str) -> str | None:
     key = key[:-1] if key.endswith("s") else key
     body = section_body(read_text(root / "_memory" / "CLAUDE.md"), lambda t: t.startswith("Record Types"))
     for line in (body or "").splitlines():
-        if line.startswith("- ") and key in letters(line):
-            return line[2:].replace("**", "").strip()
+        if not line.startswith("- "):
+            continue
+        text = line[2:]
+        # Match the label only: a description can name another type ("a choice made under standing rules").
+        m = re.search(r"\*\*(.+?)\*\*", text) or re.search(r"`(.+?)`", text) or re.match(r"[A-Za-z /-]+", text)
+        label = m.group(m.lastindex or 0) if m else ""
+        if key in letters(label):
+            return text.replace("**", "").strip()
     return None
 
 
