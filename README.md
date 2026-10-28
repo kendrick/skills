@@ -48,6 +48,7 @@ Each skill's own README covers any CLI it expects.
 | Skill                                              | What it does                                                        | Install flag                  |
 | -------------------------------------------------- | ------------------------------------------------------------------- | ----------------------------- |
 | [inbox-to-memory](inbox-to-memory/)                | Meeting exhaust into groomed notes and durable memory               | `--skill inbox-to-memory`     |
+| [memory-index](memory-index/README.md)             | Registers memory scopes with qmd and keeps the index fresh          | `--skill memory-index`        |
 | [jd-file](jd-file/README.md)                       | Gives an arriving thing its Johnny.Decimal number and register line | `--skill jd-file`             |
 | [jd-audit](jd-audit/README.md)                     | Finds drift between a Johnny.Decimal register and its folders       | `--skill jd-audit`            |
 | [technical-writing](technical-writing/README.md)   | Commits, comments, and PR prose against named public standards      | `--skill technical-writing`   |
@@ -68,6 +69,10 @@ Each skill's own README covers any CLI it expects.
 #### [inbox-to-memory](inbox-to-memory/)
 
 Drop your meeting exhaust—transcripts, slide decks, PDFs, half-finished scratch notes—into an `_inbox/` folder, say "process the inbox," and each input comes back as one groomed markdown note: frontmatter up top, extracted quotes and tensions and action items in the middle, the verbatim original at the bottom. Along the way it flags memory candidates across three tiers, and you approve each record before it's written.
+
+#### [memory-index](memory-index/README.md)
+
+Registers a memory scope with [qmd](https://github.com/tobi/qmd) so agents can search it: one collection per `_memory/` record folder, one for the groomed notes with the raw transcripts in `notes/raw/` left out, and a context string for each, written from the scope's own `CLAUDE.md`. Folders decide collections: a record belongs to the collection of the folder it sits in, whatever its frontmatter says. qmd has no file watcher, so `refresh` reindexes after records land, and you can call it from a hook.
 
 #### [jd-file](jd-file/README.md)
 
@@ -133,7 +138,7 @@ A router plus eight domain skills covering the Databricks REST APIs and the Pyth
 
 ## Repository Layout
 
-- [databricks-api/](databricks-api/), [file-issue/](file-issue/), [jira-refine/](jira-refine/), [inbox-to-memory/](inbox-to-memory/), [jd-file/](jd-file/), [jd-audit/](jd-audit/), [readme-coauthorship/](readme-coauthorship/), [handoff/](handoff/), [adversarial-review/](adversarial-review/), [divvy-up/](divvy-up/), [work-issue/](work-issue/), [mutation-testing/](mutation-testing/), [work-wave/](work-wave/), [technical-writing/](technical-writing/), [eli5/](eli5/): the skills themselves, one directory each
+- [databricks-api/](databricks-api/), [file-issue/](file-issue/), [jira-refine/](jira-refine/), [inbox-to-memory/](inbox-to-memory/), [memory-index/](memory-index/), [jd-file/](jd-file/), [jd-audit/](jd-audit/), [readme-coauthorship/](readme-coauthorship/), [handoff/](handoff/), [adversarial-review/](adversarial-review/), [divvy-up/](divvy-up/), [work-issue/](work-issue/), [mutation-testing/](mutation-testing/), [work-wave/](work-wave/), [technical-writing/](technical-writing/), [eli5/](eli5/): the skills themselves, one directory each
 - **[\_docs/](_docs/)**: research notes behind the skills, like the [readme-coauthorship writeup](_docs/readme-coauthorship-research.md) and the [issue-authorship survey](_docs/file-issue-research.md)
 - **[\_maintenance/](_maintenance/)**: maintainer tooling, one subdirectory per skill that needs it: the refresh workflow that keeps `databricks-api` synced with upstream Databricks docs, the upstream sync behind `handoff`, the check that holds the `jd` pair's prose to the vault register, and the decision ledgers, evals, and provenance records behind the rest
 - **[tests/](tests/)**: smoke scripts that pin the load-bearing decisions in each skill and in the repo's agent docs; each runs standalone from the repo root, like `bash tests/technical-writing-smoke.sh`
