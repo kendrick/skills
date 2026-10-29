@@ -45,7 +45,7 @@ git clone git@github.com:kendrick/skills.git
 cp -R skills/work-issue ~/.claude/skills/work-issue
 ```
 
-Needs a git repo and Python 3 for the four bundled scripts, which are stdlib-only. Needs `gh` authenticated too, since the opening gate cannot read the issue without it and would invent the acceptance criteria. It invokes `divvy-up`, `code-review`, `adversarial-review`, and `technical-writing` by name, and the step that needs a missing one stops and says which. `herdr` is optional; without it the run falls back to `git worktree` and plain subagents.
+Needs a git repo and Python 3 for the five bundled scripts, which are stdlib-only. Needs `gh` authenticated too, since the opening gate cannot read the issue without it and would invent the acceptance criteria. It invokes `divvy-up`, `code-review`, `adversarial-review`, and `technical-writing` by name, and the step that needs a missing one stops and says which. `herdr` is optional; without it the run falls back to `git worktree` and plain subagents.
 
 ## Use
 
@@ -62,6 +62,12 @@ Type its name, or let a wave reach it one lane at a time—see the Gotchas for w
 
 Type the same invocation again to resume, plan path included if you passed one. The run probes the world, works out where it stopped, and picks up there. Without a plan path it looks under `docs/plans/` in this repo, then for a path linked from the issue, then in each directory `WORK_ISSUE_PLAN_DIRS` names, then for the approved plan in the conversation. With the variable unset, that directory search covers `~/.claude/plans`, where Claude Code's plan mode saves, so a plan made there is found again by its issue number and a resume needs no path. `--isolate` and `--no-isolate` pin the isolation decision, `--deep` forces `adversarial-review`, `--max-review-rounds N` sets the review round cap (2 by default), `--no-publish` ends the run after the red-team with nothing pushed, and `--dry-run` runs every gate and every derivation while dispatching nothing and pushing nothing.
 
+To keep a confirmed run going after its session ends, run `work-issue/scripts/drive.py N` from the repo. Where the run has no confirmation yet, the driver asks the Step 0 question once on its own terminal. It then relaunches a fresh headless agent on the same invocation whenever a launch ends without a stop that needs you, including a launch that crashed or lost its terminal. It waits out the no-review stop up to `--max-review-waits` times. At the default of 6 that comes to 1 to 6 hours, depending on whether the agent's host polls in the background or the foreground. Every other stop halts the driver. So do two launches in a row that change nothing, and the 20th launch, which `--max-launches` moves. Launch logs go to `RUN_DIR/drive/`. With `--detach`, the driver runs in tmux, or under `nohup` where tmux is missing, and prints how to watch it and how to stop it. `--agent-cmd` sets the agent's permission mode for every unattended launch, and choosing it is your call: the driver picks none. For example:
+
+```
+work-issue/scripts/drive.py 42 --agent-cmd "claude -p --permission-mode acceptEdits"
+```
+
 ## What's Here
 
 ```
@@ -76,6 +82,7 @@ work-issue/
     ├── check-plan.py           # the mechanical half of the plan gate
     ├── check-inflight.py       # proves no run in flight owns a path this plan owns
     ├── find-plan.py            # finds issue N's plan in WORK_ISSUE_PLAN_DIRS, ~/.claude/plans by default
+    ├── drive.py                # relaunches a confirmed run from outside the session until it reaches a stop that needs you
     └── run-state.py            # gathers the resume probe and places a run on the phase table; scores a pull request's review; weighs review time against build time
 ```
 
@@ -92,7 +99,7 @@ work-issue/
 
 ## Maintainers
 
-The decision ledger and eval suite live in [`_maintenance/work-issue/`](../_maintenance/work-issue/). Every contested choice has a row in [RATIONALE.md](../_maintenance/work-issue/RATIONALE.md), including where each borrowed mechanism came from and everything deliberately cut. Smoke tests: `bash tests/work-issue-smoke.sh` from the repo root, which pins the documents and runs the four scripts against fixtures, and `bash tests/work-issue-resume-tables-smoke.sh`, which checks that both copies of the Resume table and `run-state.py` agree row for row. [EVALS.md](../_maintenance/work-issue/EVALS.md) carries the live end-to-end scenarios, unrun until somebody runs one.
+The decision ledger and eval suite live in [`_maintenance/work-issue/`](../_maintenance/work-issue/). Every contested choice has a row in [RATIONALE.md](../_maintenance/work-issue/RATIONALE.md), including where each borrowed mechanism came from and everything deliberately cut. Smoke tests: `bash tests/work-issue-smoke.sh` from the repo root, which pins the documents and runs the five scripts against fixtures, and `bash tests/work-issue-resume-tables-smoke.sh`, which checks that both copies of the Resume table and `run-state.py` agree row for row. [EVALS.md](../_maintenance/work-issue/EVALS.md) carries the live end-to-end scenarios, unrun until somebody runs one.
 
 ## License
 
