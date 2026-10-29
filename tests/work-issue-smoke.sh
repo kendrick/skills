@@ -51,6 +51,7 @@ require_file work-issue/references/redteam.md
 require_file work-issue/references/resume.md
 require_file work-issue/references/triage.md
 require_file work-issue/scripts/check-plan.py
+require_file work-issue/scripts/find-plan.py
 require_file work-issue/scripts/check-inflight.py
 require_file work-issue/scripts/run-state.py
 require_file _maintenance/work-issue/RATIONALE.md
@@ -213,16 +214,19 @@ require_text work-issue/SKILL.md "**BASE_SHA** — \`git merge-base origin/<DEFA
 require_text work-issue/SKILL.md "**SINCE** — the contents of \`RUN_DIR/pushed_at\`"
 
 # --- Where the plan comes from. SKILL.md's PLAN bullet is the only place the
-# four routes are written down: no script globs `docs/plans`, so a quiet edit to
-# the search path changes what the skill resolves with nothing to catch it.
-# Issue #112: a plan kept outside the working tree reaches a run through route 1
-# or route 3 alone, and the silent fall-through to route 4 is what costs a resume. Pinned
-# positively, because a refute passes just as happily on a file that dropped the
-# whole bullet. ---
+# five routes are written down, and only route 4 is a script: nothing globs
+# `docs/plans` but the prose, so a quiet edit to the search path changes what
+# the skill resolves with nothing to catch it. Issue #112: a plan kept outside
+# the working tree used to reach a run through route 1 or route 3 alone, and
+# the silent fall-through to the conversation is what costs a resume. Issue
+# #142 added route 4, `find-plan.py` over `WORK_ISSUE_PLAN_DIRS`, so the
+# conversation is now route 5. Pinned positively, because a refute passes just
+# as happily on a file that dropped the whole bullet. ---
 
 require_text work-issue/SKILL.md "2. \`<ROOT>/docs/plans/*issue-<N>*.md\` or \`<ROOT>/docs/plans/*-<N>-*.md\`, newest by name"
-require_text work-issue/SKILL.md "reaches this run through route 1 or route 3 and no other: pass its path on the argument line, or link it from the issue"
-require_text work-issue/SKILL.md "Route 4 is where missing both of those lands, and it lands silently"
+require_text work-issue/SKILL.md "4. the one plan \`work-issue/scripts/find-plan.py --issue N --repo REPO\` prints from the directories in \`WORK_ISSUE_PLAN_DIRS\`"
+require_text work-issue/SKILL.md "A file matches when its name contains N as a whole number, not inside a longer digit run"
+require_text work-issue/SKILL.md "Route 5 is where missing"
 require_text work-issue/SKILL.md "starts over at Step 0, where PLAN resolves in a session that no longer holds the plan"
 
 # The README's resume line used to say "type the first line again", pointing at
@@ -230,6 +234,123 @@ require_text work-issue/SKILL.md "starts over at Step 0, where PLAN resolves in 
 # resume without the path and land in exactly the row-5 window the paragraph
 # below it warns about. Codex caught it on PR #115.
 require_text work-issue/README.md "plan path included if you passed one"
+
+# The confirmation is the user's one chance to see that a plan found in a shared
+# directory is the right one, so it names the path and route for every route.
+require_text work-issue/SKILL.md "names the path PLAN resolved to and its route number, for every route"
+# #142 retired this README advice: route 4 now finds a plan in ~/.claude/plans
+# without the user typing its path.
+refute_text work-issue/README.md "only if you pass the path or the issue links it"
+
+# --- Route 4, run for real. Every case pins exact stdout and the exit code,
+# because Step 0 branches on both: one path means use it, empty means fall
+# through to route 5, exit 1 means refuse. Each run gets a temp HOME so the
+# unset-variable default never reads the real ~/.claude/plans. ---
+
+find_plan=work-issue/scripts/find-plan.py
+fp_dir="$tmp/find-plan"
+fp_home="$tmp/find-plan-home"
+mkdir -p "$fp_home"
+
+fp_reset() { rm -rf "$fp_dir"; mkdir -p "$fp_dir"; }
+
+# fp_run [ENV_ASSIGNMENT...] -- [ARGS...]; ARGS default to the case's issue.
+fp_run() {
+  local envs=()
+  while [[ $# -gt 0 && "$1" != "--" ]]; do envs+=("$1"); shift; done
+  [[ $# -gt 0 ]] && shift
+  [[ $# -gt 0 ]] || set -- --issue 113 --repo kendrick/skills
+  set +e
+  fp_out="$(env ${envs[@]+"${envs[@]}"} HOME="$fp_home" python3 "$find_plan" "$@" 2>"$tmp/fp_err")"
+  fp_status=$?
+  set -e
+  fp_err="$(cat "$tmp/fp_err")"
+}
+
+fp_expect() { # LABEL STATUS STDOUT
+  [[ "$fp_status" == "$2" && "$fp_out" == "$3" ]] || {
+    echo "find-plan $1: want exit $2 and stdout [$3], got exit $fp_status and stdout [$fp_out], stderr [$fp_err]" >&2
+    exit 1
+  }
+}
+
+# 1. The one match is printed.
+fp_reset
+echo plan >"$fp_dir/113-work-wave.md"
+fp_run WORK_ISSUE_PLAN_DIRS="$fp_dir" --
+fp_expect "single match" 0 "$fp_dir/113-work-wave.md"
+
+# 2. A different issue number is no match, and no match is a quiet exit 0.
+mv "$fp_dir/113-work-wave.md" "$fp_dir/114-work-wave.md"
+fp_run WORK_ISSUE_PLAN_DIRS="$fp_dir" --
+fp_expect "other issue" 0 ""
+
+# 3. A `.v<digits>.md` draft is superseded, so it never makes the run ambiguous.
+fp_reset
+echo plan >"$fp_dir/113-work-wave.md"
+echo draft >"$fp_dir/113-work-wave.v2.md"
+fp_run WORK_ISSUE_PLAN_DIRS="$fp_dir" --
+fp_expect "superseded draft" 0 "$fp_dir/113-work-wave.md"
+
+# 4. A plan that names another repo, by shorthand or by URL, belongs to that
+# repo's issue 113.
+echo "see other-owner/other-repo#4" >"$fp_dir/113-other.md"
+echo "https://github.com/other-owner/other-repo" >"$fp_dir/113-url.md"
+fp_run WORK_ISSUE_PLAN_DIRS="$fp_dir" --
+fp_expect "other repo" 0 "$fp_dir/113-work-wave.md"
+
+# 5. The substring neighbor: 2113 holds 113 but is not issue 113. This is the
+# case the whole-number lookbehind exists for.
+fp_reset
+echo plan >"$fp_dir/113-work-wave.md"
+echo plan >"$fp_dir/2113-x.md"
+fp_run WORK_ISSUE_PLAN_DIRS="$fp_dir" --
+fp_expect "longer digit run" 0 "$fp_dir/113-work-wave.md"
+
+# 6. Naming its own repo, in either form, keeps a plan.
+fp_reset
+printf '%s\n' "kendrick/skills#142" "github.com/kendrick/skills/pull/1" >"$fp_dir/113-own.md"
+fp_run WORK_ISSUE_PLAN_DIRS="$fp_dir" --
+fp_expect "own repo" 0 "$fp_dir/113-own.md"
+
+# 7. A repo-relative path has the owner/name shape but names no repo. A rule
+# that read it as one would drop every plan.
+fp_reset
+printf '%s\n' "edit work-issue/SKILL.md" "see docs/plans/x.md" >"$fp_dir/113-paths.md"
+fp_run WORK_ISSUE_PLAN_DIRS="$fp_dir" --
+fp_expect "path not repo" 0 "$fp_dir/113-paths.md"
+
+# 8. Two survivors refuse: empty stdout, both paths on stderr, sorted.
+fp_reset
+echo plan >"$fp_dir/113-a.md"
+echo plan >"$fp_dir/113-b.md"
+fp_run WORK_ISSUE_PLAN_DIRS="$fp_dir" --
+fp_expect "two survivors" 1 ""
+[[ "$fp_err" == "ambiguous: $fp_dir/113-a.md"$'\n'"ambiguous: $fp_dir/113-b.md" ]] || {
+  echo "find-plan two survivors: want two sorted ambiguous: lines, got [$fp_err]" >&2
+  exit 1
+}
+
+# 9. The empty string turns the route off, even over the default directory.
+mkdir -p "$fp_home/.claude/plans"
+echo plan >"$fp_home/.claude/plans/113-a.md"
+fp_run WORK_ISSUE_PLAN_DIRS= --
+fp_expect "empty variable" 0 ""
+
+# 10. Unset falls back to ~/.claude/plans, where plan mode saves.
+fp_run -u WORK_ISSUE_PLAN_DIRS --
+fp_expect "unset variable" 0 "$fp_home/.claude/plans/113-a.md"
+
+# 11. A typo in a set variable stops the run rather than falling through to
+# route 5 in silence, and a bad --issue is a usage error.
+fp_run WORK_ISSUE_PLAN_DIRS="/nonexistent-$$" --
+fp_expect "missing directory" 3 ""
+[[ "$fp_err" == "not a directory: /nonexistent-$$" ]] || {
+  echo "find-plan missing directory: want [not a directory: /nonexistent-$$], got [$fp_err]" >&2
+  exit 1
+}
+fp_run WORK_ISSUE_PLAN_DIRS="$fp_dir" -- --issue x --repo kendrick/skills
+fp_expect "bad issue" 3 ""
 
 # --- Every step heading. The resume table, the references, and the README all
 # point at steps by number, so a step folded into its neighbor leaves every one
