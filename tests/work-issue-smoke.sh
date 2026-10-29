@@ -327,6 +327,17 @@ echo "see https://github.com/kendrick/skills." >"$fp_dir/113-dot.md"
 fp_run WORK_ISSUE_PLAN_DIRS="$fp_dir" --
 fp_expect "trailing period" 0 "$fp_dir/113-dot.md"
 
+# 7a2. A URL wrapped in Markdown emphasis still names its repository. The
+# closing `**` once failed the lookahead, so another repo's plan was kept.
+fp_reset
+echo "Repository: **https://github.com/other/repo**" >"$fp_dir/113-md.md"
+fp_run WORK_ISSUE_PLAN_DIRS="$fp_dir" --
+fp_expect "markdown other repo" 0 ""
+fp_reset
+echo "Repository: **https://github.com/kendrick/skills**" >"$fp_dir/113-mdown.md"
+fp_run WORK_ISSUE_PLAN_DIRS="$fp_dir" --
+fp_expect "markdown own repo" 0 "$fp_dir/113-mdown.md"
+
 # 7b. GitHub URLs under a reserved first segment (screenshots, boards,
 # settings) name no repository, so they must not drop a plan.
 fp_reset

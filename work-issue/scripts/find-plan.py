@@ -35,9 +35,12 @@ class _Parser(argparse.ArgumentParser):
 # counts as naming a repository.
 # Sentence punctuation after the name is skipped in the lookahead, so a URL
 # ending a sentence still reads as the repo it names rather than `name.`.
+# Markdown emphasis delimiters (`*`, `_`, `~`) get the same pass, so
+# `**https://github.com/o/r**` names o/r. An interior `_` stays in the name;
+# a trailing one is read as emphasis (see RATIONALE Known Limitations).
 URL_REF = re.compile(
     r"github\.com/([A-Za-z0-9-]+)/([A-Za-z0-9._-]+?)(?:\.git)?"
-    r"(?=[.,;:]*(?:[/#?\s)\]>\"'`]|$))"
+    r"(?=[.,;:*_~]*(?:[/#?\s)\]>\"'`]|$))"
 )
 # GitHub reserves these first segments for its own pages (screenshots, boards,
 # settings), so a URL under one names no repository and must not drop a plan.
