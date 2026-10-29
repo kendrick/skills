@@ -70,7 +70,9 @@ That read answers two questions rather than one: does this input contradict what
 
 **Five body reads per input, and the budget binds.** It is not a suggestion to stay near. When detection would need a sixth read to be useful, say so in the phase 6 report and leave the read undone. A budget quietly exceeded on every input is one nobody notices has stopped bounding anything. A scope where five is routinely too few is telling you its records are too granular, which is a finding worth having. Confirmations come out of that same budget rather than drawing one of their own. There is no second pass over the records, and no sixth read on the grounds that an input might also be confirming something.
 
-Only `status: accepted` records produce flags, and only they can be confirmed. A `proposed` record hasn't been agreed to yet, so disagreeing with it is just discussion and agreeing with it asserts nothing; a `superseded` one is already known to be wrong.
+Only `status: accepted` records produce flags, and only they can be confirmed. A `proposed` record hasn't been agreed to yet, so disagreeing with it is just discussion and agreeing with it is not a confirmation; a `superseded` one is already known to be wrong.
+
+The status filter runs after the body read, never before it. A record's status decides what its read can produce, not whether it gets read, so a `proposed` record whose header suggests overlap is body-read like any other and counts against the five-read budget. Filtering it out earlier would make a restatement of it impossible to notice. When an input restates a `proposed` record, write nothing to the record, leave it out of the stamping call, and put nothing before the phase 5 gate. Name it in the phase 6 report with the note that restated it. Independent restatement is the evidence someone deciding whether to accept the record needs, and this read is the only place a run sees it.
 
 Flag a conflict inline, where the triggering passage lives:
 
@@ -82,7 +84,7 @@ Both halves are required. The record's own claim written down beside the new sta
 
 A contradiction is a first-class candidate, resolved at phase 5 sign-off like any other. Its three outcomes are in that phase.
 
-A confirmation is not a candidate and gets no flag. The record already exists and already makes the claim; the only thing that changes is the date saying when it was last seen to be true, so there is nothing for the user to sign off on and the stamp never passes through phase 5. Its trace is the date on the record itself and the phase 6 report, which names every record the run stamped and every one the stamper declined to write.
+A confirmation is not a candidate and gets no flag. The record already exists and already makes the claim; the only thing that changes is the date saying when it was last seen to be true, so there is nothing for the user to sign off on and the stamp never passes through phase 5. Its trace is the date on the record itself and the phase 6 report, which names every record the run stamped, every one the stamper declined to write, and every `proposed` record an input restated.
 
 ### Phase 3 — Groom Into a Single Note
 
@@ -216,6 +218,7 @@ Then check by hand what the lint can't:
 - Any input where the phase 2.5 read budget bound is named, along with what went unread. A budget that silently truncates detection reports the same "no conflicts" as a scope that genuinely has none.
 - Every record whose `last_confirmed` the run stamped is named, with the date it now carries. Read them off the stamper's `stamped:` lines. This report is the only durable trace of a write the user was never asked to approve.
 - Every record the stamper declined to write is named, with its reason: a v1 file, a `status` other than `accepted`, a date already at or past the note's, or an insertion that would overrun the 20-line frontmatter budget. Read them off its `skipped:` lines, which is also the scope of this list: what the stamper turned down, not everything phase 2.5 opened. The skipped v1 records are the ones nobody would otherwise learn were left behind, and a silent skip reads exactly like a record nobody confirmed.
+- Every `proposed` record an input restated is named, one line per record and note, as `restated proposed: <record-path> by <note-path>`, both paths relative to the scope root, the form the stamper uses for the record paths it prints. The record never reached the stamper, so it is on neither of its lists, and this line is the only trace the restatement leaves.
 
 Report failures. Don't silently retry or auto-fix — those bugs hide.
 
