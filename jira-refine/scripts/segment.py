@@ -27,11 +27,13 @@ all.
 Keys are read one of two ways, decided once per transcript and never per
 key. A planning session files each ticket after talking it through ("okay,
 that one is PROJ-502"), so its keys trail their discussion. Every key
-occurrence votes: trailing when it lands within four words after a
-`filing_cues` phrase, or in the last `TRAILING_WINDOW_WORDS` words of its
-cue; leading when it qualifies under the window-and-cue rule above. More
-trailing votes than leading ones read the transcript as trailing, and
-anything else, a tie included, reads as leading. In the trailing reading a
+occurrence casts one vote, set by the first of these rules it meets:
+trailing when it lands within four words after a `filing_cues` phrase;
+leading when it qualifies under the window-and-cue rule above; trailing when
+at most `TRAILING_WINDOW_WORDS` words follow it in its cue. So "Okay,
+PROJ-412." votes leading even though it also ends its cue. More trailing
+votes than leading ones read the transcript as trailing, and anything
+else, a tie included, reads as leading. In the trailing reading a
 key closes its segment, which runs back to the previous boundary or the start
 of the transcript, and the atoms after the last key are `postamble`, the
 trailing counterpart of preamble. The mode is reported as `stats.key_mode`.
@@ -767,7 +769,6 @@ def analyze_turns(turns, project_regexes, cue_re, boundary_window_words, filing_
             ) or any(ce <= idx < ce + 4 for ce in cue_end_words)
             filing = any(ce <= idx < ce + 4 for ce in filing_end_words)
             cue_start = _enclosing_cue_start(turn.cues, idx)
-            # The enclosing cue ends where the next one starts, or with the turn.
             later_starts = [cs for cs, _s, _l in turn.cues if cs > cue_start]
             cue_word_end = later_starts[0] if later_starts else total_words
             last = cue_word_end - word_index_at(text, end_char) <= TRAILING_WINDOW_WORDS
