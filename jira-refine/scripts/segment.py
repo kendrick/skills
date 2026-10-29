@@ -50,9 +50,10 @@ turned into prose.
 Exit codes: 0 success; 1 no project key was ever heard as a boundary, so
 there is nothing to stage; 3 usage, an unreadable transcript or config, a
 config missing `projects`, or a Python below the 3.11 floor `tomllib`
-needs; 4 the transcript names no ticket key at all, typed or spoken, which
-is a planning session rather than a refinement one. Argparse supplies 2 for
-a mistyped flag.
+needs; 4 the transcript names no ticket key at all, typed or spoken. A
+planning session exits 4 only when nobody reads the new keys aloud; one
+that speaks each key as it files it stages under the trailing reading.
+Argparse supplies 2 for a mistyped flag.
 
 Stdlib only, so the skill stays copy-in portable.
 """
@@ -588,11 +589,11 @@ TYPED_KEY_RE = re.compile(r"\b[A-Z][A-Z0-9]+-[0-9]+\b")
 def names_any_key(turns, cfg):
     """Exit 1 and exit 4 need different advice (#87). Keys that were spoken
     but never opened a segment point at the config's `projects` and
-    `spoken_aliases`; a transcript with no key-shaped token at all is a
-    planning session, where tickets are made in the call, and no config edit
-    helps. A configured project or alias plus a number counts even when it
-    never qualified as a boundary, and a typed key counts even when its
-    prefix is not configured."""
+    `spoken_aliases`. A transcript with no key-shaped token at all gets
+    exit 4, and no config edit helps it. A planning session lands there
+    when nobody reads the new keys aloud. A configured project or alias
+    plus a number counts even when it never qualified as a boundary, and a
+    typed key counts even when its prefix is not configured."""
     project_regexes = [
         build_project_regex(p, cfg["spoken_aliases"].get(p, [])) for p in cfg["projects"]
     ]
