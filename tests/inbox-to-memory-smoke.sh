@@ -1092,6 +1092,20 @@ for outcome in "**Amend.**" "**Supersede.**" "**Dismiss.**"; do
 done
 require_text inbox-to-memory/SKILL.md "**A dismissed flag stays in the note permanently.**"
 
+# Phase 2.5 reads a restated `proposed` record but may not flag or stamp it, so
+# the phase 6 `restated proposed:` line is the only trace the restatement leaves
+# (#38). Without that line the run throws away a finding it spent a body read
+# on; without the refusal it stamps a claim nobody agreed to.
+require_text inbox-to-memory/SKILL.md 'Only `status: accepted` records produce flags, and only they can be confirmed.'
+require_text inbox-to-memory/SKILL.md 'The status filter runs after the body read, never before it.'
+require_text inbox-to-memory/SKILL.md 'counts against the five-read budget'
+require_text inbox-to-memory/SKILL.md 'put nothing before the phase 5 gate'
+require_text inbox-to-memory/SKILL.md 'and every `proposed` record an input restated.'
+require_text inbox-to-memory/SKILL.md 'restated proposed: <record-path> by <note-path>'
+require_text _maintenance/inbox-to-memory/EVALS.md '| The restatement reported | Phase 6 names `paper-worksheet-until-close-Y_fVVkE5D8.md` as restated'
+require_text _maintenance/inbox-to-memory/EVALS.md '| The `proposed` record | `paper-worksheet-until-close-Y_fVVkE5D8.md` is byte-identical and still carries no `last_confirmed:`, though Marta says its title back almost exactly |'
+require_text _maintenance/inbox-to-memory/EVALS.md '`harrow-route-sequence-mr1b_3yB4S` is on none of those lines |'
+
 # The table is what a reader consults after hitting a failure, so a check
 # missing from it ships a failure name that leads nowhere.
 for check in frontmatter-fences frontmatter-parses frontmatter-budget \
