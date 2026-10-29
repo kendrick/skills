@@ -55,6 +55,9 @@ require_file tests/fixtures/jira-refine/refinement.srt
 require_file tests/fixtures/jira-refine/refinement.txt
 require_file tests/fixtures/jira-refine/planning.txt
 require_file tests/fixtures/jira-refine/unmatched-keys.txt
+require_file tests/fixtures/jira-refine/trailing-keys.txt
+require_file tests/fixtures/jira-refine/mixed-keys.txt
+require_file tests/fixtures/jira-refine/filing-cue-no-key.txt
 require_file tests/fixtures/jira-refine/jira-refine.toml
 require_file tests/fixtures/jira-refine/issues.json
 require_file tests/fixtures/jira-refine/staging-good.md
@@ -405,6 +408,10 @@ for path in sys.argv[1:]:
     stats = data["stats"]
     if stats["revisited_total"] != 1 or stats["mentioned_in_passing"] != 1:
         sys.exit(f"unexpected stats in {path}: {stats}")
+    # Every refinement transcript has to keep reading leading, or the
+    # trailing mode #217 added has changed a session that worked before it.
+    if stats["key_mode"] != "leading" or data["postamble"] != {"turns": 0, "words": 0}:
+        sys.exit(f"{path} should read leading with no postamble: {stats}, {data['postamble']}")
 values = list(flags.values())
 if any(v != values[0] for v in values):
     sys.exit(f"the three transcripts disagree on revisited/long: {flags}")
@@ -449,6 +456,113 @@ grep -Fq 'check `projects` and `spoken_aliases`' <<<"$unmatched_err" || {
   echo "the unmatched-keys exit lost its config pointer: $unmatched_err" >&2
   exit 1
 }
+
+# --- Key position (#217). ---------------------------------------------------
+
+# A key read aloud as its ticket is filed comes after its discussion. Read
+# forward, the issue's reproduction staged nothing: PROJ-501's talk went to
+# the preamble and PROJ-502 was demoted. Each trailing key has to claim the
+# talk before it, and the closing chatter goes to `postamble`, not `preamble`.
+python3 "$segment" "$fixtures/trailing-keys.txt" --config "$config" \
+  --session-date 2026-09-10 --json > "$tmp/trailing.json" || {
+  echo "segment.py failed on trailing-keys.txt" >&2
+  exit 1
+}
+python3 -c '
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as f:
+    d = json.load(f)
+stats, pre, post, passing, entries = d["stats"], d["preamble"], d["postamble"], d["passing"], d["entries"]
+spans = [(e["key"], e["segment"]["start"], e["segment"]["end"]) for e in d["entries"]]
+want = [("PROJ-501", "00:00:10", "00:02:00"), ("PROJ-502", "00:02:20", "00:03:10")]
+if spans != want:
+    sys.exit(f"trailing-keys.txt should segment to {want}, got: {spans}")
+if d["stats"]["key_mode"] != "trailing":
+    sys.exit(f"trailing-keys.txt should read trailing: {stats}")
+if d["preamble"] != {"turns": 0, "words": 0} or d["postamble"] != {"turns": 1, "words": 5}:
+    sys.exit(f"trailing-keys.txt preamble/postamble wrong: {pre}, {post}")
+' "$tmp/trailing.json" || exit 1
+
+# One reading per transcript, never both. PROJ-602 opens its line and would
+# read leading on its own, but the room's other two keys trail, so it is a
+# mention inside PROJ-603's backward span. This pins the Deliberately Not
+# Built row "Deciding leading or trailing per key" functionally.
+python3 "$segment" "$fixtures/mixed-keys.txt" --config "$config" \
+  --session-date 2026-09-10 --json > "$tmp/mixed.json" || {
+  echo "segment.py failed on mixed-keys.txt" >&2
+  exit 1
+}
+python3 -c '
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as f:
+    d = json.load(f)
+stats, pre, post, passing, entries = d["stats"], d["preamble"], d["postamble"], d["passing"], d["entries"]
+keys = [e["key"] for e in d["entries"]]
+if keys != ["PROJ-601", "PROJ-603"]:
+    sys.exit(f"mixed-keys.txt should segment to PROJ-601,PROJ-603, got: {keys}")
+if d["stats"]["key_mode"] != "trailing":
+    sys.exit(f"mixed-keys.txt should read trailing: {stats}")
+if {"key": "PROJ-602", "reason": "mentioned-only", "count": 1} not in d["passing"]:
+    sys.exit(f"PROJ-602 should pass as mentioned-only: {passing}")
+if "PROJ-602" not in d["entries"][1]["mentions"]:
+    sys.exit(f"PROJ-602 should be mentioned in PROJ-603: {entries[1]}")
+' "$tmp/mixed.json" || exit 1
+
+# The issue's first falsifier: the same talk with each key moved to the front
+# of its discussion has to read leading and keep today's forward spans.
+cat > "$tmp/leading-keys.txt" <<'TXT'
+[00:00:10] Kendrick: Okay, next thing, PROJ-501. The ingest job drops the membership rows whenever the upstream export is late, and nobody notices until the weekly report is short.
+[00:00:40] Priya: Right, and the fix is to hold the run until the export lands, with a timeout that pages someone instead of silently skipping.
+[00:01:10] Sam: The acceptance check is that a late export delays the run and a missing export pages on-call after thirty minutes.
+[00:01:40] Priya: And we should backfill the three weeks we already lost, that is part of the same ticket.
+[00:02:20] Kendrick: All right. Next up, PROJ-502, the dashboard tiles render blank on Safari because the chart library needs a polyfill we stopped shipping.
+[00:02:50] Sam: We just add the polyfill back behind the browser check, and the done test is the tiles render on Safari seventeen.
+[00:03:20] Priya: Cool, that's it for today.
+TXT
+python3 "$segment" "$tmp/leading-keys.txt" --config "$config" \
+  --session-date 2026-09-10 --json > "$tmp/leading.json" || {
+  echo "segment.py failed on the inline leading-keys transcript" >&2
+  exit 1
+}
+python3 -c '
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as f:
+    d = json.load(f)
+stats, pre, post, passing, entries = d["stats"], d["preamble"], d["postamble"], d["passing"], d["entries"]
+spans = [(e["key"], e["segment"]["start"], e["segment"]["end"]) for e in d["entries"]]
+want = [("PROJ-501", "00:00:10", "00:01:40"), ("PROJ-502", "00:02:20", "00:03:20")]
+if spans != want:
+    sys.exit(f"leading-keys.txt should segment to {want}, got: {spans}")
+if d["stats"]["key_mode"] != "leading":
+    sys.exit(f"leading-keys.txt should read leading: {stats}")
+' "$tmp/leading.json" || exit 1
+
+# The issue's second falsifier: a filing cue with no key after it ("that one
+# is fine") casts no vote and closes nothing, so PROJ-501 still spans to 00:02:00.
+python3 "$segment" "$fixtures/filing-cue-no-key.txt" --config "$config" \
+  --session-date 2026-09-10 --json > "$tmp/filing-cue.json" || {
+  echo "segment.py failed on filing-cue-no-key.txt" >&2
+  exit 1
+}
+python3 -c '
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as f:
+    d = json.load(f)
+stats, pre, post, passing, entries = d["stats"], d["preamble"], d["postamble"], d["passing"], d["entries"]
+keys = [e["key"] for e in d["entries"]]
+if keys != ["PROJ-501", "PROJ-502"]:
+    sys.exit(f"filing-cue-no-key.txt should segment to PROJ-501,PROJ-502, got: {keys}")
+seg = d["entries"][0]["segment"]
+if (seg["start"], seg["end"]) != ("00:00:10", "00:02:00"):
+    sys.exit(f"PROJ-501 should span 00:00:10-00:02:00 in filing-cue-no-key.txt: {seg}")
+' "$tmp/filing-cue.json" || exit 1
+
+# The prose that tells the agent and the user about the trailing reading (#217).
+require_text jira-refine/SKILL.md "\`stats.key_mode\` reads \`trailing\`"
+require_text jira-refine/SKILL.md "postamble.turns"
+require_text jira-refine/assets/jira-refine.example.toml 'filing_cues = ["this one will be"'
+require_text _maintenance/jira-refine/RATIONALE.md "| 48 | A transcript's keys read all as leading or all as trailing"
+require_text _maintenance/jira-refine/RATIONALE.md "Deciding leading or trailing per key"
 
 python3 "$staging" validate "$fixtures/staging-good.md" >/dev/null || {
   echo "staging-good.md should validate" >&2
