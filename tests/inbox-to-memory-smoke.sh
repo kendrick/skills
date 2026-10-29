@@ -1106,6 +1106,20 @@ require_text _maintenance/inbox-to-memory/EVALS.md '| The restatement reported |
 require_text _maintenance/inbox-to-memory/EVALS.md '| The `proposed` record | `paper-worksheet-until-close-Y_fVVkE5D8.md` is byte-identical and still carries no `last_confirmed:`, though Marta says its title back almost exactly |'
 require_text _maintenance/inbox-to-memory/EVALS.md '`harrow-route-sequence-mr1b_3yB4S` is on none of those lines |'
 
+# Phase 2.5 and phase 6 name a restatement on purpose, so this refute reads
+# only the phase 5 section. A restated `proposed` record put before the gate
+# would ask the user to approve a claim nobody changed. An empty section fails
+# the suite, so a renamed heading can't turn the refute into a silent pass.
+phase5="$(awk '/^### Phase 5/ { f = 1; next } /^### Phase 6/ { exit } f' inbox-to-memory/SKILL.md)"
+[[ -n "$phase5" ]] || {
+  echo "no phase 5 section found in inbox-to-memory/SKILL.md" >&2
+  exit 1
+}
+if grep -qi -- 'restate' <<<"$phase5"; then
+  echo "phase 5 of inbox-to-memory/SKILL.md names a restatement; a restated proposed record never goes before the gate" >&2
+  exit 1
+fi
+
 # The table is what a reader consults after hitting a failure, so a check
 # missing from it ships a failure name that leads nowhere.
 for check in frontmatter-fences frontmatter-parses frontmatter-budget \

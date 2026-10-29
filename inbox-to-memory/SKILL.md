@@ -218,7 +218,7 @@ Then check by hand what the lint can't:
 - Any input where the phase 2.5 read budget bound is named, along with what went unread. A budget that silently truncates detection reports the same "no conflicts" as a scope that genuinely has none.
 - Every record whose `last_confirmed` the run stamped is named, with the date it now carries. Read them off the stamper's `stamped:` lines. This report is the only durable trace of a write the user was never asked to approve.
 - Every record the stamper declined to write is named, with its reason: a v1 file, a `status` other than `accepted`, a date already at or past the note's, or an insertion that would overrun the 20-line frontmatter budget. Read them off its `skipped:` lines, which is also the scope of this list: what the stamper turned down, not everything phase 2.5 opened. The skipped v1 records are the ones nobody would otherwise learn were left behind, and a silent skip reads exactly like a record nobody confirmed.
-- Every `proposed` record an input restated is named, one line per record and note, as `restated proposed: <record-path> by <note-path>`, both paths relative to the scope root as the stamper prints them. The record never reached the stamper, so it is on neither of its lists, and this line is the only trace the restatement leaves.
+- Every `proposed` record an input restated is named, one line per record and note, as `restated proposed: <record-path> by <note-path>`, both paths relative to the scope root, the form the stamper uses for the record paths it prints. The record never reached the stamper, so it is on neither of its lists, and this line is the only trace the restatement leaves.
 
 Report failures. Don't silently retry or auto-fix — those bugs hide.
 
