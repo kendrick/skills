@@ -238,9 +238,9 @@ require_text work-issue/README.md "plan path included if you passed one"
 # The confirmation is the user's one chance to see that a plan found in a shared
 # directory is the right one, so it names the path and route for every route.
 require_text work-issue/SKILL.md "names the path PLAN resolved to and its route number, for every route"
-# #142 retired this README advice: route 4 now finds a plan in ~/.claude/plans
-# without the user typing its path.
-refute_text work-issue/README.md "only if you pass the path or the issue links it"
+# #142's route 4 is why a resume no longer needs a typed plan path; the README
+# has to tell users so, or they keep passing ~/.claude/plans paths by hand.
+require_text work-issue/README.md "a plan made there is found again by its issue number and a resume needs no path"
 
 # --- Route 4, run for real. Every case pins exact stdout and the exit code,
 # because Step 0 branches on both: one path means use it, empty means fall
@@ -319,6 +319,20 @@ fp_reset
 printf '%s\n' "edit work-issue/SKILL.md" "see docs/plans/x.md" >"$fp_dir/113-paths.md"
 fp_run WORK_ISSUE_PLAN_DIRS="$fp_dir" --
 fp_expect "path not repo" 0 "$fp_dir/113-paths.md"
+
+# 7a. A URL to this repo that ends a sentence still names this repo. Read with
+# the period, it became `kendrick/skills.` and dropped the plan.
+fp_reset
+echo "see https://github.com/kendrick/skills." >"$fp_dir/113-dot.md"
+fp_run WORK_ISSUE_PLAN_DIRS="$fp_dir" --
+fp_expect "trailing period" 0 "$fp_dir/113-dot.md"
+
+# 7b. GitHub URLs under a reserved first segment (screenshots, boards,
+# settings) name no repository, so they must not drop a plan.
+fp_reset
+printf '%s\n' "https://github.com/user-attachments/assets/abc" "https://github.com/orgs/kendrick/projects/2" "https://github.com/settings/tokens" >"$fp_dir/113-gh.md"
+fp_run WORK_ISSUE_PLAN_DIRS="$fp_dir" --
+fp_expect "reserved segment" 0 "$fp_dir/113-gh.md"
 
 # 8. Two survivors refuse: empty stdout, both paths on stderr, sorted.
 fp_reset

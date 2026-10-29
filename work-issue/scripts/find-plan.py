@@ -33,9 +33,20 @@ class _Parser(argparse.ArgumentParser):
 # A bare owner/name can't be the rule: plans cite paths like work-issue/SKILL.md
 # that have the same shape. Only a GitHub URL or the cross-repo issue shorthand
 # counts as naming a repository.
+# Sentence punctuation after the name is skipped in the lookahead, so a URL
+# ending a sentence still reads as the repo it names rather than `name.`.
 URL_REF = re.compile(
-    r"github\.com/([A-Za-z0-9-]+)/([A-Za-z0-9._-]+?)(?:\.git)?(?=[/#?\s)\]>\"'`]|$)"
+    r"github\.com/([A-Za-z0-9-]+)/([A-Za-z0-9._-]+?)(?:\.git)?"
+    r"(?=[.,;:]*(?:[/#?\s)\]>\"'`]|$))"
 )
+# GitHub reserves these first segments for its own pages (screenshots, boards,
+# settings), so a URL under one names no repository and must not drop a plan.
+RESERVED_OWNERS = frozenset({
+    "apps", "codespaces", "collections", "enterprises", "explore", "features",
+    "issues", "login", "marketplace", "new", "notifications", "orgs",
+    "organizations", "pulls", "search", "settings", "sponsors", "topics",
+    "user-attachments", "users",
+})
 SHORTHAND_REF = re.compile(r"(?<![\w./-])([A-Za-z0-9-]+)/([A-Za-z0-9._-]+)#[0-9]+")
 SUPERSEDED = re.compile(r"\.v[0-9]+\.md$")
 
@@ -58,6 +69,8 @@ def names_other_repo(text, repo):
     want = repo.lower()
     for rx in (URL_REF, SHORTHAND_REF):
         for m in rx.finditer(text):
+            if rx is URL_REF and m.group(1).lower() in RESERVED_OWNERS:
+                continue
             if f"{m.group(1)}/{m.group(2)}".lower() != want:
                 return True
     return False
