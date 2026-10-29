@@ -1,0 +1,9 @@
+[00:00:10] Kendrick: First thing, the export job retries forever when the bucket is gone, and the logs fill the disk on the worker hosts by morning.
+[00:00:40] Priya: The fix is a capped retry with backoff, and the done test is that a missing bucket fails the run after five attempts.
+[00:01:10] Kendrick: Okay, so this one will be PROJ-601.
+[00:01:20] Sam: PROJ-602, the login banner shows the wrong tenant name after a switch, because the cache key ignores the tenant id.
+[00:01:50] Priya: Fix is to key the cache by tenant, and the check is that switching tenants shows the new name without a reload.
+[00:02:10] Kendrick: Next, the nightly report emails go out twice whenever the scheduler restarts during the send window.
+[00:02:40] Sam: We need an idempotency key on the send, and the acceptance check is one email per recipient per night across a restart.
+[00:03:00] Kendrick: Okay, that one is PROJ-603.
+[00:03:10] Priya: That's all for today.

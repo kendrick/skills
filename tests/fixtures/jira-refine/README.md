@@ -191,6 +191,14 @@ python3 seg.py --config tests/fixtures/jira-refine/jira-refine.toml --session-da
 
 The `sed` replaces the three frontmatter values that change from run to run or from machine to machine: the clock time and two absolute paths. The smoke test stages each transcript with the working copy's `segment.py`, applies the same `sed`, and `cmp`s the result against its snapshot. Regenerate a snapshot only when a change to schema-1 output is intended.
 
+## Key Position: `trailing-keys.txt`, `mixed-keys.txt`, `filing-cue-no-key.txt`
+
+These three plain-text transcripts cover issue #217, where someone reads each key aloud after its discussion, as a room does when it files tickets during the call. Run each through `segment.py` with `jira-refine.toml` and `--json`, and read `stats.key_mode` beside the entries.
+
+- `trailing-keys.txt` is the issue's reproduction transcript, byte for byte. `PROJ-501` comes after "this one will be" at the end of its line, and `PROJ-502` after "that one is". It reads `trailing`, with `PROJ-501` at 00:00:10 to 00:02:00 and `PROJ-502` at 00:02:20 to 00:03:10, and Priya's sign-off is the `postamble` at 1 turn and 5 words. Kendrick speaks both the `00:02:00` and `00:02:20` lines, so the second span can start at 00:02:20 only because each same-speaker line records its own cue.
+- `mixed-keys.txt` holds two trailing keys and one leading one. `PROJ-601` and `PROJ-603` each follow a filing cue, and `PROJ-602` opens Sam's line. The vote is 2 to 1, so the whole file reads `trailing` and `PROJ-602` opens no forward segment. `PROJ-601` covers 00:00:10 to 00:01:10, `PROJ-603` covers 00:01:20 to 00:03:00, and `PROJ-602` becomes a `mentioned-only` key inside `PROJ-603`'s segment.
+- `filing-cue-no-key.txt` is `trailing-keys.txt` with one line added at 00:01:25, where Sam says "that one is fine" about the timeout. A filing cue with no key after it casts no vote and closes nothing, so `PROJ-501` still runs from 00:00:10 to 00:02:00 and `PROJ-502` still stages.
+
 ## `issues.json`
 
 The seed state both transport fakes load, one issue per key as the Jira REST
