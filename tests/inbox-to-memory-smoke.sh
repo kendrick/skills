@@ -2786,6 +2786,7 @@ require_text inbox-to-memory/SKILL.md 'A `superseded` or `deprecated` record lea
 require_text inbox-to-memory/SKILL.md 'A qmd query is not a body read, and a vec hit draws on the same five reads as a grep hit.'
 require_text inbox-to-memory/SKILL.md 'When the script prints `vec off:` on stderr, the lookup ran on grep alone.'
 require_text inbox-to-memory/SKILL.md '`candidates: <note-path> grep=<g> vec=<v> both=<b>`'
+require_text inbox-to-memory/SKILL.md 'When the fallback fired, name the `memory-index` skill in the report as what registers the scope.'
 require_text _maintenance/inbox-to-memory/EVALS.md '### 6. Vec-assisted lookup'
 require_text _maintenance/inbox-to-memory/EVALS.md 'tolland-carries-wholesale-Vc1TolWhs1'
 
