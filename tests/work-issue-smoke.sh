@@ -3778,4 +3778,283 @@ require_text _maintenance/work-issue/EVALS.md "fails as well if it ends there wi
 # repo-docs-smoke.sh, so this does not re-pin it twelve times.
 require_text README.md "--skill work-issue"
 
+# --- #187: drive.py relaunches a confirmed run from outside the session. ---
+# Every agent is a stub and `gh` a fake that prints nothing, so no case starts
+# a real agent or reaches the network. Each case gets its own fixture, since a
+# launch leaves stub files and drive/ logs behind that the next case's
+# fingerprint would read.
+require_file work-issue/scripts/drive.py
+# The cases below call drive.py through python3, which hides a missing executable bit the documented entry point needs.
+[[ -x work-issue/scripts/drive.py ]] || {
+  echo "drive.py is not executable: work-issue/scripts/drive.py" >&2
+  exit 1
+}
+drive="$repo_root/work-issue/scripts/drive.py"
+dv="$tmp/drive187"
+mkdir -p "$dv/bin"
+printf '#!/bin/sh\nexit 0\n' >"$dv/bin/gh"
+chmod +x "$dv/bin/gh"
+# Counts launches, keeps each prompt, prints out-<k>.txt, and moves the
+# fingerprint unless `still` is set. It appends to timing.log on every launch,
+# as a real resume does, so the no-progress case proves the driver skips it.
+# The stamp must be a real one: a malformed line nulls the probe's
+# review_over_budget, and the phase line that follows moves the fingerprint.
+cat >"$dv/stub.sh" <<'STUB'
+#!/bin/sh
+c=$(cat "$STUB_DIR/count" 2>/dev/null || echo 0); c=$((c+1)); echo $c >"$STUB_DIR/count"
+for a; do last=$a; done; printf '%s' "$last" >"$STUB_DIR/prompt-$c"
+[ -f "$STUB_DIR/out-$c.txt" ] && cat "$STUB_DIR/out-$c.txt"
+[ -f "$STUB_DIR/still" ] || touch "$RUN_DIR/stub-$c" 2>/dev/null
+echo "$c start $(date -u +%FT%TZ)" >>"$RUN_DIR/timing.log" 2>/dev/null
+exit $(cat "$STUB_DIR/rc-$c" 2>/dev/null || echo 0)
+STUB
+chmod +x "$dv/stub.sh"
+
+# NAME [g]: a fresh fixture at $dv/NAME. F (the default) has issue-187 checked
+# out and a one-row plan in RUN_DIR, so `phase` prints `phase: 1`; G has no
+# branch and no RUN_DIR, so it prints `phase: 0`. Leaves $fx, $run, $sd set.
+drive_fixture() {
+  fx="$dv/$1"
+  run="$fx/work/.git/work-issue/issue-187"
+  sd="$fx/stub"
+  mkdir -p "$sd"
+  make_repo "$fx/work"
+  [[ "${2:-}" == g ]] && return 0
+  probe_git "$fx/work" checkout -q -b issue-187
+  mkdir -p "$run"
+  printf '## Waves\n\n| Wave | Task | Files owned | Model | Done when | Constraints |\n|---|---|---|---|---|---|\n| 0 | a | f | opus | x | y |\n' >"$run/plan.md"
+}
+# [DRIVE] ARGS... with stdin from $drive_in: runs the driver in $fx/work and
+# sets $drc, $dout, $derr, and $dn (the stub's launch count).
+drive_in=/dev/null
+run_drive() {
+  local script="$drive"
+  [[ "${1:-}" == *.py ]] && { script="$1"; shift; }
+  drc=0
+  (cd "$fx/work" && PATH="$dv/bin:$PATH" STUB_DIR="$sd" RUN_DIR="$run" \
+    python3 "$script" 187 --agent-cmd "$dv/stub.sh" "$@" <"$drive_in" \
+    >"$fx/out" 2>"$fx/err") || drc=$?
+  dout="$(cat "$fx/out")"
+  derr="$(cat "$fx/err")"
+  dn="$(cat "$sd/count" 2>/dev/null || echo 0)"
+}
+# LABEL RC LAUNCHES
+expect_drive() {
+  [[ "$drc" == "$2" && "$dn" == "$3" ]] || {
+    echo "drive $1: want exit $2 after $3 launches, got exit $drc after $dn; stdout: $dout; stderr: $derr" >&2
+    exit 1
+  }
+}
+budget_out='build: 10m review: 30m ratio: 3.00 over: yes
+Stop here, or raise the ratio?'
+noreview_out='no review yet on https://github.com/o/r/pull/9; `work-issue 187` resumes here.'
+
+# 1. The rebase-conflict message carries a bare `N`; only the whole-word
+# substitution turns it into what a launch prints.
+drive_fixture c1
+printf '%s\n' 'resolve, then `work-issue 187`' >"$sd/out-1.txt"
+run_drive
+expect_drive rebase-conflict 1 1
+grep -Fq "drive: halted: A rebase conflict" <<<"$derr" || { echo "drive rebase-conflict: stderr lacks the Stop cell: $derr" >&2; exit 1; }
+
+# 2-4. The budget stop halts, and only because of its output: the same launch
+# with other output relaunches, and the exit status decides nothing.
+drive_fixture c2
+printf '%s\n' "$budget_out" >"$sd/out-1.txt"
+run_drive
+expect_drive budget 1 1
+grep -Fq "drive: halted: The budget stop" <<<"$derr" || { echo "drive budget: stderr lacks the Stop cell: $derr" >&2; exit 1; }
+
+drive_fixture c3
+printf 'all quiet here\n' >"$sd/out-1.txt"
+printf 'waiting on the reviewer\n' >"$sd/out-2.txt"
+run_drive
+expect_drive budget-perturbed 0 2
+
+drive_fixture c4a
+echo 0 >"$sd/rc-1"
+printf '%s\n' "$budget_out" >"$sd/out-1.txt"
+run_drive
+expect_drive rc0-budget 1 1
+drive_fixture c4b
+echo 0 >"$sd/rc-1"
+printf 'a human merges\n' >"$sd/out-2.txt"
+run_drive
+expect_drive rc0-silent 0 2
+drive_fixture c4c
+echo 1 >"$sd/rc-1"
+printf 'a human merges\n' >"$sd/out-2.txt"
+run_drive
+expect_drive rc1-silent 0 2
+
+# 5. No review relaunches W times, then halts naming the PR. `still` is set,
+# so this also pins the no-review stop's exemption from the no-progress halt.
+drive_fixture c5
+touch "$sd/still"
+for k in 1 2 3; do printf '%s\n' "$noreview_out" >"$sd/out-$k.txt"; done
+run_drive --max-review-waits 2
+expect_drive no-review 1 3
+grep -Fq "https://github.com/o/r/pull/9" <<<"$derr" || { echo "drive no-review: stderr lacks the PR URL: $derr" >&2; exit 1; }
+
+# 6. The final report.
+drive_fixture c6
+printf 'Report.\nNothing else to do: a human merges\n' >"$sd/out-1.txt"
+run_drive
+expect_drive final-report 0 1
+grep -Fq "drive: done after 1 launches" <<<"$dout" || { echo "drive final-report: stdout lacks the done line: $dout" >&2; exit 1; }
+
+# 7. Two launches that change nothing halt, though timing.log grew both times.
+drive_fixture c7
+touch "$sd/still"
+run_drive
+expect_drive no-progress 1 2
+for k in 1 2; do
+  grep -Fq "$run/drive/launch-$k.log" <<<"$derr" || { echo "drive no-progress: stderr does not name launch-$k.log: $derr" >&2; exit 1; }
+done
+
+# 8. Launches that move the fingerprint keep relaunching.
+drive_fixture c8
+printf 'a human merges\n' >"$sd/out-4.txt"
+run_drive
+expect_drive progress 0 4
+
+# 9. The launch cap.
+drive_fixture c9
+run_drive --max-launches 2
+expect_drive launch-cap 1 2
+grep -Fq "launch cap 2 reached" <<<"$derr" || { echo "drive launch-cap: stderr lacks the cap: $derr" >&2; exit 1; }
+
+# 10. The driver reads the table in the SKILL.md beside it, not a copy of its
+# own: an edit to one row in a scratch copy changes what it halts on.
+cp -R work-issue "$dv/wi"
+sed -i.bak '/^| A rebase conflict |/s/"resolve, then/"settle it, then/' "$dv/wi/SKILL.md"
+grep -Fq '| A rebase conflict | 5, 8 | `RUN_DIR/conflict.txt` and "settle it, then `work-issue N`" |' "$dv/wi/SKILL.md" || {
+  echo "drive reads-table: the scratch SKILL.md edit did not land" >&2; exit 1; }
+drive_fixture c10a
+printf '%s\n' 'settle it, then `work-issue 187`' >"$sd/out-1.txt"
+run_drive "$dv/wi/scripts/drive.py"
+expect_drive edited-row 1 1
+drive_fixture c10b
+printf '%s\n' 'resolve, then `work-issue 187`' >"$sd/out-1.txt"
+printf 'a human merges\n' >"$sd/out-2.txt"
+run_drive "$dv/wi/scripts/drive.py"
+expect_drive old-row-text 0 2
+sed -i.bak '/^| No review within/d' "$dv/wi/SKILL.md"
+drive_fixture c10c
+run_drive "$dv/wi/scripts/drive.py"
+expect_drive no-review-row-missing 3 0
+
+# 11. drive/ is invisible to the probe.
+drive_fixture c11
+(cd "$fx/work" && env -u HERDR_ENV python3 "$repo_root/$run_state" probe --run-dir "$run" --root "$fx/work" --issue 187 --herdr-state absent) >"$fx/p1.json"
+mkdir -p "$run/drive"
+printf 'x\n' >"$run/drive/launch-9.log"
+(cd "$fx/work" && env -u HERDR_ENV python3 "$repo_root/$run_state" probe --run-dir "$run" --root "$fx/work" --issue 187 --herdr-state absent) >"$fx/p2.json"
+cmp -s "$fx/p1.json" "$fx/p2.json" || { echo "drive: a file under RUN_DIR/drive/ changed probe's output" >&2; diff "$fx/p1.json" "$fx/p2.json" >&2; exit 1; }
+
+# 12. The grant: asked once at phase 0 by a --dry-run launch, carried in
+# every later prompt on yes, refused on anything else, and never asked when
+# the dry run itself ends on a stop or the run is past phase 0.
+drive_fixture c12 g
+touch "$sd/still"
+printf 'Go?\n' >"$sd/out-1.txt"
+printf 'a human merges\n' >"$sd/out-2.txt"
+drive_in="$dv/yes"; printf 'y\n' >"$drive_in"
+run_drive
+expect_drive grant-yes 0 2
+[[ "$(head -n 1 "$sd/prompt-1")" == "work-issue 187 --dry-run" ]] || { echo "drive grant: prompt-1 opens '$(head -n 1 "$sd/prompt-1")'" >&2; exit 1; }
+[[ "$(head -n 1 "$sd/prompt-2")" == "work-issue 187" ]] || { echo "drive grant: prompt-2 opens '$(head -n 1 "$sd/prompt-2")'" >&2; exit 1; }
+require_text "$sd/prompt-2" "has been put to the user by work-issue/scripts/drive.py and answered"
+require_text "$sd/prompt-2" "The answer, verbatim: y"
+drive_fixture c12n g
+touch "$sd/still"
+printf 'Go?\n' >"$sd/out-1.txt"
+drive_in="$dv/no"; printf 'n\n' >"$drive_in"
+run_drive
+expect_drive grant-no 1 1
+drive_fixture c12p g
+printf '%s\n' 'Plan it first: `writing-plans`, then `work-issue 187 docs/plans/x.md`.' >"$sd/out-1.txt"
+drive_in="$dv/yes"
+run_drive
+expect_drive grant-stop 1 1
+refute_text "$fx/out" "Go? [y/N]"
+# A grant needs proof the dry run rendered the confirmation: an erroring dry
+# run, or one that never reached Go?, must not be passed off as one.
+drive_fixture c12e g
+printf 'Error: agent API unavailable\n' >"$sd/out-1.txt"
+echo 1 >"$sd/rc-1"
+drive_in="$dv/yes"
+run_drive
+expect_drive grant-dry-run-error 1 1
+grep -Fq "drive: halted: the dry run exited 1" <<<"$derr" || { echo "drive grant-dry-run-error: stderr lacks the halt: $derr" >&2; exit 1; }
+refute_text "$fx/out" "Go? [y/N]"
+[[ ! -e "$sd/prompt-2" ]] || { echo "drive grant-dry-run-error: a second launch ran" >&2; exit 1; }
+drive_fixture c12q g
+printf 'all quiet here\n' >"$sd/out-1.txt"
+run_drive
+expect_drive grant-no-go 1 1
+grep -Fq "drive: halted: the dry run's output does not end on" <<<"$derr" || { echo "drive grant-no-go: stderr lacks the halt: $derr" >&2; exit 1; }
+refute_text "$fx/out" "Go? [y/N]"
+drive_fixture c12f
+printf 'a human merges\n' >"$sd/out-1.txt"
+drive_in=/dev/null
+run_drive
+expect_drive grant-past-phase-0 0 1
+refute_text "$sd/prompt-1" "has been put to the user"
+
+# 13. Usage errors exit 3, as the validator convention says.
+drive_fixture c13
+for bad in "x" "187 --dry-run" "187 --max-launches 0"; do
+  rc=0
+  # shellcheck disable=SC2086
+  (cd "$fx/work" && PATH="$dv/bin:$PATH" python3 "$drive" $bad </dev/null >/dev/null 2>&1) || rc=$?
+  [[ "$rc" == 3 ]] || { echo "drive.py $bad: want exit 3, got $rc" >&2; exit 1; }
+done
+
+# 14. Standard library only, so the skill stays copy-in portable.
+python3 - "$drive" <<'PY' || exit 1
+import ast, sys
+tree = ast.parse(open(sys.argv[1]).read())
+mods = {a.name.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
+mods |= {n.module.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.module}
+bad = sorted(m for m in mods if m not in sys.stdlib_module_names)
+if bad:
+    sys.exit(f"drive.py imports outside the standard library: {bad}")
+PY
+
+# 15. --detach without tmux: the nohup child runs the loop to done and logs
+# outside the issue-* pattern.
+if PATH="$dv/bin:/usr/bin:/bin" command -v tmux >/dev/null 2>&1; then
+  echo "skip: tmux on the minimal PATH"
+else
+  drive_fixture c15
+  printf 'a human merges\n' >"$sd/out-1.txt"
+  py="$(command -v python3)"
+  drc=0
+  (cd "$fx/work" && PATH="$dv/bin:/usr/bin:/bin" STUB_DIR="$sd" RUN_DIR="$run" \
+    "$py" "$drive" 187 --agent-cmd "$dv/stub.sh" --detach </dev/null >"$fx/out" 2>"$fx/err") || drc=$?
+  [[ "$drc" == 0 ]] || { echo "drive --detach: exit $drc: $(cat "$fx/err")" >&2; exit 1; }
+  require_text "$fx/out" "watch: tail -f"
+  dlog="$fx/work/.git/work-issue/drive-issue-187.log"
+  for _ in $(seq 50); do
+    grep -Fqs "drive: done after 1 launches" "$dlog" && break
+    sleep 0.2
+  done
+  grep -Fqs "drive: done after 1 launches" "$dlog" || { echo "drive --detach: no done line in $dlog within 10 s" >&2; exit 1; }
+fi
+
+# #187's prose: the budget row's quoted line is what the driver matches, and
+# the ledger keeps row 132's no-early-stop rule standing.
+require_text work-issue/SKILL.md "the \`budget\` line, \"build: <m>m review: <m>m ratio: <r> over: yes\", and the question"
+require_text work-issue/SKILL.md "and so does \`work-issue/scripts/drive.py\`, which reads this table at run time to tell how a launch ended."
+require_text work-issue/README.md "and choosing it is your call: the driver picks none."
+require_text work-issue/README.md "To keep a confirmed run going after its session ends, run \`work-issue/scripts/drive.py N\` from the repo."
+require_text _maintenance/work-issue/RATIONALE.md "The driver leaves row 132 and the Deliberately Not Built row \"Ending an invocation at a committed wave for the user to re-invoke\" untouched, because it never ends an invocation early."
+require_text _maintenance/work-issue/RATIONALE.md "| Ending an invocation at a committed wave for the user to re-invoke, with or without a marker | Row 132."
+# Deliberately Not Built: a copy of the stop messages, and a default
+# --agent-cmd that picks a permission mode.
+refute_text work-issue/scripts/drive.py "no review yet on"
+refute_text work-issue/scripts/drive.py "dangerously-skip-permissions"
+refute_text work-issue/scripts/drive.py "--permission-mode"
+
 echo "work-issue smoke: OK"

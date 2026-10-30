@@ -289,7 +289,7 @@ An invocation ends at one of these stops and no other. Each prints its message a
 | The format pass's command errors naming no path in the derived set or the repair's `files_changed`, or none it can be tied to, or a repair already re-dispatched for a format-pass error fails it again | 3, 4, 5, 7 | the pass's output, quoted, after its writes outside the derived set are reverted, and at a repair gate the repair's own writes too |
 | Two red-team rounds fail in a row | 4 | the failed claims with the reproducer's commands and output |
 | `adversarial-review` derives a depth past the forecast | 4, 8 | that review's own question |
-| The budget stop | 4, 7, 8 | the `budget` line and the question: stop here or raise the ratio, and at row 16 also defer the newest triage round's in-scope rows not yet queued, written as Step 6's review round cap paragraph says |
+| The budget stop | 4, 7, 8 | the `budget` line, "build: <m>m review: <m>m ratio: <r> over: yes", and the question: stop here or raise the ratio, and at row 16 also defer the newest triage round's in-scope rows not yet queued, written as Step 6's review round cap paragraph says |
 | The push half of the grant is withheld, or `--no-publish` is set | after 4, Resume | the report the withholding caller asked for, carrying Step 4's result; with the flag and no caller, Step 4's result and "`work-issue N` without `--no-publish` publishes." |
 | A rebase conflict | 5, 8 | `RUN_DIR/conflict.txt` and "resolve, then `work-issue N`" |
 | `gh` is unauthenticated at publish | 5, 8 | `RUN_DIR/pr-body.md` and "resume after `gh auth login`" |
@@ -301,7 +301,7 @@ An invocation ends at one of these stops and no other. Each prints its message a
 | The pull request is merged or closed | Resume | the cleanup offer, asked before anything is removed |
 | The final report | 8 | the final report, ending "a human merges" or "waiting on the reviewer" |
 
-Keep every quoted message byte-identical to the step that prints it; the suite's drift check depends on it.
+Keep every quoted message byte-identical to the step that prints it; the suite's drift check depends on it, and so does `work-issue/scripts/drive.py`, which reads this table at run time to tell how a launch ended. A stop with no double-quoted text in its row is one the driver can't recognize: it relaunches, and halts once two launches in a row change nothing.
 
 ## Resume
 
