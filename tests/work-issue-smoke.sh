@@ -2710,6 +2710,11 @@ probe_git "$lab_repo" rev-parse HEAD >"$r/base_sha"
 echo ok >"$r/baseline.txt"
 expect_field "with base_sha" base_sha true "$r" "$lab_repo"
 expect_field "with baseline.txt" baseline true "$r" "$lab_repo"
+# adopted reads adopted.json's presence alone, which adoption writes last (#118).
+ad="$(new_run adopted)"
+expect_field "with no adopted.json" adopted false "$ad" "$lab_repo"
+echo '{}' >"$ad/adopted.json"
+expect_field "with adopted.json" adopted true "$ad" "$lab_repo"
 
 # branch_remote asks the live remote: false where origin lacks the branch, true
 # once pushed, and null where there is no origin to ask.
