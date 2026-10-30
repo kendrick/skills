@@ -170,7 +170,7 @@ require_text work-issue/SKILL.md "name: work-issue"
 # from siblings too—a wave reaches it once per lane. Refuted on the bare
 # key so `: false` fails here as loudly as `: true`.
 refute_text work-issue/SKILL.md "disable-model-invocation"
-require_text work-issue/SKILL.md "argument-hint: '<issue number or URL> [plan path] [--isolate | --no-isolate] [--deep] [--max-review-rounds N] [--no-publish] [--dry-run]'"
+require_text work-issue/SKILL.md "argument-hint: '<issue or pull request number or URL> [plan path] [--isolate | --no-isolate] [--deep] [--max-review-rounds N] [--no-publish] [--dry-run]'"
 
 # A description that summarizes the steps becomes the shortcut the model takes
 # instead of reading the body, which is how a nine-step skill collapses into
@@ -931,8 +931,8 @@ awk -v h="$stops_header" '
   on { exit }
 ' work-issue/SKILL.md > "$tmp/stops.txt"
 stops_rows="$(wc -l < "$tmp/stops.txt" | tr -d ' ')"
-[[ "$stops_rows" -eq 27 ]] || {
-  echo "Where a Run Stops lists $stops_rows stops, expected 27" >&2
+[[ "$stops_rows" -eq 29 ]] || {
+  echo "Where a Run Stops lists $stops_rows stops, expected 29" >&2
   exit 1
 }
 while IFS= read -r row; do

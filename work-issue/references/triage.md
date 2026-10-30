@@ -29,6 +29,12 @@ The `findings`-outranks-`cleared` order matters for the same reason. A reviewer 
 
 Strip a trailing `[bot]` from every login before comparing. REST reports `chatgpt-codex-connector[bot]`; GraphQL reports `chatgpt-codex-connector` for the same account. Compared unstripped, one reviewer reads as two different logins depending on which API answered, and the author check that distinguishes a real reviewer from the run's own voice starts passing for the wrong reason.
 
+## The first adopted pass
+
+An adopted pull request carries review threads opened before this run existed, and every one of them is older than the SINCE adoption writes. Scored against SINCE alone, they would read as stale and go unanswered. So the first Step 6 check on an adopted run passes `--unanswered`: a thread counts when it is unresolved and its newest comment's login is not a self login, whatever its age. The newest comment is the thread's latest reply, else its last commenter, else its root. Reviews, pull-request comments, and reactions are still scored against SINCE, and every later poll drops the flag.
+
+The self logins are the pull request's author and the invoking login from `adopted.json`, each compared with `[bot]` stripped. `--author` names the first and `--invoker` the second, because `--author` replaces the bundle's author rather than adding to it, and an adopted run usually replies as someone other than the author. Both are skipped everywhere a login is: a thread's reply test, a reaction, a review, a comment. Without the second, the run's own replies would score as a reviewer's follow-up.
+
 ## The in-scope test
 
 A finding is **in scope** where any of these holds:
@@ -36,6 +42,8 @@ A finding is **in scope** where any of these holds:
 - it points at a line inside `git diff BASE_SHA..HEAD`
 - it names a CRITERIA line
 - it names a task in the plan
+
+On an adopted run the plan-task clause is inert, because an adopted run has no plan, and the CRITERIA clause is inert where `issue.md` holds no Acceptance lines; the diff clause still scores every finding.
 
 It is **out of scope** otherwise. Two shapes account for most of them: pre-existing code the diff did not touch, and a capability neither the issue nor the plan ever asked for. The issue this skill came from has the second kind on record — a reviewer asking for `navigator.storage.persist()` on a change that was about something else entirely. The suggestion was good. It was also a new feature, arriving through a review thread, with no issue behind it and no plan covering it, and building it there would have grown the diff past what anyone approved.
 
@@ -121,4 +129,4 @@ One pull-request comment, headed `Deferred findings`, carrying the queue table c
 | 1 | <url> | <quoted> | not in the diff under review | `file-issue` — <one line> | queued |
 ```
 
-Edited in place on later rounds rather than posted again. A second comment leaves two tables on the pull request and no rule for which is current, and the reviewer reading the older one is looking at a row somebody has already dealt with. The resume probe reads this comment back and checks every queue row, whole, against it, which is why the table is quoted exactly as it appears on disk: a row the comment lacks, or carries with a changed cell, is a Step 8 still owed.
+Edited in place on later rounds rather than posted again. Find the comment in the saved bundle by its `## Deferred findings` heading, posted by the pull request's author or the invoking login, and edit that one; post a new one only where neither has posted it. Adoption seeds `queue.md` from that comment, so a second adoption of one pull request appends to the earlier rows and edits the existing comment. A second comment leaves two tables on the pull request and no rule for which is current, and the reviewer reading the older one is looking at a row somebody has already dealt with. The resume probe reads this comment back and checks every queue row, whole, against it, which is why the table is quoted exactly as it appears on disk: a row the comment lacks, or carries with a changed cell, is a Step 8 still owed.
