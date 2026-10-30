@@ -4057,4 +4057,38 @@ refute_text work-issue/scripts/drive.py "no review yet on"
 refute_text work-issue/scripts/drive.py "dangerously-skip-permissions"
 refute_text work-issue/scripts/drive.py "--permission-mode"
 
+
+# #252: ponytail-review is Step 3's optional third reviewer (row 165). The
+# skip line is pinned byte for byte because a run without the plugin must
+# still say it skipped. The routing sentences are pinned because the group a
+# finding sits in decides whether its repair is required, whatever it says.
+require_text work-issue/SKILL.md "write \`ponytail-review not installed; skipped\` as the only line under \`## Ponytail\`, print that line once, and carry on with the step unchanged."
+require_text work-issue/SKILL.md "Save its output verbatim under \`## Ponytail\` in the same \`self-<round>.md\`."
+require_text work-issue/SKILL.md "A \`## Ponytail\` finding routes by the group heading \`ponytail-review\` put it under, and its wording never moves it."
+require_text work-issue/SKILL.md "A finding under **Must fix** is a required repair dispatch with the finding quoted, as a Spec finding naming a CRITERIA line is."
+require_text work-issue/SKILL.md "A finding under **Should fix** or **Nice to have** is the worker's call: fix it, or put it in \`left\` with a reason"
+require_text work-issue/SKILL.md "\`ponytail-review\` is optional: Step 3 runs it where it is installed, and its absence skips that reviewer and stops nothing."
+require_text work-issue/README.md "\`ponytail-review\` is optional: where it's installed, the run invokes it beside \`code-review\`"
+require_text _maintenance/work-issue/RATIONALE.md "| \`ponytail-review\` in Step 7's repair re-review | Row 165"
+require_text _maintenance/work-issue/RATIONALE.md "| \`ponytail-review\` at Step 6 | Row 165"
+# Deliberately Not Built: ponytail at Step 6, Step 7, or as a stop. The file
+# names ponytail at Step 3 on purpose, so each refute reads one section, cut
+# from its heading to the next `## ` heading. The require on each cut proves
+# the cut found its section, or an empty file would pass every refute.
+section() {
+  awk -v h="$2" 'index($0, h) == 1 { on = 1; print; next } on && /^## / { exit } on { print }' "$1"
+}
+section work-issue/SKILL.md "## Step 7 " >"$tmp/step-7.md"
+section work-issue/SKILL.md "## Step 6 " >"$tmp/step-6.md"
+section work-issue/SKILL.md "## Step 0 " >"$tmp/step-0.md"
+section work-issue/SKILL.md "## Where a Run Stops" >"$tmp/stops.md"
+require_text "$tmp/step-7.md" "\`code-review\` ran on the repaired diff; \`repair-<k>.json\` exists."
+require_text "$tmp/step-6.md" "**Done when:** \`review\` returned \`cleared\`"
+require_text "$tmp/step-0.md" "**Done when:** \`RUN_DIR/max_review_rounds\` holds the cap"
+require_text "$tmp/stops.md" "| Stop |"
+refute_text "$tmp/step-7.md" "ponytail"
+refute_text "$tmp/step-6.md" "ponytail"
+refute_text "$tmp/step-0.md" "ponytail"
+refute_text "$tmp/stops.md" "ponytail"
+
 echo "work-issue smoke: OK"

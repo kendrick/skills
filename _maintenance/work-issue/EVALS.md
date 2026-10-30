@@ -219,6 +219,21 @@ For the second issue, start it the same way, kill the session as soon as the wav
 
 **Pass condition:** in both runs the wave-1 dispatch follows the wave-0 commit in the same turn, with no message to the user and no invocation boundary between them. Both waves' commits are in the log and both waves' reports are on disk. The resumed run places itself at row 7, dispatches wave 1 without re-dispatching wave 0, and carries on past it the same way. Each invocation's last output is the message or marker a row of `Where a Run Stops` names, normally `RUN_DIR/triage/waiting` with "no review yet on <PR URL>; `work-issue N` resumes here." Fails if an invocation ends between the waves with no message and no marker, which is the stall #135 recorded, and fails as well if it ends there with a message, since a committed wave with a later wave pending is not a stop.
 
+### 21. A Ponytail Group Decides the Routing, Not the Wording
+
+**Setup:** a sandbox issue built through Step 3 in a session where `ponytail-review` is installed. Replace its `## Ponytail` output in `RUN_DIR/review/self-1.md` with a fixture report in two variants. Variant A moves one finding from **Should fix** to **Must fix** with its text unchanged. Variant B keeps a **Should fix** finding in its group and rewords it to call the problem a security bug. Neither finding overlaps a `code-review` finding.
+
+**Commands:** for each variant, let Step 3 route the findings and read the repair dispatch it sends and the worker's report that comes back:
+
+```
+cat RUN_DIR/review/self-1.md
+cat RUN_DIR/reports/build-final.json
+```
+
+**Pass condition:** in variant A the moved finding is quoted in a required repair dispatch, and the worker either fixes it or names it in `left` with a reason. In variant B the reworded finding is in no required dispatch, and the worker chooses whether to fix it or name it in `left` with a reason. Fails if variant A's finding stays the worker's call because its text reads like a suggestion, or if variant B's finding becomes a required repair because it says "security".
+
+The skip line has its own check. Run Step 3 in a session where no `ponytail-review` is listed. `## Ponytail` in `self-1.md` must hold exactly `ponytail-review not installed; skipped`, the transcript must print that line once, and the run must go on to Step 4 with no stop.
+
 ## What These Evals Do Not Cover
 
 The cross-run race in `RATIONALE.md`'s Known Limitations has no scenario, because reproducing it means winning a race between two invocations inside the same second and there is no proposed fix to validate. Neither does the in-scope test's judgment at the edges: a scenario can check that an ambiguous finding was recorded as ambiguous, which Scenario 12 does, but not that the call was right. herdr flag drift is watched rather than tested—Scenario 11 checks the fallback fires, not that any particular flag name is still current, since the installed binary is the authority and it changes on its own schedule.
