@@ -1097,7 +1097,7 @@ require_text inbox-to-memory/SKILL.md "**A dismissed flag stays in the note perm
 # (#38). Without that line the run throws away a finding it spent a body read
 # on; without the refusal it stamps a claim nobody agreed to.
 require_text inbox-to-memory/SKILL.md 'Only `status: accepted` records produce flags, and only they can be confirmed.'
-require_text inbox-to-memory/SKILL.md 'The status filter runs after the body read, never before it.'
+require_text inbox-to-memory/SKILL.md 'Between `accepted` and `proposed`, the status filter runs after the body read, never before it.'
 require_text inbox-to-memory/SKILL.md 'counts against the five-read budget'
 require_text inbox-to-memory/SKILL.md 'put nothing before the phase 5 gate'
 require_text inbox-to-memory/SKILL.md 'and every `proposed` record an input restated.'
@@ -2585,6 +2585,235 @@ require_line "$sc_out" "v1 bodies skipped: 1" "reflow-raw over $sc"
 require_line "$sc_out" "left alone: 0" "reflow-raw over $sc"
 
 rm -rf "$split_tmp"
+
+# find-candidates.sh (#194) widens phase 2.5's lookup with qmd vec search, so
+# an input that contradicts a record without naming its entity still reaches
+# it. qmd is the checked-in shim, symlinked first on PATH, and every run reads
+# the eval fixture in place. The fixture-integrity check at the end proves the
+# fixture stays untouched.
+fc=inbox-to-memory/scripts/find-candidates.sh
+fc_shim=_maintenance/inbox-to-memory/qmd-shim.sh
+vc="$fixtures/evals/vec-candidates"
+vc_tol=_memory/decisions/tolland-carries-wholesale-Vc1TolWhs1.md
+vc_cut=_memory/context/tolland-depot-cutoff-Vc2TolCut2.md
+vc_mar=_memory/rules/marlowe-allergen-labels-Vc3MarAlg3.md
+vc_pri=_memory/decisions/priya-owns-carrier-contracts-Vc4PriCon4.md
+require_dir "$vc/_memory"
+# Mode 100644 passes every `bash "$fc"` below, so only -x catches a lost bit.
+[[ -x "$fc" && -x "$fc_shim" ]] || {
+  echo "$fc and $fc_shim must both be executable" >&2
+  exit 1
+}
+bash -n "$fc"
+bash -n "$fc_shim"
+
+fc_dir="$(mktemp -d "${TMPDIR:-/tmp}/i2m-find-candidates.XXXXXX")"
+trap 'rm -rf "$not_a_scope" "$inline_scope" "$dismissal_scope" "$mig" "$jrn" "$t2_extract_scope" "$t2x_dir" "$subset_scope" "$batched_scope" "$lifecycle_scope" "$idem_dir" "$v_pass" "$scripts_copy" "$v_combo" "$v_linkdrop" "$v_lintdefect" "$v1_broken_scope" "$v1_pass_scope" "$wt_headline" "$wt_backward" "$wt_dedupe" "$wt_status" "$wt_keyins" "$v_subdir" "$bench_dir" "$fc_dir"' EXIT
+
+mkdir -p "$fc_dir/bin" "$fc_dir/pybin" "$fc_dir/flaky"
+ln -s "$repo_root/$fc_shim" "$fc_dir/bin/qmd"
+# The developer's own qmd may sit later on PATH, so check the shim comes first.
+[[ "$(PATH="$fc_dir/bin:$PATH" command -v qmd)" == "$fc_dir/bin/qmd" ]] || {
+  echo "test setup: the qmd shim is not first on PATH" >&2
+  exit 1
+}
+# python3 alone, so a PATH built from this dir has no qmd on it.
+ln -s "$(command -v python3)" "$fc_dir/pybin/python3"
+fc_bare="$fc_dir/pybin:/usr/bin:/bin"
+PATH="$fc_bare" command -v qmd >/dev/null 2>&1 && {
+  echo "test setup: qmd reachable on $fc_bare, the no-qmd case would prove nothing" >&2
+  exit 1
+}
+# The shim fails every call when told to, so the first call fails before any
+# hit exists and a kept partial hit can't show. This wrapper answers the first
+# call and fails the rest.
+printf '#!/usr/bin/env bash\n[[ -s "$QMD_SHIM_LOG" ]] && export QMD_SHIM_FAIL="qmd: index busy"\nexec %q "$@"\n' \
+  "$repo_root/$fc_shim" >"$fc_dir/flaky/qmd"
+chmod +x "$fc_dir/flaky/qmd"
+
+: >"$fc_dir/empty"
+printf "We're moving off the vendor at the end of Q3.\n" >"$fc_dir/claim-vendor"
+printf "We're moving off the vendor at the end of Q3.\nWe have quotes from two other carriers.\n" >"$fc_dir/claim-two"
+printf 'Marlowe\nPriya\n' >"$fc_dir/ents-mp"
+printf '%s\n' "${vc_tol#_memory/}" >"$fc_dir/hits-tol"
+printf '%s\n' "${vc_cut#_memory/}" >"$fc_dir/hits-cut"
+printf '%s\n' "${vc_mar#_memory/}" "${vc_tol#_memory/}" >"$fc_dir/hits-mt"
+(cd "$vc" && find _memory -name '*.md' | sed 's|^_memory/||' | sort) >"$fc_dir/hits-all"
+[[ "$(wc -l <"$fc_dir/hits-all")" -eq 8 ]] || {
+  echo "the vec-candidates fixture should hold eight records" >&2
+  exit 1
+}
+
+# fc_run <path> <hits> <entities> <claims>: sets fc_rc, fc_out, fc_err, and a
+# fresh $fc_log. QMD_SHIM_FAIL, when the caller sets it, rides the environment.
+fc_log="$fc_dir/log"
+fc_run() {
+  : >"$fc_log"
+  fc_rc=0
+  QMD_SHIM_HITS="$2" QMD_SHIM_LOG="$fc_log" PATH="$1" \
+    bash "$fc" "$vc" --entities "$3" --claims "$4" >"$fc_dir/out" 2>"$fc_dir/err" || fc_rc=$?
+  fc_out="$(cat "$fc_dir/out")"
+  fc_err="$(cat "$fc_dir/err")"
+}
+fc_expect() {
+  [[ "$fc_rc" == 0 ]] || {
+    echo "find-candidates exited $fc_rc on $1 (want 0)" >&2
+    printf '%s\n' "$fc_err" >&2
+    exit 1
+  }
+  [[ "$(tail -n 1 "$fc_dir/out")" == "$2" ]] || {
+    echo "find-candidates on $1 ended without: $2" >&2
+    printf '%s\n' "$fc_out" >&2
+    exit 1
+  }
+}
+fc_shim_path="$fc_dir/bin:$PATH"
+
+# The issue's case: the claim names no entity, and only vec finds the record.
+fc_run "$fc_shim_path" "$fc_dir/hits-tol" "$fc_dir/empty" "$fc_dir/claim-vendor"
+fc_expect "the vendor claim" "counts: grep=0 vec=1 both=0"
+require_line "$fc_out" "candidate: $vc_tol accepted vec" "find-candidates on the vendor claim"
+
+# Falsifier 1: without a vec hit, grep alone misses the record.
+fc_run "$fc_shim_path" "$fc_dir/empty" "$fc_dir/empty" "$fc_dir/claim-vendor"
+fc_expect "the vendor claim with no vec hits" "counts: grep=0 vec=0 both=0"
+refute_text "$fc_dir/out" "tolland-carries-wholesale"
+
+# Falsifier 2: a superseded vec hit drops at the header read and never costs a
+# body read.
+fc_run "$fc_shim_path" "$fc_dir/hits-cut" "$fc_dir/empty" "$fc_dir/claim-vendor"
+fc_expect "a superseded vec hit" "counts: grep=0 vec=1 both=0"
+require_line "$fc_out" "dropped: $vc_cut superseded vec" "find-candidates on a superseded vec hit"
+refute_text "$fc_dir/out" "candidate: $vc_cut"
+
+# Counts are disjoint: Marlowe from both lookups, Priya by name, Tolland by meaning.
+fc_run "$fc_shim_path" "$fc_dir/hits-mt" "$fc_dir/ents-mp" "$fc_dir/claim-vendor"
+fc_expect "Marlowe and Priya with Marlowe and Tolland hits" "counts: grep=1 vec=1 both=1"
+require_line "$fc_out" "candidate: $vc_mar accepted both" "find-candidates with grep and vec hits"
+require_line "$fc_out" "candidate: $vc_pri accepted grep" "find-candidates with grep and vec hits"
+
+# No qmd at all: grep still runs, and stderr carries the one notice phase 6
+# copies into its report.
+fc_run "$fc_bare" "$fc_dir/hits-tol" "$fc_dir/ents-mp" "$fc_dir/claim-vendor"
+fc_expect "a PATH with no qmd" "counts: grep=2 vec=0 both=0"
+[[ "$fc_err" == "vec off: qmd not on PATH; grep only" ]] || {
+  echo "find-candidates with no qmd should print exactly one vec off line, got:" >&2
+  printf '%s\n' "$fc_err" >&2
+  exit 1
+}
+require_line "$fc_out" "candidate: $vc_pri accepted grep" "find-candidates with no qmd"
+
+# A scope memory-index never registered fails as an unknown collection.
+QMD_SHIM_FAIL='Collection not found: vec-candidates-rules' \
+  fc_run "$fc_shim_path" "$fc_dir/hits-mt" "$fc_dir/ents-mp" "$fc_dir/claim-vendor"
+fc_expect "an unregistered scope" "counts: grep=2 vec=0 both=0"
+require_line "$fc_err" "vec off: Collection not found: vec-candidates-rules; grep only" "find-candidates on an unregistered scope"
+[[ "$(grep -c '^vec off:' "$fc_dir/err")" == 1 ]] || {
+  echo "find-candidates on an unregistered scope printed more than one vec off line" >&2
+  exit 1
+}
+
+# The fallback is all or nothing. When the second call fails, the script
+# discards the first claim's hit, so the counts never describe half an index.
+fc_run "$fc_dir/flaky:$PATH" "$fc_dir/hits-tol" "$fc_dir/empty" "$fc_dir/claim-two"
+fc_expect "a qmd call failing after one answered" "counts: grep=0 vec=0 both=0"
+[[ "$(grep -c '^vsearch ' "$fc_log")" == 2 ]] || {
+  echo "the flaky shim should have been called twice, log:" >&2
+  cat "$fc_log" >&2
+  exit 1
+}
+require_line "$fc_err" "vec off: qmd: index busy; grep only" "find-candidates after a later qmd failure"
+refute_text "$fc_dir/out" "tolland-carries-wholesale"
+
+# One vsearch per claim across every type collection, never notes, with -n set
+# because qmd's json default is 20.
+fc_run "$fc_shim_path" "$fc_dir/empty" "$fc_dir/empty" "$fc_dir/claim-two"
+fc_expect "two claims" "counts: grep=0 vec=0 both=0"
+[[ "$(grep -c '^vsearch .* -c vec-candidates-context -c vec-candidates-decisions -c vec-candidates-rules -n 5 --format json$' "$fc_log")" == 2 ]] || {
+  echo "find-candidates did not make one vsearch per claim with the full argv, log:" >&2
+  cat "$fc_log" >&2
+  exit 1
+}
+grep -Eq -- '-notes( |$)' "$fc_log" && {
+  echo "find-candidates queried a notes collection" >&2
+  exit 1
+}
+
+# The script prints status lines and nothing from a body, so the five-read
+# budget stays SKILL.md's to spend.
+fc_run "$fc_shim_path" "$fc_dir/hits-all" "$fc_dir/empty" "$fc_dir/claim-vendor"
+fc_expect "all eight records as vec hits" "counts: grep=0 vec=8 both=0"
+[[ "$(grep -c '^candidate: ' "$fc_dir/out")" == 7 && "$(grep -c '^dropped: ' "$fc_dir/out")" == 1 ]] || {
+  echo "all eight vec hits should give seven candidates and one dropped:" >&2
+  printf '%s\n' "$fc_out" >&2
+  exit 1
+}
+grep -Evq '^(candidate|dropped|counts): ' "$fc_dir/out" && {
+  echo "find-candidates printed a line that is not a status line:" >&2
+  printf '%s\n' "$fc_out" >&2
+  exit 1
+}
+
+fc_rc=0
+bash "$fc" >/dev/null 2>&1 || fc_rc=$?
+[[ "$fc_rc" == 2 ]] || {
+  echo "find-candidates exited $fc_rc with no arguments (want 2)" >&2
+  exit 1
+}
+mkdir -p "$fc_dir/no-memory"
+fc_rc=0
+fc_err="$(bash "$fc" "$fc_dir/no-memory" --entities "$fc_dir/empty" --claims "$fc_dir/empty" 2>&1 >/dev/null)" || fc_rc=$?
+[[ "$fc_rc" == 2 ]] || {
+  echo "find-candidates exited $fc_rc on a dir with no _memory/ (want 2)" >&2
+  exit 1
+}
+require_output "$fc_err" "not a memory scope:"
+
+# A journal scope passes phase 1 on entries/ alone, so the lookup has to come
+# back empty rather than stop grooming (#273 review). The fixture is only read.
+: >"$fc_log"
+fc_rc=0
+QMD_SHIM_HITS="$fc_dir/hits-all" QMD_SHIM_LOG="$fc_log" PATH="$fc_shim_path" \
+  bash "$fc" "$fixtures/journal-v1" --entities "$fc_dir/ents-mp" --claims "$fc_dir/claim-vendor" \
+  >"$fc_dir/out" 2>"$fc_dir/err" || fc_rc=$?
+[[ "$fc_rc" == 0 && "$(cat "$fc_dir/out")" == "counts: grep=0 vec=0 both=0" && ! -s "$fc_dir/err" && ! -s "$fc_log" ]] || {
+  echo "find-candidates on a journal scope should exit 0 with zero counts and no qmd call, got exit $fc_rc:" >&2
+  cat "$fc_dir/out" "$fc_dir/err" "$fc_log" >&2
+  exit 1
+}
+
+# A comment after a quoted status is still a comment, so the record stays accepted.
+mkdir -p "$fc_dir/quoted/_memory/decisions"
+printf -- '---\nstatus: "accepted" # reviewed\nentity: Marlowe\n---\nbody\n' \
+  >"$fc_dir/quoted/_memory/decisions/quoted-status.md"
+fc_rc=0
+fc_out="$(PATH="$fc_bare" bash "$fc" "$fc_dir/quoted" --entities "$fc_dir/ents-mp" --claims "$fc_dir/empty" 2>/dev/null)" || fc_rc=$?
+[[ "$fc_rc" == 0 ]] || {
+  echo "find-candidates exited $fc_rc on a quoted status with a comment (want 0)" >&2
+  exit 1
+}
+require_line "$fc_out" "candidate: _memory/decisions/quoted-status.md accepted grep" "find-candidates on a quoted status with a comment"
+
+# A drifted scope name reads as an unregistered collection and says nothing else.
+require_text "$fc" 're.sub(r"[^a-z0-9]+", "-", root.name.lower()).strip("-")'
+require_text memory-index/scripts/memory-index.py 're.sub(r"[^a-z0-9]+", "-", root.name.lower()).strip("-")'
+
+# Each cut has a Deliberately Not Built row in _maintenance/inbox-to-memory/RATIONALE.md.
+refute_text "$fc" '--budget'
+refute_text "$fc" '"qmd", "query"'
+refute_text "$fc" '-notes'
+refute_text "$fc" 'collection add'
+refute_text "$fc" '"embed"'
+require_text "$fc" '"qmd", "vsearch"'
+
+require_text inbox-to-memory/SKILL.md 'scripts/find-candidates.sh <scope-root> --entities <file> --claims <file>'
+require_text inbox-to-memory/SKILL.md 'A `superseded` or `deprecated` record leaves at the header read and never costs a body read, whichever lookup found it.'
+require_text inbox-to-memory/SKILL.md 'A qmd query is not a body read, and a vec hit draws on the same five reads as a grep hit.'
+require_text inbox-to-memory/SKILL.md 'When the script prints `vec off:` on stderr, the lookup ran on grep alone.'
+require_text inbox-to-memory/SKILL.md '`candidates: <note-path> grep=<g> vec=<v> both=<b>`'
+require_text inbox-to-memory/SKILL.md 'When the fallback fired, name the `memory-index` skill in the report as what registers the scope.'
+require_text _maintenance/inbox-to-memory/EVALS.md '### 6. Vec-assisted lookup'
+require_text _maintenance/inbox-to-memory/EVALS.md 'tolland-carries-wholesale-Vc1TolWhs1'
 
 # The checked-in fixtures are never migrated or stamped in place. Every
 # migration or write-through test works on a copy, and a test that forgets

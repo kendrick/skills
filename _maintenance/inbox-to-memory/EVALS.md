@@ -6,13 +6,14 @@ Every run happens in a scratch copy. Nothing in this suite writes to the repo.
 
 ## Fixtures
 
-Five, all under `tests/fixtures/inbox-to-memory/evals/`. Nothing is ever run there — a scenario runs against the copy `eval-scope.sh` prints.
+Six, all under `tests/fixtures/inbox-to-memory/evals/`. Nothing is ever run there — a scenario runs against the copy `eval-scope.sh` prints.
 
 - **`contradiction-amend`** — Larkspur Supply, refund controls. An `accepted` Rule record putting a $500 approval-code threshold on every refund, a `superseded` Context record, a `proposed` Decision, and one inbox transcript that walks into all three. Two prior notes.
 - **`unacknowledged-tension`** — Meridian Freight's Dockside pilot at the Bexley Road terminal. Four prior notes, two open-question slugs live in all four, one of them named out loud in the inbox transcript and one of them never mentioned.
 - **`scope-tiers`** — Calderwood Mutual. A client root with `projects/claims-intake/` and `pursuits/underwriting-assist/` beneath it, four inbox inputs spread across three opted-in scope roots, and a client `CLAUDE.md` declaring lightweight memory mode.
 - **`tier2-summary-entities`** — a v1 Kestrel cutover scope, two notes and two records. A transcript mishearing, a locked cutover date, and a four-hour rebuild figure all sit below `## Raw Content`, where the Tier 2 extract does not reach.
 - **`confirmation-writethrough`** — Ashgrove Water's Tanager rollout at the Ferndale depot. Three prior notes and four records the pilot review walks past: an `accepted` v2 Context record it restates, an `accepted` v1 Decision it also restates, a second `accepted` v2 Context record about the same overnight job that it never restates, and a `proposed` Decision it agrees with word for word. Exactly one `last_confirmed:` line in the whole scope.
+- **`vec-candidates`** — Pellworth, a bakery, and its wholesale carrier. Eight records: an `accepted` Decision that Tolland Freight carries every wholesale delivery through 2027, a `superseded` Context record about Tolland's depot cutoff, an `accepted` Rule naming Marlowe, an `accepted` Decision whose `owners` names Priya, and four more `accepted` records naming neither. One inbox transcript where Priya says the bakery is moving off the vendor at the end of Q3 and never says "Tolland".
 
 ## Running a scenario
 
@@ -141,6 +142,38 @@ Without the skill: nothing reads `_memory/` before writing, so no record is name
 
 Four of these seven rows go green for a run that writes nothing into `_memory/` at all, which is what grading restraint costs. The stamp, the restatement line, and the phase 6 report carry the scenario. Missing the confirmation is the cheap failure; the expensive one is a run that stamps `harrow-route-sequence-mr1b_3yB4S` because Harrow, the overnight job, and drive-time sequencing are all in the transcript, and never notices that the record's own claim is the one thing nobody in the room said.
 
+### 6. Vec-assisted lookup — the contradiction nobody named
+
+**Fixture:** `vec-candidates`
+**Run from:** the staged root
+**Prompt:** "process the inbox"
+
+qmd here is the stub at `_maintenance/inbox-to-memory/qmd-shim.sh`, so the scenario grades what phase 2.5 does with vec hits, not how well a real index ranks them. Before loading the skill, put the shim first on PATH and hand it every record as a hit:
+
+```bash
+bin="$(mktemp -d)"; ln -s "$PWD/_maintenance/inbox-to-memory/qmd-shim.sh" "$bin/qmd"
+hits="$(mktemp)"; (cd "$staged/_memory" && ls */*.md) > "$hits"
+export PATH="$bin:$PATH" QMD_SHIM_HITS="$hits"
+```
+
+Run it from the repo root, after staging. The hits file holds the eight `_memory/` paths as `<type>/<file>`, `decisions/tolland-carries-wholesale-Vc1TolWhs1.md` among them.
+
+Approve nothing at the phase 5 gate.
+
+| Expect | Pass condition |
+| --- | --- |
+| Phase 2.5 flag | `[contradicts accepted: [[tolland-carries-wholesale-Vc1TolWhs1\|<label>]]]`, inline on Priya's passage about moving off the vendor |
+| The `superseded` record | No flag against `tolland-depot-cutoff-Vc2TolCut2`, and the run's transcript shows no read of that file past its frontmatter |
+| Phase 6 counts | A `candidates:` line for the groomed note, with `grep=`, `vec=`, and `both=` all present and `vec=` at least 1 |
+| Budget | The transcript shows at most five record-body reads for the input, though seven `accepted` records are candidates |
+| Fallback | A second staged copy, run with a PATH that reaches no `qmd`, completes, phase 6 carries `vec off: qmd not on PATH; grep only`, and `tolland-carries-wholesale-Vc1TolWhs1` is named by no flag. That is today's behavior, which the issue's falsifier compares against |
+
+Every row after the flag settles off the run's transcript or its phase 6 report rather than the staged copy, since a body read, a count, and a fallback notice leave no trace on disk. Keep both runs' transcripts. Build the fallback run's PATH from a fresh shell, with no shim and with every directory holding a real `qmd` left out, and confirm `command -v qmd` prints nothing before loading the skill.
+
+Without the skill: nothing reads `_memory/` before writing, so no record is named anywhere in the output, as in scenario 1's baseline.
+
+The fallback row is the falsifier. Grep alone can't reach the Tolland record, because the transcript never names Tolland, so a flag that survives with qmd off came from somewhere other than the lookup this scenario tests.
+
 ## Grading
 
 Per scenario, record `passed` plus verbatim `evidence` for each row, taken off the staged copy rather than off the transcript of the run. Every row is binary on purpose. A row that needs an argument to settle was specified badly, so fix the row rather than the grade.
@@ -152,5 +185,6 @@ Per scenario, record `passed` plus verbatim `evidence` for each row, taken off t
 | 3. Scope proposal and the tiebreak | | | | |
 | 4. Tier 2 summary and entities | | | | |
 | 5. Confirmation write-through | | | | |
+| 6. Vec-assisted lookup | | | | |
 
 The delta is widest on 1 and 4, and those are the two where a baseline reads best: a groomed note that is accurate about the meeting and never opened `_memory/`, and a summary that is accurate about the day and unsourceable from the layer the migrator checks it against. Scenario 5 has scenario 1's baseline and a much narrower delta, since four of its six rows pass for a run that never opens `_memory/` at all. Read the two rows that move rather than the count.

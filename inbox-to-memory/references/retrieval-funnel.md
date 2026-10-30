@@ -53,6 +53,8 @@ grep -rl -A1 "note_id: JJuYgImRWn" notes/ | grep -l "relation: extends"
 
 Still cheap. Returns a list of filenames; nothing loaded yet.
 
+Phase 2.5 widens this stage with `scripts/find-candidates.sh`, which greps entities against frontmatter and adds `qmd vsearch` hits for the input's claims, so a record the input never names can still surface. A vec hit enters Stage 3 exactly as a grep hit does, and the status check there drops a `superseded` hit before any body read.
+
 ## Stage 3 — Read YAML Headers Only
 
 Read the first 20 lines of each candidate. On a v2 file that is a contract rather than a guess: the frontmatter contract caps the block at 20 lines precisely so a header read is guaranteed to catch all of it. See [machine-contracts.md](machine-contracts.md).
