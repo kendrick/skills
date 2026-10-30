@@ -2769,6 +2769,31 @@ fc_err="$(bash "$fc" "$fc_dir/no-memory" --entities "$fc_dir/empty" --claims "$f
 }
 require_output "$fc_err" "not a memory scope:"
 
+# A journal scope passes phase 1 on entries/ alone, so the lookup has to come
+# back empty rather than stop grooming (#273 review). The fixture is only read.
+: >"$fc_log"
+fc_rc=0
+QMD_SHIM_HITS="$fc_dir/hits-all" QMD_SHIM_LOG="$fc_log" PATH="$fc_shim_path" \
+  bash "$fc" "$fixtures/journal-v1" --entities "$fc_dir/ents-mp" --claims "$fc_dir/claim-vendor" \
+  >"$fc_dir/out" 2>"$fc_dir/err" || fc_rc=$?
+[[ "$fc_rc" == 0 && "$(cat "$fc_dir/out")" == "counts: grep=0 vec=0 both=0" && ! -s "$fc_dir/err" && ! -s "$fc_log" ]] || {
+  echo "find-candidates on a journal scope should exit 0 with zero counts and no qmd call, got exit $fc_rc:" >&2
+  cat "$fc_dir/out" "$fc_dir/err" "$fc_log" >&2
+  exit 1
+}
+
+# A comment after a quoted status is still a comment, so the record stays accepted.
+mkdir -p "$fc_dir/quoted/_memory/decisions"
+printf -- '---\nstatus: "accepted" # reviewed\nentity: Marlowe\n---\nbody\n' \
+  >"$fc_dir/quoted/_memory/decisions/quoted-status.md"
+fc_rc=0
+fc_out="$(PATH="$fc_bare" bash "$fc" "$fc_dir/quoted" --entities "$fc_dir/ents-mp" --claims "$fc_dir/empty" 2>/dev/null)" || fc_rc=$?
+[[ "$fc_rc" == 0 ]] || {
+  echo "find-candidates exited $fc_rc on a quoted status with a comment (want 0)" >&2
+  exit 1
+}
+require_line "$fc_out" "candidate: _memory/decisions/quoted-status.md accepted grep" "find-candidates on a quoted status with a comment"
+
 # A drifted scope name reads as an unregistered collection and says nothing else.
 require_text "$fc" 're.sub(r"[^a-z0-9]+", "-", root.name.lower()).strip("-")'
 require_text memory-index/scripts/memory-index.py 're.sub(r"[^a-z0-9]+", "-", root.name.lower()).strip("-")'

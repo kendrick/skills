@@ -4,7 +4,7 @@ Evidence tiers: **[E]** measured or observed in a real run, **[P]** practitioner
 
 ## Where This Came From
 
-This ledger covers `scripts/collapse-vtt.sh` (rows 1–8), `scripts/bench-fixture.sh` (rows 9–16), `scripts/migrate-scope.sh` (row 17), the link check in `scripts/lint-scope.sh` (row 18), the raw sidecar with `scripts/split-raw.sh` (rows 19–23), what phase 2.5 does with a restated `proposed` record (row 24), and phase 2.5's candidate lookup with `scripts/find-candidates.sh` (rows 25–32), and nothing else. The skill predates the rationale bar in `AGENTS.md`, so the rest of it is unledgered; a later change to another part of the skill is the moment to add rows for that part rather than backfilling here.
+This ledger covers `scripts/collapse-vtt.sh` (rows 1–8), `scripts/bench-fixture.sh` (rows 9–16), `scripts/migrate-scope.sh` (row 17), the link check in `scripts/lint-scope.sh` (row 18), the raw sidecar with `scripts/split-raw.sh` (rows 19–23), what phase 2.5 does with a restated `proposed` record (row 24), and phase 2.5's candidate lookup with `scripts/find-candidates.sh` (rows 25–33), and nothing else. The skill predates the rationale bar in `AGENTS.md`, so the rest of it is unledgered; a later change to another part of the skill is the moment to add rows for that part rather than backfilling here.
 
 The collapser turns a WebVTT file into speaker turns, and its output becomes a note's `## Raw Content` zone. Phase 4 then deletes the source file, on the stated grounds that the raw zone preserved it. That chain is what makes a quiet defect here expensive: whatever the collapser emits is the only surviving record, and three P0s (#78, #84, #85) each ended in a note that read as correct while the original was gone.
 
@@ -56,6 +56,7 @@ The vec lookup came from #194. Phase 2.5 found candidate records by grepping the
 | 30 | Grep moves out of the prose into the script and matches each entity against the frontmatter block only. | `both` needs the two hit lists in one place, and the issue's falsifiers need a mechanism a PATH shim can stub. Titles live in frontmatter, so the old "frontmatter and titles" is that one block. | [P] |
 | 31 | `scope_name` is vendored byte-identically from `memory-index/scripts/memory-index.py`. | It follows `AGENTS.md`'s vendoring rule. A collection name that drifts from `memory-index` fails every lookup as an unregistered scope and says nothing else. | [C] |
 | 32 | `find-candidates.sh` exits 0 or 2, not the validator convention's codes. | Row 14's reasoning holds here, since the script produces an artifact and gates nothing. | [C] |
+| 33 | A journal scope (`entries/`, no `_memory/`) prints `counts: grep=0 vec=0 both=0`, makes no qmd call, and exits 0. A directory with neither keeps exit 2. | Phase 1 accepts a journal scope, and phase 2.5 has never checked journal entries: the `_memory/` glob the script took over found nothing there. Exiting 2 stopped journal grooming at phase 2.5, so zero candidates is the behavior journal scopes already had (#273 review). | [P] |
 
 ## Deliberately Not Built
 

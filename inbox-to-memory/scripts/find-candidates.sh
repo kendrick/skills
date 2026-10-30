@@ -25,8 +25,8 @@
 #
 # Exit 0 once output is printed, the fallback included. Exit 2 on a usage
 # error, an unreadable entities, claims, or record file, frontmatter that
-# opens and never closes, or a scope with no _memory/. This produces an
-# artifact rather than gating a run, so it takes bench-fixture.sh's 2.
+# opens and never closes, or a scope with neither _memory/ nor entries/. This
+# produces an artifact rather than gating a run, so it takes bench-fixture.sh's 2.
 set -euo pipefail
 
 # The Python program arrives on stdin via a quoted heredoc, so nothing in it is
@@ -114,11 +114,16 @@ def status_of(block):
         m = STATUS.match(ln)
         if m:
             v = m.group(1)
-            # A trailing comment would turn `accepted # ok` into a dropped record.
-            if v[:1] not in "'\"":
+            # A trailing comment would turn `accepted # ok` into a dropped
+            # record. A quoted value can carry one too (`"accepted" # ok`), and
+            # a `#` inside the quotes is not a comment, so a quoted value ends
+            # at its closing quote (#273 review).
+            q = v[:1]
+            if q in ("'", '"'):
+                end = v.find(q, 1)
+                v = v[1:end] if end > 0 else v
+            else:
                 v = re.sub(r"\s+#.*$", "", v)
-            if len(v) >= 2 and v[0] == v[-1] and v[0] in "'\"":
-                v = v[1:-1]
             return v.strip() or "none"
     return "none"
 
@@ -217,10 +222,17 @@ def main():
     except ValueError:
         die("--top-k must be a positive integer")
     scope = os.path.normpath(args.scope)
-    if not os.path.isdir(os.path.join(scope, "_memory")):
+    has_memory = os.path.isdir(os.path.join(scope, "_memory"))
+    if not has_memory and not os.path.isdir(os.path.join(scope, "entries")):
         die("not a memory scope: %s" % args.scope)
     entities = [e.lower() for e in read_lines(args.entities, "entities")]
     claims = read_lines(args.claims, "claims")
+    # A journal scope (entries/, no _memory/) passes phase 1 and holds no
+    # records for phase 2.5 to check. Zero counts with no qmd call let journal
+    # grooming run to the end (#273 review).
+    if not has_memory:
+        print("counts: grep=0 vec=0 both=0")
+        return
 
     types, recs = records(scope)
     headers = {rel: frontmatter(p) for rel, p in recs.items()}
