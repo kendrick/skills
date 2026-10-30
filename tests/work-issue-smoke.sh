@@ -4067,7 +4067,7 @@ require_text work-issue/SKILL.md "Save its output verbatim under \`## Ponytail\`
 # The probe counts a self-review by the file alone, so writing the axes before
 # ponytail runs lets a resume route without it (PR #272, r4426159749).
 require_text work-issue/SKILL.md "Hold both axes verbatim for \`RUN_DIR/review/self-<round>.md\`, under \`## Standards\` and \`## Spec\`, and write nothing to \`review/\` yet."
-require_text work-issue/SKILL.md "Write \`self-<round>.md\` once, with \`## Standards\`, \`## Spec\`, and \`## Ponytail\` together, only after both reviewers have run or the skip line is decided."
+require_text work-issue/SKILL.md "Write \`self-<round>.md\` once, with \`## Standards\`, \`## Spec\`, and \`## Ponytail\` together, only after both reviewers have run or the skip line is decided, writing it as \`self-<round>.md.tmp\` and renaming it to \`self-<round>.md\` once complete."
 refute_text work-issue/SKILL.md "Save both axes verbatim to \`RUN_DIR/review/self-<round>.md\`"
 require_text _maintenance/work-issue/RATIONALE.md "| Saving \`code-review\`'s axes to \`self-<round>.md\` before \`ponytail-review\` runs | Row 165"
 require_text work-issue/SKILL.md "A \`## Ponytail\` finding routes by the group heading \`ponytail-review\` put it under, and its wording never moves it."
