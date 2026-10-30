@@ -1097,7 +1097,7 @@ require_text inbox-to-memory/SKILL.md "**A dismissed flag stays in the note perm
 # (#38). Without that line the run throws away a finding it spent a body read
 # on; without the refusal it stamps a claim nobody agreed to.
 require_text inbox-to-memory/SKILL.md 'Only `status: accepted` records produce flags, and only they can be confirmed.'
-require_text inbox-to-memory/SKILL.md 'The status filter runs after the body read, never before it.'
+require_text inbox-to-memory/SKILL.md 'Between `accepted` and `proposed`, the status filter runs after the body read, never before it.'
 require_text inbox-to-memory/SKILL.md 'counts against the five-read budget'
 require_text inbox-to-memory/SKILL.md 'put nothing before the phase 5 gate'
 require_text inbox-to-memory/SKILL.md 'and every `proposed` record an input restated.'

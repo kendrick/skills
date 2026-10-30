@@ -62,17 +62,25 @@ For each inbox file, in order:
 
 1. **Extract the named entities.** People, systems, vendors, regions, anything a record might be about.
 2. **Normalize them through the scope's alias table** before any lookup. Grep matching happens on canonical forms only. Skip this and "Shachi" and "Saatchi" search as two people, which produces a clean no-conflict report on a scope that has the conflict.
-3. **Glob `_memory/`** and grep the entity list against frontmatter and titles.
-4. **Read the headers of the hits.** Frontmatter, and no further. That's stage 3 of [references/retrieval-funnel.md](references/retrieval-funnel.md).
+3. **Run the candidate lookup.** Write the step 2 canonical entities to one file and the input's claim sentences (the Notable Quotes and Tensions candidates phase 2 pulled) to another, one per line, both in a `mktemp -d` outside the scope. Then run:
+
+   ```bash
+   bash <skill-path>/scripts/find-candidates.sh <scope-root> --entities <file> --claims <file>
+   ```
+
+   It greps the entities against each record's frontmatter, runs each claim as a `qmd vsearch` against the scope's per-type `_memory` collections, and merges the two hit lists before any header is read. Those collections exist once the `memory-index` skill has registered the scope, a step that waits on the user's yes to its dry run, so a scope it hasn't reached falls back to grep and the report points the user at `memory-index`. Stdout ends on a `counts:` line, which phase 6 copies.
+
+   When the script prints `vec off:` on stderr, the lookup ran on grep alone. Keep that line for the phase 6 report.
+4. **Read the headers of the `candidate:` lines.** Frontmatter, and no further. That's stage 3 of [references/retrieval-funnel.md](references/retrieval-funnel.md). A `superseded` or `deprecated` record leaves at the header read and never costs a body read, whichever lookup found it.
 5. **Body-read only the records whose headers suggest overlap** with something this input actually claims.
 
 That read answers two questions rather than one: does this input contradict what the record claims, or does it restate it? A restatement is a **confirmation** — the claim is still true, and somebody said so on the date this input carries, which is the whole of what `last_confirmed` is for. Deciding an input doesn't contradict a record means you have already read everything the second question needs, so the confirmation costs nothing past the read that was happening anyway. Keep the pairing of note to records; the stamping call below takes one group per note.
 
-**Five body reads per input, and the budget binds.** It is not a suggestion to stay near. When detection would need a sixth read to be useful, say so in the phase 6 report and leave the read undone. A budget quietly exceeded on every input is one nobody notices has stopped bounding anything. A scope where five is routinely too few is telling you its records are too granular, which is a finding worth having. Confirmations come out of that same budget rather than drawing one of their own. There is no second pass over the records, and no sixth read on the grounds that an input might also be confirming something.
+**Five body reads per input, and the budget binds.** It is not a suggestion to stay near. When detection would need a sixth read to be useful, say so in the phase 6 report and leave the read undone. A budget quietly exceeded on every input is one nobody notices has stopped bounding anything. A scope where five is routinely too few is telling you its records are too granular, which is a finding worth having. Confirmations come out of that same budget rather than drawing one of their own. A qmd query is not a body read, and a vec hit draws on the same five reads as a grep hit. There is no second pass over the records, and no sixth read on the grounds that an input might also be confirming something.
 
 Only `status: accepted` records produce flags, and only they can be confirmed. A `proposed` record hasn't been agreed to yet, so disagreeing with it is just discussion and agreeing with it is not a confirmation; a `superseded` one is already known to be wrong.
 
-The status filter runs after the body read, never before it. A record's status decides what its read can produce, not whether it gets read, so a `proposed` record whose header suggests overlap is body-read like any other and counts against the five-read budget. Filtering it out earlier would make a restatement of it impossible to notice. When an input restates a `proposed` record, write nothing to the record, leave it out of the stamping call, and put nothing before the phase 5 gate. Name it in the phase 6 report with the note that restated it. Independent restatement is the evidence someone deciding whether to accept the record needs, and this read is the only place a run sees it.
+Between `accepted` and `proposed`, the status filter runs after the body read, never before it. For those two, a record's status decides what its read can produce, not whether it gets read, so a `proposed` record whose header suggests overlap is body-read like any other and counts against the five-read budget. Filtering it out earlier would make a restatement of it impossible to notice. When an input restates a `proposed` record, write nothing to the record, leave it out of the stamping call, and put nothing before the phase 5 gate. Name it in the phase 6 report with the note that restated it. Independent restatement is the evidence someone deciding whether to accept the record needs, and this read is the only place a run sees it.
 
 Flag a conflict inline, where the triggering passage lives:
 
@@ -219,6 +227,7 @@ Then check by hand what the lint can't:
 - Every record whose `last_confirmed` the run stamped is named, with the date it now carries. Read them off the stamper's `stamped:` lines. This report is the only durable trace of a write the user was never asked to approve.
 - Every record the stamper declined to write is named, with its reason: a v1 file, a `status` other than `accepted`, a date already at or past the note's, or an insertion that would overrun the 20-line frontmatter budget. Read them off its `skipped:` lines, which is also the scope of this list: what the stamper turned down, not everything phase 2.5 opened. The skipped v1 records are the ones nobody would otherwise learn were left behind, and a silent skip reads exactly like a record nobody confirmed.
 - Every `proposed` record an input restated is named, one line per record and note, as `restated proposed: <record-path> by <note-path>`, both paths relative to the scope root, the form the stamper uses for the record paths it prints. The record never reached the stamper, so it is on neither of its lists, and this line is the only trace the restatement leaves.
+- Every input's candidate sources, one line per note, as `candidates: <note-path> grep=<g> vec=<v> both=<b>`, copied from the `counts:` line `find-candidates.sh` printed for that input, with its `vec off:` line beneath it when the fallback fired. A lookup that fell back to grep reports the same "no conflicts" as one that searched by meaning and found none, and this line is how a reader tells them apart.
 
 Report failures. Don't silently retry or auto-fix — those bugs hide.
 
