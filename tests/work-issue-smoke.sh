@@ -3784,6 +3784,11 @@ require_text README.md "--skill work-issue"
 # launch leaves stub files and drive/ logs behind that the next case's
 # fingerprint would read.
 require_file work-issue/scripts/drive.py
+# The cases below call drive.py through python3, which hides a missing executable bit the documented entry point needs.
+[[ -x work-issue/scripts/drive.py ]] || {
+  echo "drive.py is not executable: work-issue/scripts/drive.py" >&2
+  exit 1
+}
 drive="$repo_root/work-issue/scripts/drive.py"
 dv="$tmp/drive187"
 mkdir -p "$dv/bin"
