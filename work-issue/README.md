@@ -45,7 +45,7 @@ git clone git@github.com:kendrick/skills.git
 cp -R skills/work-issue ~/.claude/skills/work-issue
 ```
 
-Needs a git repo and Python 3 for the five bundled scripts, which are stdlib-only. Needs `gh` authenticated too, since the opening gate cannot read the issue without it and would invent the acceptance criteria. It invokes `divvy-up`, `code-review`, `adversarial-review`, and `technical-writing` by name, and the step that needs a missing one stops and says which. `ponytail-review` is optional: where it's installed, the run invokes it beside `code-review` over the assembled diff, and where it isn't, the run skips it and goes on. `herdr` is optional; without it the run falls back to `git worktree` and plain subagents.
+Needs a git repo and Python 3 for the five bundled scripts, which are stdlib-only. Needs `gh` authenticated too, since the opening gate cannot read the issue without it and would invent the acceptance criteria. It invokes `divvy-up`, `code-review`, `adversarial-review`, and `technical-writing` by name, and the step that needs a missing one stops and says which. `ponytail-review` is optional: where it's installed, the run invokes it after `code-review` over the same assembled diff, and where it isn't, the run skips it and goes on. `herdr` is optional; without it the run falls back to `git worktree` and plain subagents.
 
 ## Use
 

@@ -4068,10 +4068,12 @@ require_text work-issue/SKILL.md "A \`## Ponytail\` finding routes by the group 
 require_text work-issue/SKILL.md "A finding under **Must fix** is a required repair dispatch with the finding quoted, as a Spec finding naming a CRITERIA line is."
 require_text work-issue/SKILL.md "A finding under **Should fix** or **Nice to have** is the worker's call: fix it, or put it in \`left\` with a reason"
 require_text work-issue/SKILL.md "\`ponytail-review\` is optional: Step 3 runs it where it is installed, and its absence skips that reviewer and stops nothing."
-require_text work-issue/README.md "\`ponytail-review\` is optional: where it's installed, the run invokes it beside \`code-review\`"
+require_text work-issue/README.md "\`ponytail-review\` is optional: where it's installed, the run invokes it after \`code-review\`"
 require_text _maintenance/work-issue/RATIONALE.md "| \`ponytail-review\` in Step 7's repair re-review | Row 165"
 require_text _maintenance/work-issue/RATIONALE.md "| \`ponytail-review\` at Step 6 | Row 165"
-# Deliberately Not Built: ponytail at Step 6, Step 7, or as a stop. The file
+require_text _maintenance/work-issue/RATIONALE.md "| A Step 0 check or a stop for a missing \`ponytail-review\` | Row 165"
+# Deliberately Not Built: ponytail at Step 6, at Step 7, and as a Step 0 check
+# or a stop, one row each for the first two and one for the last. The file
 # names ponytail at Step 3 on purpose, so each refute reads one section, cut
 # from its heading to the next `## ` heading. The require on each cut proves
 # the cut found its section, or an empty file would pass every refute.
