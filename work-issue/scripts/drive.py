@@ -323,6 +323,12 @@ def ask_grant(ctx, stops, no_review, done):
         hit = first_match(row, text)
         if hit:
             halt(f"{row[0]}: {hit}")
+    # A dry run that crashed or errored before rendering Step 0's confirmation
+    # would otherwise reach every later launch as the confirmation the user saw.
+    if rc != 0:
+        halt(f"the dry run exited {rc}, so it rendered no confirmation to grant: {log}")
+    if "Go?" not in text:
+        halt(f"the dry run's output does not end on the confirmation's closing Go?: {log}")
     sys.stdout.write("Go? [y/N] ")
     sys.stdout.flush()
     answer = sys.stdin.readline().strip()

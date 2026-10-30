@@ -3978,6 +3978,23 @@ drive_in="$dv/yes"
 run_drive
 expect_drive grant-stop 1 1
 refute_text "$fx/out" "Go? [y/N]"
+# A grant needs proof the dry run rendered the confirmation: an erroring dry
+# run, or one that never reached Go?, must not be passed off as one.
+drive_fixture c12e g
+printf 'Error: agent API unavailable\n' >"$sd/out-1.txt"
+echo 1 >"$sd/rc-1"
+drive_in="$dv/yes"
+run_drive
+expect_drive grant-dry-run-error 1 1
+grep -Fq "drive: halted: the dry run exited 1" <<<"$derr" || { echo "drive grant-dry-run-error: stderr lacks the halt: $derr" >&2; exit 1; }
+refute_text "$fx/out" "Go? [y/N]"
+[[ ! -e "$sd/prompt-2" ]] || { echo "drive grant-dry-run-error: a second launch ran" >&2; exit 1; }
+drive_fixture c12q g
+printf 'all quiet here\n' >"$sd/out-1.txt"
+run_drive
+expect_drive grant-no-go 1 1
+grep -Fq "drive: halted: the dry run's output does not end on" <<<"$derr" || { echo "drive grant-no-go: stderr lacks the halt: $derr" >&2; exit 1; }
+refute_text "$fx/out" "Go? [y/N]"
 drive_fixture c12f
 printf 'a human merges\n' >"$sd/out-1.txt"
 drive_in=/dev/null
