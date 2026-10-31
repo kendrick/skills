@@ -4325,6 +4325,11 @@ require_text work-issue/references/triage.md "On an adopted run the plan-task cl
 require_text work-issue/SKILL.md "post a new one only where neither has posted it."
 require_text work-issue/SKILL.md "moved on origin; merge origin/<BRANCH> into it locally, then"
 require_text work-issue/README.md "To triage a pull request this skill didn't open, pass its number or URL instead of an issue's."
+# PR #274's review: a clean worktree on the head branch can hold commits
+# origin lacks, and raw --json output hides the body's Acceptance lines.
+require_text work-issue/SKILL.md "is reused only where it is clean and its HEAD equals \`origin/<head>\`"
+require_text work-issue/SKILL.md "\`gh issue view <K> --json number,title,body --jq '\"# #\\(.number) \\(.title)\\n\\n\\(.body)\\n\"'\`"
+require_text _maintenance/work-issue/RATIONALE.md "whether or not a worktree has it checked out"
 require_text _maintenance/work-issue/RATIONALE.md "Criteria 4 and 5 are read through the decisions carried over from #143, which the issue says replace its own wording."
 # Deliberately Not Built: a flag where the number's own type decides, a
 # refusal of a pull request that closes no issue, and `gh pr view` failing
@@ -4334,5 +4339,7 @@ refute_text work-issue/README.md "--adopt-pr"
 refute_text work-issue/SKILL.md "references no issue and no CRITERIA can be read"
 refute_text work-issue/SKILL.md "gh pr view <n>"
 refute_text work-issue/SKILL.md "issue-<N>:refs/heads/issue-<N>"
+# And Adopt item 8's first wording, which saved raw --json output (PR #274).
+refute_text work-issue/SKILL.md "\`gh issue view <K> --json title,body\` output under"
 
 echo "work-issue smoke: OK"
