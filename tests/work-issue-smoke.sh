@@ -4139,13 +4139,16 @@ ax_pr_json() {
   printf '{"number": 96, "url": "https://github.com/o/r/pull/96", "state": "%s", "isCrossRepository": %s, "headRefName": "%s", "baseRefName": "%s", "closingIssuesReferences": [{"number": 95}], "body": "Fixes #95"}\n' \
     "${2:-OPEN}" "${3:-false}" "${4:-$ax_head}" "${5:-main}" >"$1"
 }
-# FILE REVIEWED DEFERRED_AUTHOR: one reviewer thread, one the invoker answered
-# last, one resolved; a Codex review whose body ends `Reviewed commit:
-# REVIEWED` (none where REVIEWED is empty); and a two-row deferred comment.
+# FILE REVIEWED DEFERRED_AUTHOR [plain]: one reviewer thread, one the invoker
+# answered last, one resolved; a Codex review whose body ends
+# `**Reviewed commit:** REVIEWED`, the bold shape Codex posts (PR #273), with
+# the plain label when the fourth arg is `plain` and no line where REVIEWED is
+# empty; and a two-row deferred comment.
 ax_bundle() {
   python3 - "$@" <<'PY'
 import json, sys
 path, reviewed, deferred_author = sys.argv[1:4]
+label = "Reviewed commit:" if sys.argv[4:] == ["plain"] else "**Reviewed commit:**"
 codex = "chatgpt-codex-connector[bot]"
 def thread(tid, resolved, tail):
     root = {"author": codex, "created_at": "2026-09-30T15:00:00Z", "body": "**P1** The guard asserts nothing.", "id": int(tid[-1]), "url": f"https://github.com/o/r/pull/96#discussion_r{tid[-1]}"}
@@ -4153,7 +4156,7 @@ def thread(tid, resolved, tail):
             "root_body": root["body"], "root_comment_id": root["id"], "root_url": root["url"], "comments": [root] + tail}
 body = "### Codex Review\n\nTwo findings."
 if reviewed:
-    body += f"\n\nReviewed commit: `{reviewed}`"
+    body += f"\n\n{label} `{reviewed}`"
 deferred = ("## Deferred findings\n\n| # | Source | Finding | Outside because | Recommendation | Status |\n|---|---|---|---|---|---|\n"
             "| 1 | PRRT_7 | The cache never expires | not this diff | follow-up issue | queued |\n"
             "| 2 | PRRT_8 | The log is noisy | not this diff | drop it | filed #90 |\n\nPosted by the run.")
@@ -4191,6 +4194,14 @@ for want in "head: $ax_head" "since: $ax_since (reviewed commit $ax_c1)" "base_s
 done
 [[ "$(wc -l <<<"$ax_out" | tr -d ' ')" == 6 ]] || { echo "adopt should print six lines, got: $ax_out" >&2; exit 1; }
 [[ ! -e "$ax/pr-96" ]] || { echo "adopt --dry-run created RUN_DIR" >&2; exit 1; }
+# The plain label still matches, and uppercase hex resolves to the same commit.
+ax_bundle "$ax/bundle-plain.json" "$ax_short" adopter plain
+ax_bundle "$ax/bundle-upper.json" "$(tr a-f A-F <<<"$ax_short")" adopter
+for b in plain upper; do
+  ax_adopt "$ax/pr-96" "$ax/pr.json" "$ax/bundle-$b.json" --dry-run
+  grep -Fxq "since: $ax_since (reviewed commit $ax_c1)" <<<"$ax_out" || {
+    echo "adopt --dry-run with the $b Reviewed commit line should name $ax_c1, got $ax_rc: $ax_out $ax_err" >&2; exit 1; }
+done
 
 # 2. No review names a commit: SINCE falls back to the head commit's date.
 ax_bundle "$ax/bundle-noreview.json" "" adopter

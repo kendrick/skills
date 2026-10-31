@@ -2511,8 +2511,11 @@ def budget_over(text, ratio=None, now=None):
 
 # Codex ends its review body with this line, naming the commit it read. A
 # finding scored against a newer head commit's date reads as older than SINCE
-# and is lost, which is the silent loss #118 was filed to prevent.
-REVIEWED_COMMIT = re.compile(r"Reviewed commit:\s*`?([0-9a-f]{7,40})`?")
+# and is lost, which is the silent loss #118 was filed to prevent. Codex bolds
+# the label, writing **Reviewed commit:** `1c94013c2f` on PR #273, so the
+# pattern takes an optional `**` after the colon. Git resolves uppercase hex
+# too; the match is lowercased so a refusal names the SHA as git spells it.
+REVIEWED_COMMIT = re.compile(r"Reviewed commit:(?:\*\*)?\s*`?([0-9a-fA-F]{7,40})`?")
 QUEUE_HEADER = "| # | Source | Finding | Outside because | Recommendation | Status |"
 QUEUE_SEPARATOR = "|---|---|---|---|---|---|"
 PR_JSON_KEYS = (
@@ -2550,9 +2553,10 @@ def check_pr_json(pr_json, pr):
 
 
 def reviewed_commit(bundle, self_keys):
-    """The SHA the newest non-self review names in a `Reviewed commit:` line,
-    or None. Newest by `submitted_at`, since a later review read a later push
-    and its findings are scored from that push's date."""
+    """The SHA, lowercased, that the newest non-self review names in a
+    `Reviewed commit:` line, bold or plain, or None. Newest by
+    `submitted_at`, since a later review read a later push and its findings
+    are scored from that push's date."""
     problems = []
     named = []
     for index, review in enumerate(bundle["reviews"]):
@@ -2563,7 +2567,7 @@ def reviewed_commit(bundle, self_keys):
         if not match:
             continue
         moment = parse_ts(review["submitted_at"], f"reviews[{index}].submitted_at", problems)
-        named.append((moment or datetime.min.replace(tzinfo=timezone.utc), index, match.group(1)))
+        named.append((moment or datetime.min.replace(tzinfo=timezone.utc), index, match.group(1).lower()))
     if problems:
         raise InputError(problems)
     return max(named)[2] if named else None
