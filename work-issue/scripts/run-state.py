@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 """Read a pull request's review state, gather a resume probe, and map it to a phase.
 
-    work-issue/scripts/run-state.py review PR [--since ISO8601] [--author LOGIN] [--save PATH]
+    work-issue/scripts/run-state.py review PR [--since ISO8601] [--author LOGIN] [--invoker LOGIN] [--unanswered] [--save PATH]
     work-issue/scripts/run-state.py review PR --input BUNDLE.json [--save PATH]
-    work-issue/scripts/run-state.py probe --run-dir DIR --root ROOT --issue N [--pr-bundle FILE] [--herdr-state STATE] [--author LOGIN]
+    work-issue/scripts/run-state.py probe --run-dir DIR --root ROOT (--issue N | --pr M) [--pr-bundle FILE] [--herdr-state STATE] [--author LOGIN]
     work-issue/scripts/run-state.py phase --probe PROBE.json
+    work-issue/scripts/run-state.py adopt M --pr-json FILE --bundle FILE --run-dir DIR --root ROOT --default DEFAULT --invoker LOGIN [--max-review-rounds R] [--dry-run]
 
-Neither subcommand is a gate. `review` answers `findings`, `cleared`, or
+Neither `review` nor `phase` is a gate. `review` answers `findings`, `cleared`, or
 `pending` on its first stdout line, then lists every item that bore on the
 answer. `phase` answers where a half-finished run resumes. The skill reads both
-answers and decides what to do with them, so neither subcommand ever exits 1.
+answers and decides what to do with them, so neither one ever exits 1.
 `findings` is an answer.
 
 Without `--since`, every item on the pull request counts, and an approving
@@ -35,11 +36,16 @@ JSON `phase --probe` reads, every field present. It never calls `gh` or
 `herdr`: the bundle carries GitHub's answer and `--herdr-state` carries
 herdr's. A field it cannot answer is null, with one stderr line saying why.
 
+`adopt` turns a pull request this skill did not open into a run dir that
+enters at Step 6. It reads the `gh pr view` JSON and a `review --save` bundle
+the skill saved, plus git, and never calls `gh` itself. It exits 1 with one
+`run-state: adopt:` line per refusal, every refusal checked before it exits.
+
 Exit codes: 0 with an answer on stdout; 3 usage, a `gh` failure, an unwritable
 `--save` path, or input this script cannot read (an unparseable bundle, a
 bundle missing a top-level key, a probe missing a field). Argparse supplies 2
-for a mistyped flag, except under `probe`, where it is 3 too, because the
-issue that asked for `probe` asked for the validator convention.
+for a mistyped flag, except under `probe` and `adopt`, where it is 3 too,
+because the issue that asked for `probe` asked for the validator convention.
 
 Stdlib only, so the skill stays copy-in portable.
 """
@@ -155,6 +161,7 @@ PROBE_FIELDS = (
     ("repair_ar_settled", "bool", ()),
     ("review_over_budget", "bool", ()),
     ("repair_diff_triggers", "bool", ()),
+    ("adopted", "bool", ()),
 )
 
 # A bundle's `state` is optional to `check_bundle`, so every review fixture
@@ -653,15 +660,51 @@ def check_bundle(bundle):
         raise InputError(problems)
 
 
-def classify(bundle, since, author):
+def self_logins(author, invoker=None):
+    """The normalized logins whose items are the run's own voice.
+
+    An adopted run replies as whoever invoked it, often not the pull request's
+    author. With the author alone, the run's own replies score as a reviewer's
+    follow-up. A missing invoker adds no key, since an empty key matches every
+    item with no author."""
+    keys = {normalize_login(author)}
+    if invoker:
+        keys.add(normalize_login(invoker))
+    return keys
+
+
+def thread_unanswered(thread, self_keys):
+    """True when an unresolved thread's newest comment is not a self login's.
+
+    An adopted pull request's open threads predate any SINCE this run could
+    write, so the first adopted pass reads who spoke last instead of when.
+    The newest comment is the tail's last entry, else `last_comment_author`,
+    else the root, since an older bundle carries less of the thread."""
+    if thread.get("is_resolved"):
+        return False
+    tail = [c for c in (thread.get("comments") or []) if isinstance(c, dict)]
+    if tail:
+        newest = tail[-1].get("author")
+    elif thread.get("last_comment_author"):
+        newest = thread.get("last_comment_author")
+    else:
+        newest = thread.get("root_author")
+    return normalize_login(newest) not in self_keys
+
+
+def classify(bundle, since, author, invoker=None, unanswered=False):
     """The state and the lines that justify it.
 
     The lines cover every item past the cutoff, not only the ones that set the
     state. This script answered `findings` for PR #100 while an approving
     reaction sat on it, and a human reading that answer needs to see the
-    reaction that lost."""
+    reaction that lost.
+
+    `invoker` joins `author` as a self login. `unanswered` replaces the SINCE
+    test for threads only, with `thread_unanswered`; reviews, comments, and
+    reactions are still scored against SINCE."""
     problems = []
-    author_key = normalize_login(author)
+    self_keys = self_logins(author, invoker)
     lines = []
     findings = False
     approving = False
@@ -678,6 +721,17 @@ def classify(bundle, since, author):
         )
         if thread["is_resolved"]:
             continue
+        if unanswered:
+            if not thread_unanswered(thread, self_keys):
+                continue
+            findings = True
+            lines.append(
+                f"thread {thread['id']} unresolved, created {show_ts(created)}, "
+                f"unanswered, {severity(thread['root_body'])}, reply-to "
+                f"{show_or_unknown(thread.get('root_comment_id'))} "
+                f"{show_or_unknown(thread.get('root_url'))}"
+            )
+            continue
         # An unresolved thread counts on its root, or on a later comment from
         # anyone but the author: the reviewer's "still wrong" after a repair
         # push lands as a reply, not as a new thread. The comment that counts
@@ -686,7 +740,7 @@ def classify(bundle, since, author):
         # carries only the last comment, and that is what it is read from.
         tail = [c for c in (thread.get("comments") or []) if isinstance(c, dict)]
         reviewer_tail = [
-            c for c in tail if normalize_login(c.get("author")) != author_key
+            c for c in tail if normalize_login(c.get("author")) not in self_keys
         ]
         if tail:
             reply = reviewer_tail[-1] if reviewer_tail else {}
@@ -698,7 +752,7 @@ def classify(bundle, since, author):
             }
         last = parse_ts(reply.get("created_at"), f"threads[{index}].reply", problems)
         reviewer_replied = (
-            newer(last) and normalize_login(reply.get("author")) != author_key
+            newer(last) and normalize_login(reply.get("author")) not in self_keys
         )
         if not newer(created) and not reviewer_replied:
             continue
@@ -724,7 +778,7 @@ def classify(bundle, since, author):
         )
         if reaction["content"] != "+1" or not newer(created):
             continue
-        if normalize_login(reaction["user"]) == author_key:
+        if normalize_login(reaction["user"]) in self_keys:
             continue
         approving = True
         lines.append(f"reaction +1 by {reaction['user']} {show_ts(created)}")
@@ -736,7 +790,7 @@ def classify(bundle, since, author):
         state = review["state"]
         if state not in DECIDING_REVIEWS or not newer(submitted):
             continue
-        if normalize_login(review["author"]) == author_key:
+        if normalize_login(review["author"]) in self_keys:
             continue
         if state == "CHANGES_REQUESTED":
             findings = True
@@ -753,7 +807,7 @@ def classify(bundle, since, author):
         )
         if not newer(created):
             continue
-        if normalize_login(comment["author"]) == author_key:
+        if normalize_login(comment["author"]) in self_keys:
             continue
         opening = comment["body"].lstrip() if isinstance(comment["body"], str) else ""
         if opening.startswith(STATUS_MARKER):
@@ -808,7 +862,9 @@ def cmd_review(args):
             bundle = gather(args.pr)
             check_bundle(bundle)
         author = args.author or bundle.get("author")
-        state, lines = classify(bundle, since, author)
+        state, lines = classify(
+            bundle, since, author, invoker=args.invoker, unanswered=args.unanswered
+        )
         if args.save:
             try:
                 with open(args.save, "w", encoding="utf-8") as handle:
@@ -952,6 +1008,19 @@ def phase_of(probe):
                 "the default branch was rewritten or the file was edited by hand, so "
                 "stop for a human",
             )
+        # An adopted run's branch is the PR head, so issue-<N> names a branch
+        # it doesn't have. It never rebases either, so a drifted base is
+        # someone else's merge or rebase of DEFAULT into the head.
+        if flag(probe, "adopted"):
+            return (
+                "stop",
+                "base_sha mismatch (not-merge-base): RUN_DIR/base_sha is not the live "
+                "merge-base of origin/<DEFAULT> and the branch, so every later review would "
+                "diff against a base the branch has left; an adopted run never rebases, so "
+                "whoever merged or rebased origin/<DEFAULT> into <BRANCH> moved it; if that "
+                "move stands, write git merge-base origin/<DEFAULT> <BRANCH> to it and "
+                "re-invoke, else stop for a human",
+            )
         return (
             "stop",
             "base_sha mismatch (not-merge-base): RUN_DIR/base_sha is not the live "
@@ -961,89 +1030,104 @@ def phase_of(probe):
             "origin/<DEFAULT> issue-<N> to it and re-invoke, else stop for whoever "
             "rebased the branch",
         )
-    if not branch_anywhere and not flag(probe, "run_dir"):
-        return "0", "row 4: no branch anywhere and no run dir, so this issue is fresh"
-    if flag(probe, "run_dir") and not branch_anywhere:
-        # Step 0 writes plan.md's Waves table before Step 1 makes the branch,
-        # so a stop between the two is a live run, not a dead one: the table
-        # is the gate's own artifact, and archiving it re-ran the gate.
-        if flag(probe, "has_waves"):
-            return "0", "row 5: the gate ran but Step 1 never created the branch; resume at the confirmation, then Step 1"
-        return "0", "row 5: a run dir with no branch anywhere; move it to closed/ first"
-    if branch_anywhere and not flag(probe, "has_waves"):
-        return "0", "row 6: the branch exists but plan.md has no ## Waves table; resume at the plan gate"
-    # Step 1 ends by writing base_sha and baseline.txt, and every later gate
-    # reads them. A run that stopped inside Step 1 has the branch and the Waves
-    # table and none of the reports, which used to read as "resume at wave 0"
-    # and dispatched workers with no fixed point and no baseline.
-    if flag(probe, "has_waves") and not (flag(probe, "base_sha") and flag(probe, "baseline")):
-        return "1", "row 7: the Waves table is written but Step 1 left no base_sha or baseline.txt; resume at Step 1"
-    if flag(probe, "has_waves") and wave_reports < wave_tasks:
-        # A commit past base_sha on an unreported task's owned paths is a
-        # gated wave whose report is missing, not a half-written one. On
-        # cambium #78 a filename glob read five committed waves as 0 of 5,
-        # and this row's revert would have thrown them away.
-        committed = count(probe, "wave_unreported_committed")
-        if committed > 0:
+    # Row 19. An adopted run has a branch and no plan, so row 6 would send it
+    # to the plan gate on every resume. It never rebases, so a rebase in its
+    # tree is someone else's, and rows 4 through 13 read a build and a publish
+    # it never makes. Like row 16's "on to row 17", it falls through to row 14.
+    adopted = flag(probe, "adopted")
+    if adopted:
+        if flag(probe, "conflict") or flag(probe, "rebase_in_progress"):
             return (
                 "stop",
-                f"row 7: {wave_reports} of {wave_tasks} wave tasks count as reported, but "
-                f"{committed} unreported task(s) own paths a commit in git log "
-                "base_sha..HEAD touched; the reports and git log disagree, so stop "
-                "rather than revert committed work",
+                "row 19: an adopted pull request has a rebase in progress, which this "
+                "run never starts; finish or abort it, then re-invoke",
             )
-        return "2", f"row 7: {wave_reports} of {wave_tasks} wave tasks count as reported (a report, clean owned paths, and a gate marker, or a commit where no gated/ exists); resume at that wave"
-    if every_wave_report and count(probe, "self_reviews") == 0:
-        return "3", "row 8: every wave report is in and no self-review; resume at the code-review invocation"
-    if count(probe, "self_reviews") > 0 and not flag(probe, "build_final"):
-        return "3", "row 9: a self-review with no build-final report; resume at the fix dispatch"
-    if flag(probe, "build_final") and redteam_rounds == 0:
-        if over_budget:
-            return budget_stop(10)
-        return "4", "row 10: a build-final report with no red-team round yet"
-    # A failed round owns the run until a later round is clean. Which way it
-    # resumes turns on order, not on counts: a repair report that predates the
-    # failed round is the code that round just refuted, and re-running the
-    # round over it re-tests unchanged code. Two failed rounds in a row is
-    # Step 4's stop, and a resume that kept cycling past it would never honor
-    # the stop.
-    if flag(probe, "build_final") and flag(probe, "redteam_last_failed"):
-        if flag(probe, "redteam_failed_twice"):
-            return "stop", "row 10: two red-team rounds in a row failed; stop and report with the evidence"
-        if over_budget:
-            return budget_stop(10)
-        if flag(probe, "repair_after_last_round"):
-            return "4", "row 10: the newest red-team round failed and a repair followed it; run round k+1"
-        return "4", "row 10: the newest red-team round failed and no repair has followed it; dispatch the repair"
-    # `ar_complete` reads Step 4's record of adversarial-review's final ledger
-    # state, not its run directory: the directory exists from that skill's
-    # preflight onward, and a review interrupted after preflight left one
-    # behind that this row once took for a finished review.
-    # `trigger_fired` is three-valued. A run that stopped after its clean
-    # round file but before Step 4 wrote trigger.txt has no verdict, and a
-    # bool read that as "no" and let row 13 publish a diff whose trigger was
-    # never evaluated.
-    trigger = probe["trigger_fired"]
-    if redteam_clean and trigger == "absent":
-        if over_budget:
-            return budget_stop(11)
-        return "4", "row 11: red-team is clean and trigger.txt is not written yet; resume at the trigger"
-    if redteam_clean and trigger == "yes" and not flag(probe, "ar_complete"):
-        if over_budget:
-            return budget_stop(11)
-        return "4", "row 11: trigger.txt says fired and adversarial-review has not finished"
-    if flag(probe, "conflict") or flag(probe, "rebase_in_progress"):
-        return "5", "row 12: a rebase conflict is in progress; resume at Step 5 item 1"
-    # A review repair committed at Step 7 is also "ahead of origin" with a clean
-    # build red-team behind it, and that belongs to row 17 (red-team the repair,
-    # then push and reply), never to a fresh publish.
-    if (
-        redteam_clean
-        and trigger != "absent"
-        and triage_rounds == 0
-        and (pr_state is None or flag(probe, "ahead_of_origin"))
-    ):
-        return "5", "row 13: red-team is clean, the trigger is recorded, no triage round yet, and the branch is unpublished or ahead of origin"
+        if triage_rounds == 0:
+            return "6", "row 19: an adopted pull request with no triage round yet; run Step 6's first adopted pass"
+    if not adopted:
+        if not branch_anywhere and not flag(probe, "run_dir"):
+            return "0", "row 4: no branch anywhere and no run dir, so this issue is fresh"
+        if flag(probe, "run_dir") and not branch_anywhere:
+            # Step 0 writes plan.md's Waves table before Step 1 makes the branch,
+            # so a stop between the two is a live run, not a dead one: the table
+            # is the gate's own artifact, and archiving it re-ran the gate.
+            if flag(probe, "has_waves"):
+                return "0", "row 5: the gate ran but Step 1 never created the branch; resume at the confirmation, then Step 1"
+            return "0", "row 5: a run dir with no branch anywhere; move it to closed/ first"
+        if branch_anywhere and not flag(probe, "has_waves"):
+            return "0", "row 6: the branch exists but plan.md has no ## Waves table; resume at the plan gate"
+        # Step 1 ends by writing base_sha and baseline.txt, and every later gate
+        # reads them. A run that stopped inside Step 1 has the branch and the Waves
+        # table and none of the reports, which used to read as "resume at wave 0"
+        # and dispatched workers with no fixed point and no baseline.
+        if flag(probe, "has_waves") and not (flag(probe, "base_sha") and flag(probe, "baseline")):
+            return "1", "row 7: the Waves table is written but Step 1 left no base_sha or baseline.txt; resume at Step 1"
+        if flag(probe, "has_waves") and wave_reports < wave_tasks:
+            # A commit past base_sha on an unreported task's owned paths is a
+            # gated wave whose report is missing, not a half-written one. On
+            # cambium #78 a filename glob read five committed waves as 0 of 5,
+            # and this row's revert would have thrown them away.
+            committed = count(probe, "wave_unreported_committed")
+            if committed > 0:
+                return (
+                    "stop",
+                    f"row 7: {wave_reports} of {wave_tasks} wave tasks count as reported, but "
+                    f"{committed} unreported task(s) own paths a commit in git log "
+                    "base_sha..HEAD touched; the reports and git log disagree, so stop "
+                    "rather than revert committed work",
+                )
+            return "2", f"row 7: {wave_reports} of {wave_tasks} wave tasks count as reported (a report, clean owned paths, and a gate marker, or a commit where no gated/ exists); resume at that wave"
+        if every_wave_report and count(probe, "self_reviews") == 0:
+            return "3", "row 8: every wave report is in and no self-review; resume at the code-review invocation"
+        if count(probe, "self_reviews") > 0 and not flag(probe, "build_final"):
+            return "3", "row 9: a self-review with no build-final report; resume at the fix dispatch"
+        if flag(probe, "build_final") and redteam_rounds == 0:
+            if over_budget:
+                return budget_stop(10)
+            return "4", "row 10: a build-final report with no red-team round yet"
+        # A failed round owns the run until a later round is clean. Which way it
+        # resumes turns on order, not on counts: a repair report that predates the
+        # failed round is the code that round just refuted, and re-running the
+        # round over it re-tests unchanged code. Two failed rounds in a row is
+        # Step 4's stop, and a resume that kept cycling past it would never honor
+        # the stop.
+        if flag(probe, "build_final") and flag(probe, "redteam_last_failed"):
+            if flag(probe, "redteam_failed_twice"):
+                return "stop", "row 10: two red-team rounds in a row failed; stop and report with the evidence"
+            if over_budget:
+                return budget_stop(10)
+            if flag(probe, "repair_after_last_round"):
+                return "4", "row 10: the newest red-team round failed and a repair followed it; run round k+1"
+            return "4", "row 10: the newest red-team round failed and no repair has followed it; dispatch the repair"
+        # `ar_complete` reads Step 4's record of adversarial-review's final ledger
+        # state, not its run directory: the directory exists from that skill's
+        # preflight onward, and a review interrupted after preflight left one
+        # behind that this row once took for a finished review.
+        # `trigger_fired` is three-valued. A run that stopped after its clean
+        # round file but before Step 4 wrote trigger.txt has no verdict, and a
+        # bool read that as "no" and let row 13 publish a diff whose trigger was
+        # never evaluated.
+        trigger = probe["trigger_fired"]
+        if redteam_clean and trigger == "absent":
+            if over_budget:
+                return budget_stop(11)
+            return "4", "row 11: red-team is clean and trigger.txt is not written yet; resume at the trigger"
+        if redteam_clean and trigger == "yes" and not flag(probe, "ar_complete"):
+            if over_budget:
+                return budget_stop(11)
+            return "4", "row 11: trigger.txt says fired and adversarial-review has not finished"
+        if flag(probe, "conflict") or flag(probe, "rebase_in_progress"):
+            return "5", "row 12: a rebase conflict is in progress; resume at Step 5 item 1"
+        # A review repair committed at Step 7 is also "ahead of origin" with a clean
+        # build red-team behind it, and that belongs to row 17 (red-team the repair,
+        # then push and reply), never to a fresh publish.
+        if (
+            redteam_clean
+            and trigger != "absent"
+            and triage_rounds == 0
+            and (pr_state is None or flag(probe, "ahead_of_origin"))
+        ):
+            return "5", "row 13: red-team is clean, the trigger is recorded, no triage round yet, and the branch is unpublished or ahead of origin"
     # Step 8 pushes before it replies, so a stop between those two leaves rows
     # that still owe a reply under a review that now reads `pending`. Without
     # this guard the poll preempts row 17 and the old findings are never
@@ -1194,16 +1278,18 @@ class ProbeError(Exception):
 
 
 class ProbeContext:
-    """What every gatherer reads: RUN_DIR, the work tree, the issue, and the
-    bundle. The tree is the worktree holding `issue-<N>`, found from ROOT."""
+    """What every gatherer reads: RUN_DIR, the work tree, the branch, and the
+    bundle. The branch is `issue-<N>`, or an adopted pull request's head, and
+    the tree is the worktree holding it, found from ROOT. `invoker` is the
+    adopted run's second self login, None on any other run."""
 
-    def __init__(self, run_dir, tree, issue, bundle, author, herdr_state, review_state):
+    def __init__(self, run_dir, tree, branch, bundle, author, herdr_state, review_state, invoker=None):
         self.run_dir = run_dir
         self.tree = tree
-        self.issue = issue
-        self.branch = f"issue-{issue}"
+        self.branch = branch
         self.bundle = bundle
         self.author = author
+        self.invoker = invoker
         self.herdr_state = herdr_state
         self.review_state = review_state
         self._remote = None
@@ -1457,13 +1543,13 @@ def g_herdr_agent_state(ctx):
 
 @gatherer("branch_local")
 def g_branch_local(ctx):
-    """`refs/heads/issue-<N>` exists in the repo."""
+    """`refs/heads/<BRANCH>` exists in the repo."""
     return ctx.branch_local()
 
 
 @gatherer("branch_remote")
 def g_branch_remote(ctx):
-    """origin has `issue-<N>`, asked of the live remote. No origin, or no
+    """origin has BRANCH, asked of the live remote. No origin, or no
     answer from it, is null rather than a no."""
     return ctx.branch_remote()
 
@@ -1794,7 +1880,7 @@ def g_rebase_in_progress(ctx):
 
 @gatherer("ahead_of_origin")
 def g_ahead_of_origin(ctx):
-    """The branch has commits `origin/issue-<N>` lacks; where origin has no
+    """The branch has commits `origin/<BRANCH>` lacks; where origin has no
     such branch, commits past BASE_SHA. No local branch has nothing ahead,
     and no base_sha has no fixed point to count from, so both are false."""
     if not ctx.branch_local():
@@ -1903,8 +1989,8 @@ def g_triage_rows_unanswered(ctx):
 
 @gatherer("deferred_comment_needed")
 def g_deferred_comment_needed(ctx):
-    """Some `queue.md` row is missing, whole, from the author's `## Deferred
-    findings` comment. The whole row, because a Status moved from `queued` to
+    """Some `queue.md` row is missing, whole, from the `## Deferred findings`
+    comment of the author or, on an adopted run, the invoker. The whole row, because a Status moved from `queued` to
     `filed #M` is a row the comment no longer carries: comparing Sources alone
     missed that, and testing for the heading alone missed a later round's
     rows. True with no comment, false with no queue rows, and false with no
@@ -1916,13 +2002,13 @@ def g_deferred_comment_needed(ctx):
     rows = [l for l in (queue or "").split("\n") if QUEUE_ROW.match(l)]
     if not rows:
         return False
-    author = normalize_login(ctx.author)
+    self_keys = self_logins(ctx.author, ctx.invoker)
     carried = []
     seen_heading = False
     # The heading opens the section for good, across later comments too, as
     # the awk over the concatenated bodies read it.
     for comment in ctx.bundle["comments"]:
-        if normalize_login(comment.get("author")) != author:
+        if normalize_login(comment.get("author")) not in self_keys:
             continue
         body = comment.get("body") if isinstance(comment.get("body"), str) else ""
         for line in body.split("\n"):
@@ -2052,6 +2138,13 @@ def g_repair_diff_triggers(ctx):
     return bool(chomp(matched.stdout))
 
 
+@gatherer("adopted")
+def g_adopted(ctx):
+    """`adopted.json` exists. Adoption writes it last, so its presence means
+    every file row 19 and Step 6 read is already there."""
+    return ctx.path("adopted.json").is_file()
+
+
 def find_tree(root, branch, terminal=False):
     """`(tree, problem)`: the worktree holding `branch`, else ROOT where no
     local `branch` exists, since rows 1 and 4 through 7 own those runs.
@@ -2121,6 +2214,31 @@ def probe_field_ok(kind, allowed, value):
     return value in allowed
 
 
+def read_adopted(run_dir, pr):
+    """`(adopted, problem)` from RUN_DIR/adopted.json, for `probe --pr`.
+
+    BRANCH and the invoker come from this one file rather than from flags, so
+    a resume can't pass a head or a login that disagrees with what adoption
+    recorded. Every way the file can be wrong is a problem, never a default:
+    an empty head would probe `refs/heads/` and read every field as no."""
+    path = run_dir / "adopted.json"
+    try:
+        data = json.loads(read_text(path))
+    except FileNotFoundError:
+        return None, f"no {path}; adopt the pull request first"
+    except (OSError, ValueError) as e:
+        return None, f"cannot read {path}: {e}"
+    if not isinstance(data, dict):
+        return None, f"expected a JSON object, got {type(data).__name__}"
+    if data.get("pr") != pr or isinstance(data.get("pr"), bool):
+        return None, f"pr is {data.get('pr')!r}, expected {pr}"
+    if not isinstance(data.get("head"), str) or not data["head"]:
+        return None, f"head is {data.get('head')!r}, expected a branch name"
+    if not isinstance(data.get("invoker"), str):
+        return None, f"invoker is {data.get('invoker')!r}, expected a login"
+    return data, None
+
+
 def cmd_probe(args):
     def usage(problems):
         for problem in problems:
@@ -2135,8 +2253,10 @@ def cmd_probe(args):
             [f"no gatherer for {n}" for n in missing]
             + [f"a gatherer for {n}, which PROBE_FIELDS does not name" for n in extra]
         )
-    if not re.fullmatch(r"[1-9][0-9]*", args.issue):
+    if args.issue is not None and not re.fullmatch(r"[1-9][0-9]*", args.issue):
         return usage([f"--issue must be a number, got {args.issue!r}"])
+    if args.pr is not None and not re.fullmatch(r"[1-9][0-9]*", args.pr):
+        return usage([f"--pr must be a number, got {args.pr!r}"])
     herdr_state = args.herdr_state
     if herdr_state is None:
         # Under HERDR a defaulted `absent` skips row 2's wait and dispatches a
@@ -2152,7 +2272,15 @@ def cmd_probe(args):
     if inside.returncode != 0 or chomp(inside.stdout) != "true":
         return usage([f"--root {args.root} is not a git work tree"])
     run_dir = Path(args.run_dir).absolute()
-    branch = f"issue-{args.issue}"
+    invoker = None
+    if args.pr is None:
+        branch = f"issue-{args.issue}"
+    else:
+        adopted, problem = read_adopted(run_dir, int(args.pr))
+        if problem:
+            return usage([f"adopted.json: {problem}"])
+        branch = adopted["head"]
+        invoker = adopted["invoker"]
 
     bundle = None
     review_state = None
@@ -2173,7 +2301,7 @@ def cmd_probe(args):
         if since is None:
             return usage([f"review_state: no SINCE to score the bundle against: {'; '.join(problems)}"])
         try:
-            review_state, _ = classify(bundle, since, author)
+            review_state, _ = classify(bundle, since, author, invoker=invoker)
         except InputError as e:
             return usage(e.problems)
 
@@ -2183,7 +2311,7 @@ def cmd_probe(args):
     if tree is None:
         return usage([problem])
     ctx = ProbeContext(
-        run_dir, tree, args.issue, bundle, author, herdr_state, review_state
+        run_dir, tree, branch, bundle, author, herdr_state, review_state, invoker
     )
     probe = {}
     for name, kind, allowed in PROBE_FIELDS:
@@ -2394,6 +2522,234 @@ def budget_over(text, ratio=None, now=None):
         return build_seconds, review_seconds, False
     return build_seconds, review_seconds, review_seconds / build_seconds > threshold
 
+# Codex ends its review body with this line, naming the commit it read. A
+# finding scored against a newer head commit's date reads as older than SINCE
+# and is lost, which is the silent loss #118 was filed to prevent. Codex bolds
+# the label, writing **Reviewed commit:** `1c94013c2f` on PR #273, so the
+# pattern takes an optional `**` after the colon. Git resolves uppercase hex
+# too; the match is lowercased so a refusal names the SHA as git spells it.
+REVIEWED_COMMIT = re.compile(r"Reviewed commit:(?:\*\*)?\s*`?([0-9a-fA-F]{7,40})`?")
+QUEUE_HEADER = "| # | Source | Finding | Outside because | Recommendation | Status |"
+QUEUE_SEPARATOR = "|---|---|---|---|---|---|"
+PR_JSON_KEYS = (
+    ("number", int),
+    ("url", str),
+    ("state", str),
+    ("isCrossRepository", bool),
+    ("headRefName", str),
+    ("baseRefName", str),
+    ("closingIssuesReferences", list),
+)
+
+
+def check_pr_json(pr_json, pr):
+    """The problems with a saved `gh pr view --json` document, as usage errors.
+
+    The skill saves the file before adopting, so a missing key means the
+    `--json` list went wrong, and exits 3 instead of refusing the pull request."""
+    if not isinstance(pr_json, dict):
+        return [f"pr-json: expected a JSON object, got {type(pr_json).__name__}"]
+    problems = []
+    for key, kind in PR_JSON_KEYS:
+        value = pr_json.get(key)
+        if not isinstance(value, kind) or (kind is int and isinstance(value, bool)):
+            problems.append(f"pr-json: {key} is {value!r}, expected a {kind.__name__}")
+    for index, ref in enumerate(pr_json.get("closingIssuesReferences") or []):
+        number = ref.get("number") if isinstance(ref, dict) else None
+        if not isinstance(number, int) or isinstance(number, bool):
+            problems.append(f"pr-json: closingIssuesReferences[{index}] has no issue number")
+    if not problems and pr_json["number"] != pr:
+        problems.append(f"pr-json: number is {pr_json['number']}, not {pr}")
+    if not problems and not pr_json["headRefName"]:
+        problems.append("pr-json: headRefName is empty")
+    return problems
+
+
+def reviewed_commit(bundle, self_keys):
+    """The SHA, lowercased, that the newest non-self review names in a
+    `Reviewed commit:` line, bold or plain, or None. Newest by
+    `submitted_at`, since a later review read a later push and its findings
+    are scored from that push's date."""
+    problems = []
+    named = []
+    for index, review in enumerate(bundle["reviews"]):
+        if normalize_login(review["author"]) in self_keys:
+            continue
+        body = review.get("body")
+        match = REVIEWED_COMMIT.search(body) if isinstance(body, str) else None
+        if not match:
+            continue
+        moment = parse_ts(review["submitted_at"], f"reviews[{index}].submitted_at", problems)
+        named.append((moment or datetime.min.replace(tzinfo=timezone.utc), index, match.group(1).lower()))
+    if problems:
+        raise InputError(problems)
+    return max(named)[2] if named else None
+
+
+def deferred_rows(bundle, self_keys):
+    """Body rows of the newest self-posted `## Deferred findings` table.
+
+    Adoption seeds `queue.md` from them, so a second adoption appends to the
+    rows already posted and Step 8 edits that comment instead of posting a
+    second one. The rows travel byte for byte, because the probe compares
+    queue rows to the comment whole."""
+    problems = []
+    newest = None
+    for index, comment in enumerate(bundle["comments"]):
+        if normalize_login(comment["author"]) not in self_keys:
+            continue
+        if not visible_opening(comment["body"]).startswith("## Deferred findings"):
+            continue
+        moment = parse_ts(comment["created_at"], f"comments[{index}].created_at", problems)
+        key = (moment or datetime.min.replace(tzinfo=timezone.utc), index)
+        if newest is None or key > newest[0]:
+            newest = (key, comment["body"])
+    if problems:
+        raise InputError(problems)
+    if newest is None:
+        return []
+    table = []
+    for line in newest[1].split("\n"):
+        if TABLE_LINE.match(line):
+            table.append(line)
+        elif table:
+            break
+    # The header and the separator are the comment's, and the queue writes its own.
+    return table[2:]
+
+
+def adopt_git(root, *args):
+    """stdout of a git call in ROOT, stripped, or None where git refused."""
+    done = run_git(root, *args)
+    return chomp(done.stdout).strip() if done.returncode == 0 else None
+
+
+def commit_date(root, ref):
+    """`ref`'s committer date in `pushed_at`'s shape, or None. SINCE is read
+    back from `pushed_at` as a string, so `%cI`'s local offset is moved to UTC
+    and written the way `date -u +%FT%TZ` writes it."""
+    raw = adopt_git(root, "log", "-1", "--format=%cI", ref)
+    moment = parse_ts(raw, ref, []) if raw else None
+    return show_ts(moment) if moment else None
+
+
+def cmd_adopt(args):
+    """Refuse, or print and (without `--dry-run`) write, an adopted run.
+
+    Usage errors go first, so a refusal is never read off input that didn't
+    parse. Every refusal is checked before the exit, so one pass names all
+    of them. Refs on origin are checked after the refusals, because a fork's
+    head isn't on origin and "fetch it" would send the user after a branch
+    that can't arrive."""
+
+    def usage(problems):
+        for problem in problems:
+            sys.stderr.write(f"run-state: adopt: {problem}\n")
+        return 3
+
+    if not re.fullmatch(r"[1-9][0-9]*", args.pr):
+        return usage([f"PR must be a positive integer, got {args.pr!r}"])
+    pr = int(args.pr)
+    rounds = args.max_review_rounds if args.max_review_rounds is not None else "2"
+    if not re.fullmatch(r"[1-9][0-9]*", rounds):
+        return usage([f"--max-review-rounds must be a positive integer, got {rounds!r}"])
+    try:
+        pr_json = load_json(args.pr_json, "pr-json")
+        bundle = load_json(args.bundle, "bundle")
+        check_bundle(bundle)
+    except InputError as e:
+        return usage(e.problems)
+    problems = check_pr_json(pr_json, pr)
+    if problems:
+        return usage(problems)
+    root = Path(args.root).absolute()
+    if adopt_git(root, "rev-parse", "--is-inside-work-tree") != "true":
+        return usage([f"--root {args.root} is not a git work tree"])
+    run_dir = Path(args.run_dir).absolute()
+    if not args.dry_run:
+        # Step 6 reads CRITERIA from issue.md and Step 7 gates on
+        # baseline.txt, and adopted.json would mark the dir resumable without them.
+        missing = [n for n in ("issue.md", "baseline.txt") if not (run_dir / n).is_file()]
+        if missing:
+            return usage([f"no {run_dir / n}; write it before adopting" for n in missing])
+
+    head = pr_json["headRefName"]
+    default = args.default
+    self_keys = self_logins(bundle["author"], args.invoker)
+    try:
+        named = reviewed_commit(bundle, self_keys)
+        seed = deferred_rows(bundle, self_keys)
+    except InputError as e:
+        return usage(e.problems)
+
+    refusals = []
+    if pr_json["state"] != "OPEN":
+        refusals.append(f"PR #{pr} is {pr_json['state']}, not OPEN")
+    if pr_json["isCrossRepository"]:
+        refusals.append(f"PR #{pr}'s head is on a fork, and this run pushes only to origin")
+    if head == default:
+        refusals.append(f"PR #{pr}'s head is {default}, the default branch, which this run never pushes")
+    if pr_json["baseRefName"] != default:
+        refusals.append(f"PR #{pr} targets {pr_json['baseRefName']}, not {default}")
+    sha = None
+    if named:
+        sha = adopt_git(root, "rev-parse", "--verify", "-q", f"{named}^{{commit}}")
+        if sha is None:
+            refusals.append(
+                f"a review names reviewed commit {named}, which this clone lacks; "
+                f"git fetch origin {named} and re-run"
+            )
+    if refusals:
+        for refusal in refusals:
+            sys.stderr.write(f"run-state: adopt: {refusal}\n")
+        return 1
+
+    for ref in (default, head):
+        if adopt_git(root, "rev-parse", "--verify", "-q", f"origin/{ref}^{{commit}}") is None:
+            return usage([f"origin/{ref} does not resolve in {root}; git fetch origin {ref} and re-run"])
+    head_sha = adopt_git(root, "rev-parse", f"origin/{head}^{{commit}}")
+    since = commit_date(root, sha or head_sha)
+    base_sha = adopt_git(root, "merge-base", f"origin/{default}", f"origin/{head}")
+    if since is None or base_sha is None:
+        return usage([f"git could not read SINCE or the merge-base of origin/{default} and origin/{head}"])
+    triage = sum(1 for t in bundle["threads"] if thread_unanswered(t, self_keys))
+    issues = [ref["number"] for ref in pr_json["closingIssuesReferences"]]
+
+    print(f"adopt: PR #{pr} {pr_json['url']}")
+    print(f"head: {head}")
+    print("issues: " + (" ".join(f"#{k}" for k in issues) if issues else "none; the pull request body is the spec"))
+    if sha:
+        print(f"since: {since} (reviewed commit {sha})")
+    else:
+        print(f"since: {since} (head commit {head_sha}; no review names one)")
+    print(f"base_sha: {base_sha}")
+    print(f"threads to triage: {triage}")
+    if args.dry_run:
+        return 0
+
+    adopted = {
+        "pr": pr,
+        "head": head,
+        "invoker": args.invoker,
+        "issues": issues,
+        "reviewed_commit": sha,
+    }
+    try:
+        (run_dir / "base_sha").write_text(base_sha + "\n", encoding="utf-8")
+        (run_dir / "pushed_at").write_text(since + "\n", encoding="utf-8")
+        (run_dir / "max_review_rounds").write_text(rounds + "\n", encoding="utf-8")
+        queue = run_dir / "queue.md"
+        if seed and not queue.exists():
+            queue.write_text(
+                "\n".join([QUEUE_HEADER, QUEUE_SEPARATOR] + seed) + "\n", encoding="utf-8"
+            )
+        # Last, because its presence is what tells a re-invocation that
+        # adoption finished; a dir without it is adopted again from scratch.
+        (run_dir / "adopted.json").write_text(json.dumps(adopted, indent=2) + "\n", encoding="utf-8")
+    except OSError as e:
+        return usage([f"cannot write to {run_dir}: {e.strerror or e}"])
+    return 0
+
 
 def cmd_phase(args):
     try:
@@ -2418,6 +2774,8 @@ def parse_args(argv=None):
     r.add_argument("pr", metavar="PR", help="pull request number")
     r.add_argument("--since", metavar="ISO8601", help="ignore items at or before this")
     r.add_argument("--author", metavar="LOGIN", help="the PR author, who cannot clear it")
+    r.add_argument("--invoker", metavar="LOGIN", help="the login an adopted run replies as; a second self login beside --author")
+    r.add_argument("--unanswered", action="store_true", help="count an unresolved thread whose newest comment is not a self login's, whatever its age")
     r.add_argument(
         "--input",
         metavar="BUNDLE_JSON",
@@ -2443,11 +2801,25 @@ def parse_args(argv=None):
     g = sub.add_parser("probe", help="gather the resume probe that phase reads")
     g.add_argument("--run-dir", metavar="DIR", required=True, help="RUN_DIR; read, never created")
     g.add_argument("--root", metavar="ROOT", required=True, help="the repo's work tree; the issue branch's worktree is found from it")
-    g.add_argument("--issue", metavar="N", required=True, help="the issue number")
+    which = g.add_mutually_exclusive_group(required=True)
+    which.add_argument("--issue", metavar="N", help="the issue number")
+    which.add_argument("--pr", metavar="M", help="an adopted pull request's number; BRANCH and the invoker come from RUN_DIR/adopted.json")
     g.add_argument("--pr-bundle", metavar="FILE", help="a bundle `review PR --save FILE` wrote; omit where there is no pull request")
     g.add_argument("--herdr-state", metavar="STATE", choices=HERDR_STATES, help="the issue agent's state from herdr: " + ", ".join(HERDR_STATES))
     g.add_argument("--author", metavar="LOGIN", help="the PR author; defaults to the bundle's author")
     g.set_defaults(func=cmd_probe)
+
+    a = sub.add_parser("adopt", help="turn a pull request this skill did not open into a run that enters at Step 6")
+    a.add_argument("pr", metavar="M", help="the pull request number")
+    a.add_argument("--pr-json", metavar="FILE", required=True, help="gh pr view M --json number,url,state,isCrossRepository,headRefName,baseRefName,closingIssuesReferences,body, saved")
+    a.add_argument("--bundle", metavar="FILE", required=True, help="a bundle `review M --save FILE` wrote")
+    a.add_argument("--run-dir", metavar="DIR", required=True, help="RUN_DIR, <COMMON>/work-issue/pr-<M>/")
+    a.add_argument("--root", metavar="ROOT", required=True, help="a work tree of the repo, with origin fetched")
+    a.add_argument("--default", metavar="DEFAULT", required=True, help="the repo's default branch")
+    a.add_argument("--invoker", metavar="LOGIN", required=True, help="the login this run replies as")
+    a.add_argument("--max-review-rounds", metavar="R", help="written to RUN_DIR/max_review_rounds; 2 without it")
+    a.add_argument("--dry-run", action="store_true", help="print the six lines and write nothing")
+    a.set_defaults(func=cmd_adopt)
 
     return ap.parse_args(argv)
 
@@ -2457,9 +2829,9 @@ def main(argv=None):
     try:
         args = parse_args(argv)
     except SystemExit as e:
-        # probe follows the validator convention's 3 for usage; the other
-        # subcommands keep argparse's 2, which this docstring has always said.
-        if e.code == 2 and argv[:1] == ["probe"]:
+        # probe and adopt follow the validator convention's 3 for usage; the
+        # other subcommands keep argparse's 2, which this docstring has always said.
+        if e.code == 2 and argv[:1] in (["probe"], ["adopt"]):
             return 3
         raise
     return args.func(args)

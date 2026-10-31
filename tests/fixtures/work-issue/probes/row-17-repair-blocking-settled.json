@@ -35,5 +35,6 @@
   "triage_stop_rows": 0,
   "repair_ar_settled": true,
   "review_over_budget": false,
-  "repair_diff_triggers": false
+  "repair_diff_triggers": false,
+  "adopted": false
 }
