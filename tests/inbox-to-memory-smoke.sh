@@ -341,6 +341,13 @@ require_text inbox-to-memory/SKILL.md "scripts/stamp-confirmed.sh"
 # exists to catch.
 require_text inbox-to-memory/SKILL.md "scripts/scaffold_digest.py --stamp"
 
+# Every process-mode run reads SKILL.md in full. The ceiling is its size after
+# #196's cut, 43401 bytes, rounded up to the next multiple of 2048, so the next
+# real addition has to cut something to fit. It counts bytes because no
+# tokenizer runs offline here, and bytes/4 is the proxy #196 measured with.
+skill_bytes="$(wc -c < inbox-to-memory/SKILL.md | tr -d ' ')"
+[[ "$skill_bytes" -le 45056 ]] || { echo "inbox-to-memory/SKILL.md is $skill_bytes bytes; ceiling 45056 (#196)" >&2; exit 1; }
+
 # Both key orders get pinned verbatim. They are duplicated by hand into the
 # templates, the lint, and eventually the migrator, and the only thing keeping
 # those three copies honest is that changing the order fails here first.
