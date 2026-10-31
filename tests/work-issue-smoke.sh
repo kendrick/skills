@@ -4104,4 +4104,218 @@ refute_text "$tmp/step-6.md" "ponytail"
 refute_text "$tmp/step-0.md" "ponytail"
 refute_text "$tmp/stops.md" "ponytail"
 
+
+# --- #118: adopt a pull request this skill did not open, entering at Step 6. ---
+# Fixture A: a bare origin on main, and a clone on fix/84-guard-asserts-the-tree
+# two commits past main and pushed. Committer dates are fixed per commit, so
+# SINCE is a known string. Every pr-json and bundle is written here, and the
+# fake gh leads PATH, so no case reaches the network.
+ax="$tmp/adopt-118"
+ax_clone="$ax/clone"
+ax_head=fix/84-guard-asserts-the-tree
+mkdir -p "$ax"
+git init -q --bare -b main "$ax/origin.git"
+git init -q -b main "$ax_clone"
+probe_git "$ax_clone" remote add origin "$ax/origin.git"
+ax_commit() {
+  printf '%s\n' "$1" >"$ax_clone/$1.txt"
+  probe_git "$ax_clone" add "$1.txt"
+  GIT_COMMITTER_DATE="$2" GIT_AUTHOR_DATE="$2" probe_git "$ax_clone" commit -q -m "$1"
+  probe_git "$ax_clone" rev-parse HEAD
+}
+ax_base="$(ax_commit seed '2026-09-01 10:00:00 +0000')"
+probe_git "$ax_clone" push -q origin main 2>/dev/null
+probe_git "$ax_clone" checkout -q -b "$ax_head"
+# The first commit's date carries a +02:00 offset on purpose: SINCE must come
+# out in pushed_at's UTC shape, not as %cI prints it.
+ax_c1="$(ax_commit guard '2026-09-30 16:02:11 +0200')"
+ax_c2="$(ax_commit asserts '2026-10-02 09:00:00 +0000')"
+probe_git "$ax_clone" push -q origin "$ax_head" 2>/dev/null
+ax_short="$(probe_git "$ax_clone" rev-parse --short=10 "$ax_c1")"
+ax_since=2026-09-30T14:02:11Z
+
+# FILE [STATE CROSS HEAD BASE]
+ax_pr_json() {
+  printf '{"number": 96, "url": "https://github.com/o/r/pull/96", "state": "%s", "isCrossRepository": %s, "headRefName": "%s", "baseRefName": "%s", "closingIssuesReferences": [{"number": 95}], "body": "Fixes #95"}\n' \
+    "${2:-OPEN}" "${3:-false}" "${4:-$ax_head}" "${5:-main}" >"$1"
+}
+# FILE REVIEWED DEFERRED_AUTHOR: one reviewer thread, one the invoker answered
+# last, one resolved; a Codex review whose body ends `Reviewed commit:
+# REVIEWED` (none where REVIEWED is empty); and a two-row deferred comment.
+ax_bundle() {
+  python3 - "$@" <<'PY'
+import json, sys
+path, reviewed, deferred_author = sys.argv[1:4]
+codex = "chatgpt-codex-connector[bot]"
+def thread(tid, resolved, tail):
+    root = {"author": codex, "created_at": "2026-09-30T15:00:00Z", "body": "**P1** The guard asserts nothing.", "id": int(tid[-1]), "url": f"https://github.com/o/r/pull/96#discussion_r{tid[-1]}"}
+    return {"id": tid, "is_resolved": resolved, "root_created_at": root["created_at"], "root_author": codex,
+            "root_body": root["body"], "root_comment_id": root["id"], "root_url": root["url"], "comments": [root] + tail}
+body = "### Codex Review\n\nTwo findings."
+if reviewed:
+    body += f"\n\nReviewed commit: `{reviewed}`"
+deferred = ("## Deferred findings\n\n| # | Source | Finding | Outside because | Recommendation | Status |\n|---|---|---|---|---|---|\n"
+            "| 1 | PRRT_7 | The cache never expires | not this diff | follow-up issue | queued |\n"
+            "| 2 | PRRT_8 | The log is noisy | not this diff | drop it | filed #90 |\n\nPosted by the run.")
+json.dump({
+    "state": "OPEN", "author": "pr-author", "reactions": [],
+    "reviews": [{"state": "COMMENTED", "author": codex, "submitted_at": "2026-10-02T10:00:00Z", "body": body}],
+    "threads": [
+        thread("PRRT_1", False, []),
+        thread("PRRT_2", False, [{"author": "adopter", "created_at": "2026-10-03T08:00:00Z", "body": "Fixed in the next push.", "id": 22, "url": "https://github.com/o/r/pull/96#discussion_r22"}]),
+        thread("PRRT_3", True, []),
+    ],
+    "comments": [{"author": deferred_author, "created_at": "2026-10-03T09:00:00Z", "body": deferred, "url": "https://github.com/o/r/pull/96#issuecomment-1"}],
+}, open(path, "w"), indent=2)
+PY
+}
+# RUN_DIR PR_JSON BUNDLE [ARGS...]: sets $ax_rc, $ax_out, $ax_err.
+ax_adopt() {
+  set +e
+  ax_out="$(PATH="$probe_bin:$PATH" python3 "$run_state" adopt 96 --pr-json "$2" --bundle "$3" \
+    --run-dir "$1" --root "$ax_clone" --default main --invoker adopter "${@:4}" 2>"$ax/stderr")"
+  ax_rc=$?
+  set -e
+  ax_err="$(cat "$ax/stderr")"
+}
+ax_pr_json "$ax/pr.json"
+ax_bundle "$ax/bundle.json" "$ax_short" adopter
+
+# 1. Dry run: the reviewed commit's date in UTC, the full SHA git resolves
+# from the review's short one, and nothing written.
+ax_adopt "$ax/pr-96" "$ax/pr.json" "$ax/bundle.json" --dry-run
+[[ "$ax_rc" == 0 ]] || { echo "adopt --dry-run should exit 0, got $ax_rc: $ax_err" >&2; exit 1; }
+for want in "head: $ax_head" "since: $ax_since (reviewed commit $ax_c1)" "base_sha: $ax_base" \
+  "threads to triage: 1"; do
+  grep -Fxq -- "$want" <<<"$ax_out" || { echo "adopt --dry-run should print '$want', got: $ax_out" >&2; exit 1; }
+done
+[[ "$(wc -l <<<"$ax_out" | tr -d ' ')" == 6 ]] || { echo "adopt should print six lines, got: $ax_out" >&2; exit 1; }
+[[ ! -e "$ax/pr-96" ]] || { echo "adopt --dry-run created RUN_DIR" >&2; exit 1; }
+
+# 2. No review names a commit: SINCE falls back to the head commit's date.
+ax_bundle "$ax/bundle-noreview.json" "" adopter
+ax_adopt "$ax/pr-96" "$ax/pr.json" "$ax/bundle-noreview.json" --dry-run
+grep -Fxq "since: 2026-10-02T09:00:00Z (head commit $ax_c2; no review names one)" <<<"$ax_out" || {
+  echo "adopt with no Reviewed commit line should fall back to the head commit, got $ax_rc: $ax_out $ax_err" >&2; exit 1; }
+
+# 3. A named commit the clone lacks refuses rather than falling back, since
+# the head's date would score that review's findings as older than SINCE.
+ax_bundle "$ax/bundle-unknown.json" deadbeef00 adopter
+ax_adopt "$ax/pr-96" "$ax/pr.json" "$ax/bundle-unknown.json" --dry-run
+[[ "$ax_rc" == 1 ]] && grep -Fq deadbeef00 <<<"$ax_err" || {
+  echo "adopt naming an unknown reviewed commit should exit 1 naming it, got $ax_rc: $ax_err" >&2; exit 1; }
+
+# 4. Every refusal in one pass.
+ax_pr_json "$ax/pr-refused.json" MERGED true main dev
+ax_adopt "$ax/pr-96" "$ax/pr-refused.json" "$ax/bundle.json" --dry-run
+[[ "$ax_rc" == 1 && "$(grep -c '^run-state: adopt: ' <<<"$ax_err")" == 4 ]] || {
+  echo "a merged, cross-repo pr-json headed main and based on dev should exit 1 with four refusals, got $ax_rc: $ax_err" >&2; exit 1; }
+
+# 5. Order of writes. Without issue.md the run isn't resumable, so adopt
+# refuses to write; adopted.json goes last, so a write that fails before it
+# leaves a dir the next invocation adopts again rather than resumes.
+mkdir -p "$ax/pr-96"
+echo "verify: ok" >"$ax/pr-96/baseline.txt"
+ax_adopt "$ax/pr-96" "$ax/pr.json" "$ax/bundle.json"
+[[ "$ax_rc" == 3 && ! -e "$ax/pr-96/adopted.json" ]] || {
+  echo "adopt without issue.md should exit 3 and write nothing, got $ax_rc: $ax_err" >&2; exit 1; }
+echo "# #95 Guard asserts the tree" >"$ax/pr-96/issue.md"
+mkdir -p "$ax/pr-broken"
+cp "$ax/pr-96/issue.md" "$ax/pr-96/baseline.txt" "$ax/pr-broken/"
+mkdir "$ax/pr-broken/base_sha"
+ax_adopt "$ax/pr-broken" "$ax/pr.json" "$ax/bundle.json"
+[[ "$ax_rc" == 3 && ! -e "$ax/pr-broken/adopted.json" ]] || {
+  echo "adopt whose base_sha write fails should exit 3 with no adopted.json, got $ax_rc: $ax_err" >&2; exit 1; }
+ax_adopt "$ax/pr-96" "$ax/pr.json" "$ax/bundle.json"
+[[ "$ax_rc" == 0 ]] || { echo "adopt should exit 0, got $ax_rc: $ax_err" >&2; exit 1; }
+[[ "$(cat "$ax/pr-96/base_sha")" == "$ax_base" ]] || { echo "adopt's base_sha should be the merge-base $ax_base" >&2; exit 1; }
+[[ "$(cat "$ax/pr-96/pushed_at")" == "$ax_since" ]] || { echo "adopt's pushed_at should be the dry run's SINCE $ax_since" >&2; exit 1; }
+[[ "$(cat "$ax/pr-96/max_review_rounds")" == 2 ]] || { echo "adopt's max_review_rounds should default to 2" >&2; exit 1; }
+python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d["head"] == sys.argv[2] and d["invoker"] == "adopter" and d["reviewed_commit"] == sys.argv[3] else 1)' \
+  "$ax/pr-96/adopted.json" "$ax_head" "$ax_c1" || { echo "adopted.json should carry head, invoker, and the full reviewed commit: $(cat "$ax/pr-96/adopted.json")" >&2; exit 1; }
+
+# 6. Criterion 7: the invoker's deferred comment seeds queue.md byte for byte,
+# so the probe reads it as already posted and Step 8 edits it rather than
+# double-posting.
+printf '%s\n' "| # | Source | Finding | Outside because | Recommendation | Status |" "|---|---|---|---|---|---|" \
+  "| 1 | PRRT_7 | The cache never expires | not this diff | follow-up issue | queued |" \
+  "| 2 | PRRT_8 | The log is noisy | not this diff | drop it | filed #90 |" >"$ax/queue-want.md"
+cmp -s "$ax/queue-want.md" "$ax/pr-96/queue.md" || {
+  echo "adopt should seed queue.md with the deferred comment's two rows, got: $(cat "$ax/pr-96/queue.md" 2>&1)" >&2; exit 1; }
+# NAME BUNDLE: probe --pr 96's deferred_comment_needed.
+ax_deferred() {
+  PATH="$probe_bin:$PATH" env -u HERDR_ENV python3 "$run_state" probe --run-dir "$ax/pr-96" --root "$ax_clone" \
+    --pr 96 --pr-bundle "$2" >"$ax/$1.json" 2>"$ax/probe-stderr" || {
+    echo "probe --pr 96 ($1) should exit 0, got: $(cat "$ax/probe-stderr")" >&2; exit 1; }
+  python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1]))["deferred_comment_needed"]))' "$ax/$1.json"
+}
+[[ "$(ax_deferred own "$ax/bundle.json")" == false ]] || {
+  echo "probe --pr 96 should read the invoker's deferred comment as posted" >&2; exit 1; }
+ax_bundle "$ax/bundle-third.json" "$ax_short" someone-else
+[[ "$(ax_deferred third "$ax/bundle-third.json")" == true ]] || {
+  echo "probe --pr 96 should read a third login's deferred comment as not the run's own" >&2; exit 1; }
+# A second adoption keeps the queue it finds, rows added since included.
+echo "| 3 | PRRT_1 | The guard asserts nothing | not this diff | follow-up issue | queued |" >>"$ax/pr-96/queue.md"
+cp "$ax/pr-96/queue.md" "$ax/queue-before.md"
+ax_adopt "$ax/pr-96" "$ax/pr.json" "$ax/bundle.json"
+[[ "$ax_rc" == 0 ]] && cmp -s "$ax/queue-before.md" "$ax/pr-96/queue.md" || {
+  echo "a second adoption should leave queue.md as it found it, got $ax_rc: $(cat "$ax/pr-96/queue.md")" >&2; exit 1; }
+cp "$ax/queue-want.md" "$ax/pr-96/queue.md"
+
+# 7. The first adopted pass: an unresolved thread counts where a self login
+# didn't speak last, whatever its age, and the invoker is a self login for
+# threads and reactions alike.
+ax_review() {
+  PATH="$probe_bin:$PATH" python3 "$run_state" review 96 --input "$1" --since 2026-10-20T00:00:00Z \
+    --author pr-author "${@:2}"
+}
+ax_got="$(ax_review "$ax/bundle.json" --invoker adopter --unanswered)"
+[[ "$(head -n 1 <<<"$ax_got")" == findings && "$(grep -c '^thread ' <<<"$ax_got")" == 1 ]] \
+  && grep -q '^thread PRRT_1 unresolved, created 2026-09-30T15:00:00Z, unanswered, P1, reply-to 1 ' <<<"$ax_got" || {
+  echo "review --unanswered should find PRRT_1 alone, got: $ax_got" >&2; exit 1; }
+ax_got="$(ax_review "$ax/bundle.json" --invoker adopter)"
+[[ "$ax_got" == pending ]] || { echo "review without --unanswered should score threads by SINCE, got: $ax_got" >&2; exit 1; }
+python3 -c 'import json,sys; b=json.load(open(sys.argv[1])); b["threads"]=[]; b["reactions"]=[{"content": "+1", "user": "adopter", "created_at": "2026-10-21T00:00:00Z"}]; json.dump(b, open(sys.argv[2], "w"))' \
+  "$ax/bundle.json" "$ax/bundle-reaction.json"
+# Without --invoker the same +1 clears, so the pending below is the skip's doing.
+[[ "$(ax_review "$ax/bundle-reaction.json" | head -n 1)" == cleared ]] || {
+  echo "an outside login's +1 should clear the review" >&2; exit 1; }
+ax_got="$(ax_review "$ax/bundle-reaction.json" --invoker adopter)"
+[[ "$ax_got" == pending ]] || { echo "the invoker's own +1 should not clear the review, got: $ax_got" >&2; exit 1; }
+
+# 8. Probe and phase: --pr reads BRANCH from adopted.json, and row 19 sends a
+# run with no triage round to Step 6's first adopted pass rather than row 6's
+# plan gate.
+PATH="$probe_bin:$PATH" env -u HERDR_ENV python3 "$run_state" probe --run-dir "$ax/pr-96" --root "$ax_clone" \
+  --pr 96 >"$ax/probe.json" 2>"$ax/probe-stderr" || {
+  echo "probe --pr 96 should exit 0, got: $(cat "$ax/probe-stderr")" >&2; exit 1; }
+[[ "$(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1]))["adopted"]))' "$ax/probe.json")" == true ]] || {
+  echo "probe --pr 96 should read adopted true: $(cat "$ax/probe.json")" >&2; exit 1; }
+expect_phase "phase on an adopted probe" "phase: 6 reason: row 19:" "$(python3 "$run_state" phase --probe "$ax/probe.json")"
+mkdir -p "$ax/pr-none"
+expect_probe_usage "--pr 96 with no adopted.json" --run-dir "$ax/pr-none" --root "$ax_clone" --pr 96
+expect_probe_usage "with both --issue and --pr" --run-dir "$ax/pr-96" --root "$ax_clone" --issue 1 --pr 96
+[[ ! -e "$tmp/called-gh" ]] || { echo "an adopt case called gh" >&2; exit 1; }
+
+# 9. #118's prose. The argument-hint pin sits with the frontmatter pins above.
+require_text work-issue/SKILL.md "gh api repos/REPO/issues/<n> --jq '.pull_request != null'"
+require_text work-issue/SKILL.md "git push origin <BRANCH>:refs/heads/<BRANCH>"
+require_text work-issue/SKILL.md "--force-with-lease=<BRANCH>"
+require_text work-issue/SKILL.md "An adopted run never rebases and never force-pushes."
+require_text work-issue/SKILL.md "SINCE is the committer date of the commit the newest review names in a \`Reviewed commit:\` line, and the head commit's only where no review names one."
+require_text work-issue/SKILL.md "On an adopted run the plan-task clause is inert"
+require_text work-issue/references/triage.md "On an adopted run the plan-task clause is inert"
+require_text work-issue/SKILL.md "post a new one only where neither has posted it."
+require_text work-issue/SKILL.md "moved on origin; merge origin/<BRANCH> into it locally, then"
+require_text work-issue/README.md "To triage a pull request this skill didn't open, pass its number or URL instead of an issue's."
+require_text _maintenance/work-issue/RATIONALE.md "Criteria 4 and 5 are read through the decisions carried over from #143, which the issue says replace its own wording."
+# Deliberately Not Built: a flag where the number's own type decides, a
+# refusal of a pull request that closes no issue, and `gh pr view` failing
+# as the pull-request test.
+refute_text work-issue/SKILL.md "--adopt-pr"
+refute_text work-issue/README.md "--adopt-pr"
+refute_text work-issue/SKILL.md "references no issue and no CRITERIA can be read"
+refute_text work-issue/SKILL.md "gh pr view <n>"
+refute_text work-issue/SKILL.md "issue-<N>:refs/heads/issue-<N>"
+
 echo "work-issue smoke: OK"
