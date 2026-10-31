@@ -1008,6 +1008,19 @@ def phase_of(probe):
                 "the default branch was rewritten or the file was edited by hand, so "
                 "stop for a human",
             )
+        # An adopted run's branch is the PR head, so issue-<N> names a branch
+        # it doesn't have. It never rebases either, so a drifted base is
+        # someone else's merge or rebase of DEFAULT into the head.
+        if flag(probe, "adopted"):
+            return (
+                "stop",
+                "base_sha mismatch (not-merge-base): RUN_DIR/base_sha is not the live "
+                "merge-base of origin/<DEFAULT> and the branch, so every later review would "
+                "diff against a base the branch has left; an adopted run never rebases, so "
+                "whoever merged or rebased origin/<DEFAULT> into <BRANCH> moved it; if that "
+                "move stands, write git merge-base origin/<DEFAULT> <BRANCH> to it and "
+                "re-invoke, else stop for a human",
+            )
         return (
             "stop",
             "base_sha mismatch (not-merge-base): RUN_DIR/base_sha is not the live "

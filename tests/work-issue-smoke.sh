@@ -4303,6 +4303,12 @@ PATH="$probe_bin:$PATH" env -u HERDR_ENV python3 "$run_state" probe --run-dir "$
 [[ "$(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1]))["adopted"]))' "$ax/probe.json")" == true ]] || {
   echo "probe --pr 96 should read adopted true: $(cat "$ax/probe.json")" >&2; exit 1; }
 expect_phase "phase on an adopted probe" "phase: 6 reason: row 19:" "$(python3 "$run_state" phase --probe "$ax/probe.json")"
+# A drifted base on an adopted run names the PR head, since it has no issue-<N>.
+python3 -c 'import json,sys; p=json.load(open(sys.argv[1])); p["base_sha_state"]="not-merge-base"; json.dump(p, open(sys.argv[2], "w"))' \
+  "$ax/probe.json" "$ax/probe-drift.json"
+ax_got="$(python3 "$run_state" phase --probe "$ax/probe-drift.json")"
+expect_phase "phase on an adopted drifted base" "write git merge-base origin/<DEFAULT> <BRANCH> to it" "$ax_got"
+[[ "$ax_got" != *"issue-<N>"* ]] || { echo "an adopted drifted base should not name issue-<N>, got: $ax_got" >&2; exit 1; }
 mkdir -p "$ax/pr-none"
 expect_probe_usage "--pr 96 with no adopted.json" --run-dir "$ax/pr-none" --root "$ax_clone" --pr 96
 expect_probe_usage "with both --issue and --pr" --run-dir "$ax/pr-96" --root "$ax_clone" --issue 1 --pr 96
