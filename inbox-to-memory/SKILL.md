@@ -88,11 +88,9 @@ Flag a conflict inline, where the triggering passage lives:
 [contradicts accepted: [[<record-filename>|<short-label>]]] <what this input says> | claims: <what the record says>
 ```
 
-Both halves are required. The record's own claim written down beside the new statement is what lets a reader settle the disagreement without opening the record, and what makes it obvious when the two never actually disagreed.
-
 A contradiction is a first-class candidate, resolved at phase 5 sign-off like any other. Its three outcomes are in that phase.
 
-A confirmation is not a candidate and gets no flag. The record already exists and already makes the claim; the only thing that changes is the date saying when it was last seen to be true, so there is nothing for the user to sign off on and the stamp never passes through phase 5. Its trace is the date on the record itself and the phase 6 report, which names every record the run stamped, every one the stamper declined to write, and every `proposed` record an input restated.
+A confirmation is not a candidate: it gets no flag and never passes through phase 5 (the `last_confirmed` rule in Operating Rules). Its trace is the date on the record itself and the phase 6 report, which names every record the run stamped, every one the stamper declined to write, and every `proposed` record an input restated.
 
 ### Phase 3 — Groom Into a Single Note
 
@@ -117,15 +115,14 @@ Inside the extracted sections, flag candidates **inline** using the taxonomy bel
 [memory candidate: client] <claim>
 [memory candidate: update existing [[<filename>|<short-name>]]] <amended claim>
 [journal candidate: <generalized pattern>]
-[contradicts accepted: [[<filename>|<short-name>]]] <statement> | claims: <what the record says>
 ```
 
 - The scope token (`project` or `client`) is the skill's _proposal_, not a decision. The user confirms or overrides at phase 5.
-- The contradiction flag comes out of phase 2.5 rather than out of reading the input alone. It's the one candidate type that needs memory read first.
+- The contradiction flag, in the shape phase 2.5 gives, is the one candidate type that needs memory read first.
 - The "update existing" variant signals an amendment to an already-crystallized record. Its scope is inherited from the target.
 - Journal candidates take no scope token — their destination is always the cross-client journal.
 
-Every token the skill emits is registered in the grammar table in [references/machine-contracts.md](references/machine-contracts.md) with the grep that finds it. Register a new shape there before using it; a token invented at the point of use is one nothing can retrieve later.
+Emit only token shapes registered in The Token Grammar in [references/machine-contracts.md](references/machine-contracts.md); `scripts/lint-scope.sh` (`check_tokens`) fails any other shape on a v2 file.
 
 #### Open Question Slugs
 
@@ -163,13 +160,11 @@ bash <skill-path>/scripts/stamp-confirmed.sh <scope-root> \
   [--note <note-path> <record-path>...]...
 ```
 
-Each `--note` group is one groomed note and the records that note confirms. The script reads the note's own `date:` and stamps it onto them. It refuses to move a date backwards, to touch a v1 file, to stamp anything that isn't `accepted`, and to insert the key where doing so would push the frontmatter past its 20-line budget; each refusal comes back as a `skipped:` line naming the reason. Paths are absolute or relative to the scope root.
+Each `--note` group is one groomed note and the records that note confirms. The script reads the note's own `date:` and stamps it onto them; each record it refuses comes back as a `skipped:` line naming the reason. Paths are absolute or relative to the scope root.
 
 **One call for the whole queue, never one per input.** Hand it every group at once. Two inputs in one run can confirm the same record, and the script only gets to write that record once — taking the later of the two dates — if it sees both groups in the same invocation. A loop calling it per input has already written the first date before it hears about the second, so the same inbox writes that record once or twice and reports it differently depending on which file got read first.
 
 **A run that found no confirmations makes no call at all**, and most runs are that run. An invocation with no `--note` group is a usage error rather than a quiet no-op, so there is nothing to hand it and nothing to run.
-
-Putting the call here, after phase 4 and before phase 5, is a convention rather than something the script forces. The close of phase 3 would serve as well, since phase 4 only disposes sources and opens no gate. Fixing it in one spot is what makes two agents draining the same inbox produce the same trace, and it keeps the phase 6 report reading in phase order; the batch rule above is the part that carries real weight. It gets no phase number of its own because it is a call, not a phase of work.
 
 The script writes without stopping to ask, which is the exception spelled out in Operating Rules. Keep its output: phase 6 reports both the stamps and the skips off those lines. `--dry-run` prints the same lines and writes nothing, if you want to look first.
 
@@ -179,7 +174,7 @@ Stop here. Show the user every groomed note and every flagged candidate, organiz
 
 For each candidate the user approves:
 
-1. **Generate a nanoid**: `nanoid -s 10` (globally-installed CLI). Never random-generate or use Python's random module.
+1. **Generate a nanoid** as Filename and ID Conventions says.
 2. **Create the record file** using the matching template in [assets/records/](assets/records/):
    - Memory record (project or client scope): `<scope-root>/_memory/<type-folder>/<slug>-<nanoid>.md`. The folder set depends on the scope's memory mode (declared at the top of its `CLAUDE.md`):
      - Lightweight: `decisions/`, `context/`, `rules/`.
@@ -215,19 +210,19 @@ Run the lint over the scope first:
 bash <skill-path>/scripts/lint-scope.sh <scope-root>
 ```
 
-It reports how many files in the scope are v1 and how many are v2, and exits nonzero if any check fails.
-
-Then check by hand what the lint can't:
+Among its checks, every wiki-link path resolves (`check_links`). Then check by hand what the lint can't:
 
 - Every candidate flag in every groomed note has either been resolved to a wiki link OR retains its original prefix. No half-rewrites, no orphans.
 - Every record file has a valid `id`, a `memory_type` matching its folder, and at least one entry in `source_refs`.
-- Every wiki-link path resolves (the target file exists at the expected location).
 - The `_inbox/` is empty.
-- Any input where the phase 2.5 read budget bound is named, along with what went unread. A budget that silently truncates detection reports the same "no conflicts" as a scope that genuinely has none.
-- Every record whose `last_confirmed` the run stamped is named, with the date it now carries. Read them off the stamper's `stamped:` lines. This report is the only durable trace of a write the user was never asked to approve.
-- Every record the stamper declined to write is named, with its reason: a v1 file, a `status` other than `accepted`, a date already at or past the note's, or an insertion that would overrun the 20-line frontmatter budget. Read them off its `skipped:` lines, which is also the scope of this list: what the stamper turned down, not everything phase 2.5 opened. The skipped v1 records are the ones nobody would otherwise learn were left behind, and a silent skip reads exactly like a record nobody confirmed.
-- Every `proposed` record an input restated is named, one line per record and note, as `restated proposed: <record-path> by <note-path>`, both paths relative to the scope root, the form the stamper uses for the record paths it prints. The record never reached the stamper, so it is on neither of its lists, and this line is the only trace the restatement leaves.
-- Every input's candidate sources, one line per note, as `candidates: <note-path> grep=<g> vec=<v> both=<b>`, copied from the `counts:` line `find-candidates.sh` printed for that input, with its `vec off:` line beneath it when the fallback fired. A lookup that fell back to grep reports the same "no conflicts" as one that searched by meaning and found none, and this line is how a reader tells them apart. When the fallback fired, name the `memory-index` skill in the report as what registers the scope.
+
+Then report what phase 2.5 and the stamper did:
+
+- Any input where the phase 2.5 read budget bound is named, with what went unread.
+- Every record the stamper stamped, with its new date, off its `stamped:` lines.
+- Every record the stamper declined, with its reason, off its `skipped:` lines and nothing else.
+- Every `proposed` record an input restated, one line per record and note, as `restated proposed: <record-path> by <note-path>`, both paths relative to the scope root.
+- Every input's candidate sources, one line per note, as `candidates: <note-path> grep=<g> vec=<v> both=<b>`, copied from that input's `counts:` line, with its `vec off:` line beneath it when the fallback fired. When the fallback fired, name the `memory-index` skill in the report as what registers the scope.
 
 Report failures. Don't silently retry or auto-fix — those bugs hide.
 
@@ -408,27 +403,11 @@ bash <skill-path>/scripts/migrate-scope.sh <scope-root>            # dry run, wr
 bash <skill-path>/scripts/migrate-scope.sh <scope-root> --apply    # writes
 ```
 
-One scope per run. Files already carrying `schema: 2` are skipped, so a second run over the same scope reports everything as already migrated and changes nothing.
-
-**Show the user the dry run and get approval before `--apply`.** Tier 1 is mechanical, so it's approvable as one batch rather than per file. Every transformation in it has a single correct answer; nothing in Tier 1 is the skill's opinion.
-
-What it changes, all above the fence:
-
-- Adds `schema: 2` and `body_schema: 1`.
-- Converts block-style lists to inline arrays and reorders keys to the contract.
-- Flattens `related` mappings to `<relation>::<id>` and journal `source_refs` to `<scope-path>::<note-id>`.
-- Computes the four derived counts from body tokens. A v1 note with no tokens gets zeros, because they were counted and not assumed.
-- Sets `last_confirmed` on a record to the record's own date.
-
-**The body is copied byte for byte**, which is why a migrated file carries `body_schema: 1`. Its frontmatter is v2 and its body is still v1, that combination is legal indefinitely, and the lint's body-grammar checks skip it. Old anchors, old phrasing, and old section names all stay exactly as written.
-
-The migrator refuses to guess. A `related` entry with an id but no relation keeps its bare id and gets reported; so does any frontmatter it can't parse, any rewrite that would overrun the 20-line budget, and any sub-field the compound form has no room for. Read the "needs a human" list at the end of the run.
-
-**Requires a clean working tree** unless run with `--allow-dirty`. Every safety claim here rests on `git diff` being readable afterward, and starting dirty makes a mistake indistinguishable from whatever was already uncommitted.
+**Show the user the dry run and get approval before `--apply`.** Tier 1 is approvable as one batch. What it changes and what it refuses to guess are in [references/migration.md](references/migration.md), under What Tier 1 Does and What It Refuses to Do. Read the "needs a human" list at the end of the run.
 
 ### Tier 2: Summary and Entities
 
-Most v1 notes carry neither key, and filling them in is the skill's reading of a note rather than a fact about it. So Tier 2 runs through a sidecar the migrator writes and then holds you to: it emits the text you're allowed to read, you fill in a proposals file, and the apply writes back only what it can source.
+Tier 2 runs through a sidecar, under The Tier 2 Sidecar in [references/migration.md](references/migration.md). Run the extract before applying anything, since a note already carrying `schema: 2` is skipped whole.
 
 ```bash
 # 1. write the sidecar: one extract per v1 note, plus a proposals skeleton
@@ -441,17 +420,9 @@ bash <skill-path>/scripts/migrate-scope.sh <scope-root> --tier2 <dir>/proposals.
 bash <skill-path>/scripts/migrate-scope.sh <scope-root> --tier2 <dir>/proposals.yaml --apply
 ```
 
-Step 1 writes nothing to the scope. For every note it would migrate, it drops `<note-id>.extract.md` into `<dir>` holding that note's sections down to `## Raw Content` and no further, and appends an entry to `<dir>/proposals.yaml` keyed by note id, with the file it came from and `summary: ''` / `entities: []` waiting. Records get no extract; Tier 2 is a note concept.
+**Generate `summary` and `entities` from the emitted extract and from nothing else**: each summary one line the extract supports, each entity a canonical name the extract carries verbatim.
 
-**Generate `summary` and `entities` from the emitted extract and from nothing else.** Not the note on disk, and never raw content. The extract is the reviewed layer, it is the only text the script can hold a proposal against, and a name that appears only below the fence came out of a transcript nobody checked. Each summary is one line that asserts nothing the extract doesn't support: no date, name, decision, or outcome that isn't already up there. Each entity is a canonical name appearing in the extract verbatim.
-
-The apply enforces the half it can. An entity missing from that note's extract gets `tier2-entity-unsourced` and the note is left exactly as it was, never written halfway. A summary spanning lines gets `tier2-summary-multiline`, since it would fail `frontmatter-single-line` the moment the lint ran. Both land in the "needs a human" list with everything else.
-
-Tier 2 rides along with the Tier 1 apply rather than following it. Once a note carries `schema: 2` the migrator skips it whole, so there is no adding summaries to a scope that already migrated. Run the extract before you apply anything.
-
-**Tier 2 is approved separately from Tier 1.** A plain `--apply` writes no `summary` or `entities` key anywhere, so approving the tier you can check never ships the one you can't. Tier 2's own approval is per file or one batch, whichever the user wants: the dry run prints each proposal inside the diff for the file it belongs to, so a reviewer reads a proposed summary against the note that would get it, and can rewrite one without touching the rest.
-
-Rejecting a proposal is an absence, not a rollback. Leave a note out of the proposals file and it still migrates, because Tier 1 never waits on Tier 2, and it comes out byte-identical to what a Tier-1-only apply would have written. There is nothing to undo, because nothing was written.
+**Tier 2 is approved separately from Tier 1**, per file or as one batch, whichever the user wants.
 
 ### Verifying a Migration
 
@@ -459,17 +430,13 @@ Rejecting a proposal is an absence, not a rollback. Leave a note out of the prop
 bash <skill-path>/scripts/verify-migration.sh <scope-root> --since <pre-migration-ref>
 ```
 
-The closing sweep, and it stands apart from the migrator on purpose: it reads git history rather than the working tree, so it works just as well on a migration someone applied and committed last week. It lints the scope, confirms every wiki-link target the scope carried at `<ref>` still resolves (by filename first, then by the trailing ten-character id, and it says how many needed that fallback), and reads `git diff --name-status -M <ref>` for anything renamed or deleted. Failures carry `verify-lint`, `verify-link`, or `verify-rename`, so the report names what broke.
-
-Verification reports and never repairs. It prints every failure it found rather than the first, changes nothing on disk, and exits nonzero.
-
-A passing run ends by printing one paragraph carrying the scope, the date, and the run's counts, for the user to paste into the scope's patterns journal. Offer it; don't write it. Nothing under the scope is touched, `patterns-journal/` included. A failing run prints no paragraph, because a migration that didn't verify has nothing paste-ready to say.
+It reads git history rather than the working tree, so it also verifies a migration committed last week. It reports and never repairs. A passing run prints a paragraph for the scope's patterns journal: offer it to the user, and leave writing it to them.
 
 ---
 
 ## Frontmatter Quick Reference
 
-Full shapes live in the templates, and the rules behind them in [references/machine-contracts.md](references/machine-contracts.md). Values stay on one line, lists are inline arrays, and the block closes inside the first 20 lines. Omit any key you don't need; the order below is fixed among the keys you keep.
+Full shapes live in the templates. Write every block to The Frontmatter Contract in [references/machine-contracts.md](references/machine-contracts.md): one line per value, closed inside the first 20 lines, keys in the order below among those you keep.
 
 **Groomed note**, in order:
 
