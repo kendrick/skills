@@ -2741,6 +2741,12 @@ expect_field "with one row's Recommendation changed" queue_unfiled_rows 2 "$q" "
 printf "$q_header%s\n%s\n" "$q_row1" "$q_row2" >"$q/queue.md"
 expect_field "with a Deferred findings comment in the bundle" queue_unfiled_rows 2 "$q" "$lab_repo" --pr-bundle "$bundles_dir/open-deferred.json"
 expect_field "with a bundle and no Deferred findings comment" queue_unfiled_rows 2 "$q" "$lab_repo" --pr-bundle "$bundles_dir/merged.json"
+# A pipe inside a quoted repro can't move Status off the row's last cell, and a
+# blank line between appended rounds can't hide the rows after it.
+printf "$q_header%s\n" '| 1 | adversarial-review | "Log the retry." (repro: `grep -c foo f | wc -l`) | listed advisory | `file-issue` — log | queued |' >"$q/queue.md"
+expect_field "with an unescaped pipe in a queued Finding" queue_unfiled_rows 1 "$q" "$lab_repo"
+printf "$q_header%s\n\n%s\n" "${q_row1/queued |/filed #12 |}" "$q_row2" >"$q/queue.md"
+expect_field "with a queued row after a blank line" queue_unfiled_rows 1 "$q" "$lab_repo"
 printf '| # | Source | Finding | Outside because | Recommendation |\n|---|---|---|---|---|\n| 1 | worker | "Retry." | not in the diff | `file-issue` — retry |\n' >"$q/queue.md"
 expect_field "with no Status column" queue_unfiled_rows null "$q" "$lab_repo"
 expect_phase "phase on a null queue_unfiled_rows" "phase: stop reason: unknown probe fields: queue_unfiled_rows" \

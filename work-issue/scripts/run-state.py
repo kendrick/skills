@@ -2169,15 +2169,29 @@ def g_queue_unfiled_rows(ctx):
     """`queue.md` rows whose Status cell, read with its whitespace dropped, is
     exactly `queued`. Only that cell, so a Source, a Recommendation, or a
     `Deferred findings` comment can't move the count, and `filed #M` or
-    `dismissed: <reason>` drops the row out. 0 with no queue.md, null with no
-    Status column (#183)."""
+    `dismissed: <reason>` drops the row out. 0 with no queue.md, null where no
+    header ends in a Status column (#183).
+
+    Rows are every QUEUE_ROW line in the file, as g_deferred_comment_needed
+    reads them, because queue.md is appended across steps and rounds and a
+    blank line between appends hid every row after it from triage_table.
+    Status is read as the row's last cell, since it is the queue's last column
+    and an unescaped `|` in a quoted repro (`grep -c foo f | wc -l`) shifted it
+    out of its header index, so a queued row read as settled."""
     path = ctx.path("queue.md")
     if not path.is_file():
         return 0
-    columns, rows = triage_table(path)
-    if "Status" not in columns:
+
+    def last_cell(line):
+        return squeeze(line.replace("\\|", "").rstrip().rstrip("|").rsplit("|", 1)[-1])
+
+    lines = read_text(path).split("\n")
+    if not any(
+        TABLE_LINE.match(l) and not QUEUE_ROW.match(l) and last_cell(l) == "Status"
+        for l in lines
+    ):
         raise ProbeError("queue.md has no Status column")
-    return sum(1 for r in rows if cell(r, columns["Status"]) == "queued")
+    return sum(1 for l in lines if QUEUE_ROW.match(l) and last_cell(l) == "queued")
 
 
 def find_tree(root, branch, terminal=False):
