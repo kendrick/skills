@@ -1,6 +1,6 @@
 ---
 name: inbox-to-memory
-description: Process raw inputs (transcripts, meeting notes, PDFs, slide decks, scratch braindumps) from a `_inbox/` queue into one groomed markdown note per input, and propose memory records across three scope tiers — project, client, and a cross-client journal. Use whenever the user wants to process the inbox, groom notes, drain the inbox, crystallize a memory candidate, promote something to memory or to a journal — even if they don't say "skill" or name a file type. Also use to set up the substrate for a new project, client, or the journal — scaffold a new project here, set up notes substrate, spin up a client, set up the journal, create a memory bank here. Client and project scaffolds default to a lightweight 3-type memory schema (Decision/Context/Rule) with a canonical 4-type opt; they also produce a README, `_personal.md`, `working-state.md` (project scope), and a `patterns-journal/`. Only operates on opted-in directories (holding `_memory/` or `entries/`, plus an `_inbox/` at that level or under `notes/`).
+description: Process raw inputs (transcripts, meeting notes, PDFs, slide decks, scratch braindumps) from a `_inbox/` queue into one groomed markdown note per input, and propose memory records across three scope tiers — project, client, and a cross-client journal. Use whenever the user wants to process the inbox, groom notes, drain the inbox, crystallize a memory candidate, promote something to memory or to a journal — even if they don't say "skill" or name a file type. Also use to set up the substrate for a new project, client, or the journal — scaffold a new project here, set up notes substrate, spin up a client, set up the journal, create a memory bank here. Client and project scaffolds default to a lightweight 3-type memory schema (Decision/Context/PolicyRule) with a canonical 4-type opt; they also produce a README, `_personal.md`, `working-state.md` (project scope), and a `patterns-journal/`. Only operates on opted-in directories (holding `_memory/` or `entries/`, plus an `_inbox/` at that level or under `notes/`).
 ---
 
 # inbox-to-memory
@@ -9,7 +9,7 @@ Three modes:
 
 - **Process** (default): pulls raw inputs from a `_inbox/` queue, produces one groomed markdown note per input, and proposes memory records or journal entries for the user to approve.
 - **Scaffold**: stands up the directory structure and CLAUDE.md for a new scope — a project, a client, or the cross-client journal.
-- **Migrate**: rewrites an existing scope's v1 frontmatter onto the v2 contract, leaving every body untouched.
+- **Migrate**: rewrites an existing scope's v1 frontmatter onto the v2 contract, and its v2 records onto long-term-memory-kit's `schema: 1`, leaving every body untouched.
 
 Decide the mode from the user's phrasing. When ambiguous, ask.
 
@@ -17,7 +17,7 @@ Decide the mode from the user's phrasing. When ambiguous, ask.
 | ------------------------------------------------------------------------------------------------------------------------------------ | -------- |
 | "process the inbox", "groom these notes", "drain the inbox", "crystallize this candidate", "promote to memory", "promote to journal" | process  |
 | "scaffold a new project here", "set up notes substrate", "spin up a client", "set up the journal", "create a memory bank here"       | scaffold |
-| "migrate this scope", "bring these notes onto v2", "upgrade the frontmatter", "migrate to schema 2", "get this scope onto the contract" | migrate  |
+| "migrate this scope", "bring these notes onto v2", "upgrade the frontmatter", "migrate to schema 2", "get this scope onto the contract", "migrate records to ltm" | migrate  |
 
 ---
 
@@ -179,7 +179,7 @@ For each candidate the user approves:
    - Memory record (project or client scope): `<scope-root>/_memory/<type-folder>/<slug>-<nanoid>.md`. The folder set depends on the scope's memory mode (declared at the top of its `CLAUDE.md`):
      - Lightweight: `decisions/`, `context/`, `rules/`.
      - Canonical: `decisions/`, `context/`, `policy-rules/`, `exceptions/`.
-     The folder must match `memory_type` in the frontmatter (`Rule` in lightweight = `PolicyRule` in canonical; see [references/memory-bank-schema.md](references/memory-bank-schema.md)).
+     The folder must match `memory_type` in the frontmatter. Both modes write rules as `PolicyRule`; lightweight keeps them in `rules/` through `memory-bank.yaml`'s `folders` (see [references/memory-bank-schema.md](references/memory-bank-schema.md)).
    - Journal entry: `11 Clients/11.99 Journal/entries/YYYY-MM-DD-<slug>-<nanoid>.md`.
 3. **Rewrite the candidate line** in the source note to a wiki link:
    - `[memory candidate: <scope>] <claim>` → `[[<record-filename-without-ext>|memory]] <claim>`
@@ -235,7 +235,7 @@ Stand up the directory structure and CLAUDE.md set for a new scope. Ask at most 
 1. **Scope** — project, client, or journal. (Suggest a default based on cwd: inside a client root, suggest client; inside `pursuits/` or `projects/`, suggest project; matches `*/11.99 Journal*`, suggest journal.)
 2. **Target path** — where to scaffold. Default: cwd. Exception: journal scope defaults to `11 Clients/11.99 Journal/` relative to the nearest vault root.
 3. **For project scope only** — pursuit (pre-sale, RFP work) or delivery (post-sale, working sessions)? This drives the `type:` enum baked into the generated CLAUDE.md.
-4. **For client and project scope** — memory mode: **lightweight** (default, 3 types: Decision/Context/Rule) or **canonical** (4 types: Decision/PolicyRule/Exception/Context). The user can answer simply "lightweight" / "canonical" or "use the full schema". See [references/memory-bank-schema.md](references/memory-bank-schema.md) for the trade-off. Default is lightweight — Exception folds into Decision.
+4. **For client and project scope** — memory mode: **lightweight** (default, 3 types: Decision/Context/PolicyRule) or **canonical** (4 types: Decision/PolicyRule/Exception/Context). The user can answer simply "lightweight" / "canonical" or "use the full schema". See [references/memory-bank-schema.md](references/memory-bank-schema.md) for the trade-off. Default is lightweight — Exception folds into Decision.
 
 The chosen memory mode gets recorded in the scope's `CLAUDE.md` (top frontmatter blockquote) so later `process inbox` runs flag candidates against the right type set.
 
@@ -248,6 +248,7 @@ The chosen memory mode gets recorded in the scope's `CLAUDE.md` (top frontmatter
 ├── CLAUDE.md                       # from assets/claude-md/client.template.md
 ├── README.md                       # from assets/readme/client.template.md
 ├── _personal.md                    # from assets/personal.template.md
+├── memory-bank.yaml                # from assets/memory-bank.template.yaml
 ├── notes/
 │   ├── CLAUDE.md                   # from assets/claude-md/notes.template.md
 │   ├── README.md                   # from assets/readme/notes.template.md
@@ -274,6 +275,7 @@ The chosen memory mode gets recorded in the scope's `CLAUDE.md` (top frontmatter
 ├── README.md                       # from assets/readme/project.template.md
 ├── working-state.md                # from assets/working-state.template.md
 ├── _personal.md                    # from assets/personal.template.md
+├── memory-bank.yaml
 ├── notes/
 │   ├── CLAUDE.md
 │   ├── README.md
@@ -292,7 +294,7 @@ The chosen memory mode gets recorded in the scope's `CLAUDE.md` (top frontmatter
 
 The differences from client scope: project scope gains `working-state.md` (the narrative decisions layer) and does not create `projects/` or `pursuits/` subdirectories.
 
-**Canonical mode replaces** the `_memory/rules/` folder with `_memory/policy-rules/` and `_memory/exceptions/`, and the generated CLAUDE.md templates substitute `Decision/PolicyRule/Exception/Context` for `Decision/Context/Rule` throughout.
+**Canonical mode replaces** the `_memory/rules/` folder with `_memory/policy-rules/` and `_memory/exceptions/`, the generated CLAUDE.md templates substitute `Decision/PolicyRule/Exception/Context` for `Decision/Context/PolicyRule` throughout, and `memory-bank.yaml` loses its `folders` line.
 
 **Journal scope:**
 
@@ -315,8 +317,9 @@ The CLAUDE.md and README templates use double-curly placeholders. Substitute the
 | `{{ClientName}}` / `{{ProjectName}}` / `{{ScopeName}}` | Human-readable name supplied by the user. |
 | `{{pursuit\|delivery project}}` / `{{pursuit\|project}}` / `{{pursuits\|projects}}` / `{{Pursuit\|Project}}` | Pick one side of the pipe based on question 3. Use the title-cased `{{Pursuit\|Project}}` form when the substitution lands inside a heading. |
 | `{{MEMORY_MODE}}` | `lightweight` or `canonical`. |
-| `{{MEMORY_TYPES}}` | `Decision, Context, Rule` (lightweight) or `Decision, PolicyRule, Exception, Context` (canonical). |
-| `{{MEMORY_TYPE_ENUM}}` | `Decision \| Context \| Rule` or `Decision \| PolicyRule \| Exception \| Context`. |
+| `{{SCOPE_NAME}}` | The scope directory's basename, lowercased to `a-z0-9-`. |
+| `{{MEMORY_TYPES}}` | `Decision, Context, PolicyRule` (lightweight) or `Decision, PolicyRule, Exception, Context` (canonical). |
+| `{{MEMORY_TYPE_ENUM}}` | `Decision \| Context \| PolicyRule` or `Decision \| PolicyRule \| Exception \| Context`. |
 | `{{MEMORY_TYPE_FOLDERS}}` | `decisions/, context/, rules/` or `decisions/, policy-rules/, exceptions/, context/`. |
 | `{{MEMORY_TYPE_LIST}}` | Markdown bullet list of types with one-line descriptions (pull from `references/memory-bank-schema.md`). |
 | `{{MEMORY_TYPE_SUMMARY}}` | Short table or bullet list summarizing types for the human-facing `_memory/README.md`. |
@@ -356,7 +359,7 @@ Each generated CLAUDE.md (client and project) carries a `## Deltas` section with
 - `### Active stakeholders` — project-specific roster.
 - `### Alias table` — project-specific aliases, optionally pointing to client-level Context records.
 - `### Tag namespace (suggested)` — project-specific tags.
-- `### applies_to facets` — optional per-scope dimension prefixes for memory-record `applies_to` values.
+- `### applies_to facets` — what each facet prefix in `memory-bank.yaml`'s `facet_prefixes` means here.
 - `### Pre-existing content` — optional, only when a project subdirectory predates the substrate.
 
 The alias table is load-bearing for grooming accuracy. It covers everything that reaches a note under more than one spelling: transcript mishears, nicknames, abbreviations, and OCR variants off slides and PDFs. The form is `canonical <- [variant, variant]`.
@@ -386,7 +389,7 @@ When invoked at a pre-existing project (e.g., `pursuits/atlas/`) that already ha
 
 1. Detect existing structure; do not overwrite content.
 2. Add any missing subdirectories per the chosen memory mode (e.g., `_memory/rules/` for lightweight, `_memory/policy-rules/` and `_memory/exceptions/` for canonical) with `.gitkeep`.
-3. Add any missing top-level files (`README.md`, `_personal.md`, `working-state.md` for projects, `patterns-journal/{CLAUDE.md,journal.md}`) without clobbering existing content.
+3. Add any missing top-level files (`README.md`, `_personal.md`, `memory-bank.yaml`, `working-state.md` for projects, `patterns-journal/{CLAUDE.md,journal.md}`) without clobbering existing content.
 4. Regenerate `CLAUDE.md` from the project template (write to `CLAUDE.md.new` if the existing file has been edited beyond template substitution).
 5. Ask the user for **deltas** — active stakeholders, custom tag namespace, custom `type:` enum values, transcription-error mappings. Append them under the regenerated `## Deltas` section.
 6. Stamp every file this run wrote—the regenerated `CLAUDE.md` or `CLAUDE.md.new`, plus anything added in step 3. The Deltas append in step 5 changes the body, so stamping before that records a digest the file already no longer matches.
@@ -401,9 +404,10 @@ Bring one opted-in scope's v1 files onto the v2 frontmatter contract. Full spec 
 ```bash
 bash <skill-path>/scripts/migrate-scope.sh <scope-root>            # dry run, writes nothing
 bash <skill-path>/scripts/migrate-scope.sh <scope-root> --apply    # writes
+bash <skill-path>/scripts/migrate-scope.sh <scope-root> --to-ltm [--facet-map <file>] [--apply]  # v2 records to schema: 1
 ```
 
-**Show the user the dry run and get approval before `--apply`.** Tier 1 is approvable as one batch. What it changes and what it refuses to guess are in [references/migration.md](references/migration.md), under What Tier 1 Does and What It Refuses to Do. Read the "needs a human" list at the end of the run.
+**Show the user the dry run and get approval before `--apply`.** Tier 1 is approvable as one batch. What it changes and what it refuses to guess are in [references/migration.md](references/migration.md), under What Tier 1 Does and What It Refuses to Do. Read the "needs a human" list at the end of the run. `--to-ltm` runs after Tier 1, all or nothing, under Migrating Records to ltm in [references/migration.md](references/migration.md).
 
 ### Tier 2: Summary and Entities
 
@@ -452,10 +456,10 @@ schema, body_schema, id, memory_type, title, status, date, effective_from, effec
 
 `status` is `proposed|accepted|superseded|deprecated|rejected`. Type-specific body fields are in [references/memory-bank-schema.md](references/memory-bank-schema.md).
 
-Files with no `schema` key are v1. They stay legal forever, and a scope holding both generations is a supported state rather than an unfinished migration. The lint checks one thing on them, whether their wiki links resolve, because a link resolving to no file is broken whichever generation wrote it.
+A record's generation is its `schema` value: `1` is long-term-memory-kit's format and what new records carry, `2` awaits `--to-ltm`. Notes and journal entries stay at `schema: 2`. Files with no `schema` key are v1. They stay legal forever, and a scope holding both generations is a supported state rather than an unfinished migration. The lint checks one thing on them, whether their wiki links resolve, because a link resolving to no file is broken whichever generation wrote it.
 
 `memory_type` values depend on the scope's chosen memory mode:
-- **Lightweight** (default): `Decision | Context | Rule`. Exception is folded into Decision.
+- **Lightweight** (default): `Decision | Context | PolicyRule`. Exception is folded into Decision.
 - **Canonical**: `Decision | PolicyRule | Exception | Context`. Matches the upstream reference architecture exactly.
 
 The scope's `CLAUDE.md` declares the mode in its top frontmatter blockquote. Read it before flagging candidates so the suggested type uses the right vocabulary.

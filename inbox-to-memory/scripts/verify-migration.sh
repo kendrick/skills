@@ -205,12 +205,43 @@ while IFS=$'\t' read -r status path1 path2; do
   esac
 done < <(git -C "$scope" diff --name-status -M "$since_ref" -- .)
 
+# --- ltm sweep ---------------------------------------------------------------
+#
+# Runs only beside a memory-bank.yaml: a pre-migration scope has no bank for the
+# kit to validate. A missing `ltm` skips rather than fails, because this script
+# stays runnable without the kit; the summary says so, since a skip is not a pass.
+ltm_summary=""
+if [[ -f "$scope/memory-bank.yaml" ]]; then
+  if command -v ltm >/dev/null 2>&1; then
+    if ltm_out="$(ltm validate "$scope" 2>&1)"; then
+      ltm_status=0
+    else
+      ltm_status=$?
+    fi
+    if [[ "$ltm_status" -ne 0 ]]; then
+      ltm_lines=0
+      while IFS= read -r line; do
+        [[ -z "$line" ]] && continue
+        ltm_lines=$((ltm_lines + 1))
+        fail "$scope" "verify-ltm: $line"
+      done < <(printf '%s\n' "$ltm_out")
+      if [[ "$ltm_lines" -eq 0 ]]; then
+        fail "$scope" "verify-ltm: ltm validate exited $ltm_status without a finding"
+      fi
+    fi
+    [[ "$ltm_status" -ne 0 ]] || ltm_summary="ltm: validated"
+  else
+    ltm_summary="ltm: not installed; skipped"
+  fi
+fi
+
 echo "scope: $scope"
 echo "since: $since_ref"
 echo "lint failures: $lint_failures"
 echo "links checked: $links_checked (id fallback: $links_fallback)"
 echo "renames: $renames"
 echo "deletions: $deletions"
+[[ -z "$ltm_summary" ]] || echo "$ltm_summary"
 echo "failures: $failures"
 
 # The record is stdout-only and exists for a passing run alone: a migration
