@@ -165,6 +165,91 @@ It skips and counts three kinds of note: a v1 body (no `schema` key, or `body_sc
 
 It runs no git check of its own, so commit or stash first if you mean to read the split as a diff. Then run `lint-scope.sh`: a `raw_file` that resolves nowhere fails as `raw-file`.
 
+## Migrating Records to ltm
+
+`--to-ltm` moves a scope's `schema: 2` records onto long-term-memory-kit's format, `schema: 1`, so `ltm validate` and `ltm doctor` can read the scope as a bank. Notes and journal entries keep `schema: 2` and are never touched. The record format is in [memory-bank-schema.md](memory-bank-schema.md), and the facet shape is under Facets in [machine-contracts.md](machine-contracts.md).
+
+For each `schema: 2` record under `_memory/*/`, the pass:
+
+- sets `schema: 1`;
+- rewrites `memory_type: Rule` to `PolicyRule`, leaving the file in `_memory/rules/`;
+- in `applies_to` and `owners`, rewrites `<prefix>::<value>` to `<prefix>:<value>`, keeps a `<prefix>:<value>` entry, and maps a bare value through the facet map;
+- rewrites a scalar `supersedes: <id>` to `supersedes: [<id>]`;
+- drops `effective_from`, `effective_to`, `supersedes`, and `superseded_by` where the value is `null` or empty.
+
+Bodies are copied byte for byte. A `schema: 1` record is skipped and counted under `already ltm:`, so a second `--apply` changes nothing.
+
+Where the scope root has no `memory-bank.yaml`, the pass writes one: `schema: 1`, a `name` from the scope directory's basename lowercased to `a-z0-9-`, `facet_prefixes` as the sorted union of every prefix the migrated records use plus the map's `prefixes`, and `folders: {PolicyRule: _memory/rules}` where `_memory/rules/` exists. Where the file already exists, the pass leaves it alone and refuses any prefix it doesn't declare. On a scope with `_memory/rules/`, it also refuses a bank whose `folders` maps no `PolicyRule` to `_memory/rules`, since the kit would then look for rules in `_memory/policy-rules/` and never find the migrated ones. Add `folders: {PolicyRule: _memory/rules}` to `memory-bank.yaml` by hand, commit it, and rerun.
+
+The facet map is a YAML file the scope's owner writes. The pass never infers a prefix, because a bare `billing` could be a system, a topic, or a team, and the file is the only place that answer exists:
+
+```yaml
+prefixes: [topic]   # extra prefixes to declare; a scope with no facets needs one
+applies_to:
+  billing: topic    # bare `billing` in applies_to becomes `topic:billing`
+owners:
+  ops: team         # bare `ops` in owners becomes `team:ops`
+```
+
+**The pass is all or nothing.** It checks every record before it writes any, and refuses the whole apply on any record it can't rewrite mechanically. Each refusal is a `needs a human:` line with the record path and the reason, and the dry run prints the same lines, so its output is the complete list for a scope. The common causes:
+
+- a bare value the map doesn't cover, which the dry run also lists under `unmapped:`;
+- a v1 record, reason `v1 record; run the Tier 1 migration first`;
+- a `related` entry that fails the kit's `^[a-z_]+::[A-Za-z0-9_-]{10}$`;
+- a record whose rewritten block would overrun the 20-line budget;
+- an empty prefix union, which names the map's `prefixes` key;
+- an existing `memory-bank.yaml` with `_memory/rules/` beside it and no `folders` entry mapping `PolicyRule` there.
+
+A refusal exits 1 and writes nothing, and the dry run exits 1 on the same input, so it predicts the apply. A scope is never left half in each format. Exit 2 is usage or a precondition: a dirty tree without `--allow-dirty`, or `--to-ltm` beside `--tier2` or `--tier2-extract`.
+
+Run the nine steps in order, one scope at a time, from the root of this skill's checkout:
+
+1. Install `ltm` from the Install section of long-term-memory-kit's README, and confirm it is on `PATH`.
+2. Commit the scope, and keep the commit as the ref verification reads.
+3. If the scope still holds v1 records, run the Tier 1 migration, verify it, and commit it. On a scope with none, Tier 1 writes nothing.
+4. Dry-run `--to-ltm`. It writes nothing.
+5. Write the facet map from the dry run's `unmapped:` lines, one entry per bare value under the key it appeared in, then dry-run again with `--facet-map` until it exits 0.
+6. Apply.
+7. Run `verify-migration.sh`. It gives the same answer before or after the migration commit: an uncommitted `memory-bank.yaml` is untracked, so the rename sweep never sees it, and a committed one is the single added file the sweep accepts.
+8. Run `ltm validate`. Exit 0 means every record parses, so `ltm doctor` skips none as malformed.
+9. If either check fails, undo, fix the map or the records, and start again at step 4. Otherwise commit.
+
+```bash
+# 1. install ltm
+ltm --version
+
+# 2. commit, and keep the ref
+git add <scope-root> && git commit -m 'pre-ltm checkpoint'
+ref="$(git rev-parse HEAD)"
+
+# 3. Tier 1 first, on a scope with v1 records (verify and commit it, then take the ref again)
+bash inbox-to-memory/scripts/migrate-scope.sh <scope-root> --apply
+
+# 4. dry run: lists every bare value under unmapped:
+bash inbox-to-memory/scripts/migrate-scope.sh <scope-root> --to-ltm
+
+# 5. write <facet-map> from the unmapped: lines, then dry-run with it
+bash inbox-to-memory/scripts/migrate-scope.sh <scope-root> --to-ltm --facet-map <facet-map>
+
+# 6. apply
+bash inbox-to-memory/scripts/migrate-scope.sh <scope-root> --to-ltm --facet-map <facet-map> --apply
+
+# 7. verify (before or after committing the migration)
+bash inbox-to-memory/scripts/verify-migration.sh <scope-root> --since "$ref"
+
+# 8. validate
+ltm validate <scope-root>
+
+# 9. undo: before committing the migration
+git restore -- <scope-root> && git clean -f -- <scope-root>/memory-bank.yaml
+# or after committing it (resets the whole repository)
+git reset --hard "$ref"
+```
+
+`git restore` alone leaves the new `memory-bank.yaml` behind, since it was never tracked. `git clean` removes only that untracked file, so a `memory-bank.yaml` the scope committed before the pass survives.
+
+Verification is complete only with `ltm` installed. Without it, `verify-migration.sh` prints `ltm: not installed; skipped` and passes on the lint alone, and the lint doesn't run the kit's schema.
+
 ## Verification
 
 ```bash
@@ -173,13 +258,14 @@ bash inbox-to-memory/scripts/verify-migration.sh <scope-root> --since <pre-migra
 
 Its own script rather than a flag on the migrator, and it reads git history instead of the working tree. That is what lets it run against a migration someone applied and committed last week: by then `git status` reports a clean tree and has nothing left to say about what the migration did.
 
-Three sweeps run over the scope.
+Three sweeps run over the scope, and a fourth runs where the scope root holds `memory-bank.yaml`.
 
 - `lint-scope.sh` runs across every file in it, resolved as a sibling of `verify-migration.sh` so a copied `scripts/` directory runs its own copy. Verification reads the lint's exit status rather than its output, because a lint that aborts on bad input never reaches its summary line and a check grepping for one would read that abort as a clean sweep.
 - Every wiki-link target the scope carried at `--since` has to still resolve, by filename first and then by the trailing ten-character id. A target that resolved by name before and by id now counts as a pass, and the report says how many took that fallback. Targets come from the `--since` tree rather than the migrated one, so a link that vanished during the migration is still checked instead of dropping out of the count.
-- File statuses come from `git diff --name-status -M <ref>`. Anything other than `M` fails, with renames and deletions named separately.
+- File statuses come from `git diff --name-status -M <ref>`. Anything other than `M` fails, with renames and deletions named separately. The one exception is an `A` for `memory-bank.yaml` at the scope root, the file `--to-ltm` writes; an added file anywhere else fails.
+- Beside `memory-bank.yaml`, `ltm validate` runs when `ltm` is on `PATH`, given the bank file and each `schema: 1` record under `_memory/` by path. `schema: 2` and v1 records are left out: they stay legal until `--to-ltm` runs, and a scope can hold the bank before then. Without `ltm`, the summary prints `ltm: not installed; skipped` and the sweep passes.
 
-Every failure names a diagnostic. `verify-lint` is the lint's own failure line passed through, or a note that the lint aborted with some exit status and no summary. `verify-link` means a target resolves neither by name nor by the nanoid in its last ten characters, so either the file is gone or its id changed, and migration is allowed to do neither. `verify-rename` covers a file that was renamed, deleted, or came back with a status the sweep didn't expect; migration rewrites frontmatter in place, so any other status is evidence that something besides the migrator touched the scope.
+Every failure names a diagnostic. `verify-lint` is the lint's own failure line passed through, or a note that the lint aborted with some exit status and no summary. `verify-link` means a target resolves neither by name nor by the nanoid in its last ten characters, so either the file is gone or its id changed, and migration is allowed to do neither. `verify-rename` covers a file that was renamed, deleted, added anywhere but the scope root's `memory-bank.yaml`, or came back with a status the sweep didn't expect; migration rewrites frontmatter in place and adds only that one file, so any other status is evidence that something besides the migrator touched the scope. `verify-ltm` is one `ltm validate` error line passed through, or `ltm validate exited <n> without a finding` when it failed silently. An ltm warning prints as an `info` line and never fails the run, matching ltm, which exits 0 on warnings.
 
 **Verification reports and never repairs.** It prints every failure it found rather than stopping at the first, leaves the scope byte-identical, and exits nonzero. A sweep that rewrote the file it just flagged would stop being the check on the migration and become a second, unreviewed one.
 

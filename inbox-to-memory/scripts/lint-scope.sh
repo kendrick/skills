@@ -478,11 +478,140 @@ check_counts() {
   done
 }
 
+# The four ltm checks below read a record's `schema` value, which the generation
+# test above never does. `schema: 2` is a record awaiting migrate-scope.sh --to-ltm
+# and stays legal; only `schema: 1` has to satisfy the kit. Notes never carry it.
+KIT_TYPES="Decision PolicyRule Exception Context"
+
+kit_default_folder() {
+  case "$1" in
+    Decision) echo "_memory/decisions" ;;
+    PolicyRule) echo "_memory/policy-rules" ;;
+    Exception) echo "_memory/exceptions" ;;
+    Context) echo "_memory/context" ;;
+  esac
+}
+
+# Prints the schema value, or nothing when the block won't parse. check_frontmatter
+# has already failed such a file, so a second failure here would only repeat it.
+frontmatter_schema_value() {
+  local end
+  end="$(frontmatter_end "$1")"
+  [[ "$end" -eq 0 ]] && return 0
+  sed -n "2,$((end - 1))p" "$1" | yq '.schema' 2>/dev/null || true
+}
+
+# ltm's own prefix check reads the text before the first colon, so `regions::emea`
+# passes it as prefix `regions` with value `:emea`. The `[^:]` here is what
+# catches that. Prefixes come from the scope's memory-bank.yaml; when that file
+# is unusable, bank-config already fails the scope and the membership test is
+# skipped rather than failing every entry a second time.
+check_record_facets() {
+  local block="$1" key entry prefix tag
+  for key in applies_to owners; do
+    tag="$(printf '%s\n' "$block" | yq ".$key | tag" 2>/dev/null || true)"
+    case "$tag" in
+      '!!null' | '') continue ;;
+      '!!seq') ;;
+      *)
+        fail record-facet "\`$key\` is not an inline list"
+        continue
+        ;;
+    esac
+    while IFS= read -r entry; do
+      if ! [[ "$entry" =~ ^[a-z][a-z0-9-]*:[^:] ]]; then
+        fail record-facet "\`$key\` entry \`$entry\` is not <prefix>:<value> with one colon"
+        continue
+      fi
+      prefix="${entry%%:*}"
+      if [[ "$bank_prefixes_ok" -eq 1 ]] && ! printf '%s\n' "$bank_prefixes" | grep -Fqx -- "$prefix"; then
+        fail record-facet "\`$key\` entry \`$entry\` uses prefix \`$prefix\`, which memory-bank.yaml does not list under facet_prefixes"
+      fi
+    done < <(printf '%s\n' "$block" | yq -r ".$key[]" 2>/dev/null || true)
+  done
+}
+
+check_record_type() {
+  local file="$1" block="$2" type folder actual
+  type="$(printf '%s\n' "$block" | yq -r '.memory_type // ""' 2>/dev/null || true)"
+  if ! printf '%s\n' $KIT_TYPES | grep -Fqx -- "$type"; then
+    fail record-type "\`memory_type: $type\` is not one of: $KIT_TYPES"
+    return
+  fi
+  folder=""
+  if [[ "$bank_parses" -eq 1 ]]; then
+    folder="$(yq -r ".folders.$type // \"\"" "$scope/memory-bank.yaml" 2>/dev/null || true)"
+  fi
+  [[ -n "$folder" ]] || folder="$(kit_default_folder "$type")"
+  folder="${folder%/}"
+  actual="$(dirname "${file#"$scope"/}")"
+  if [[ "$actual" != "$folder" ]]; then
+    fail record-type "\`memory_type: $type\` belongs in \`$folder\`, this file is in \`$actual\`"
+  fi
+}
+
+check_record_supersedes() {
+  local block="$1"
+  [[ "$(printf '%s\n' "$block" | yq 'has("supersedes")' 2>/dev/null || true)" == true ]] || return 0
+  if [[ "$(printf '%s\n' "$block" | yq '.supersedes | tag' 2>/dev/null || true)" != '!!seq' ]]; then
+    fail record-supersedes "\`supersedes\` must be an inline list, like [<id>]"
+  fi
+}
+
+check_ltm_record() {
+  local file="$1" end block
+  [[ "$(frontmatter_schema_value "$file")" == 1 ]] || return 0
+  ltm_records=$((ltm_records + 1))
+  end="$(frontmatter_end "$file")"
+  block="$(sed -n "2,$((end - 1))p" "$file")"
+  check_record_facets "$block"
+  check_record_type "$file" "$block"
+  check_record_supersedes "$block"
+}
+
+# Once per scope, after the walk. The bank file is what makes `_memory/` a kit
+# bank, so a scope holding one `schema: 1` record without it fails here rather
+# than once per record.
+check_bank_config() {
+  local saved="$current_file" bank="$scope/memory-bank.yaml" p
+  current_file="$bank"
+  if [[ ! -f "$bank" ]]; then
+    fail bank-config "$scope holds a schema: 1 record and no memory-bank.yaml"
+  elif [[ "$bank_parses" -eq 0 ]]; then
+    fail bank-config "yq could not parse memory-bank.yaml"
+  else
+    [[ "$(yq '.schema' "$bank")" == 1 ]] || fail bank-config "\`schema\` is not 1"
+    [[ "$(yq '.name | tag' "$bank")" == '!!str' && -n "$(yq '.name' "$bank")" ]] ||
+      fail bank-config "\`name\` is missing or empty"
+    if [[ "$(yq '.facet_prefixes | tag' "$bank")" != '!!seq' || "$(yq '.facet_prefixes | length' "$bank")" -eq 0 ]]; then
+      fail bank-config "\`facet_prefixes\` needs at least one entry"
+    else
+      while IFS= read -r p; do
+        [[ "$p" =~ ^[a-z][a-z0-9-]*$ ]] || fail bank-config "facet prefix \`$p\` is not lowercase a-z, 0-9, and hyphens"
+      done < <(yq -r '.facet_prefixes[]' "$bank")
+    fi
+  fi
+  current_file="$saved"
+}
+
 shopt -s nullglob
 
 work="$(mktemp -d "${TMPDIR:-/tmp}/i2m-lint.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 : >"$work/open-slugs"
+
+# memory-bank.yaml state, read once. Facet-prefix membership needs it per record.
+bank_parses=0
+bank_prefixes_ok=0
+bank_prefixes=""
+ltm_records=0
+if [[ -f "$scope/memory-bank.yaml" ]] && yq '.' "$scope/memory-bank.yaml" >/dev/null 2>&1; then
+  bank_parses=1
+  if [[ "$(yq '.facet_prefixes | tag' "$scope/memory-bank.yaml")" == '!!seq' ]]; then
+    bank_prefixes_ok=1
+    bank_prefixes="$(yq -r '.facet_prefixes[]' "$scope/memory-bank.yaml")"
+  fi
+fi
 
 # Pass one classifies and caches each v2 body, because the resolution and
 # recurrence checks are scope-wide: they can't be answered from inside one file.
@@ -525,6 +654,7 @@ for file in ${v2_files[@]+"${v2_files[@]}"}; do
   current_file="$file"
   body="${body_for_index[$index]}"
   check_frontmatter "$file"
+  check_ltm_record "$file"
 
   # The body grammar checks are the ones a v1 body cannot satisfy and was never
   # asked to. Links stay on either way, and they run on files with no `schema` key
@@ -553,6 +683,8 @@ for file in ${v2_files[@]+"${v2_files[@]}"}; do
       fail open-question-resolution "\`$slug\` is resolved here but never opened anywhere in scope"
   done < <(grep -oE -- '\[open question resolved: [^]]*\]' "$body" | sed -E 's/\[open question resolved: (.*)\]/\1/' | sort -u)
 done
+
+if [[ "$ltm_records" -gt 0 ]]; then check_bank_config; fi
 
 # A link is broken the same way regardless of which schema generation wrote it,
 # so it's the one check the v1/v2 split above was never meant to gate. Nothing

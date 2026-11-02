@@ -17,6 +17,11 @@
 # v1 below it. It says so with `body_schema: 1`, which is what stops the lint from
 # holding a note written in 2025 to a grammar that did not exist yet.
 #
+# `--to-ltm` is a separate pass over `schema: 2` records, moving them onto
+# long-term-memory-kit's `schema: 1` and writing the scope's memory-bank.yaml.
+# A bare facet takes its prefix from the facet map alone, and any record the
+# pass can't rewrite refuses the whole apply.
+#
 # Requires bash, awk, yq, and git. The awk does the frontmatter rewrite because
 # the transform needs keyed lookups, and the bash that ships on macOS has none.
 set -euo pipefail
@@ -31,12 +36,16 @@ allow_dirty=0
 scope=""
 tier2_file=""
 tier2_extract_dir=""
+to_ltm=0
+dry_run=0
+facet_map=""
 
 usage() {
   cat >&2 <<'USAGE'
 usage: migrate-scope.sh <scope-path> [--apply] [--allow-dirty]
        migrate-scope.sh <scope-path> --tier2-extract <dir>
        migrate-scope.sh <scope-path> --tier2 <proposals-file> --apply
+       migrate-scope.sh <scope-path> --to-ltm [--facet-map <file>] [--apply] [--allow-dirty]
 
   <scope-path>       a directory with _inbox/ or notes/_inbox/, plus _memory/ or entries/
   --apply            write the changes; without it nothing is written
@@ -45,6 +54,11 @@ usage: migrate-scope.sh <scope-path> [--apply] [--allow-dirty]
                       proposals skeleton to <dir>, and write nothing to the scope
   --tier2            merge summary/entities from a filled-in proposals file into
                       the Tier 1 rewrite; only takes effect together with --apply
+  --dry-run          the default; named so a command can say so, and never mixes with --apply
+  --to-ltm           move schema 2 records under _memory/ to long-term-memory-kit's
+                      schema 1 and write memory-bank.yaml; refuses the whole scope
+                      if any record can't move
+  --facet-map        a YAML file mapping bare applies_to/owners values to a prefix
 USAGE
 }
 
@@ -52,6 +66,16 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --apply) apply=1 ;;
     --allow-dirty) allow_dirty=1 ;;
+    --dry-run) dry_run=1 ;;
+    --to-ltm) to_ltm=1 ;;
+    --facet-map)
+      shift
+      [[ $# -gt 0 ]] || {
+        echo "--facet-map requires a file argument" >&2
+        exit 2
+      }
+      facet_map="$1"
+      ;;
     --tier2)
       shift
       [[ $# -gt 0 ]] || {
@@ -120,6 +144,34 @@ command -v yq >/dev/null 2>&1 || {
 if [[ -n "$tier2_file" && -n "$tier2_extract_dir" ]]; then
   echo "--tier2 and --tier2-extract do not mix in one run" >&2
   exit 2
+fi
+
+if [[ "$dry_run" -eq 1 && "$apply" -eq 1 ]]; then
+  echo "--dry-run and --apply contradict each other" >&2
+  exit 2
+fi
+
+# The ltm move is a different contract from Tier 1/2, with its own all-or-nothing
+# rule; letting it ride along with a Tier 2 merge would put two refusal policies
+# on one run.
+if [[ "$to_ltm" -eq 1 && ( -n "$tier2_file" || -n "$tier2_extract_dir" ) ]]; then
+  echo "--to-ltm does not mix with --tier2 or --tier2-extract" >&2
+  exit 2
+fi
+
+if [[ -n "$facet_map" ]]; then
+  [[ "$to_ltm" -eq 1 ]] || {
+    echo "--facet-map only applies with --to-ltm" >&2
+    exit 2
+  }
+  [[ -f "$facet_map" ]] || {
+    echo "facet map not found: $facet_map" >&2
+    exit 2
+  }
+  yq '.' "$facet_map" >/dev/null 2>&1 || {
+    echo "facet map does not parse as YAML: $facet_map" >&2
+    exit 2
+  }
 fi
 
 if [[ -n "$tier2_file" ]]; then
@@ -321,6 +373,296 @@ render_frontmatter() {
 }
 
 shopt -s nullglob
+
+# --to-ltm moves records, and only records, onto long-term-memory-kit's schema 1.
+# It checks every record before it writes any, because a scope left half in each
+# format fails ltm validate and the lint at once, and nothing says which half is
+# which. A refusal anywhere means nothing is written anywhere.
+if [[ "$to_ltm" -eq 1 ]]; then
+  : >"$work/ltm-refusals"
+  : >"$work/ltm-unmapped"
+  : >"$work/ltm-used"
+  : >"$work/ltm-writes"
+  to_ltm_count=0
+  already_ltm=0
+  n_refusals=0
+
+  refuse() {
+    echo "  $1: $2" >>"$work/ltm-refusals"
+    n_refusals=$((n_refusals + 1))
+  }
+
+  # Quote every item except a facet. A plain id like 1234567890 or 1e10000000
+  # parses as a number, and ltm wants a string. A facet opens with `prefix:`,
+  # which no YAML number, bool, null or date can, so it stays plain and
+  # greppable as `topic:billing`.
+  ltm_item() {
+    local v="$1"
+    if [[ "$v" =~ ^[a-z][a-z0-9-]*:[A-Za-z0-9_./][A-Za-z0-9_./:\ -]*$ && "$v" != *": "* && "$v" != *" " && "$v" != *: ]]; then
+      printf '%s' "$v"
+    else
+      printf "'%s'" "${v//\'/\'\'}"
+    fi
+  }
+
+  map_prefix() {
+    [[ -n "$facet_map" ]] || return 0
+    FM_K="$2" yq -r ".$1[strenv(FM_K)] // \"\"" "$facet_map"
+  }
+
+  for file in "$scope"/_memory/*/*.md; do
+    case "${file##*/}" in
+      CLAUDE.md | README.md) continue ;;
+    esac
+
+    end="$(frontmatter_end "$file")"
+    [[ "$end" -eq 0 ]] && continue
+    sed -n "2,$((end - 1))p" "$file" >"$work/block"
+    if ! yq '.' "$work/block" >/dev/null 2>&1; then
+      refuse "$file" "yq could not parse the frontmatter"
+      continue
+    fi
+    memory_type="$(yq -r '.memory_type // ""' "$work/block")"
+    [[ -n "$memory_type" ]] || continue
+
+    schema_value="$(yq -r '.schema // "absent"' "$work/block")"
+    case "$schema_value" in
+      absent)
+        refuse "$file" "v1 record; run the Tier 1 migration first"
+        continue
+        ;;
+      1)
+        already_ltm=$((already_ltm + 1))
+        for key in applies_to owners; do
+          yq -r "(.$key // []) | .[]" "$work/block" 2>/dev/null |
+            { grep -oE '^[a-z][a-z0-9-]*:' || true; } | tr -d ':' >>"$work/ltm-used"
+        done
+        continue
+        ;;
+      2) ;;
+      *)
+        refuse "$file" "schema: $schema_value is neither 2 nor 1"
+        continue
+        ;;
+    esac
+
+    # The rewrite swaps whole lines, which is only sound on the v2 contract's
+    # one-key-per-line block. A block list or folded scalar needs a human.
+    if grep -qvE '^([A-Za-z_][A-Za-z0-9_]*:( |$)|#|[[:space:]]*$)' "$work/block"; then
+      refuse "$file" "frontmatter is not one key per line"
+      continue
+    fi
+
+    : >"$work/repl"
+    record_refused=0
+    has_key() { grep -qE "^$1:( |$)" "$work/block"; }
+    ytype() { yq -r ".$1 | type" "$work/block"; }
+
+    printf 'schema\tschema: 1\n' >>"$work/repl"
+
+    case "$memory_type" in
+      Rule) printf 'memory_type\tmemory_type: PolicyRule\n' >>"$work/repl" ;;
+      Decision | PolicyRule | Exception | Context) ;;
+      *)
+        refuse "$file" "memory_type $memory_type has no long-term-memory-kit type"
+        record_refused=1
+        ;;
+    esac
+
+    for key in applies_to owners; do
+      has_key "$key" || continue
+      case "$(ytype "$key")" in
+        '!!null')
+          printf '%s\t\n' "$key" >>"$work/repl"
+          continue
+          ;;
+        '!!seq') ;;
+        *)
+          refuse "$file" "$key is not a list"
+          record_refused=1
+          continue
+          ;;
+      esac
+      items=""
+      while IFS= read -r entry; do
+        [[ -n "$entry" ]] || continue
+        if [[ "$entry" =~ ^([a-z][a-z0-9-]*)::(.+)$ ]]; then
+          prefix="${BASH_REMATCH[1]}"
+          new="$prefix:${BASH_REMATCH[2]}"
+        elif [[ "$entry" =~ ^([a-z][a-z0-9-]*):[^:] ]]; then
+          prefix="${BASH_REMATCH[1]}"
+          new="$entry"
+        else
+          # Never infer a prefix: `billing` could be a system, a topic, or a
+          # team, and a guessed one reads exactly like a chosen one.
+          prefix="$(map_prefix "$key" "$entry")"
+          if [[ -z "$prefix" ]]; then
+            printf '  %s: %s\n' "$key" "$entry" >>"$work/ltm-unmapped"
+            refuse "$file" "$key value '$entry' has no prefix and no facet-map entry"
+            record_refused=1
+            continue
+          fi
+          if ! [[ "$prefix" =~ ^[a-z][a-z0-9-]*$ ]]; then
+            refuse "$file" "the facet map gives $key value '$entry' the prefix '$prefix', which is not a lowercase prefix"
+            record_refused=1
+            continue
+          fi
+          new="$prefix:$entry"
+        fi
+        if ! [[ "$new" =~ ^[a-z][a-z0-9-]*:[^:] ]]; then
+          refuse "$file" "$key value '$entry' would become '$new', which still has a doubled colon"
+          record_refused=1
+          continue
+        fi
+        echo "$prefix" >>"$work/ltm-used"
+        items="${items:+$items, }$(ltm_item "$new")"
+      done < <(yq -r ".$key[]" "$work/block")
+      printf '%s\t%s: [%s]\n' "$key" "$key" "$items" >>"$work/repl"
+    done
+
+    if has_key related; then
+      case "$(ytype related)" in
+        '!!null') printf 'related\t\n' >>"$work/repl" ;;
+        '!!seq')
+          while IFS= read -r entry; do
+            [[ -n "$entry" ]] || continue
+            if ! [[ "$entry" =~ ^[a-z_]+::[A-Za-z0-9_-]{10}$ ]]; then
+              refuse "$file" "related entry '$entry' is not <relation>::<10-character id>"
+              record_refused=1
+            fi
+          done < <(yq -r '.related[]' "$work/block")
+          ;;
+        *)
+          refuse "$file" "related is not a list"
+          record_refused=1
+          ;;
+      esac
+    fi
+
+    # The kit's id and date patterns reject a literal null or an empty string,
+    # so an unset optional key goes rather than staying as a placeholder.
+    for key in effective_from effective_to superseded_by supersedes; do
+      has_key "$key" || continue
+      if [[ "$(ytype "$key")" == '!!null' || -z "$(yq -r ".$key" "$work/block")" ]]; then
+        printf '%s\t\n' "$key" >>"$work/repl"
+      elif [[ "$key" == supersedes && "$(ytype "$key")" != '!!seq' ]]; then
+        printf 'supersedes\tsupersedes: [%s]\n' "$(ltm_item "$(yq -r '.supersedes' "$work/block")")" >>"$work/repl"
+      fi
+    done
+
+    [[ "$record_refused" -eq 0 ]] || continue
+
+    awk -F '\t' '
+      NR == FNR { repl[$1] = $2; seen[$1] = 1; next }
+      {
+        k = substr($0, 1, index($0, ":") - 1)
+        if (k in seen) { if (repl[k] != "") print repl[k]; next }
+        print
+      }
+    ' "$work/repl" "$work/block" >"$work/new-fm"
+
+    lines="$(wc -l <"$work/new-fm" | tr -d ' ')"
+    if [[ $((lines + 2)) -gt "$FRONTMATTER_LINE_BUDGET" ]]; then
+      refuse "$file" "rewritten frontmatter needs $((lines + 2)) lines, past the $FRONTMATTER_LINE_BUDGET-line budget"
+      continue
+    fi
+    if ! yq '.' "$work/new-fm" >/dev/null 2>&1; then
+      refuse "$file" "the rewritten frontmatter does not parse"
+      continue
+    fi
+
+    to_ltm_count=$((to_ltm_count + 1))
+    candidate="$work/ltm-candidate.$to_ltm_count"
+    {
+      echo "---"
+      cat "$work/new-fm"
+      echo "---"
+      tail -n +$((end + 1)) "$file"
+    } >"$candidate"
+    printf '%s\t%s\n' "$candidate" "$file" >>"$work/ltm-writes"
+
+    echo "--- $file"
+    diff -u <(sed -n "1,${end}p" "$file") <(sed -n "1,$((lines + 2))p" "$candidate") |
+      tail -n +3 || true
+  done
+
+  bank="$scope/memory-bank.yaml"
+  bank_status="present, left alone"
+  if [[ -f "$bank" ]]; then
+    # An existing bank file is the owner's; the pass checks it covers the
+    # records and never edits it.
+    declared="$(yq -r '(.facet_prefixes // []) | .[]' "$bank" 2>/dev/null || true)"
+    while IFS= read -r prefix; do
+      [[ -n "$prefix" ]] || continue
+      grep -qxF -- "$prefix" <<<"$declared" ||
+        refuse "$bank" "records use the prefix '$prefix', which facet_prefixes does not declare"
+    done < <(sort -u "$work/ltm-used")
+    # Without this entry the kit looks for PolicyRule in _memory/policy-rules/,
+    # so the rules this pass rewrites would validate clean and then be invisible
+    # to `ltm show` (#276 F-r1-authz-01). The bank is the owner's file, so the
+    # pass names the fix rather than writing it.
+    if [[ -d "$scope/_memory/rules" ]]; then
+      rules_folder="$(yq -r '.folders.PolicyRule // ""' "$bank" 2>/dev/null || true)"
+      [[ "${rules_folder%/}" == "_memory/rules" ]] ||
+        refuse "$bank" "folders maps no PolicyRule to _memory/rules; add 'folders: {PolicyRule: _memory/rules}' by hand"
+    fi
+  else
+    if [[ -n "$facet_map" ]]; then
+      while IFS= read -r prefix; do
+        [[ -n "$prefix" ]] || continue
+        if [[ "$prefix" =~ ^[a-z][a-z0-9-]*$ ]]; then
+          echo "$prefix" >>"$work/ltm-used"
+        else
+          refuse "$facet_map" "prefixes entry '$prefix' is not a lowercase prefix"
+        fi
+      done < <(yq -r '(.prefixes // []) | .[]' "$facet_map")
+    fi
+    prefixes="$(sort -u "$work/ltm-used" | paste -sd ',' - | sed 's/,/, /g')"
+    if [[ -z "$prefixes" ]]; then
+      refuse "$bank" "no facet prefix to declare, since no record uses one; list at least one under the facet map's prefixes key"
+    fi
+    bank_name="$(basename "$(cd "$scope" && pwd)" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g')"
+    {
+      echo "schema: 1"
+      echo "name: '$bank_name'"
+      echo "facet_prefixes: [$prefixes]"
+      [[ -d "$scope/_memory/rules" ]] && echo "folders: {PolicyRule: _memory/rules}"
+    } >"$work/bank"
+    bank_status="would be written"
+  fi
+
+  echo
+  echo "scope: $scope"
+  echo "to ltm: $to_ltm_count"
+  echo "already ltm: $already_ltm"
+  echo "memory-bank.yaml: $bank_status"
+
+  if [[ -s "$work/ltm-unmapped" ]]; then
+    echo
+    echo "unmapped:"
+    sort -u "$work/ltm-unmapped"
+  fi
+
+  if [[ "$n_refusals" -gt 0 ]]; then
+    echo
+    echo "needs a human:"
+    cat "$work/ltm-refusals"
+    echo
+    echo "refused; nothing was written. resolve every line above, then rerun."
+    exit 1
+  fi
+
+  if [[ "$apply" -eq 1 ]]; then
+    while IFS=$'\t' read -r candidate target; do
+      cat "$candidate" >"$target"
+    done <"$work/ltm-writes"
+    [[ -f "$work/bank" ]] && cp "$work/bank" "$bank" && echo "memory-bank.yaml: written"
+  else
+    echo
+    echo "dry run; nothing was written. rerun with --apply to write these changes."
+  fi
+  exit 0
+fi
 
 for file in "$scope"/notes/*.md "$scope"/_memory/*/*.md "$scope"/entries/*.md; do
   case "${file##*/}" in

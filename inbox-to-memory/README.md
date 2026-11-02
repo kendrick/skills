@@ -49,12 +49,12 @@ inbox-to-memory/
 ├── assets/           # templates emitted at scaffold and crystallize time
 │   ├── claude-md/    # CLAUDE.md per scope
 │   ├── readme/       # README.md per scope
-│   ├── records/      # Decision, Rule, PolicyRule, Exception, Context, Journal
-│   └── ...           # note, personal, working-state, journal templates
+│   ├── records/      # Decision, Context, PolicyRule, Exception, Journal
+│   └── ...           # note, personal, working-state, journal, memory-bank.yaml templates
 ├── scripts/
 │   ├── scaffold_digest.py  # computes and stamps the scaffold_digest a scaffolded file carries
 │   ├── lint-scope.sh       # what the verify phase runs
-│   ├── migrate-scope.sh    # brings a v1 scope onto the v2 contract
+│   ├── migrate-scope.sh    # brings a v1 scope onto the v2 contract, and v2 records onto long-term-memory-kit's format
 │   ├── collapse-vtt.sh     # merges VTT cues into speaker turns
 │   ├── bench-fixture.sh    # builds a qmd bench fixture from accepted records
 │   ├── find-candidates.sh  # merges grep and qmd vec hits for phase 2.5
@@ -77,7 +77,7 @@ inbox-to-memory/
 - IDs come from the `nanoid` CLI (`nanoid -s 10`), which must be installed globally.
 - The verify step runs `scripts/lint-scope.sh` over the scope, and it parses YAML with `yq`. Install that alongside `nanoid` (`brew install yq`). Neither ships with macOS, and a missing one fails for a reason that has nothing to do with your notes.
 - qmd is optional. Phase 2.5 searches your records by meaning only after the `memory-index` skill registers the scope with qmd. Until then, `scripts/find-candidates.sh` falls back to grep and prints a `vec off:` line. The closing report carries that line, so you can tell a grep-only run from a search that found nothing.
-- Notes written before the v2 contract keep working untouched; nothing forces a migration. When you do want one, `scripts/migrate-scope.sh` rewrites frontmatter only and never touches a body. It dry-runs by default and wants a clean working tree before it writes. See [references/migration.md](references/migration.md).
+- Notes written before the v2 contract keep working untouched; nothing forces a migration. When you do want one, `scripts/migrate-scope.sh` rewrites frontmatter only and never touches a body. It dry-runs by default and wants a clean working tree before it writes. With `--to-ltm`, it moves a scope's memory records onto [long-term-memory-kit](https://github.com/kendrick/long-term-memory-kit)'s format, so `ltm validate` can check them. It rewrites every record or none, and takes each bare facet's prefix from a map you write. See [references/migration.md](references/migration.md).
 - Draining the inbox is destructive by design: after grooming, text sources are gone from `_inbox/` and binaries have moved. The content survives under `notes/`, where `notes/raw/` keeps each text source verbatim. If you want pristine originals kept elsewhere, copy before you drop.
 - Nothing is ever promoted to memory automatically. Every record requires your explicit per-candidate approval, and unpromoted candidates keep their `[memory candidate: ...]` flag as a record of what was considered. One date is the exception. When an input restates a claim an accepted record already makes, the run stamps that input's date onto the record's `last_confirmed` and names it in the closing report, so `git status` can show modified memory files after a run where you approved nothing. No record is created and nothing a record claims is edited — only the date saying when the claim was last seen to hold.
 

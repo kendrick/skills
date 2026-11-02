@@ -1,12 +1,12 @@
 ---
-schema: 2
+schema: 1
 id: '{{nanoid}}'
 memory_type: Exception
 title: '{{Title describing the exception, not the rule}}'
 status: '{{proposed | accepted}}'
 date: '{{YYYY-MM-DD}}'
 # effective_from: '{{YYYY-MM-DD}}'
-# effective_to: null   # set this when the exception expires
+# effective_to: YYYY-MM-DD   # set this when the exception expires
 last_confirmed: '{{YYYY-MM-DD}}'
 source_refs: ['{{note-id}}']
 applies_to: []
@@ -14,8 +14,8 @@ owners: []
 tags: []
 related: []
 exception_to: '[[{{rule-id}}|{{rule-short-name}}]]'
-# supersedes: <id-of-old-exception>
-# superseded_by: null
+# supersedes: [<id>]
+# superseded_by: <id>
 ---
 
 # {{title}}

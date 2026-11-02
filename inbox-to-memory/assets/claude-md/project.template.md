@@ -100,11 +100,11 @@ Project-specific tags layered on top of the client-wide namespace.
 
 ### applies_to Facets
 
-Optional dimension prefixes on memory-record `applies_to` values, shape `<facet>::<value>`. Reach for this once flat values from different dimensions start colliding in one grep, where a search for a system also pulls back topics that happen to share the word. Unprefixed values stay legal, and faceted and unfaceted records can sit side by side in the same scope, so this can be adopted late and backfilled partly or never. The facet names are this {{pursuit|project}}'s to choose, not the skill's.
+Every memory-record `applies_to` and `owners` entry is `<prefix>:<value>`, with one colon, and its prefix must be listed under `facet_prefixes` in this {{pursuit|project}}'s `memory-bank.yaml`, which is where prefixes are declared. The scaffold declares `topic`. Add a prefix there before the first record that uses it. Reach for a new one once a single prefix starts holding values from different dimensions, where a search for a system also pulls back topics that happen to share the word. The prefix names are this {{pursuit|project}}'s to choose, not the skill's. Note here what each one covers.
 
-<!-- Fill in once flat values start colliding across dimensions:
-products, regions, systems, sites, topics   # topics is the catch-all
-applies_to: [regions::emea, systems::billing, topics::invoice-disputes]
+<!-- Fill in as prefixes are added to memory-bank.yaml:
+regions, systems, topics   # topics is the catch-all
+applies_to: [regions:emea, systems:billing, topics:invoice-disputes]
 -->
 
 ### Pre-existing Content

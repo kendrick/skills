@@ -1,20 +1,20 @@
 ---
-schema: 2
+schema: 1
 id: '{{nanoid}}'
 memory_type: Context
 title: '{{Subject and short claim, e.g. Mike Nostra wants data as-is}}'
 status: '{{proposed | accepted}}'
 date: '{{YYYY-MM-DD}}'
 # effective_from: '{{YYYY-MM-DD}}'
-# effective_to: null
+# effective_to: YYYY-MM-DD
 last_confirmed: '{{YYYY-MM-DD}}'
 source_refs: ['{{note-id}}']
 applies_to: []
 owners: []
 tags: []
 related: []
-# supersedes: <id-of-old-record>
-# superseded_by: null
+# supersedes: [<id>]
+# superseded_by: <id>
 ---
 
 # {{title}}

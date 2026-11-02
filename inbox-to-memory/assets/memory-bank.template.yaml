@@ -1,0 +1,13 @@
+# long-term-memory-kit bank config. `ltm validate` and `ltm doctor` find the
+# scope's records through this file; schema/memory-bank.schema.json in the kit
+# is the authority on every key.
+schema: 1
+# The scope directory's basename, lowercased to a-z0-9-, the same name
+# `migrate-scope.sh --to-ltm` writes for a scope it migrates.
+name: '{{SCOPE_NAME}}'
+# Every prefix this scope's `applies_to` and `owners` facets may use. The kit
+# needs at least one; add a scope's own prefixes here as it adopts them.
+facet_prefixes: [topic]
+# Lightweight mode only: its rules stay in _memory/rules/ rather than the kit's
+# default _memory/policy-rules/. Canonical mode deletes this line.
+folders: {PolicyRule: _memory/rules}
