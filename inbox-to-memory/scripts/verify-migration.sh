@@ -219,26 +219,55 @@ done < <(git -C "$scope" diff --name-status -M "$since_ref" -- .)
 # Runs only beside a memory-bank.yaml: a pre-migration scope has no bank for the
 # kit to validate. A missing `ltm` skips rather than fails, because this script
 # stays runnable without the kit; the summary says so, since a skip is not a pass.
+#
+# ltm gets the bank file and the `schema: 1` records by path, never the scope
+# root. Phase 5 writes the bank before --to-ltm runs, and `schema: 2` and v1
+# records stay legal until then, so validating the whole bank failed every one
+# of them (#276 F-r1-state-01). The test is yq's `.schema == 1`, the same one
+# lint-scope.sh uses, so the lint and ltm judge the same set.
 ltm_summary=""
 if [[ -f "$scope/memory-bank.yaml" ]]; then
   if command -v ltm >/dev/null 2>&1; then
-    if ltm_out="$(ltm validate "$scope" 2>&1)"; then
+    ltm_paths=("$scope/memory-bank.yaml")
+    if [[ -d "$scope/_memory" ]]; then
+      while IFS= read -r rec; do
+        fm="$(awk 'NR == 1 { if ($0 != "---") exit; next } /^---$/ { exit } { print }' "$rec")"
+        [[ "$(printf '%s\n' "$fm" | yq '.schema' 2>/dev/null || true)" == 1 ]] && ltm_paths+=("$rec")
+      done < <(find "$scope/_memory" -name '*.md' -type f | sort)
+    fi
+    if ltm_out="$(ltm validate "${ltm_paths[@]}" 2>&1)"; then
       ltm_status=0
     else
       ltm_status=$?
     fi
-    if [[ "$ltm_status" -ne 0 ]]; then
-      ltm_lines=0
-      while IFS= read -r line; do
-        [[ -z "$line" ]] && continue
-        ltm_lines=$((ltm_lines + 1))
-        fail "$scope" "verify-ltm: $line"
-      done < <(printf '%s\n' "$ltm_out")
-      if [[ "$ltm_lines" -eq 0 ]]; then
-        fail "$scope" "verify-ltm: ltm validate exited $ltm_status without a finding"
+    # Naming the bank file is the only way to have ltm check it without the
+    # rest of the bank, and ltm answers that one path with this walk error
+    # because the file isn't a record. Verify drops that one expected line and
+    # doesn't treat the exit 1 it causes as a silent failure.
+    ltm_errors=0
+    bank_walk=0
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      if [[ "$line" == "memory-bank.yaml:1: error walk: -: not a Record file under any configured type folder" ]]; then
+        bank_walk=1
+        continue
       fi
+      # ltm prints `<file>:<line>: <severity> <rule>: <key>: <message>`. Only an
+      # error fails: ltm itself exits 0 on warnings, so failing on one here
+      # would fail a bank the kit accepts.
+      case "$line" in
+        *:[0-9]*': error '*)
+          ltm_errors=$((ltm_errors + 1))
+          fail "$scope" "verify-ltm: $line"
+          ;;
+        *) echo "info $scope: verify-ltm: $line" ;;
+      esac
+    done < <(printf '%s\n' "$ltm_out")
+    if [[ "$ltm_status" -ne 0 && "$ltm_errors" -eq 0 && "$bank_walk" -eq 0 ]]; then
+      ltm_errors=1
+      fail "$scope" "verify-ltm: ltm validate exited $ltm_status without a finding"
     fi
-    [[ "$ltm_status" -ne 0 ]] || ltm_summary="ltm: validated"
+    [[ "$ltm_errors" -ne 0 ]] || ltm_summary="ltm: validated"
   else
     ltm_summary="ltm: not installed; skipped"
   fi

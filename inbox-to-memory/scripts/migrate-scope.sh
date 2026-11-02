@@ -595,6 +595,15 @@ if [[ "$to_ltm" -eq 1 ]]; then
       grep -qxF -- "$prefix" <<<"$declared" ||
         refuse "$bank" "records use the prefix '$prefix', which facet_prefixes does not declare"
     done < <(sort -u "$work/ltm-used")
+    # Without this entry the kit looks for PolicyRule in _memory/policy-rules/,
+    # so the rules this pass rewrites would validate clean and then be invisible
+    # to `ltm show` (#276 F-r1-authz-01). The bank is the owner's file, so the
+    # pass names the fix rather than writing it.
+    if [[ -d "$scope/_memory/rules" ]]; then
+      rules_folder="$(yq -r '.folders.PolicyRule // ""' "$bank" 2>/dev/null || true)"
+      [[ "${rules_folder%/}" == "_memory/rules" ]] ||
+        refuse "$bank" "folders maps no PolicyRule to _memory/rules; add 'folders: {PolicyRule: _memory/rules}' by hand"
+    fi
   else
     if [[ -n "$facet_map" ]]; then
       while IFS= read -r prefix; do

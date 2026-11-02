@@ -3104,7 +3104,13 @@ lm_vout="$(LTM_SHIM_LOG="$lm_dir/shim.log" PATH="$lm_dir/bin:$PATH" bash "$lm_ve
   exit 1
 }
 require_output "$lm_vout" "ltm: validated"
-require_line "$(cat "$lm_dir/shim.log")" "validate $lm" "the ltm shim log"
+# ltm gets the bank file and each schema: 1 record by path, never the scope
+# root, which would hand it every schema: 2 record too (#276 F-r1-state-01).
+lm_paths="$lm/memory-bank.yaml"
+for rec in $(cd "$lm" && find _memory -name '*.md' -type f | sort); do
+  lm_paths="$lm_paths $lm/$rec"
+done
+require_line "$(cat "$lm_dir/shim.log")" "validate $lm_paths" "the ltm shim log"
 
 lm_finding="_memory/decisions/x.md:3: error schema: id: must match pattern"
 lm_rc=0
@@ -3122,6 +3128,75 @@ lm_vout="$(LTM_SHIM_EXIT=1 PATH="$lm_dir/bin:$PATH" bash "$lm_verify" "$lm" --si
   exit 1
 }
 require_output "$lm_vout" "FAIL $lm: verify-ltm: ltm validate exited 1 without a finding"
+
+# Only an ltm error line is a FAIL. A warning prints as info whether or not
+# an error sits beside it, since ltm itself exits 0 on warnings (#276
+# F-r1-state-02).
+lm_warning="_memory/decisions/x.md:1: warning body-sections: -: Decision body has no Context heading"
+lm_rc=0
+lm_vout="$(LTM_SHIM_OUT="$lm_warning"$'\n'"$lm_finding" LTM_SHIM_EXIT=1 PATH="$lm_dir/bin:$PATH" bash "$lm_verify" "$lm" --since "$ref" 2>&1)" || lm_rc=$?
+[[ "$lm_rc" -ne 0 ]] || {
+  echo "verify-migration.sh passed when ltm validate reported an error beside a warning" >&2
+  exit 1
+}
+[[ "$(grep -c 'verify-ltm:' <<<"$(grep '^FAIL ' <<<"$lm_vout")")" -eq 1 ]] || {
+  echo "verify-migration.sh did not fail exactly the one ltm error line" >&2
+  printf '%s\n' "$lm_vout" >&2
+  exit 1
+}
+require_line "$lm_vout" "FAIL $lm: verify-ltm: $lm_finding" "verify-migration.sh beside an ltm warning"
+require_line "$lm_vout" "info $lm: verify-ltm: $lm_warning" "verify-migration.sh beside an ltm error"
+lm_vout="$(LTM_SHIM_OUT="$lm_warning" PATH="$lm_dir/bin:$PATH" bash "$lm_verify" "$lm" --since "$ref" 2>&1)" || {
+  echo "verify-migration.sh failed on an ltm warning" >&2
+  printf '%s\n' "$lm_vout" >&2
+  exit 1
+}
+require_line "$lm_vout" "info $lm: verify-ltm: $lm_warning" "verify-migration.sh on an ltm warning alone"
+require_line "$lm_vout" "ltm: validated" "verify-migration.sh on an ltm warning alone"
+
+# A scope that holds memory-bank.yaml before --to-ltm runs, as Phase 5 and
+# regeneration leave one: its records are still schema: 2, so ltm gets the
+# bank file alone, and the walk error ltm answers that path with is expected.
+lm_pre="$lm_dir/prebank"
+lm_stage "$lm_pre"
+printf '%s\n' "schema: 1" "name: 'prebank'" "facet_prefixes: [person, regions, team, topic]" "folders: {PolicyRule: _memory/rules}" >"$lm_pre/memory-bank.yaml"
+lm_commit "$lm_pre" bank
+lm_pre_ref="$(git -C "$lm_pre" rev-parse HEAD)"
+rm -f "$lm_dir/shim.log"
+lm_vout="$(LTM_SHIM_LOG="$lm_dir/shim.log" LTM_SHIM_OUT="memory-bank.yaml:1: error walk: -: not a Record file under any configured type folder" LTM_SHIM_EXIT=1 PATH="$lm_dir/bin:$PATH" bash "$lm_verify" "$lm_pre" --since "$lm_pre_ref" 2>&1)" || {
+  echo "verify-migration.sh failed a bank holding only schema: 2 records" >&2
+  printf '%s\n' "$lm_vout" >&2
+  exit 1
+}
+require_line "$(cat "$lm_dir/shim.log")" "validate $lm_pre/memory-bank.yaml" "the ltm shim log for a schema: 2 bank"
+require_line "$lm_vout" "ltm: validated" "verify-migration.sh on a schema: 2 bank"
+
+# An existing bank with _memory/rules/ and no PolicyRule folder entry is
+# refused, not edited: the rules would migrate to a folder the kit never
+# reads (#276 F-r1-authz-01). The owner adds the line, and the apply goes.
+lm_nofold="$lm_dir/nofolders"
+lm_stage "$lm_nofold"
+printf '%s\n' "schema: 1" "name: 'nofolders'" "facet_prefixes: [person, regions, team, topic]" >"$lm_nofold/memory-bank.yaml"
+lm_commit "$lm_nofold" bank
+lm_nofold_msg="  $lm_nofold/memory-bank.yaml: folders maps no PolicyRule to _memory/rules; add 'folders: {PolicyRule: _memory/rules}' by hand"
+for lm_mode in "" --apply; do
+  lm_rc=0
+  lm_out="$(bash "$lm_migrator" "$lm_nofold" --to-ltm --facet-map "$lm_map" $lm_mode 2>&1)" || lm_rc=$?
+  [[ "$lm_rc" -eq 1 ]] || {
+    echo "--to-ltm ${lm_mode:-dry run} on a bank with no PolicyRule folder exited $lm_rc (want 1)" >&2
+    printf '%s\n' "$lm_out" >&2
+    exit 1
+  }
+  require_line "$lm_out" "$lm_nofold_msg" "--to-ltm ${lm_mode:-dry run} on a bank with no PolicyRule folder"
+  lm_clean "$lm_nofold" "a refused --to-ltm ${lm_mode:-dry run}"
+done
+echo "folders: {PolicyRule: _memory/rules}" >>"$lm_nofold/memory-bank.yaml"
+lm_commit "$lm_nofold" folders
+bash "$lm_migrator" "$lm_nofold" --to-ltm --facet-map "$lm_map" --apply >/dev/null 2>&1 || {
+  echo "--to-ltm --apply failed once the PolicyRule folder was added by hand" >&2
+  exit 1
+}
+require_line "$(cat "$lm_nofold/_memory/rules/dunning-notices-need-ops-signoff-Lm2DunOps2.md")" "memory_type: PolicyRule" "the Rule under a hand-fixed bank"
 
 # With no ltm on PATH the sweep skips and says so, and the run still passes:
 # the skill's scripts stay runnable without the kit.
@@ -3172,6 +3247,31 @@ if command -v ltm >/dev/null 2>&1; then
     echo "ltm validate passed an undeclared facet prefix the lint rejects" >&2
     exit 1
   }
+
+  # The schema: 2 bank from above against the real ltm: green before --to-ltm
+  # and green after it, with no verify-ltm FAIL either time.
+  for lm_when in before after; do
+    if [[ "$lm_when" == after ]]; then
+      bash "$lm_migrator" "$lm_pre" --to-ltm --facet-map "$lm_map" --apply >/dev/null 2>&1 || {
+        echo "--to-ltm --apply failed on the schema: 2 bank" >&2
+        exit 1
+      }
+      require_line "$(cat "$lm_pre/$lm_decision")" "schema: 1" "the schema: 2 bank after --to-ltm"
+    fi
+    lm_rc=0
+    lm_vout="$(bash "$lm_verify" "$lm_pre" --since "$lm_pre_ref" 2>&1)" || lm_rc=$?
+    [[ "$lm_rc" -eq 0 ]] || {
+      echo "verify-migration.sh failed the schema: 2 bank $lm_when --to-ltm under the real ltm" >&2
+      printf '%s\n' "$lm_vout" >&2
+      exit 1
+    }
+    refute_text <(printf '%s\n' "$lm_vout") "verify-ltm: ltm validate exited"
+    grep -q '^FAIL .*verify-ltm' <<<"$lm_vout" && {
+      echo "verify-migration.sh printed a verify-ltm FAIL on the schema: 2 bank $lm_when --to-ltm" >&2
+      exit 1
+    }
+    require_line "$lm_vout" "ltm: validated" "the schema: 2 bank $lm_when --to-ltm"
+  done
 
   # A freshly scaffolded scope: the lightweight bank and one record from each
   # template, its placeholders filled the way the agent fills them.
@@ -3239,6 +3339,10 @@ require_output "$lm_vout" "FAIL $lm_done: verify-rename: \`notes/memory-bank.yam
 require_text _maintenance/inbox-to-memory/RATIONALE.md "| 36 |"
 require_text _maintenance/inbox-to-memory/RATIONALE.md "A prefix inferred for a bare facet."
 require_text _maintenance/inbox-to-memory/RATIONALE.md "Moving notes or journal entries to \`schema: 1\`."
+# Rows 45-47 record the adversarial-review rulings the cases above pin.
+require_text _maintenance/inbox-to-memory/RATIONALE.md "| 45 | \`verify-ltm:\` hands \`ltm validate\` the bank file and each \`schema: 1\` record"
+require_text _maintenance/inbox-to-memory/RATIONALE.md "| 46 | Only an ltm \`error\` line fails verify."
+require_text _maintenance/inbox-to-memory/RATIONALE.md "| 47 | \`--to-ltm\` refuses an existing \`memory-bank.yaml\` whose \`folders\` maps no \`PolicyRule\`"
 
 rm -rf "$lm_dir"
 
