@@ -3171,6 +3171,32 @@ lm_vout="$(LTM_SHIM_LOG="$lm_dir/shim.log" LTM_SHIM_OUT="memory-bank.yaml:1: err
 require_line "$(cat "$lm_dir/shim.log")" "validate $lm_pre/memory-bank.yaml" "the ltm shim log for a schema: 2 bank"
 require_line "$lm_vout" "ltm: validated" "verify-migration.sh on a schema: 2 bank"
 
+# A CRLF record's fence reads `---\r`, and a selector that misses it never
+# hands the record to ltm, so a bad one verified green (#276 round 3). The
+# real-ltm block below checks the bad id fails; this pins the selection.
+lm_crlf="$lm_dir/crlf"
+lm_stage "$lm_crlf"
+bash "$lm_migrator" "$lm_crlf" --to-ltm --facet-map "$lm_map" --apply >/dev/null 2>&1 || {
+  echo "--to-ltm --apply failed on the CRLF copy" >&2
+  exit 1
+}
+lm_commit "$lm_crlf" migrated
+sed 's/^id: Lm1EmeLdg1$/id: BAD/' "$lm_crlf/$lm_decision" | awk '{ printf "%s\r\n", $0 }' >"$lm_dir/crlf.md"
+mv "$lm_dir/crlf.md" "$lm_crlf/$lm_decision"
+grep -q $'^id: BAD\r$' "$lm_crlf/$lm_decision" || {
+  echo "test setup: the CRLF record did not get its bad id" >&2
+  exit 1
+}
+lm_commit "$lm_crlf" crlf
+lm_crlf_ref="$(git -C "$lm_crlf" rev-parse HEAD)"
+rm -f "$lm_dir/shim.log"
+LTM_SHIM_LOG="$lm_dir/shim.log" PATH="$lm_dir/bin:$PATH" bash "$lm_verify" "$lm_crlf" --since "$lm_crlf_ref" >/dev/null 2>&1 || true
+grep -qF "$lm_crlf/$lm_decision" "$lm_dir/shim.log" || {
+  echo "verify-migration.sh did not hand ltm the CRLF schema: 1 record" >&2
+  cat "$lm_dir/shim.log" >&2
+  exit 1
+}
+
 # An existing bank with _memory/rules/ and no PolicyRule folder entry is
 # refused, not edited: the rules would migrate to a folder the kit never
 # reads (#276 F-r1-authz-01). The owner adds the line, and the apply goes.
@@ -3272,6 +3298,20 @@ if command -v ltm >/dev/null 2>&1; then
     }
     require_line "$lm_vout" "ltm: validated" "the schema: 2 bank $lm_when --to-ltm"
   done
+
+  # The CRLF record from above, with its bad id, fails verify under the real ltm.
+  lm_rc=0
+  lm_vout="$(bash "$lm_verify" "$lm_crlf" --since "$lm_crlf_ref" 2>&1)" || lm_rc=$?
+  [[ "$lm_rc" -ne 0 ]] || {
+    echo "verify-migration.sh passed a CRLF schema: 1 record with a bad id" >&2
+    printf '%s\n' "$lm_vout" >&2
+    exit 1
+  }
+  grep -q "^FAIL $lm_crlf: verify-ltm: $lm_decision:.* error .*id" <<<"$lm_vout" || {
+    echo "verify-migration.sh did not fail the CRLF record's bad id under verify-ltm" >&2
+    printf '%s\n' "$lm_vout" >&2
+    exit 1
+  }
 
   # A freshly scaffolded scope: the lightweight bank and one record from each
   # template, its placeholders filled the way the agent fills them.

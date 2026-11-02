@@ -231,7 +231,9 @@ if [[ -f "$scope/memory-bank.yaml" ]]; then
     ltm_paths=("$scope/memory-bank.yaml")
     if [[ -d "$scope/_memory" ]]; then
       while IFS= read -r rec; do
-        fm="$(awk 'NR == 1 { if ($0 != "---") exit; next } /^---$/ { exit } { print }' "$rec")"
+        # A CRLF record's fence reads `---\r`; without the strip it's never
+        # selected and ltm never sees it (#276 round 3).
+        fm="$(awk '{ sub(/\r$/, "") } NR == 1 { if ($0 != "---") exit; next } /^---$/ { exit } { print }' "$rec")"
         [[ "$(printf '%s\n' "$fm" | yq '.schema' 2>/dev/null || true)" == 1 ]] && ltm_paths+=("$rec")
       done < <(find "$scope/_memory" -name '*.md' -type f | sort)
     fi
