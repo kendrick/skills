@@ -191,7 +191,7 @@ owners:
   ops: team         # bare `ops` in owners becomes `team:ops`
 ```
 
-**The pass is all or nothing.** It checks every record before it writes any, and refuses the whole apply on any of these, each named under `needs a human:` with the record path and the reason:
+**The pass is all or nothing.** It checks every record before it writes any, and refuses the whole apply on any record it can't rewrite mechanically. Each refusal is a `needs a human:` line with the record path and the reason, and the dry run prints the same lines, so its output is the complete list for a scope. The common causes:
 
 - a bare value the map doesn't cover, which the dry run also lists under `unmapped:`;
 - a v1 record, reason `v1 record; run the Tier 1 migration first`;
@@ -209,7 +209,7 @@ Run the nine steps in order, one scope at a time, from the root of this skill's 
 4. Dry-run `--to-ltm`. It writes nothing.
 5. Write the facet map from the dry run's `unmapped:` lines, one entry per bare value under the key it appeared in, then dry-run again with `--facet-map` until it exits 0.
 6. Apply.
-7. Run `verify-migration.sh` before committing the migration. Once `memory-bank.yaml` is committed, the rename sweep reads it as an added file and fails.
+7. Run `verify-migration.sh`. It gives the same answer before or after the migration commit: an uncommitted `memory-bank.yaml` is untracked, so the rename sweep never sees it, and a committed one is the single added file the sweep accepts.
 8. Run `ltm validate`. Exit 0 means every record parses, so `ltm doctor` skips none as malformed.
 9. If either check fails, undo, fix the map or the records, and start again at step 4. Otherwise commit.
 
@@ -233,7 +233,7 @@ bash inbox-to-memory/scripts/migrate-scope.sh <scope-root> --to-ltm --facet-map 
 # 6. apply
 bash inbox-to-memory/scripts/migrate-scope.sh <scope-root> --to-ltm --facet-map <facet-map> --apply
 
-# 7. verify, before committing
+# 7. verify (before or after committing the migration)
 bash inbox-to-memory/scripts/verify-migration.sh <scope-root> --since "$ref"
 
 # 8. validate
@@ -261,10 +261,10 @@ Three sweeps run over the scope, and a fourth runs where the scope root holds `m
 
 - `lint-scope.sh` runs across every file in it, resolved as a sibling of `verify-migration.sh` so a copied `scripts/` directory runs its own copy. Verification reads the lint's exit status rather than its output, because a lint that aborts on bad input never reaches its summary line and a check grepping for one would read that abort as a clean sweep.
 - Every wiki-link target the scope carried at `--since` has to still resolve, by filename first and then by the trailing ten-character id. A target that resolved by name before and by id now counts as a pass, and the report says how many took that fallback. Targets come from the `--since` tree rather than the migrated one, so a link that vanished during the migration is still checked instead of dropping out of the count.
-- File statuses come from `git diff --name-status -M <ref>`. Anything other than `M` fails, with renames and deletions named separately.
+- File statuses come from `git diff --name-status -M <ref>`. Anything other than `M` fails, with renames and deletions named separately. The one exception is an `A` for `memory-bank.yaml` at the scope root, the file `--to-ltm` writes; an added file anywhere else fails.
 - Beside `memory-bank.yaml`, `ltm validate <scope-root>` runs when `ltm` is on `PATH`. Without it, the summary prints `ltm: not installed; skipped` and the sweep passes.
 
-Every failure names a diagnostic. `verify-lint` is the lint's own failure line passed through, or a note that the lint aborted with some exit status and no summary. `verify-link` means a target resolves neither by name nor by the nanoid in its last ten characters, so either the file is gone or its id changed, and migration is allowed to do neither. `verify-rename` covers a file that was renamed, deleted, or came back with a status the sweep didn't expect; migration rewrites frontmatter in place, so any other status is evidence that something besides the migrator touched the scope. `verify-ltm` is one `ltm validate` finding line passed through, or `ltm validate exited <n> without a finding` when it failed silently.
+Every failure names a diagnostic. `verify-lint` is the lint's own failure line passed through, or a note that the lint aborted with some exit status and no summary. `verify-link` means a target resolves neither by name nor by the nanoid in its last ten characters, so either the file is gone or its id changed, and migration is allowed to do neither. `verify-rename` covers a file that was renamed, deleted, added anywhere but the scope root's `memory-bank.yaml`, or came back with a status the sweep didn't expect; migration rewrites frontmatter in place and adds only that one file, so any other status is evidence that something besides the migrator touched the scope. `verify-ltm` is one `ltm validate` finding line passed through, or `ltm validate exited <n> without a finding` when it failed silently.
 
 **Verification reports and never repairs.** It prints every failure it found rather than stopping at the first, leaves the scope byte-identical, and exits nonzero. A sweep that rewrote the file it just flagged would stop being the check on the migration and become a second, unreviewed one.
 

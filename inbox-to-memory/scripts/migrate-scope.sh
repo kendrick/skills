@@ -17,6 +17,11 @@
 # v1 below it. It says so with `body_schema: 1`, which is what stops the lint from
 # holding a note written in 2025 to a grammar that did not exist yet.
 #
+# `--to-ltm` is a separate pass over `schema: 2` records, moving them onto
+# long-term-memory-kit's `schema: 1` and writing the scope's memory-bank.yaml.
+# A bare facet takes its prefix from the facet map alone, and any record the
+# pass can't rewrite refuses the whole apply.
+#
 # Requires bash, awk, yq, and git. The awk does the frontmatter rewrite because
 # the transform needs keyed lookups, and the bash that ships on macOS has none.
 set -euo pipefail

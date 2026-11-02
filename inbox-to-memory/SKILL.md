@@ -504,7 +504,7 @@ The scope's `CLAUDE.md` declares the mode in its top frontmatter blockquote. Rea
 
 - [references/extraction-heuristics.md](references/extraction-heuristics.md) — quote selection, tension surfacing, assumption mining.
 - [references/scope-decisions.md](references/scope-decisions.md) — full heuristics for proposing project vs client vs journal scope.
-- [references/memory-bank-schema.md](references/memory-bank-schema.md) — vendored summary of the substrate schema. Inspired by, not bound to.
+- [references/memory-bank-schema.md](references/memory-bank-schema.md) — vendored summary of long-term-memory-kit's record format. The kit is authoritative where the two disagree.
 - [references/retrieval-funnel.md](references/retrieval-funnel.md) — token-efficient four-stage retrieval at scale.
 - [references/machine-contracts.md](references/machine-contracts.md) — the frontmatter contract and the closed token grammar, both enforced by the lint.
 - [references/migration.md](references/migration.md) — what Tier 1 migration changes, what it refuses to guess, and the safety properties behind both.

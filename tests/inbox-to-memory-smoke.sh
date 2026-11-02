@@ -3006,8 +3006,8 @@ require_line "$(cat "$lm/$lm_note")" "schema: 2" "$lm_note"
 lm_lint="$(run_lint "$lm")"
 require_line "$lm_lint" "failures: 0" "the migrated ltm-migrate copy"
 
-# Verification runs before the migration is committed, as migration.md's
-# step 7 says.
+# Verification before the migration commit: memory-bank.yaml is untracked
+# here, so the rename sweep never sees it. The committed case runs below.
 lm_rc=0
 lm_vout="$(bash inbox-to-memory/scripts/verify-migration.sh "$lm" --since "$ref" 2>&1)" || lm_rc=$?
 [[ "$lm_rc" -eq 0 ]] || {
@@ -3165,6 +3165,36 @@ lm_clean "$lm" "migration.md's undo"
   echo "migration.md's undo left memory-bank.yaml behind" >&2
   exit 1
 }
+
+# After the migration commit, memory-bank.yaml at the scope root is the one
+# added file the rename sweep accepts, so verification still passes, as
+# migration.md's step 7 says. The allowance is that path alone: the same name
+# added under notes/ still fails.
+lm_done="$lm_dir/committed"
+lm_stage "$lm_done"
+lm_done_ref="$(git -C "$lm_done" rev-parse HEAD)"
+bash "$lm_migrator" "$lm_done" --to-ltm --facet-map "$lm_map" --apply >/dev/null 2>&1 || {
+  echo "--to-ltm --apply failed on the copy to be committed" >&2
+  exit 1
+}
+lm_commit "$lm_done" migrated
+lm_rc=0
+lm_vout="$(bash "$lm_verify" "$lm_done" --since "$lm_done_ref" 2>&1)" || lm_rc=$?
+[[ "$lm_rc" -eq 0 ]] || {
+  echo "verify-migration.sh failed once the migration and its memory-bank.yaml were committed" >&2
+  printf '%s\n' "$lm_vout" >&2
+  exit 1
+}
+refute_text <(printf '%s\n' "$lm_vout") "verify-rename:"
+cp "$lm_done/memory-bank.yaml" "$lm_done/notes/memory-bank.yaml"
+lm_commit "$lm_done" stray
+lm_rc=0
+lm_vout="$(bash "$lm_verify" "$lm_done" --since "$lm_done_ref" 2>&1)" || lm_rc=$?
+[[ "$lm_rc" -ne 0 ]] || {
+  echo "verify-migration.sh passed a memory-bank.yaml added outside the scope root" >&2
+  exit 1
+}
+require_output "$lm_vout" "FAIL $lm_done: verify-rename: \`notes/memory-bank.yaml\` has unexpected status \`A\`"
 
 # Row 36 is the decision the issue asked to have recorded.
 require_text _maintenance/inbox-to-memory/RATIONALE.md "| 36 |"
