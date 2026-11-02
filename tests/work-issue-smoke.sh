@@ -2751,6 +2751,13 @@ expect_phase "phase on a merged PR with 3 queued rows" "queue_unfiled_rows is 3"
 require_text work-issue/SKILL.md "deferred findings on <PR URL> still read queued; answer which to file and which to dismiss"
 require_text work-issue/references/triage.md "\`dismissed: <reason>\` once they have declined to"
 require_text work-issue/SKILL.md "Source \`adversarial-review\`"
+# The queue-row recipe lives twice, Step 5 item 5 and Step 8 item 1; the
+# require_text above passes on either alone, so count the lines.
+queue_recipe_lines="$(grep -cF -- "Source \`adversarial-review\`" work-issue/SKILL.md || true)"
+[[ "$queue_recipe_lines" == 2 ]] || {
+  echo "Source \`adversarial-review\` must appear on exactly two lines of work-issue/SKILL.md, Step 5 item 5 and Step 8 item 1; found $queue_recipe_lines" >&2
+  exit 1
+}
 require_text _maintenance/work-issue/RATIONALE.md "Filing queued findings without the human's answer"
 # Step 0's prune holds a sibling with unfiled rows, or else moving it to
 # closed/ walks it past its own row 1 stop.
