@@ -399,21 +399,47 @@ require_text "$contracts" 'applies_to: [regions::emea, systems::billing, topics:
 # have to survive a YAML parse for that check to mean anything.
 tpl_scope="$(mktemp -d "${TMPDIR:-/tmp}/i2m-templates.XXXXXX")"
 trap 'rm -rf "$not_a_scope" "$inline_scope" "$dismissal_scope" "$tpl_scope"' EXIT
-mkdir -p "$tpl_scope/_inbox" "$tpl_scope/_memory/decisions" "$tpl_scope/notes" "$tpl_scope/entries"
+# Each record template lands in its type's folder beside a scaffolded
+# memory-bank.yaml, because record-type and bank-config read both (#276). The
+# bank is the lightweight one, so both PolicyRule templates go in rules/.
+mkdir -p "$tpl_scope/_inbox" "$tpl_scope/notes" "$tpl_scope/entries"
 cp inbox-to-memory/assets/note.template.md "$tpl_scope/notes/"
-for record in context decision exception policy-rule rule; do
-  cp "inbox-to-memory/assets/records/$record.template.md" "$tpl_scope/_memory/decisions/"
+for record in context:context decision:decisions exception:exceptions policy-rule:rules rule:rules; do
+  mkdir -p "$tpl_scope/_memory/${record#*:}"
+  cp "inbox-to-memory/assets/records/${record%%:*}.template.md" "$tpl_scope/_memory/${record#*:}/"
 done
 cp inbox-to-memory/assets/records/journal-entry.template.md "$tpl_scope/entries/"
+sed 's/{{SCOPE_NAME}}/templates/' inbox-to-memory/assets/memory-bank.template.yaml >"$tpl_scope/memory-bank.yaml"
 
 tpl_out="$(run_lint "$tpl_scope")"
 require_line "$tpl_out" "v1 files: 0" templates
 require_line "$tpl_out" "v2 files: 7" templates
 require_line "$tpl_out" "failures: 0" templates
 
-for template in inbox-to-memory/assets/note.template.md inbox-to-memory/assets/records/*.template.md; do
+# Canonical mode drops the folders line, and its PolicyRule moves to the kit's
+# default policy-rules/. The lint has to pass that layout too.
+tpl_canon="$tpl_scope/canonical"
+mkdir -p "$tpl_canon/_inbox" "$tpl_canon/_memory/policy-rules"
+cp inbox-to-memory/assets/records/policy-rule.template.md "$tpl_canon/_memory/policy-rules/"
+sed -e 's/{{SCOPE_NAME}}/canonical/' -e '/^folders:/d' inbox-to-memory/assets/memory-bank.template.yaml >"$tpl_canon/memory-bank.yaml"
+tpl_canon_out="$(run_lint "$tpl_canon")"
+require_line "$tpl_canon_out" "failures: 0" "canonical templates"
+
+# Records moved to the kit's schema: 1; notes and journal entries stay at
+# schema: 2, since ltm reads only _memory/ and has no Journal type (#276).
+for template in inbox-to-memory/assets/note.template.md inbox-to-memory/assets/records/journal-entry.template.md; do
   require_text "$template" "schema: 2"
 done
+for record in context decision exception policy-rule rule; do
+  template="inbox-to-memory/assets/records/$record.template.md"
+  require_text "$template" "schema: 1"
+  refute_text "$template" "schema: 2"
+  # The kit's date and id patterns reject a literal null, so no record
+  # template may suggest one, even commented out.
+  refute_text "$template" "null"
+done
+require_text inbox-to-memory/assets/records/rule.template.md "memory_type: PolicyRule"
+refute_text inbox-to-memory/assets/records/rule.template.md "memory_type: Rule"
 
 # Relationships and journal sources are flat compound strings now. The refutes are
 # the load-bearing half: the nested forms are what v1 files carry, and a template
@@ -426,9 +452,10 @@ refute_text inbox-to-memory/assets/records/journal-entry.template.md "- scope:"
 # The scaffolds document the shape the agent writes from, so they have to agree
 # with the templates. A scaffold left behind teaches the old schema to every scope
 # stood up after this, and those files would be born needing migration.
-for scaffold in notes journal _memory; do
+for scaffold in notes journal; do
   require_text "inbox-to-memory/assets/claude-md/$scaffold.template.md" "schema: 2"
 done
+require_text inbox-to-memory/assets/claude-md/_memory.template.md "schema: 1"
 refute_text inbox-to-memory/assets/claude-md/journal.template.md "note_id: <nanoid>"
 
 # ---------------------------------------------------------------------------
@@ -475,6 +502,7 @@ scaffold_subs_common=(
   's/{{ClientName}}/Riverton Analytics/g'
   's/{{ProjectName}}/Atlas Cutover/g'
   's/{{ScopeName}}/Riverton Analytics/g'
+  's/{{SCOPE_NAME}}/riverton-analytics/g'
   's/{{Pursuit|Project}}/Project/g'
   's/{{pursuit|project}}/project/g'
   's/{{pursuits|projects}}/projects/g'
@@ -490,8 +518,8 @@ scaffold_subs_common=(
 )
 scaffold_subs_lightweight=(
   's/{{MEMORY_MODE}}/lightweight/g'
-  's/{{MEMORY_TYPES}}/Decision, Context, Rule/g'
-  's/{{MEMORY_TYPE_ENUM}}/Decision | Context | Rule/g'
+  's/{{MEMORY_TYPES}}/Decision, Context, PolicyRule/g'
+  's/{{MEMORY_TYPE_ENUM}}/Decision | Context | PolicyRule/g'
   's/{{MEMORY_TYPE_FOLDERS}}/decisions\/, context\/, rules\//g'
   's/{{RULES_FOLDER}}/rules/g'
 )
@@ -560,6 +588,17 @@ canonical_digest="$(grep '^scaffold_digest:' "$mem_canonical")"
   echo "lightweight and canonical substitutions of _memory.template.md stamped the same digest" >&2
   exit 1
 }
+
+# Scaffold mode writes memory-bank.yaml from its template, and ltm refuses a
+# bank with no name or no facet prefix (#276). The template carries no
+# frontmatter, so it stands up here rather than in the digest set above.
+bank_light="$sd_scope/memory-bank.yaml"
+apply_scaffold_subs inbox-to-memory/assets/memory-bank.template.yaml "$bank_light" "${scaffold_subs_lightweight[@]}"
+refute_text "$bank_light" "{{"
+require_text "$bank_light" "schema: 1"
+require_text "$bank_light" "name: 'riverton-analytics'"
+require_text "$bank_light" "facet_prefixes: [topic]"
+require_text "$bank_light" "folders: {PolicyRule: _memory/rules}"
 
 # The counts are the one exception to omit-if-empty, and the reason has to travel
 # with the rule. Without it someone reads four always-present keys as redundant
@@ -2821,6 +2860,318 @@ require_text inbox-to-memory/SKILL.md '`candidates: <note-path> grep=<g> vec=<v>
 require_text inbox-to-memory/SKILL.md 'When the fallback fired, name the `memory-index` skill in the report as what registers the scope.'
 require_text _maintenance/inbox-to-memory/EVALS.md '### 6. Vec-assisted lookup'
 require_text _maintenance/inbox-to-memory/EVALS.md 'tolland-carries-wholesale-Vc1TolWhs1'
+
+# ---------------------------------------------------------------------------
+# Records to long-term-memory-kit (#276)
+# ---------------------------------------------------------------------------
+
+# --to-ltm rewrites a user's records, so every promise below is checked with
+# git on a committed copy rather than read off the script's own report. The
+# section cleans up after itself instead of joining the trap chain.
+lm_migrator=inbox-to-memory/scripts/migrate-scope.sh
+lm_verify=inbox-to-memory/scripts/verify-migration.sh
+lm_doc=inbox-to-memory/references/migration.md
+lm_shim=_maintenance/inbox-to-memory/ltm-shim.sh
+lm_fixture="$fixtures/ltm-migrate"
+lm_map="$repo_root/$fixtures/ltm-migrate.facets.yaml"
+lm_decision=_memory/decisions/emea-invoices-use-shared-ledger-Lm1EmeLdg1.md
+lm_note=notes/2026-06-03-emea-billing-review-Lm0BilRev0.md
+require_dir "$lm_fixture/_memory/rules"
+require_file "$lm_map"
+# Mode 100644 passes every `bash "$lm_shim"`, so only -x catches a lost bit.
+[[ -x "$lm_shim" ]] || {
+  echo "$lm_shim must be executable" >&2
+  exit 1
+}
+bash -n "$lm_shim"
+
+lm_dir="$(mktemp -d "${TMPDIR:-/tmp}/i2m-ltm.XXXXXX")"
+lm_commit() {
+  git -C "$1" add -A
+  git -C "$1" -c user.email=t@t -c user.name=t commit -qm "$2"
+}
+lm_stage() {
+  mkdir -p "$1"
+  cp -R "$lm_fixture/." "$1/"
+  git -C "$1" init -q
+  lm_commit "$1" baseline
+}
+lm_clean() {
+  [[ -z "$(git -C "$1" status --porcelain)" ]] || {
+    echo "$2 wrote to the scope" >&2
+    git -C "$1" status --porcelain >&2
+    exit 1
+  }
+}
+lm_hash() {
+  find "$1" -type f -not -path '*/.git/*' -exec shasum {} + | sort
+}
+# Everything after the closing fence: the part --to-ltm promises not to touch.
+lm_body() {
+  awk 'f == 2 { print; next } /^---$/ { f++ }' "$1"
+}
+
+# The migration doc's commands are the ones run below, with <scope-root> and
+# <facet-map> filled in. A doc line that drifts from what runs fails here.
+for line in \
+  'bash inbox-to-memory/scripts/migrate-scope.sh <scope-root> --to-ltm' \
+  'bash inbox-to-memory/scripts/migrate-scope.sh <scope-root> --to-ltm --facet-map <facet-map>' \
+  'bash inbox-to-memory/scripts/migrate-scope.sh <scope-root> --to-ltm --facet-map <facet-map> --apply' \
+  'bash inbox-to-memory/scripts/verify-migration.sh <scope-root> --since "$ref"' \
+  'ltm validate <scope-root>' \
+  'git restore -- <scope-root> && git clean -f -- <scope-root>/memory-bank.yaml'; do
+  require_text "$lm_doc" "$line"
+done
+require_text "$lm_doc" "## Migrating Records to ltm"
+
+lm="$lm_dir/scope"
+lm_stage "$lm"
+ref="$(git -C "$lm" rev-parse HEAD)"
+
+# A dry run writes nothing either way, and with no map it lists every bare
+# value and exits 1, so it predicts the refused apply. The pass never infers a
+# prefix for `billing`; the map is the only place that answer comes from.
+lm_rc=0
+lm_out="$(bash inbox-to-memory/scripts/migrate-scope.sh "$lm" --to-ltm 2>&1)" || lm_rc=$?
+[[ "$lm_rc" -eq 1 ]] || {
+  echo "--to-ltm dry run with no facet map exited $lm_rc (want 1)" >&2
+  printf '%s\n' "$lm_out" >&2
+  exit 1
+}
+require_output "$lm_out" "unmapped:"
+require_line "$lm_out" "  applies_to: billing" "--to-ltm dry run"
+require_line "$lm_out" "  owners: ops" "--to-ltm dry run"
+refute_text <(printf '%s\n' "$lm_out") "topic:billing"
+lm_clean "$lm" "a --to-ltm dry run with no map"
+
+# The issue's criterion spells the dry run with --dry-run, which the pass
+# takes as a no-op so that line runs as written.
+lm_rc=0
+lm_alias="$(bash "$lm_migrator" "$lm" --to-ltm --dry-run 2>&1)" || lm_rc=$?
+[[ "$lm_rc" -eq 1 && "$lm_alias" == "$lm_out" ]] || {
+  echo "--to-ltm --dry-run did not match the plain dry run (exit $lm_rc)" >&2
+  printf '%s\n' "$lm_alias" >&2
+  exit 1
+}
+lm_clean "$lm" "--to-ltm --dry-run"
+
+lm_out="$(bash inbox-to-memory/scripts/migrate-scope.sh "$lm" --to-ltm --facet-map "$lm_map" 2>&1)" || {
+  echo "--to-ltm dry run with the facet map failed" >&2
+  printf '%s\n' "$lm_out" >&2
+  exit 1
+}
+lm_clean "$lm" "a --to-ltm dry run with the map"
+
+# All or nothing: one unmapped value refuses the whole apply, names the record
+# it sits in, and leaves the three records it could have migrated untouched.
+grep -v '^  billing:' "$lm_map" >"$lm_dir/partial.yaml"
+lm_rc=0
+lm_out="$(bash "$lm_migrator" "$lm" --to-ltm --facet-map "$lm_dir/partial.yaml" --apply 2>&1)" || lm_rc=$?
+[[ "$lm_rc" -eq 1 ]] || {
+  echo "--to-ltm --apply with billing unmapped exited $lm_rc (want 1)" >&2
+  printf '%s\n' "$lm_out" >&2
+  exit 1
+}
+require_output "$lm_out" "needs a human:"
+require_output "$lm_out" "$lm/$lm_decision: applies_to value 'billing' has no prefix and no facet-map entry"
+lm_clean "$lm" "a refused --to-ltm --apply"
+
+lm_out="$(bash inbox-to-memory/scripts/migrate-scope.sh "$lm" --to-ltm --facet-map "$lm_map" --apply 2>&1)" || {
+  echo "--to-ltm --apply with the facet map failed" >&2
+  printf '%s\n' "$lm_out" >&2
+  exit 1
+}
+require_output "$lm_out" "memory-bank.yaml: written"
+require_file "$lm/memory-bank.yaml"
+require_line "$(cat "$lm/memory-bank.yaml")" "facet_prefixes: [person, regions, team, topic]" "memory-bank.yaml"
+require_line "$(cat "$lm/memory-bank.yaml")" "folders: {PolicyRule: _memory/rules}" "memory-bank.yaml"
+require_line "$(cat "$lm/$lm_decision")" "applies_to: [regions:emea, topic:billing]" "$lm_decision"
+require_line "$(cat "$lm/_memory/rules/dunning-notices-need-ops-signoff-Lm2DunOps2.md")" "memory_type: PolicyRule" "the migrated Rule"
+
+# Bodies are byte-identical, and notes never leave schema: 2: ltm reads only
+# _memory/, and moving notes is a cut this pins (RATIONALE Not Built).
+for rec in $(cd "$lm_fixture" && find _memory -name '*.md'); do
+  [[ "$(lm_body "$lm/$rec")" == "$(lm_body "$lm_fixture/$rec")" ]] || {
+    echo "--to-ltm changed the body of $rec" >&2
+    exit 1
+  }
+  require_line "$(cat "$lm/$rec")" "schema: 1" "$rec"
+done
+cmp -s "$lm/$lm_note" "$lm_fixture/$lm_note" || {
+  echo "--to-ltm touched the note $lm_note" >&2
+  exit 1
+}
+require_line "$(cat "$lm/$lm_note")" "schema: 2" "$lm_note"
+
+lm_lint="$(run_lint "$lm")"
+require_line "$lm_lint" "failures: 0" "the migrated ltm-migrate copy"
+
+# Verification runs before the migration is committed, as migration.md's
+# step 7 says.
+lm_rc=0
+lm_vout="$(bash inbox-to-memory/scripts/verify-migration.sh "$lm" --since "$ref" 2>&1)" || lm_rc=$?
+[[ "$lm_rc" -eq 0 ]] || {
+  echo "verify-migration.sh failed on the migrated ltm-migrate copy" >&2
+  printf '%s\n' "$lm_vout" >&2
+  exit 1
+}
+require_output "$lm_vout" "failures: 0"
+
+# A second apply is a no-op, file for file. --allow-dirty because the first
+# apply sits uncommitted until verification passes.
+lm_before="$(lm_hash "$lm")"
+lm_out="$(bash "$lm_migrator" "$lm" --to-ltm --facet-map "$lm_map" --apply --allow-dirty 2>&1)" || {
+  echo "a second --to-ltm --apply failed" >&2
+  printf '%s\n' "$lm_out" >&2
+  exit 1
+}
+require_output "$lm_out" "already ltm: 4"
+[[ "$(lm_hash "$lm")" == "$lm_before" ]] || {
+  echo "a second --to-ltm --apply changed a file" >&2
+  exit 1
+}
+
+# The lint's single-colon test catches the `::` that ltm validate accepts,
+# since ltm reads `regions` as the prefix and `:emea` as the value.
+lm_planted="$lm_dir/planted"
+cp -R "$lm/." "$lm_planted/"
+rm -rf "$lm_planted/.git"
+sed -i.bak 's/^applies_to: \[regions:emea, topic:billing\]$/applies_to: [regions::emea, topic:billing]/' "$lm_planted/$lm_decision"
+rm -f "$lm_planted/$lm_decision.bak"
+require_line "$(cat "$lm_planted/$lm_decision")" "applies_to: [regions::emea, topic:billing]" "the planted record"
+require_failure "$(run_lint "$lm_planted")" "FAIL $lm_planted/$lm_decision: record-facet: \`applies_to\` entry \`regions::emea\` is not <prefix>:<value> with one colon"
+
+# An undeclared prefix is a record both checkers reject.
+lm_undeclared="$lm_dir/undeclared"
+cp -R "$lm/." "$lm_undeclared/"
+rm -rf "$lm_undeclared/.git"
+sed -i.bak 's/topic:billing\]$/squad:billing]/' "$lm_undeclared/$lm_decision"
+rm -f "$lm_undeclared/$lm_decision.bak"
+require_line "$(cat "$lm_undeclared/$lm_decision")" "applies_to: [regions:emea, squad:billing]" "the undeclared-prefix record"
+require_failure "$(run_lint "$lm_undeclared")" "FAIL $lm_undeclared/$lm_decision: record-facet: \`applies_to\` entry \`squad:billing\` uses prefix \`squad\`"
+
+# The verify-ltm sweep through the shim: a pass, a finding passed through as
+# its own FAIL line, and a silent nonzero exit that still fails. A shim proves
+# the plumbing only; the real-ltm block below proves ltm agrees.
+mkdir -p "$lm_dir/bin"
+ln -s "$repo_root/$lm_shim" "$lm_dir/bin/ltm"
+[[ "$(PATH="$lm_dir/bin:$PATH" command -v ltm)" == "$lm_dir/bin/ltm" ]] || {
+  echo "test setup: the ltm shim is not first on PATH" >&2
+  exit 1
+}
+lm_vout="$(LTM_SHIM_LOG="$lm_dir/shim.log" PATH="$lm_dir/bin:$PATH" bash "$lm_verify" "$lm" --since "$ref" 2>&1)" || {
+  echo "verify-migration.sh failed with an ltm that passed" >&2
+  printf '%s\n' "$lm_vout" >&2
+  exit 1
+}
+require_output "$lm_vout" "ltm: validated"
+require_line "$(cat "$lm_dir/shim.log")" "validate $lm" "the ltm shim log"
+
+lm_finding="_memory/decisions/x.md:3: error schema: id: must match pattern"
+lm_rc=0
+lm_vout="$(LTM_SHIM_OUT="$lm_finding" LTM_SHIM_EXIT=1 PATH="$lm_dir/bin:$PATH" bash "$lm_verify" "$lm" --since "$ref" 2>&1)" || lm_rc=$?
+[[ "$lm_rc" -ne 0 ]] || {
+  echo "verify-migration.sh passed when ltm validate reported a finding" >&2
+  exit 1
+}
+require_output "$lm_vout" "FAIL $lm: verify-ltm: $lm_finding"
+
+lm_rc=0
+lm_vout="$(LTM_SHIM_EXIT=1 PATH="$lm_dir/bin:$PATH" bash "$lm_verify" "$lm" --since "$ref" 2>&1)" || lm_rc=$?
+[[ "$lm_rc" -ne 0 ]] || {
+  echo "verify-migration.sh passed when ltm validate exited 1 silently" >&2
+  exit 1
+}
+require_output "$lm_vout" "FAIL $lm: verify-ltm: ltm validate exited 1 without a finding"
+
+# With no ltm on PATH the sweep skips and says so, and the run still passes:
+# the skill's scripts stay runnable without the kit.
+lm_bare=""
+IFS=: read -ra lm_path_dirs <<<"$PATH"
+for d in "${lm_path_dirs[@]}"; do
+  [[ -n "$d" && ! -e "$d/ltm" ]] && lm_bare="${lm_bare:+$lm_bare:}$d"
+done
+PATH="$lm_bare" command -v ltm >/dev/null 2>&1 && {
+  echo "test setup: ltm reachable on the bare PATH, the no-ltm case would prove nothing" >&2
+  exit 1
+}
+lm_vout="$(PATH="$lm_bare" bash "$lm_verify" "$lm" --since "$ref" 2>&1)" || {
+  echo "verify-migration.sh failed with no ltm installed" >&2
+  printf '%s\n' "$lm_vout" >&2
+  exit 1
+}
+require_output "$lm_vout" "ltm: not installed; skipped"
+
+# The real CLI, where it is installed. The agreement criteria are about ltm
+# itself, so the shim can't stand in for them; without ltm they go unchecked
+# and the run says so.
+if command -v ltm >/dev/null 2>&1; then
+  lm_rc=0
+  lm_vout="$(ltm validate "$lm" 2>&1)" || lm_rc=$?
+  [[ "$lm_rc" -eq 0 ]] || {
+    echo "ltm validate rejected the migrated ltm-migrate copy, which the lint passed" >&2
+    printf '%s\n' "$lm_vout" >&2
+    exit 1
+  }
+
+  # ltm doctor skips a record only when a field is malformed, and every such
+  # field is an ltm validate error, so the exit above is what shows none was
+  # skipped. Doctor still has to run clean and hand back a JSON array.
+  ltm doctor --bank "$lm" --json >"$lm_dir/doctor.json" 2>"$lm_dir/doctor.err" || {
+    echo "ltm doctor --bank failed on the migrated ltm-migrate copy" >&2
+    cat "$lm_dir/doctor.err" >&2
+    exit 1
+  }
+  python3 -c 'import json, sys; d = json.load(open(sys.argv[1])); sys.exit(0 if isinstance(d, list) else 1)' "$lm_dir/doctor.json" || {
+    echo "ltm doctor --json did not print a JSON array" >&2
+    exit 1
+  }
+
+  lm_rc=0
+  ltm validate "$lm_undeclared" >/dev/null 2>&1 || lm_rc=$?
+  [[ "$lm_rc" -ne 0 ]] || {
+    echo "ltm validate passed an undeclared facet prefix the lint rejects" >&2
+    exit 1
+  }
+
+  # A freshly scaffolded scope: the lightweight bank and one record from each
+  # template, its placeholders filled the way the agent fills them.
+  lm_tpl="$lm_dir/scaffolded"
+  sed 's/{{SCOPE_NAME}}/scaffolded/' inbox-to-memory/assets/memory-bank.template.yaml >"$lm_dir/scaffolded.yaml"
+  mkdir -p "$lm_tpl"
+  mv "$lm_dir/scaffolded.yaml" "$lm_tpl/memory-bank.yaml"
+  for record in context:context:Sc1Ctx0001 decision:decisions:Sc2Dec0002 exception:exceptions:Sc3Exc0003 policy-rule:rules:Sc4Pol0004 rule:rules:Sc5Rul0005; do
+    IFS=: read -r name folder id <<<"$record"
+    mkdir -p "$lm_tpl/_memory/$folder"
+    sed -e "s/{{nanoid}}/$id/" -e 's/{{proposed | accepted}}/proposed/' -e 's/{{YYYY-MM-DD}}/2026-11-02/g' \
+      "inbox-to-memory/assets/records/$name.template.md" >"$lm_tpl/_memory/$folder/$name.md"
+  done
+  lm_rc=0
+  lm_vout="$(ltm validate "$lm_tpl" 2>&1)" || lm_rc=$?
+  [[ "$lm_rc" -eq 0 ]] || {
+    echo "ltm validate rejected a scaffolded bank holding one record per template" >&2
+    printf '%s\n' "$lm_vout" >&2
+    exit 1
+  }
+else
+  echo "ltm not installed; skipped real-ltm checks"
+fi
+
+# migration.md's undo, run as written from the scope root, leaves the scope
+# exactly as committed, memory-bank.yaml included.
+(cd "$lm" && git restore -- . && git clean -f -- ./memory-bank.yaml) >/dev/null
+lm_clean "$lm" "migration.md's undo"
+[[ ! -e "$lm/memory-bank.yaml" ]] || {
+  echo "migration.md's undo left memory-bank.yaml behind" >&2
+  exit 1
+}
+
+# Row 36 is the decision the issue asked to have recorded.
+require_text _maintenance/inbox-to-memory/RATIONALE.md "| 36 |"
+require_text _maintenance/inbox-to-memory/RATIONALE.md "A prefix inferred for a bare facet."
+require_text _maintenance/inbox-to-memory/RATIONALE.md "Moving notes or journal entries to \`schema: 1\`."
+
+rm -rf "$lm_dir"
 
 # The checked-in fixtures are never migrated or stamped in place. Every
 # migration or write-through test works on a copy, and a test that forgets

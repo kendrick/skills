@@ -188,9 +188,16 @@ done
 # committed, which is exactly the state this script exists to check.
 renames=0
 deletions=0
+# --to-ltm writes <scope>/memory-bank.yaml, so once committed it is an expected `A`; name-status paths are repo-root-relative, hence the prefix.
+bank_path="$(git -C "$scope" rev-parse --show-prefix)memory-bank.yaml"
 while IFS=$'\t' read -r status path1 path2; do
   case "$status" in
     M) : ;;
+    A)
+      if [[ "$path1" != "$bank_path" ]]; then
+        fail "$scope" "verify-rename: \`$path1\` has unexpected status \`$status\`"
+      fi
+      ;;
     R*)
       renames=$((renames + 1))
       fail "$scope" "verify-rename: \`$path1\` renamed to \`$path2\`"
