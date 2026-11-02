@@ -392,11 +392,13 @@ if [[ "$to_ltm" -eq 1 ]]; then
     n_refusals=$((n_refusals + 1))
   }
 
-  # Quote a flow-list item only when YAML would misread it plain, so a migrated
-  # facet stays greppable as `topic:billing` rather than `'topic:billing'`.
+  # Quote every item except a facet. A plain id like 1234567890 or 1e10000000
+  # parses as a number, and ltm wants a string. A facet opens with `prefix:`,
+  # which no YAML number, bool, null or date can, so it stays plain and
+  # greppable as `topic:billing`.
   ltm_item() {
     local v="$1"
-    if [[ "$v" =~ ^[A-Za-z0-9_./][A-Za-z0-9_./:\ -]*$ && "$v" != *": "* && "$v" != *" " && "$v" != *: ]]; then
+    if [[ "$v" =~ ^[a-z][a-z0-9-]*:[A-Za-z0-9_./][A-Za-z0-9_./:\ -]*$ && "$v" != *": "* && "$v" != *" " && "$v" != *: ]]; then
       printf '%s' "$v"
     else
       printf "'%s'" "${v//\'/\'\'}"

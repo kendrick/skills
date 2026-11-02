@@ -3224,6 +3224,39 @@ bash "$lm_migrator" "$lm_nofold" --to-ltm --facet-map "$lm_map" --apply >/dev/nu
 }
 require_line "$(cat "$lm_nofold/_memory/rules/dunning-notices-need-ops-signoff-Lm2DunOps2.md")" "memory_type: PolicyRule" "the Rule under a hand-fixed bank"
 
+# A quoted scalar supersedes id that YAML reads as a number when plain keeps
+# its quotes inside the list --to-ltm builds (PR #279 r4447007149). Each id
+# gets its own superseded record so ltm validate below can exit 0. yq reads
+# 1e10000000 plain as a string while ltm's parser reads Infinity, so only the
+# real-ltm check catches that one.
+lm_ids="$lm_dir/numeric-ids"
+lm_stage "$lm_ids"
+lm_ctx="$lm_ids/_memory/context"
+lm_n=5
+for lm_id in 1234567890 0x12345678 1e10000000; do
+  lm_new="Lm${lm_n}NewSup${lm_n}"
+  sed -e "s/Lm3LdgCls3/$lm_new/g" -e "s/Lm4OldCls4/'$lm_id'/g" "$lm_ctx/regional-ledger-closes-June-Lm3LdgCls3.md" >"$lm_ctx/closes-$lm_new.md"
+  sed -e "s/Lm3LdgCls3/$lm_new/g" -e "s/Lm4OldCls4/'$lm_id'/g" "$lm_ctx/regional-ledger-open-through-September-Lm4OldCls4.md" >"$lm_ctx/open-$lm_id.md"
+  lm_n=$((lm_n + 1))
+done
+lm_commit "$lm_ids" numeric-ids
+bash "$lm_migrator" "$lm_ids" --to-ltm --facet-map "$lm_map" --apply >/dev/null 2>&1 || {
+  echo "--to-ltm --apply failed on the numeric-looking supersedes ids" >&2
+  exit 1
+}
+lm_n=5
+for lm_id in 1234567890 0x12345678 1e10000000; do
+  lm_rec="$lm_ctx/closes-Lm${lm_n}NewSup${lm_n}.md"
+  lm_got="$(sed -n '2,/^---$/p' "$lm_rec" | sed '$d' | yq '.supersedes[0] | tag + " " + .')"
+  [[ "$lm_got" == "!!str $lm_id" ]] || {
+    echo "--to-ltm turned supersedes '$lm_id' into '$lm_got' (want '!!str $lm_id')" >&2
+    grep '^supersedes:' "$lm_rec" >&2
+    exit 1
+  }
+  require_line "$(cat "$lm_rec")" "supersedes: ['$lm_id']" "--to-ltm on a numeric-looking supersedes id"
+  lm_n=$((lm_n + 1))
+done
+
 # With no ltm on PATH the sweep skips and says so, and the run still passes:
 # the skill's scripts stay runnable without the kit.
 lm_bare=""
@@ -3313,6 +3346,15 @@ if command -v ltm >/dev/null 2>&1; then
     exit 1
   }
 
+  # The numeric-looking supersedes ids from above, by ltm's own parser.
+  lm_rc=0
+  lm_vout="$(ltm validate "$lm_ids" 2>&1)" || lm_rc=$?
+  [[ "$lm_rc" -eq 0 ]] || {
+    echo "ltm validate rejected the migrated numeric-looking supersedes ids" >&2
+    printf '%s\n' "$lm_vout" >&2
+    exit 1
+  }
+
   # A freshly scaffolded scope: the lightweight bank and one record from each
   # template, its placeholders filled the way the agent fills them.
   lm_tpl="$lm_dir/scaffolded"
@@ -3379,10 +3421,11 @@ require_output "$lm_vout" "FAIL $lm_done: verify-rename: \`notes/memory-bank.yam
 require_text _maintenance/inbox-to-memory/RATIONALE.md "| 36 |"
 require_text _maintenance/inbox-to-memory/RATIONALE.md "A prefix inferred for a bare facet."
 require_text _maintenance/inbox-to-memory/RATIONALE.md "Moving notes or journal entries to \`schema: 1\`."
-# Rows 45-47 record the adversarial-review rulings the cases above pin.
+# Rows 45-48 record the review rulings the cases above pin.
 require_text _maintenance/inbox-to-memory/RATIONALE.md "| 45 | \`verify-ltm:\` hands \`ltm validate\` the bank file and each \`schema: 1\` record"
 require_text _maintenance/inbox-to-memory/RATIONALE.md "| 46 | Only an ltm \`error\` line fails verify."
 require_text _maintenance/inbox-to-memory/RATIONALE.md "| 47 | \`--to-ltm\` refuses an existing \`memory-bank.yaml\` whose \`folders\` maps no \`PolicyRule\`"
+require_text _maintenance/inbox-to-memory/RATIONALE.md "| 48 | \`--to-ltm\` writes a flow-list item plain only when it is a facet"
 
 rm -rf "$lm_dir"
 
