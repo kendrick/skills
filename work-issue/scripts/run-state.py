@@ -162,6 +162,7 @@ PROBE_FIELDS = (
     ("review_over_budget", "bool", ()),
     ("repair_diff_triggers", "bool", ()),
     ("adopted", "bool", ()),
+    ("queue_unfiled_rows", "int", ()),
 )
 
 # A bundle's `state` is optional to `check_bundle`, so every review fixture
@@ -939,6 +940,16 @@ def budget_stop(row):
     )
 
 
+def unknown_fields_stop(names):
+    """The stop for null probe fields, shared by the generic check and row 1 so
+    the two reasons cannot drift."""
+    return (
+        "stop",
+        "unknown probe fields: " + ", ".join(names)
+        + "; a null here would read as no, so gather them again per references/resume.md",
+    )
+
+
 def phase_of(probe):
     """The Resume table, in its own order, first match wins.
 
@@ -950,6 +961,18 @@ def phase_of(probe):
     pr_state = probe["pr_state"]
     review_state = probe["review_state"]
     if pr_state in ("MERGED", "CLOSED"):
+        # Row 1 answers before the generic null check below, so it reads this
+        # field's null itself: a count that could not be read must not pass as
+        # an empty queue and let cleanup delete a run with findings unfiled (#183).
+        unfiled = probe["queue_unfiled_rows"]
+        if unfiled is None:
+            return unknown_fields_stop(["queue_unfiled_rows"])
+        if unfiled > 0:
+            return (
+                "stop",
+                "row 1: the PR is " + pr_state + " and queue_unfiled_rows is " + str(unfiled)
+                + "; file or dismiss each queued row, then offer cleanup",
+            )
         return "done", "row 1: the PR is " + pr_state + ", so offer cleanup and stop"
     # A null anywhere else is a probe that could not answer, and every row
     # below reads a null as "no": no branch, no run dir, no report. A transient
@@ -962,11 +985,7 @@ def phase_of(probe):
         if name not in ("pr_state", "review_state") and probe[name] is None
     ]
     if unknown:
-        return (
-            "stop",
-            "unknown probe fields: " + ", ".join(unknown)
-            + "; a null here would read as no, so gather them again per references/resume.md",
-        )
+        return unknown_fields_stop(unknown)
     herdr = probe["herdr_agent_state"]
     branch_anywhere = flag(probe, "branch_local") or flag(probe, "branch_remote")
     wave_tasks = count(probe, "wave_tasks")
@@ -2143,6 +2162,21 @@ def g_adopted(ctx):
     """`adopted.json` exists. Adoption writes it last, so its presence means
     every file row 19 and Step 6 read is already there."""
     return ctx.path("adopted.json").is_file()
+
+
+@gatherer("queue_unfiled_rows")
+def g_queue_unfiled_rows(ctx):
+    """`queue.md` rows whose Status cell is exactly `queued`. Only that cell, so
+    a Source, a Recommendation, or a `Deferred findings` comment can't move the
+    count; `filed #M` and `dismissed: <reason>` squeeze to something else. 0 with
+    no queue.md, null with no Status column (#183)."""
+    path = ctx.path("queue.md")
+    if not path.is_file():
+        return 0
+    columns, rows = triage_table(path)
+    if "Status" not in columns:
+        raise ProbeError("queue.md has no Status column")
+    return sum(1 for r in rows if cell(r, columns["Status"]) == "queued")
 
 
 def find_tree(root, branch, terminal=False):

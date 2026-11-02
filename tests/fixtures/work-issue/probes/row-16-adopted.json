@@ -36,5 +36,6 @@
   "repair_ar_settled": false,
   "review_over_budget": false,
   "repair_diff_triggers": false,
-  "adopted": true
+  "adopted": true,
+  "queue_unfiled_rows": 0
 }
