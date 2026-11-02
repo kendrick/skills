@@ -1063,8 +1063,10 @@ for doc in "${work_issue_docs[@]}"; do
   # then a resume trusts the flag over the world it should have re-probed.
   refute_text "$doc" "phase.txt"
 
-  # Filing the queued findings as issues. A walk-away run that opens the
-  # tickets itself turns one reviewer's aside into backlog nobody triaged.
+  # Filing queued findings without the human's answer. A walk-away run that
+  # opens the tickets itself turns one reviewer's aside into backlog nobody
+  # triaged; the one filing route, `file-issue --yolo`, is pinned to the filing
+  # pass in the #183 block below.
   refute_text "$doc" "gh issue create"
 
   # A lock file for the cross-run race. check-inflight.py closes the race that
@@ -2750,6 +2752,19 @@ require_text work-issue/SKILL.md "deferred findings on <PR URL> still read queue
 require_text work-issue/references/triage.md "\`dismissed: <reason>\` once they have declined to"
 require_text work-issue/SKILL.md "Source \`adversarial-review\`"
 require_text _maintenance/work-issue/RATIONALE.md "Filing queued findings without the human's answer"
+# Step 0's prune holds a sibling with unfiled rows, or else moving it to
+# closed/ walks it past its own row 1 stop.
+require_text work-issue/SKILL.md "stays in place: moving it to \`closed/\` skips that run's own resume row 1 stop"
+# `file-issue --yolo` files without asking, so it lives on the filing pass's
+# line alone: that line runs only on the human's answer at row 1's stop. Step 8
+# or a reference naming it would file with nobody's judgment behind the issue.
+yolo_lines="$(grep -cF -- "file-issue --yolo" work-issue/SKILL.md || true)"
+[[ "$yolo_lines" == 1 ]] && grep -F -- "file-issue --yolo" work-issue/SKILL.md | grep -Fq "**The filing pass.**" || {
+  echo "file-issue --yolo must appear on exactly one line of work-issue/SKILL.md, the filing pass; found $yolo_lines" >&2
+  exit 1
+}
+refute_text work-issue/references/resume.md "file-issue --yolo"
+refute_text work-issue/references/triage.md "file-issue --yolo"
 
 # branch_remote asks the live remote: false where origin lacks the branch, true
 # once pushed, and null where there is no origin to ask.

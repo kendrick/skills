@@ -2166,10 +2166,11 @@ def g_adopted(ctx):
 
 @gatherer("queue_unfiled_rows")
 def g_queue_unfiled_rows(ctx):
-    """`queue.md` rows whose Status cell is exactly `queued`. Only that cell, so
-    a Source, a Recommendation, or a `Deferred findings` comment can't move the
-    count; `filed #M` and `dismissed: <reason>` squeeze to something else. 0 with
-    no queue.md, null with no Status column (#183)."""
+    """`queue.md` rows whose Status cell, read with its whitespace dropped, is
+    exactly `queued`. Only that cell, so a Source, a Recommendation, or a
+    `Deferred findings` comment can't move the count, and `filed #M` or
+    `dismissed: <reason>` drops the row out. 0 with no queue.md, null with no
+    Status column (#183)."""
     path = ctx.path("queue.md")
     if not path.is_file():
         return 0
