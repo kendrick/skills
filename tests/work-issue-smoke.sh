@@ -931,8 +931,8 @@ awk -v h="$stops_header" '
   on { exit }
 ' work-issue/SKILL.md > "$tmp/stops.txt"
 stops_rows="$(wc -l < "$tmp/stops.txt" | tr -d ' ')"
-[[ "$stops_rows" -eq 29 ]] || {
-  echo "Where a Run Stops lists $stops_rows stops, expected 29" >&2
+[[ "$stops_rows" -eq 30 ]] || {
+  echo "Where a Run Stops lists $stops_rows stops, expected 30" >&2
   exit 1
 }
 while IFS= read -r row; do
@@ -1736,7 +1736,7 @@ refute_text work-issue/scripts/run-state.py "codex-review-state"
 # The grep stops at `reason:` so a reworded reason does not fail the suite.
 probes_dir=tests/fixtures/work-issue/probes
 declare -a probe_cases=(
-  "row-01:done" "row-02:wait" "row-03:stop" "row-04:0" "row-05:0" "row-05-gated:0" "row-06:0"
+  "row-01:done" "row-01-queued:stop" "row-02:wait" "row-03:stop" "row-04:0" "row-05:0" "row-05-gated:0" "row-06:0"
   "row-07:2" "row-07-isolation-incomplete:1" "row-07-committed-unreported:stop" "row-08:3" "row-09:3" "row-10:4" "row-11:4" "row-11-trigger-unrecorded:4" "row-12:5" "row-13:5"
   "row-14:6" "row-15:6" "row-16:7" "row-17:8" "row-17-queued:8" "row-17-postpush:8"
   "row-10-repair-unverified:4" "row-10-repair-needed:4" "row-10-failed-twice:stop" "row-13-prepr-repair-clean:5" "row-16-earlier-queued:8" "row-17-review-repair-unpushed:8" "row-17-deferred-owed:8" "row-17-worker-queue:8" "row-18-answered:done" "row-18:done"
@@ -2715,6 +2715,41 @@ ad="$(new_run adopted)"
 expect_field "with no adopted.json" adopted false "$ad" "$lab_repo"
 echo '{}' >"$ad/adopted.json"
 expect_field "with adopted.json" adopted true "$ad" "$lab_repo"
+
+# #183: queue_unfiled_rows reads queue.md's Status cell alone, and row 1 holds
+# cleanup while any row still reads exactly `queued`.
+q="$(new_run queue-unfiled)"
+q_header='| # | Source | Finding | Outside because | Recommendation | Status |\n|---|---|---|---|---|---|\n'
+q_row1='| 1 | https://github.com/o/r/pull/9#discussion_r3 | "Consider a retry." | not in the diff | `file-issue` — retry | queued |'
+q_row2='| 2 | adversarial-review | "Log the retry." (repro: `bash t.sh`) | listed advisory | `file-issue` — log | queued |'
+expect_field "with no queue.md" queue_unfiled_rows 0 "$q" "$lab_repo"
+printf "$q_header%s\n%s\n" "$q_row1" "$q_row2" >"$q/queue.md"
+expect_field "with two queued rows" queue_unfiled_rows 2 "$q" "$lab_repo"
+printf "$q_header%s\n%s\n" "${q_row1/queued |/filed #12 |}" "$q_row2" >"$q/queue.md"
+expect_field "with one row filed #12" queue_unfiled_rows 1 "$q" "$lab_repo"
+printf "$q_header%s\n%s\n" "${q_row1/queued |/dismissed: duplicate of #9 |}" "$q_row2" >"$q/queue.md"
+expect_field "with one row dismissed" queue_unfiled_rows 1 "$q" "$lab_repo"
+# A reason that quotes the word still isn't the Status `queued`.
+printf "$q_header%s\n%s\n" "${q_row1/queued |/dismissed: queued twice, see #9 |}" "$q_row2" >"$q/queue.md"
+expect_field "with a dismissal reason naming queued" queue_unfiled_rows 1 "$q" "$lab_repo"
+printf "$q_header%s\n%s\n" "${q_row1/o\/r\/pull\/9#discussion_r3/adversarial-review}" "$q_row2" >"$q/queue.md"
+expect_field "with one row's Source changed" queue_unfiled_rows 2 "$q" "$lab_repo"
+printf "$q_header%s\n%s\n" "${q_row1/— retry/— retry with backoff}" "$q_row2" >"$q/queue.md"
+expect_field "with one row's Recommendation changed" queue_unfiled_rows 2 "$q" "$lab_repo"
+printf "$q_header%s\n%s\n" "$q_row1" "$q_row2" >"$q/queue.md"
+expect_field "with a Deferred findings comment in the bundle" queue_unfiled_rows 2 "$q" "$lab_repo" --pr-bundle "$bundles_dir/open-deferred.json"
+expect_field "with a bundle and no Deferred findings comment" queue_unfiled_rows 2 "$q" "$lab_repo" --pr-bundle "$bundles_dir/merged.json"
+printf '| # | Source | Finding | Outside because | Recommendation |\n|---|---|---|---|---|\n| 1 | worker | "Retry." | not in the diff | `file-issue` — retry |\n' >"$q/queue.md"
+expect_field "with no Status column" queue_unfiled_rows null "$q" "$lab_repo"
+expect_phase "phase on a null queue_unfiled_rows" "phase: stop reason: unknown probe fields: queue_unfiled_rows" \
+  "$(python3 "$run_state" phase --probe "$probes_dir/unknown-queue-unfiled-rows.json")"
+q_got="$(field_phase row-01.json queue_unfiled_rows 3)"
+expect_phase "phase on a merged PR with 3 queued rows" "phase: stop reason: row 1:" "$q_got"
+expect_phase "phase on a merged PR with 3 queued rows" "queue_unfiled_rows is 3" "$q_got"
+require_text work-issue/SKILL.md "deferred findings on <PR URL> still read queued; answer which to file and which to dismiss"
+require_text work-issue/references/triage.md "\`dismissed: <reason>\` once they have declined to"
+require_text work-issue/SKILL.md "Source \`adversarial-review\`"
+require_text _maintenance/work-issue/RATIONALE.md "Filing queued findings without the human's answer"
 
 # branch_remote asks the live remote: false where origin lacks the branch, true
 # once pushed, and null where there is no origin to ask.
