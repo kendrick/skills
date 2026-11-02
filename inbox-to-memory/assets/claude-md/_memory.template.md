@@ -16,7 +16,7 @@ scaffold_digest: "{{sha256:<hex> of the filled body—stamped at scaffold time}}
 
 ```yaml
 ---
-schema: 2
+schema: 1
 id: <nanoid>
 memory_type: {{MEMORY_TYPE_ENUM}}
 title: "..."
@@ -29,7 +29,9 @@ source_refs: [<note-or-record-id>]
 
 Optional, in this order among the keys you keep: `effective_from`, `effective_to`, `applies_to`, `owners`, `tags`, `related`, `exception_to`, `supersedes`, `superseded_by`.
 
-Values stay on one line, lists are inline arrays, and the block closes inside the first 20 lines so a header read catches all of it. Records with no `schema` key are v1 and stay legal indefinitely.
+Values stay on one line, lists are inline arrays, and the block closes inside the first 20 lines so a header read catches all of it. Omit an optional key that has no value rather than writing `null`, and write `supersedes` as a list even when it holds one id. Records with no `schema` key are v1 and `schema: 2` records predate the move to long-term-memory-kit's format; both stay legal until the scope's owner migrates them.
+
+Every `applies_to` and `owners` entry is a facet, `<prefix>:<value>` with one colon, such as `topic:billing` or `team:ops`. The prefix must be one the scope's `memory-bank.yaml` lists under `facet_prefixes`; add a prefix there before the first record that uses it.
 
 `last_confirmed` says when the record's claim was last seen to hold, and it is the one field here that gets written without anybody approving it. It starts as the record's own `date`. After that, when an inbox input restates a claim an `accepted` record already makes, [`~/.claude/skills/inbox-to-memory/scripts/stamp-confirmed.sh`](~/.claude/skills/inbox-to-memory/scripts/stamp-confirmed.sh) stamps that input's date onto the record and never walks the date backwards. That write skips the sign-off described below and is the only one in `_memory/` that does; the run's verify report names every record it moved along with every one it declined to. Everything else here waits for the user, item by item.
 
@@ -55,7 +57,7 @@ Glob _memory/**/*V1StGXR8Z5*                   # resolve a specific nanoid ref
 Grep "^status: accepted" _memory/decisions/
 Grep "tags:.*compliance" _memory/
 Grep "applies_to:.*commerce" _memory/context/
-Grep "applies_to:.*systems::billing" _memory/
+Grep "applies_to:.*topic:billing" _memory/
 ```
 
 **Stage 3: frontmatter-only read.** Use `Read` with `limit: 15` to pull just the YAML header (~300 tokens per record). Only on candidates that survived stages 1 and 2.
@@ -82,7 +84,7 @@ When creating the record:
 
 ## When Records Graduate
 
-The user edits `status: proposed` → `status: accepted` after review. If a record is later replaced, mark the old one `status: superseded` and set `supersedes:` on the replacement to the old record's id. No automated supersession enforcement in this version; discipline only.
+The user edits `status: proposed` → `status: accepted` after review. If a record is later replaced, mark the old one `status: superseded` with `superseded_by: <new id>`, and list the old record's id in the replacement's `supersedes: [<id>]`. No automated supersession enforcement in this version; discipline only.
 
 ## What Never Goes Here
 

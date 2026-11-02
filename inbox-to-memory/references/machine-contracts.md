@@ -4,9 +4,9 @@ The retrieval funnel assumes it can read a file's frontmatter cheaply and grep i
 
 This document is those assumptions written as rules, and [scripts/lint-scope.sh](../scripts/lint-scope.sh) is what enforces them.
 
-Everything here applies to files carrying `schema: 2`, with one exception. Files without a `schema` key are v1, they are legal forever, and the only thing the lint checks on them is whether their wiki links resolve, since a link resolving to no file is broken whichever generation wrote it. The frontmatter contract, the token grammar, the anchor rule, and the four derived counts all stop at the generation line. A scope holding both generations is a normal state, not a half-finished migration.
+Everything here applies to files carrying a `schema` key, with one exception. Files without a `schema` key are v1, they are legal forever, and the only thing the lint checks on them is whether their wiki links resolve, since a link resolving to no file is broken whichever generation wrote it. The frontmatter contract, the token grammar, the anchor rule, and the four derived counts all stop at the generation line. A scope holding several generations is a normal state, not a half-finished migration.
 
-## The Two Generations, and the File That Is Both
+## Generations, and the File That Is Both
 
 Migration rewrites frontmatter and leaves the body alone, so a migrated file is v2 above the fence and v1 below it. `body_schema: 1` is how it says so, and it splits the contract in two:
 
@@ -15,6 +15,11 @@ Migration rewrites frontmatter and leaves the body alone, so a migrated file is 
 | no `schema` key                  | not checked          | not checked  | checked |
 | `schema: 2`                      | checked              | checked      | checked |
 | `schema: 2` and `body_schema: 1` | checked              | not checked  | checked |
+| `schema: 1` (records only)       | checked, plus the four record checks | checked, or not where `body_schema: 1` | checked |
+
+Only records carry `schema: 1`. It marks a record in long-term-memory-kit's format, the one `ltm validate` reads (see [memory-bank-schema.md](memory-bank-schema.md)). Notes and journal entries stay at `schema: 2`, because the kit reads only the type folders under `_memory/` and has no Journal type.
+
+A record's generation is read from its `schema` value: no key is v1, `schema: 2` is a v2 record awaiting `migrate-scope.sh --to-ltm`, and `schema: 1` is an `ltm` record. A note's generation is read from the key's presence alone. A v2 record stays legal, as a v1 file does, and the record checks in [What the Lint Checks](#what-the-lint-checks) skip it; only `ltm` rejects it.
 
 Without the third row the first migration run would turn every bare line anchor written in 2025 into a lint failure, and the only way to clear them would be editing notes whose entire value is being an accurate record of that day. A body-shape check therefore keys off `body_schema`, never off `schema: 2`.
 
@@ -44,6 +49,14 @@ schema, body_schema, id, memory_type, title, status, date, effective_from, effec
 
 A file is a record when it has `memory_type` and a note otherwise. `themes` belongs to journal entries and `tags` to everything else; `exception_to` only to Exception records in canonical mode.
 
+A `schema: 1` record follows the kit's types and shapes on top of the record order:
+
+- `memory_type` is one of `Decision`, `PolicyRule`, `Exception`, or `Context`. `Rule` is the v2 spelling, and both memory modes write `PolicyRule`.
+- The record sits in the folder the scope's `memory-bank.yaml` names for its type under `folders`, or in the kit's default where `folders` names none: `_memory/decisions/`, `_memory/policy-rules/`, `_memory/exceptions/`, `_memory/context/`. A lightweight scope maps `PolicyRule` to `_memory/rules`.
+- `supersedes` is an inline list, `supersedes: [<id>]`, even with one id. `superseded_by` is one id.
+- An optional key with no value is omitted. The kit's date and id patterns reject a literal `null`.
+- The scope root holds `memory-bank.yaml` with `schema: 1`, a `name`, and at least one `facet_prefixes` entry.
+
 **`last_confirmed` is written for you, and only ever forward.** [Migration](migration.md) initializes it to the record's own `date`, since a record nobody has re-confirmed was last confirmed the day it was written. After that, [scripts/stamp-confirmed.sh](../scripts/stamp-confirmed.sh) advances it whenever an inbox input restates a claim an `accepted` record already makes, to that input's date, with no sign-off prompt in front of the write. It refuses any candidate not later than what the record already holds. A file carrying no `schema` key gains the key by neither route, which is the first row of the table above rather than a rule of its own: v1 frontmatter sits outside this contract, so nothing here fits a v2 key onto it.
 
 **Compound references.** A relationship is one greppable string of the form `<relation>::<id>`, never a nested mapping:
@@ -62,17 +75,28 @@ source_refs: [11 Clients/northwind/pursuits/atlas::JJuYgImRWn]
 
 The scope path is relative to the vault root. It is there for a human skimming where a pattern came from; the id is what resolves the file, which is why a moved note doesn't break the reference. Finding every entry sourced from one note is then `grep -F '::JJuYgImRWn'` rather than a YAML parse.
 
-`applies_to` values may carry the same shape a third time, `<facet>::<value>`, naming the dimension a value belongs to:
+### Facets
+
+`applies_to` and `owners` entries are facets, naming the dimension a value belongs to. On a `schema: 1` record every entry is `<prefix>:<value>`, with one colon, and its prefix is one the scope's `memory-bank.yaml` lists under `facet_prefixes`:
+
+```yaml
+applies_to: [regions:emea, systems:billing, topics:invoice-disputes]
+owners: [team:ops]
+```
+
+The prefix is required. The kit's record schema rejects a bare value, and an undeclared prefix fails `ltm validate`. The kit's prefix check reads only the text before the first colon, though, so `regions::emea` passes `ltm` as prefix `regions` with value `:emea`. The lint's `record-facet` check, which requires the character after the colon to be something other than a colon, is what catches the doubled colon.
+
+The prefixes belong to the scope rather than to this contract, and `memory-bank.yaml` is where a scope declares them. The scaffold declares `topic`; a scope adds its own before the first record that uses one.
+
+A facet keeps one dimension apart at any size. `billing` names a system and also turns up in topics, so a flat `grep billing` returns both: at fifty records a reader separates them by eye, and at several thousand the same search returns hundreds of candidates and nothing reports a problem. `grep 'systems:billing'` pins one dimension, still on one line and still without a YAML parse.
+
+A `schema: 2` record carries the older shape, `<facet>::<value>`, beside bare values, and neither is required there:
 
 ```yaml
 applies_to: [regions::emea, systems::billing, topics::invoice-disputes]
 ```
 
-This third shape is optional and stays that way. An unprefixed value is legal forever: `applies_to: [billing]` parses, passes the lint, and answers `applies_to:.*billing` exactly as it always has. Faceted and unfaceted records therefore sit in one scope with no migration between them, and a scope that adopts facets can backfill its older records, some of them, or none.
-
-Reach for a facet once a scope's values start spanning dimensions and the flat namespace stops narrowing. `billing` names a system and also turns up in topics, so one grep returns both. At fifty records a reader separates them by eye. At several thousand the same search returns hundreds of candidates, and nothing reports a problem. Prefixed, `grep 'systems::billing'` pins one dimension at any size, still on one line and still without a YAML parse.
-
-The facet names belong to the scope rather than to this contract. A scope declares its own in its `CLAUDE.md` Deltas, the way it already declares its tag namespace and its `type:` values.
+`migrate-scope.sh --to-ltm` rewrites each `<facet>::<value>` to `<facet>:<value>` and maps a bare value through a facet map the scope's owner writes. It never infers a prefix for a bare value. [migration.md](migration.md) covers the pass.
 
 ## The Token Grammar
 
@@ -189,6 +213,12 @@ Each failure names the file and the check that caught it, so a defect whose caus
 | `token-grammar`             | A bracketed token in the body is absent from the grammar table.      |
 | `contradiction-fields`      | A contradiction names no record, or never states what that record claims. |
 | `raw-file`                  | A v2-body note's `raw_file` doesn't resolve or resolves to an empty file, or its `## Raw Content` links into `raw/` with no `raw_file`. |
+| `record-facet`              | A `schema: 1` record's `applies_to` or `owners` entry fails `^[a-z][a-z0-9-]*:[^:]`, or uses a prefix the scope's `memory-bank.yaml` doesn't list under `facet_prefixes`. |
+| `record-type`               | A `schema: 1` record's `memory_type` is not one of the kit's four types, or the record sits outside the folder `memory-bank.yaml`'s `folders` names for that type, or the kit default where it names none. |
+| `record-supersedes`         | A `schema: 1` record carries `supersedes` as anything other than an inline list. |
+| `bank-config`               | A scope holding a `schema: 1` record has no `memory-bank.yaml`, or one missing `schema: 1`, a `name`, or a `facet_prefixes` entry. |
+
+The four `record-` and `bank-config` checks run only where a record carries `schema: 1`. A `schema: 2` record and a note get none of them, which is what keeps a scope that hasn't migrated passing.
 
 `frontmatter-key-domain` is checked ahead of the budget on purpose. A record carrying both keys plus most of the order runs past line 20, and the budget failure would report that overrun without ever naming the mixup underneath it.
 
