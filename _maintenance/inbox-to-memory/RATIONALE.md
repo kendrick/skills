@@ -117,7 +117,7 @@ The move to long-term-memory-kit came from #276. The kit restarted records at `s
 - An index not refreshed since records landed returns stale hits or none, and qmd still exits 0. The script can't tell that apart from no match. Run `memory-index`'s refresh after records land.
 - A hit qmd returns under a path that no longer exists is skipped with a stderr line.
 - The smoke suite stubs qmd, so real ranking gets checked only by a live run.
-- `lint-scope.sh` doesn't check a `schema: 1` record for a literal `null` or for `supersedes` ids of ten characters, and `ltm validate` rejects both. The lint can pass a hand-edited record that `ltm` fails, so run `ltm validate` as well, as step 8 in `references/migration.md` says.
+- `lint-scope.sh` doesn't check a `schema: 1` record for a literal `null`, or for a `supersedes` id that isn't ten characters long, and `ltm validate` rejects both. The lint can pass a hand-edited record that `ltm` fails, so run `ltm validate` as well, as step 8 in `references/migration.md` says.
 - The lint's one-colon facet test is stricter than `ltm`, so a hand-written `regions::emea` fails the lint and passes `ltm validate` (row 44).
 - `--to-ltm` drops a `null` `applies_to`, `owners`, or `related` along with the four date and id keys, and it folds the prefixes of records already at `schema: 1` into the `facet_prefixes` it writes.
 - Without `ltm` installed, the smoke suite prints `ltm not installed; skipped real-ltm checks` and checks the `verify-ltm:` sweep through a shim only, so the agreement with `ltm` goes unchecked on that machine.

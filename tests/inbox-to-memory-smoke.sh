@@ -456,6 +456,10 @@ for scaffold in notes journal; do
   require_text "inbox-to-memory/assets/claude-md/$scaffold.template.md" "schema: 2"
 done
 require_text inbox-to-memory/assets/claude-md/_memory.template.md "schema: 1"
+# The README scaffold's grep example has to find records after --to-ltm, which
+# leaves every facet single-colon under a prefix memory-bank.yaml declares.
+require_text inbox-to-memory/assets/readme/_memory.template.md 'Grep "applies_to:.*topic:billing" _memory/'
+refute_text inbox-to-memory/assets/readme/_memory.template.md "systems::billing"
 refute_text inbox-to-memory/assets/claude-md/journal.template.md "note_id: <nanoid>"
 
 # ---------------------------------------------------------------------------
@@ -2913,16 +2917,51 @@ lm_body() {
 
 # The migration doc's commands are the ones run below, with <scope-root> and
 # <facet-map> filled in. A doc line that drifts from what runs fails here.
+# Whole-line matches inside the section's bash block: step 4's command is a
+# prefix of steps 5 and 6, and step 3's also appears in the Tier 1 section, so
+# a file-wide substring pin stayed green with either deleted (#276 red team).
+lm_block="$(awk '/^## Migrating Records to ltm/ { s = 1 } s && /^```bash$/ { b = 1; next } b && /^```$/ { exit } b' "$lm_doc")"
 for line in \
+  'ltm --version' \
+  "git add <scope-root> && git commit -m 'pre-ltm checkpoint'" \
+  'ref="$(git rev-parse HEAD)"' \
+  'bash inbox-to-memory/scripts/migrate-scope.sh <scope-root> --apply' \
   'bash inbox-to-memory/scripts/migrate-scope.sh <scope-root> --to-ltm' \
   'bash inbox-to-memory/scripts/migrate-scope.sh <scope-root> --to-ltm --facet-map <facet-map>' \
   'bash inbox-to-memory/scripts/migrate-scope.sh <scope-root> --to-ltm --facet-map <facet-map> --apply' \
   'bash inbox-to-memory/scripts/verify-migration.sh <scope-root> --since "$ref"' \
   'ltm validate <scope-root>' \
-  'git restore -- <scope-root> && git clean -f -- <scope-root>/memory-bank.yaml'; do
-  require_text "$lm_doc" "$line"
+  'git restore -- <scope-root> && git clean -f -- <scope-root>/memory-bank.yaml' \
+  'git reset --hard "$ref"'; do
+  grep -Fqx -- "$line" <(printf '%s\n' "$lm_block") || {
+    echo "missing command line in $lm_doc's ltm bash block: $line" >&2
+    exit 1
+  }
 done
 require_text "$lm_doc" "## Migrating Records to ltm"
+
+# Phase 5 writes schema: 1 records into scopes that predate the kit, where
+# schema 2 records and no memory-bank.yaml are the norm. SKILL.md has it write
+# the bank from the template first; skip that and bank-config fails the scope.
+lm_fill() {
+  sed -e "s/{{nanoid}}/$2/" -e "s/{{[^}]*[Tt]itle[^}]*}}/Phase 5 record/" \
+    -e "s/{{proposed | accepted}}/accepted/" -e "s/{{YYYY-MM-DD}}/2026-06-04/g" \
+    -e "s/{{note-id}}/Lm0BilRev0/" -e "s/^applies_to: \[\]/applies_to: [topic:billing]/" \
+    "inbox-to-memory/assets/records/$1.template.md"
+}
+require_text inbox-to-memory/SKILL.md "Before the first record lands in a scope whose root has no \`memory-bank.yaml\`, write one from [assets/memory-bank.template.yaml]"
+lm_p5="$lm_dir/phase5"
+mkdir -p "$lm_p5"
+cp -R "$lm_fixture/." "$lm_p5/"
+lm_fill decision Lm5NewDec5 >"$lm_p5/_memory/decisions/phase-5-decision-Lm5NewDec5.md"
+lm_fill rule Lm6NewRul6 >"$lm_p5/_memory/rules/phase-5-rule-Lm6NewRul6.md"
+refute_text "$lm_p5/_memory/decisions/phase-5-decision-Lm5NewDec5.md" "{{"
+lm_p5_out="$(run_lint "$lm_p5")"
+require_failure "$lm_p5_out" "bank-config"
+require_failure "$lm_p5_out" 'record-type: `memory_type: PolicyRule` belongs in `_memory/policy-rules`'
+sed 's/{{SCOPE_NAME}}/phase5/' inbox-to-memory/assets/memory-bank.template.yaml >"$lm_p5/memory-bank.yaml"
+lm_p5_out="$(run_lint "$lm_p5")"
+require_line "$lm_p5_out" "failures: 0" "a pre-ltm scope given Phase 5 records and a bank"
 
 lm="$lm_dir/scope"
 lm_stage "$lm"

@@ -180,6 +180,7 @@ For each candidate the user approves:
      - Lightweight: `decisions/`, `context/`, `rules/`.
      - Canonical: `decisions/`, `context/`, `policy-rules/`, `exceptions/`.
      The folder must match `memory_type` in the frontmatter. Both modes write rules as `PolicyRule`; lightweight keeps them in `rules/` through `memory-bank.yaml`'s `folders` (see [references/memory-bank-schema.md](references/memory-bank-schema.md)).
+     Before the first record lands in a scope whose root has no `memory-bank.yaml`, write one from [assets/memory-bank.template.yaml](assets/memory-bank.template.yaml) as Existing-directory Regeneration step 3 does, with `{{SCOPE_NAME}}` filled and the `folders` line deleted in canonical mode; the lint fails a `schema: 1` record with no bank beside it. Every `applies_to` and `owners` facet uses a prefix that file lists under `facet_prefixes`, so add a new prefix there first. Until `--to-ltm` runs, a scope still holding `schema: 2` records fails `ltm validate`.
    - Journal entry: `11 Clients/11.99 Journal/entries/YYYY-MM-DD-<slug>-<nanoid>.md`.
 3. **Rewrite the candidate line** in the source note to a wiki link:
    - `[memory candidate: <scope>] <claim>` → `[[<record-filename-without-ext>|memory]] <claim>`
