@@ -247,7 +247,7 @@ require_text work-issue/README.md "a plan made there is found again by its issue
 # test is prose an agent applies at runtime, so these sentences are the whole
 # mechanism; a quiet edit to any of them changes who gets a plan drafted. ---
 
-require_text work-issue/SKILL.md "including an issue with no plan yet when the user invokes it directly, which it plans and has approved first"
+require_text work-issue/SKILL.md "including an issue with no plan yet that the user invokes it on directly;"
 require_text work-issue/SKILL.md "It is **direct** when the user asked for this run in their own words in this session and no calling skill's grant came with it"
 # Deliberately Not Built: planning on a wrapped invocation (row 174). A lane
 # has nobody to approve a plan, so it must refuse with the old message, and the
@@ -270,7 +270,15 @@ require_text work-issue/SKILL.md "Stop 1 approves an artifact, the plan, and gra
 require_text work-issue/SKILL.md "This message is Stop 2 wherever the Plan block ran, and a plan it drafted shows as \`Plan: <saved path> (planned this run).\`"
 require_text work-issue/SKILL.md "| A wrapped invocation with no plan, or a direct one with neither planner present | 0 |"
 require_text work-issue/SKILL.md "| A direct invocation with no plan and no plan directory | 0 |"
-require_text work-issue/SKILL.md "| Stop 1, the drafted plan put to the user | 0 |"
+require_text work-issue/SKILL.md "| Stop 1, the drafted plan put to the user and declined | 0 |"
+# A declined draft left in the plan directory resolves by route 4 next time and runs a plan the user turned down, so the decline deletes it.
+require_text work-issue/SKILL.md "On a decline, delete the drafted file from the plan directory"
+require_text work-issue/SKILL.md "\"Plan declined and deleted; \`work-issue N\` drafts a new one.\""
+# --dry-run previews and must not draft (row 178). drive.py's grant step is a dry run on a wrapped launch, so it halts on an unplanned issue, never plans.
+require_text work-issue/SKILL.md "| \`--dry-run\` on a direct invocation where every PLAN route missed | 0 |"
+require_text work-issue/SKILL.md "\"--dry-run drafts no plan; \`work-issue N\` without it plans the issue.\""
+require_text work-issue/SKILL.md "A \`drive.py\` launch is wrapped, because the driver launches a headless agent the user isn't talking to, so it never plans"
+require_text _maintenance/work-issue/RATIONALE.md "| 178 | \`--dry-run\` drafts no plan."
 require_text _maintenance/work-issue/RATIONALE.md "| 2 | An approved plan is required, and a thin one is refused rather than planned around—superseded in part by row 174 |"
 require_text _maintenance/work-issue/RATIONALE.md "| 174 | Where every PLAN route misses on a direct invocation, Step 0 plans the issue in a Plan block between items 2 and 3"
 require_text _maintenance/work-issue/RATIONALE.md "| 175 | Two stops. Stop 1 puts the drafted plan and its saved path to the user"
@@ -282,7 +290,9 @@ require_text _maintenance/work-issue/RATIONALE.md "| Writing a plan into the rep
 # there lands in the PR diff. Route 2 names `docs/plans` on purpose, so the
 # refute reads the Plan block alone, and the require on its last bullet proves
 # the cut reached the end of the block rather than coming back empty.
-require_text work-issue/SKILL.md "or a first entry that is not a directory or sits inside ROOT"
+require_text work-issue/SKILL.md "set to the empty string, or a first entry that sits inside ROOT."
+# Route 4 exits 3 on a set entry that is missing or not a directory, so the block never sees that case; listing it as a refusal described dead text.
+require_text work-issue/SKILL.md "A set first entry that is missing or not a directory never reaches this block"
 awk '/^\*\*Plan block\.\*\*/ { on = 1 } on && /^3\. The plan gate/ { exit } on { print }' work-issue/SKILL.md >"$tmp/plan-block.md"
 require_text "$tmp/plan-block.md" "**Plan block.**"
 require_text "$tmp/plan-block.md" "- **Stop 1.**"
@@ -977,8 +987,8 @@ awk -v h="$stops_header" '
   on { exit }
 ' work-issue/SKILL.md > "$tmp/stops.txt"
 stops_rows="$(wc -l < "$tmp/stops.txt" | tr -d ' ')"
-[[ "$stops_rows" -eq 33 ]] || {
-  echo "Where a Run Stops lists $stops_rows stops, expected 33" >&2
+[[ "$stops_rows" -eq 34 ]] || {
+  echo "Where a Run Stops lists $stops_rows stops, expected 34" >&2
   exit 1
 }
 while IFS= read -r row; do

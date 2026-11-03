@@ -241,7 +241,7 @@ The skip line has its own check. Run Step 3 in a session where no `ponytail-revi
 
 **Setup:** a sandbox issue with acceptance criteria and no plan on any PLAN route. `WORK_ISSUE_PLAN_DIRS` names one scratch directory outside the sandbox checkout, made with `mktemp -d`, and `writing-plans` is installed. Put a plan for the issue in a second scratch directory no route searches, named `<N>-elsewhere.md`, so the run has a plan on disk it must not find. Start from a fresh session, so the invocation is direct.
 
-**Commands:** in the first session, invoke the run and answer Stop 1 with approval and Stop 2 with no. Then end that session, start a second one, and invoke again with no path argument:
+**Commands:** in the first session, invoke the run and answer Stop 1 with approval and Stop 2 with no. End that session. Item 5 already wrote `## Waves` into `RUN_DIR/plan.md`, so a second session would resume from that copy by Resume row 5's second leg and never run route 4. Move RUN_DIR to `closed/` so the second session takes row 4, a fresh Step 0. Then start a second session and invoke again with no path argument:
 
 ```
 > /work-issue <N>
@@ -249,16 +249,18 @@ ls "$WORK_ISSUE_PLAN_DIRS"
 python3 work-issue/scripts/check-plan.py "$WORK_ISSUE_PLAN_DIRS/<N>-<slug>.md" --issue <N> --criteria RUN_DIR/issue.md
 python3 work-issue/scripts/find-plan.py --issue <N> --repo <REPO>
 git status --short
+COMMON="$(git rev-parse --path-format=absolute --git-common-dir)"
+mkdir -p "$COMMON/work-issue/closed" && mv "$COMMON/work-issue/issue-<N>" "$COMMON/work-issue/closed/issue-<N>"
 > /work-issue <N>
 ```
 
-**Pass condition:** in the first session, the plan directory holds `<N>-<slug>.md` before Stop 1 appears, the slug being the issue title lowercased to `a-z0-9-`, and `check-plan.py` exits 0 on it. Stop 1 names that saved path and puts the plan to the user. Any gate failure or derivation question the draft raised went back to the planner and never reached the user. `find-plan.py` prints that one path. After approval the run reaches Stop 2, the Step 0 confirmation, whose Plan clause reads `Plan: <saved path> (planned this run).` `git status --short` in the sandbox shows nothing, so no plan landed in the repo tree. In the second session the run finds the same file and asks no Stop 1: its confirmation reads `Plan: <saved path> (route 4).` Fails if either session uses `<N>-elsewhere.md`, if a question reaches the user before Stop 1, if Stop 2 names the conversation or route 5, if the second session plans the issue again, or if any file under the sandbox checkout changes.
+**Pass condition:** in the first session, the plan directory holds `<N>-<slug>.md` before Stop 1 appears, the slug being the issue title lowercased to `a-z0-9-`, and `check-plan.py` exits 0 on it. Stop 1 names that saved path and puts the plan to the user. Any gate failure or derivation question the draft raised went back to the planner and never reached the user. `find-plan.py` prints that one path. After approval the run reaches Stop 2, the Step 0 confirmation, whose Plan clause reads `Plan: <saved path> (planned this run).` `git status --short` in the sandbox shows nothing, so no plan landed in the repo tree. In the second session the run starts a fresh Step 0, finds the same file by route 4, and asks no Stop 1: its confirmation reads `Plan: <saved path> (route 4).` Fails if either session uses `<N>-elsewhere.md`, if a question reaches the user before Stop 1, if Stop 2 names the conversation or route 5, if the second session plans the issue again, or if any file under the sandbox checkout changes.
 
 The plan-mode fallback has its own check. Repeat the first session where `writing-plans` is not installed. The run enters plan mode, ExitPlanMode's approval stands in for Stop 1, and only after that approval does `<N>-<slug>.md` appear in the plan directory, copied from the file plan mode saved under `~/.claude/plans`. `find-plan.py` then prints the copied path, and the confirmation names it as `(planned this run)`.
 
 ### 23. A Wrapped Invocation With No Plan Refuses and Plans Nothing
 
-**Setup:** the same unplanned sandbox issue and the same two scratch directories as Scenario 22, with the plan directory emptied. `work-wave` refuses an issue with no plan at its own Step 0 before any lane starts, so instantiate `work-wave/references/lane-brief.md` by hand for this one issue: `{{PHASE}}` `build`, `{{GRANT}}` the build half, and both invocation lines without `{{PLAN}}`. Dispatch it as a general-purpose subagent.
+**Setup:** the same unplanned sandbox issue and the same two scratch directories as Scenario 22, with the plan directory emptied. `work-wave` refuses an issue with no plan at its own Step 0 before any lane starts, so instantiate `work-wave/references/lane-brief.md` by hand for this one issue: `{{PHASE}}` `build`, `{{GRANT}}` the build half, and both invocation lines without `{{PLAN}}`. Write line 15 as `Your plan, by absolute path: none`, and start the sentence after `{{GRANT}}`'s block with "Where the plan does not resolve" in place of "Where {{PLAN}} does not resolve". Dispatch it as a general-purpose subagent.
 
 **Commands:** read the lane's hand-back, then the plan directory and the run directory:
 
