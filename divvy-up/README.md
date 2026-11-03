@@ -59,7 +59,7 @@ Type its name, or let `work-issue` reach it—see the Gotchas for what it does b
 > /divvy-up docs/plan.md --commit
 ```
 
-Without a path it takes the plan file this session wrote, and failing that the approved plan sitting in the conversation. `--max N` caps how many tasks one wave may hold. `--commit` commits after each passing wave instead of asking you at the confirmation step.
+Without a path it takes the plan file this session wrote, and failing that the approved plan sitting in the conversation. `--max N` caps how many tasks one wave may hold. `--commit` commits after each passing wave instead of asking you at the confirmation step. On a repo that allows only squash merges, each of those commits gets a bare one-line subject, because the squash replaces its message; anywhere else, including where your token can't read the merge settings, it gets a full message through `technical-writing`, and under `work-issue` it takes whichever of the two that run picked.
 
 ## What's Here
 
