@@ -909,4 +909,33 @@ plain_gitdir="$(GIT_CEILING_DIRECTORIES="$(dirname "$tmp")" git -C "$repro123/pl
   exit 1
 }
 
+# #163: run alone, divvy-up reads the commit style with one jq expression and
+# no script. jq's `null == false` is false, so a token that can't administer
+# the repo reads all-null settings as the full pass; only squash-only is bare.
+squash_jq='.allow_squash_merge == true and .allow_merge_commit == false and .allow_rebase_merge == false'
+require_text divvy-up/SKILL.md "gh api repos/{owner}/{repo} --jq '$squash_jq'"
+require_text divvy-up/SKILL.md "\`squash-only repo: in-branch commits get bare subjects\`"
+if command -v jq >/dev/null 2>&1; then
+  # Run the expression SKILL.md carries, not the copy above, so an edit to the
+  # skill's command is what this case exercises.
+  skill_jq="$(grep -o -- "--jq '[^']*allow_squash_merge[^']*'" divvy-up/SKILL.md | head -n 1 | sed -e "s/^--jq '//" -e "s/'\$//")"
+  [[ -n "$skill_jq" ]] || {
+    echo "#163: no --jq expression naming allow_squash_merge found in divvy-up/SKILL.md" >&2
+    exit 1
+  }
+  jq_case() {
+    local label="$1" want="$2" body="$3" got
+    got="$(jq "$skill_jq" <<<"$body")"
+    [[ "$got" == "$want" ]] || {
+      echo "#163: divvy-up's commit-style jq on $label should print $want, got: $got" >&2
+      exit 1
+    }
+  }
+  jq_case squash-only true '{"allow_squash_merge": true, "allow_merge_commit": false, "allow_rebase_merge": false}'
+  jq_case merge-allowed false '{"allow_squash_merge": true, "allow_merge_commit": true, "allow_rebase_merge": false}'
+  jq_case rebase-allowed false '{"allow_squash_merge": true, "allow_merge_commit": false, "allow_rebase_merge": true}'
+  jq_case no-admin false '{"allow_squash_merge": null, "allow_merge_commit": null, "allow_rebase_merge": null}'
+  jq_case squash-null false '{"allow_squash_merge": true, "allow_merge_commit": null, "allow_rebase_merge": null}'
+fi
+
 echo "divvy-up smoke: OK"
