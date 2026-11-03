@@ -1,18 +1,11 @@
 #!/usr/bin/env python3
 """Turn `ltm doctor --json` findings into a consolidation report a scope can drain.
 
-Writes <scope>/notes/reports/YYYY-MM-DD-consolidation.md and nothing else. The
-date comes from LTM_TODAY where set, else today, so a pinned date makes a
-second run rewrite identical bytes.
+Writes <scope>/notes/reports/YYYY-MM-DD-consolidation.md and nothing else. The date comes from LTM_TODAY where set, else today, so a pinned date makes a second run rewrite identical bytes.
 
-Every finding becomes a line the same way, whatever its `check`. The script
-deliberately keeps no list of known check names, so a check the kit adds later
-comes through as a candidate line with no change here.
+Every finding becomes a line the same way, whatever its `check`. The script deliberately keeps no list of known check names, so a check the kit adds later comes through as a candidate line with no change here.
 
-Exit codes: 0 report written; 1 `ltm doctor` failed or couldn't run, or its
-output isn't a JSON array of {file, check} objects, with stderr quoting the
-cause; 2 argparse usage error; 3 unreadable scope, unreadable `--json` file, or
-an LTM_TODAY not exactly YYYY-MM-DD.
+Exit codes: 0 report written; 1 `ltm doctor` failed or couldn't run, or its output isn't a JSON array of {file, check} objects, with stderr quoting the cause; 2 argparse usage error; 3 unreadable scope, unreadable `--json` file, or an LTM_TODAY not exactly YYYY-MM-DD.
 """
 
 from __future__ import annotations

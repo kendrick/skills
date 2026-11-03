@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
-# Pin the memory-consolidate skill. `ltm` is a PATH shim that prints a saved
-# doctor array, so every case but one runs without the kit installed. Where a
-# real `ltm` is on PATH, one case also runs it on the fixture bank and requires
-# the same report bytes, which keeps the saved doctor.json honest.
+# Pin the memory-consolidate skill. `ltm` is a PATH shim that prints a saved doctor array, so every case but one runs without the kit installed. Where a real `ltm` is on PATH, one case also runs it on the fixture bank and requires the same report bytes, which keeps the saved doctor.json honest.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -24,8 +21,7 @@ require_text() {
   }
 }
 
-# Without the trailing `return 0`, the passing case (grep finds nothing) returns
-# 1 and `set -e` aborts the script.
+# Without the trailing `return 0`, the passing case (grep finds nothing) returns 1 and `set -e` aborts the script.
 refute_text() {
   local file="$1"
   local text="$2"
@@ -88,18 +84,15 @@ require_text memory-consolidate/SKILL.md "Phase 5"
 require_text memory-consolidate/SKILL.md 'ltm confirm <id>'
 require_text memory-consolidate/SKILL.md 'ltm deprecate <id>'
 
-# The cuts in Deliberately Not Built. A list of known checks would have to name
-# today's checks, so none of their names may appear in the script.
+# The cuts in Deliberately Not Built. A list of known checks would have to name today's checks, so none of their names may appear in the script.
 refute_text "$script" "stale-confirmed"
 refute_text "$script" "long-chain"
 refute_text "$script" "orphan"
-# No similarity search of its own, since near-duplicate detection belongs to the
-# kit (long-term-memory-kit#130).
+# No similarity search of its own, since near-duplicate detection belongs to the kit (long-term-memory-kit#130).
 refute_text "$script" "near-duplicate"
 refute_text "$script" "similarity"
 refute_text memory-consolidate/SKILL.md "near-duplicate"
-# No record writing, since the kit's record-writing commands stay in the user's
-# hands.
+# No record writing, since the kit's record-writing commands stay in the user's hands.
 refute_text "$script" "confirm"
 refute_text "$script" "deprecate"
 
@@ -139,9 +132,7 @@ run() {
     python3 "$script" --scope "$scope" "$@"
 }
 
-# Case 1: the fixture's three findings, and nothing else, in doctor's order.
-# Written out by hand from doctor.json and the records' titles, not derived
-# from the script, so a wrong title or a dropped field shows as a diff.
+# Case 1: the fixture's three findings, and nothing else, in doctor's order. Written out by hand from doctor.json and the records' titles, not derived from the script, so a wrong title or a dropped field shows as a diff.
 expected="$tmp/expected.md"
 cat >"$expected" <<'EOF'
 ---
@@ -168,8 +159,7 @@ out="$(run "$fixture/doctor.json")"
   exit 1
 }
 same_file "$expected" "$report" "case 1 three findings"
-# Phase 5's update-existing path appends the note's id to the record's
-# source_refs, and machine-contracts.md wants the question counts even at 0.
+# Phase 5's update-existing path appends the note's id to the record's source_refs, and machine-contracts.md wants the question counts even at 0.
 require_text "$report" "id: r2S5ygmyBV"
 require_text "$report" "open_questions: 0"
 require_text "$report" "resolved_questions: 0"
@@ -225,8 +215,7 @@ require_text "$report" "unpromoted_candidates: 0"
 require_text "$report" "No findings."
 refute_text "$report" "[memory candidate:"
 
-# Case 8: exit 1 when doctor fails, can't run, or prints something other than
-# an array of {file, check} objects. A failed run leaves the old report alone.
+# Case 8: exit 1 when doctor fails, can't run, or prints something other than an array of {file, check} objects. A failed run leaves the old report alone.
 cp "$report" "$tmp/before.md"
 printf 'not json\n' >"$tmp/bad.json"
 printf '{"file": "a.md", "check": "x"}\n' >"$tmp/object.json"
@@ -258,8 +247,7 @@ set -e
 expect_rc 1 "$rc" "case 8 no ltm on PATH"
 same_file "$tmp/before.md" "$report" "case 8 failed runs"
 
-# Case 9: exit 3 for a missing scope, an unreadable --json file, or a malformed
-# LTM_TODAY; exit 2 for an argparse usage error.
+# Case 9: exit 3 for a missing scope, an unreadable --json file, or a malformed LTM_TODAY; exit 2 for an argparse usage error.
 set +e
 LTM_TODAY=2026-10-01 PATH="$shim_path" LTM_LOG="$tmp/ltm.log" LTM_STUB_JSON="$fixture/doctor.json" \
   python3 "$script" --scope "$tmp/nope" 2>/dev/null
@@ -277,6 +265,18 @@ LTM_TODAY=2026-1-1 LTM_LOG="$tmp/ltm.log" LTM_STUB_JSON="$fixture/doctor.json" P
 rc=$?
 set -e
 expect_rc 3 "$rc" "case 9 LTM_TODAY 2026-1-1"
+for day in 20261001 2026-W40-4; do
+  set +e
+  LTM_TODAY="$day" LTM_LOG="$tmp/ltm.log" LTM_STUB_JSON="$fixture/doctor.json" PATH="$shim_path" \
+    python3 "$script" --scope "$scope" 2>/dev/null
+  rc=$?
+  set -e
+  expect_rc 3 "$rc" "case 9 LTM_TODAY $day"
+  [[ ! -e "$scope/notes/reports/$day-consolidation.md" ]] || {
+    echo "case 9: LTM_TODAY $day still wrote a report" >&2
+    exit 1
+  }
+done
 set +e
 python3 "$script" 2>/dev/null
 rc=$?
@@ -287,9 +287,7 @@ expect_rc 2 "$rc" "case 9 no --scope"
   exit 1
 }
 
-# Case 10: real ltm on the fixture bank gives case 1's bytes. doctor.json
-# reproduces only at LTM_TODAY=2026-10-01; unpinned, more records age past
-# doctor's thresholds.
+# Case 10: real ltm on the fixture bank gives case 1's bytes. doctor.json reproduces only at LTM_TODAY=2026-10-01; unpinned, more records age past doctor's thresholds.
 if command -v ltm >/dev/null 2>&1; then
   rm -f "$report"
   LTM_TODAY=2026-10-01 python3 "$script" --scope "$scope" >/dev/null
