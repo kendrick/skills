@@ -4,7 +4,7 @@ The smoke test (`bash tests/work-issue-smoke.sh`) pins the documents and the scr
 
 **Scenarios are unrun until somebody runs them.** This file names the setup and the pass condition; it records no result until a human has actually executed one.
 
-Run them on a sandbox repo or on `kendrick/cambium`, never on a client repo. Every scenario past the refusals pushes a branch and opens a pull request.
+Run them on a sandbox repo or on `kendrick/cambium`, never on a client repo. Every scenario that gets a yes at Step 0's confirmation pushes a branch and opens a pull request; Scenario 22 answers that confirmation no.
 
 ## What the Fixtures Already Cover
 
@@ -14,17 +14,20 @@ None of that substitutes for the scenarios below. A bundle proves `run-state.py`
 
 ## Scenarios and Pass Conditions
 
-### 1. A Missing Plan Refuses and Names `writing-plans`
+### 1. An Unplanned Issue With No Plan Directory Refuses Before Planning
 
-**Setup:** an issue in the sandbox repo with no plan anywhere—nothing matching `docs/plans/*issue-<N>*.md` or `docs/plans/*-<N>-*.md`, no path linked under a `Plan` heading in the issue, and no approved plan in the conversation.
+**Setup:** an issue in the sandbox repo with no plan on any PLAN route—nothing matching `docs/plans/*issue-<N>*.md` or `docs/plans/*-<N>-*.md`, no path linked under a `Plan` heading in the issue, no match in any `WORK_ISSUE_PLAN_DIRS` directory, and no approved plan in the conversation. Run each variant from a fresh session, so the invocation is direct: once with `WORK_ISSUE_PLAN_DIRS` set to the empty string, and once with it set to an existing directory inside the sandbox checkout, such as `<ROOT>/.plans`.
 
 **Commands:**
 
 ```
+WORK_ISSUE_PLAN_DIRS= claude
+> /work-issue <N>
+WORK_ISSUE_PLAN_DIRS=<ROOT>/.plans claude
 > /work-issue <N>
 ```
 
-**Pass condition:** the run refuses, names what is missing, names `writing-plans`, and ends with "Plan it first: `writing-plans`, then `work-issue N <plan path>`." `RUN_DIR` holds `issue.md` and nothing past it: no `reports/`, no branch locally or on origin, no worktree. Fails if the run drafts a plan, offers to draft one, or asks a question instead of refusing—and fails if it dispatches anything at all, however small the issue looks.
+**Pass condition:** each variant refuses before any planner runs, naming the empty variable in the first and `<ROOT>/.plans` in the second, and ends "set `WORK_ISSUE_PLAN_DIRS` to a plan directory outside this repository, then `work-issue N`." `RUN_DIR` holds `issue.md` and `max_review_rounds` and nothing past them: no `plan.md`, no `reports/`, no branch locally or on origin, no worktree. `git status` in the sandbox shows nothing new, and `<ROOT>/.plans` stays empty. Fails if the run invokes `writing-plans`, enters plan mode, writes a plan anywhere, or asks a question instead of refusing—and fails if it dispatches anything at all, however small the issue looks.
 
 ### 2. A Thin Plan Is Refused With Its Questions Listed
 
@@ -234,8 +237,46 @@ cat RUN_DIR/reports/build-final.json
 
 The skip line has its own check. Run Step 3 in a session where no `ponytail-review` is listed. `## Ponytail` in `self-1.md` must hold exactly `ponytail-review not installed; skipped`, the transcript must print that line once, and the run must go on to Step 4 with no stop.
 
+### 22. An Unplanned Issue Is Planned, Approved at Stop 1, and Found Again
+
+**Setup:** a sandbox issue with acceptance criteria and no plan on any PLAN route. `WORK_ISSUE_PLAN_DIRS` names one scratch directory outside the sandbox checkout, made with `mktemp -d`, and `writing-plans` is installed. Put a plan for the issue in a second scratch directory no route searches, named `<N>-elsewhere.md`, so the run has a plan on disk it must not find. Start from a fresh session, so the invocation is direct.
+
+**Commands:** in the first session, invoke the run and answer Stop 1 with approval and Stop 2 with no. End that session. Item 5 already wrote `## Waves` into `RUN_DIR/plan.md`, so a second session would resume from that copy by Resume row 5's second leg and never run route 4. Move RUN_DIR to `closed/` so the second session takes row 4, a fresh Step 0. Then start a second session and invoke again with no path argument:
+
+```
+> /work-issue <N>
+ls "$WORK_ISSUE_PLAN_DIRS"
+python3 work-issue/scripts/check-plan.py "$WORK_ISSUE_PLAN_DIRS/<N>-<slug>.md" --issue <N> --criteria RUN_DIR/issue.md
+python3 work-issue/scripts/find-plan.py --issue <N> --repo <REPO>
+git status --short
+COMMON="$(git rev-parse --path-format=absolute --git-common-dir)"
+mkdir -p "$COMMON/work-issue/closed" && mv "$COMMON/work-issue/issue-<N>" "$COMMON/work-issue/closed/issue-<N>"
+> /work-issue <N>
+```
+
+**Pass condition:** in the first session, when Stop 1 appears the draft is at `RUN_DIR/draft-plan.md`, `check-plan.py` exits 0 on it, and the plan directory holds no `<N>-<slug>.md` yet. Stop 1 names the draft's path and puts the plan to the user. Any gate failure or derivation question the draft raised went back to the planner and never reached the user. Only after Stop 1's approval does the plan directory hold `<N>-<slug>.md`, the slug being the issue title lowercased to `a-z0-9-`, and `check-plan.py` exits 0 on it too. `find-plan.py` prints that one path. After approval the run reaches Stop 2, the Step 0 confirmation, whose Plan clause reads `Plan: <saved path> (planned this run).` `git status --short` in the sandbox shows nothing, so no plan landed in the repo tree. In the second session the run starts a fresh Step 0, finds the same file by route 4, and asks no Stop 1: its confirmation reads `Plan: <saved path> (route 4).` Fails if either session uses `<N>-elsewhere.md`, if `<N>-<slug>.md` is in the plan directory before Stop 1's approval, if a question reaches the user before Stop 1, if Stop 2 names the conversation or route 5, if the second session plans the issue again, or if any file under the sandbox checkout changes.
+
+The no-overwrite rule has its own check. Before a third session, write `<N>-<slug>.md` into the plan directory with text naming another repository by a `github.com/owner/name` URL, so route 4 drops it, record its checksum, and empty `$WORK_ISSUE_PLAN_DIRS` of everything else. Move RUN_DIR to `closed/issue-<N>-2` rather than `closed/issue-<N>`, which the first move already holds and `mv` would nest into, and invoke `/work-issue <N>`, then run `shasum "$WORK_ISSUE_PLAN_DIRS/<N>-<slug>.md"`. The run refuses before any planner runs, naming that file and ending "move it or pass a plan path, then `work-issue N`." The checksum matches the recorded one. Fails if a planner runs, if Stop 1 appears, or if the file's bytes change.
+
+The interruption check comes from PR #287's thread r4450540721. Empty the plan directory, move RUN_DIR to `closed/issue-<N>-3`, and invoke `/work-issue <N>` in a fresh session. End that session once `RUN_DIR/draft-plan.md` exists and before answering Stop 1. Then run `ls "$WORK_ISSUE_PLAN_DIRS"` and invoke `/work-issue <N>` again in a new session. The plan directory is empty, resume row 5's first leg moves the stranded RUN_DIR under `closed/`, and the run drafts a fresh plan and reaches Stop 1 again. Fails if the second invocation reaches Stop 2, if any route resolves the interrupted draft, or if `<N>-<slug>.md` appears in the plan directory before Stop 1's approval.
+
+The plan-mode fallback has its own check. Repeat the first session where `writing-plans` is not installed. The run enters plan mode, ExitPlanMode's approval stands in for Stop 1, and only after that approval does `<N>-<slug>.md` appear in the plan directory, copied from the file plan mode saved under `~/.claude/plans`. `find-plan.py` then prints the copied path, and the confirmation names it as `(planned this run)`.
+
+### 23. A Wrapped Invocation With No Plan Refuses and Plans Nothing
+
+**Setup:** the same unplanned sandbox issue and the same two scratch directories as Scenario 22, with the plan directory emptied. `work-wave` refuses an issue with no plan at its own Step 0 before any lane starts, so instantiate `work-wave/references/lane-brief.md` by hand for this one issue: `{{PHASE}}` `build`, `{{GRANT}}` the build half, and both invocation lines without `{{PLAN}}`. Write line 15 as `Your plan, by absolute path: none`, and start the sentence after `{{GRANT}}`'s block with "Where the plan does not resolve" in place of "Where {{PLAN}} does not resolve". Dispatch it as a general-purpose subagent.
+
+**Commands:** read the lane's hand-back, then the plan directory and the run directory:
+
+```
+ls "$WORK_ISSUE_PLAN_DIRS"
+ls RUN_DIR
+```
+
+**Pass condition:** the lane reports `refused`, and its `question` carries the plan gate's refusal ending "Plan it first: `writing-plans`, then `work-issue N <plan path>`." The plan directory is still empty, `RUN_DIR` holds no `plan.md`, and no branch or worktree exists. Fails if the lane invokes `writing-plans`, enters plan mode, drafts a plan in any form, uses `<N>-elsewhere.md`, or stops to ask a question rather than refusing.
+
 ## What These Evals Do Not Cover
 
-The cross-run race in `RATIONALE.md`'s Known Limitations has no scenario, because reproducing it means winning a race between two invocations inside the same second and there is no proposed fix to validate. Neither does the in-scope test's judgment at the edges: a scenario can check that an ambiguous finding was recorded as ambiguous, which Scenario 12 does, but not that the call was right. herdr flag drift is watched rather than tested—Scenario 11 checks the fallback fires, not that any particular flag name is still current, since the installed binary is the authority and it changes on its own schedule.
+The direct invocation with neither planner present has no scenario, because Claude Code always offers plan mode, so no session this file runs in lacks both planners. The cross-run race in `RATIONALE.md`'s Known Limitations has no scenario, because reproducing it means winning a race between two invocations inside the same second and there is no proposed fix to validate. Neither does the in-scope test's judgment at the edges: a scenario can check that an ambiguous finding was recorded as ambiguous, which Scenario 12 does, but not that the call was right. herdr flag drift is watched rather than tested—Scenario 11 checks the fallback fires, not that any particular flag name is still current, since the installed binary is the authority and it changes on its own schedule.
 
 The caller search has three blind spots and no scenario reaches any of them. It is a grep, so it finds the callers that spell the symbol and misses the ones that do not: dynamic dispatch, a string-keyed registry, reflection, a framework that binds by convention. A scenario for that would have to plant a caller the grep was built to miss, which measures the planted caller and not the search. So Scenario 17 cannot tell a seam nothing calls from a seam whose caller is hidden, and neither can whoever reads the verdict. The grep runs wide in the other direction too. Its only exclusions are test, spec, and fixture paths, so a ledger row or an agent doc that spells the symbol out comes back among the hits. Neither scenario plants such a hit, so nothing here checks that the reproducer reads them before it picks a caller. Nearest is judgment as well: where several production paths reach the symbol directly, Scenario 16 checks that a caller was driven, not that the closest one was. Treat each of these as an open risk to watch while running the scenarios above.

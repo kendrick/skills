@@ -37,6 +37,11 @@ answered. Do not ask it again. The answer, for this invocation:
 
 {{GRANT}}
 
+That grant makes this a wrapped invocation, and a lane never plans. Where
+{{PLAN}} does not resolve, work-issue refuses with its `writing-plans`
+message instead of drafting a plan; report `refused` with that message in
+`question`.
+
 Name every path you run a command in or report by its absolute form. Your
 shell's working directory resets between calls, so a relative path addresses
 whatever tree the session started in, and a worktree-relative path in your

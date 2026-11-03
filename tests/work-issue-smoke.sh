@@ -242,6 +242,74 @@ require_text work-issue/SKILL.md "names the path PLAN resolved to and its route 
 # has to tell users so, or they keep passing ~/.claude/plans paths by hand.
 require_text work-issue/README.md "a plan made there is found again by its issue number and a resume needs no path"
 
+# --- #144: where every route misses, a direct invocation plans the issue in
+# Step 0's Plan block, and a wrapped one refuses. The direct-versus-wrapped
+# test is prose an agent applies at runtime, so these sentences are the whole
+# mechanism; a quiet edit to any of them changes who gets a plan drafted. ---
+
+require_text work-issue/SKILL.md "including an issue with no plan yet that the user invokes it on directly;"
+require_text work-issue/SKILL.md "It is **direct** when the user asked for this run in their own words in this session and no calling skill's grant came with it"
+# Deliberately Not Built: planning on a wrapped invocation (row 174). A lane
+# has nobody to approve a plan, so it must refuse with the old message, and the
+# lane brief has to say the same or a lane reads its grant as leave to plan.
+require_text work-issue/SKILL.md "A wrapped invocation plans nothing and refuses with the plan gate's refusal, \"Plan it first: \`writing-plans\`, then \`work-issue N <plan path>\`.\""
+require_text work-wave/references/lane-brief.md "That grant makes this a wrapped invocation, and a lane never plans."
+require_text work-issue/SKILL.md "**Plan block.** Runs only on a direct invocation where every PLAN route missed"
+require_text work-issue/SKILL.md "The first entry of \`WORK_ISSUE_PLAN_DIRS\` when that is set and non-empty, else \`~/.claude/plans\` when the variable is unset and that directory exists."
+require_text work-issue/SKILL.md "set \`WORK_ISSUE_PLAN_DIRS\` to a plan directory outside this repository, then \`work-issue N\`."
+require_text work-issue/SKILL.md "\`<plan dir>/<N>-<slug>.md\`"
+# Planner order: writing-plans, then plan mode, then the refusal.
+require_text work-issue/SKILL.md "the \`writing-plans\` skill, invoked by name with the issue's title, body, and CRITERIA from \`RUN_DIR/issue.md\`"
+require_text work-issue/SKILL.md "2. the harness's plan mode: in Claude Code, EnterPlanMode, then ExitPlanMode, whose approval is Stop 1's approval."
+require_text work-issue/SKILL.md "3. neither: refuse with the plan gate's refusal below, as a wrapped invocation does."
+# Stop 1 sees only a draft the gate passed; a failure goes to the planner.
+require_text work-issue/SKILL.md "never to the user as a refusal, and the gate runs again until it passes."
+require_text work-issue/SKILL.md "For both planners the file reaches the plan directory only by this copy, so \`find-plan.py\` runs after the copy"
+require_text work-issue/SKILL.md "Inside the Plan block, both halves send the draft back to the planner instead of refusing."
+require_text work-issue/SKILL.md "Stop 1 approves an artifact, the plan, and grants nothing, so the one-confirmation rule holds"
+require_text work-issue/SKILL.md "This message is Stop 2 wherever the Plan block ran, and a plan it drafted shows as \`Plan: <saved path> (planned this run).\`"
+require_text work-issue/SKILL.md "| A wrapped invocation with no plan, or a direct one with neither planner present | 0 |"
+require_text work-issue/SKILL.md "| A direct invocation with no plan and no plan directory | 0 |"
+require_text work-issue/SKILL.md "| Stop 1, the drafted plan put to the user and declined | 0 |"
+# The draft lives in RUN_DIR, where no PLAN route looks, until Stop 1 approves it (row 179, PR #287): saved in the plan directory, an interrupted session's draft resolved by route 4 and ran unapproved.
+require_text work-issue/SKILL.md "told to save to \`RUN_DIR/draft-plan.md\` and to stop once the plan is saved"
+require_text work-issue/SKILL.md "with the old draft kept as \`draft-plan.md\` in the run dir moved under \`closed/\`"
+# Deliberately Not Built: saving the draft into the plan directory before approval (row 179, PR #287 r4450540721).
+refute_text work-issue/SKILL.md "told to save to that path and to stop once the plan is saved"
+# Stop 1 promises the user a kept cross-repo reference resolves only by path; Stop 2 is where that promise lands.
+require_text work-issue/SKILL.md "Where the Plan block kept a needed reference to another repository, the clause adds that the plan resolves only by path, \`work-issue N <path>\`"
+require_text _maintenance/work-issue/RATIONALE.md "| Saving a draft into the plan directory before Stop 1's approval | Row 179"
+# Another repo's <N>-<slug>.md shares the name and route 4 drops it, so only this check keeps the copy from overwriting it (row 179).
+require_text work-issue/SKILL.md "Check whether that file exists before invoking either planner, and again immediately before that copy."
+require_text work-issue/SKILL.md "| A direct invocation whose \`<plan dir>/<N>-<slug>.md\` already exists, before planning or at the copy after Stop 1 | 0 |"
+require_text work-issue/SKILL.md "\"move it or pass a plan path, then \`work-issue N\`.\""
+require_text _maintenance/work-issue/RATIONALE.md "| 179 | The draft lives in \`RUN_DIR/draft-plan.md\`"
+require_text work-issue/SKILL.md "On a decline, delete \`RUN_DIR/draft-plan.md\`"
+require_text work-issue/SKILL.md "\"Plan declined and deleted; \`work-issue N\` drafts a new one.\""
+# --dry-run previews and must not draft (row 178). drive.py's grant step is a dry run on a wrapped launch, so it halts on an unplanned issue, never plans.
+require_text work-issue/SKILL.md "| \`--dry-run\` on a direct invocation where every PLAN route missed | 0 |"
+require_text work-issue/SKILL.md "\"--dry-run drafts no plan; \`work-issue N\` without it plans the issue.\""
+require_text work-issue/SKILL.md "A \`drive.py\` launch is wrapped, because the driver launches a headless agent the user isn't talking to, so it never plans"
+require_text _maintenance/work-issue/RATIONALE.md "| 178 | \`--dry-run\` drafts no plan."
+require_text _maintenance/work-issue/RATIONALE.md "| 2 | An approved plan is required, and a thin one is refused rather than planned around—superseded in part by row 174 |"
+require_text _maintenance/work-issue/RATIONALE.md "| 174 | Where every PLAN route misses on a direct invocation, Step 0 plans the issue in a Plan block between items 2 and 3"
+require_text _maintenance/work-issue/RATIONALE.md "| 175 | Two stops. Stop 1 puts the drafted plan and its saved path to the user"
+require_text _maintenance/work-issue/RATIONALE.md "| 176 | The planner is the first one present."
+require_text _maintenance/work-issue/RATIONALE.md "| 177 | The plan directory is the first entry of \`WORK_ISSUE_PLAN_DIRS\`"
+require_text _maintenance/work-issue/RATIONALE.md "| Planning on a wrapped invocation | Row 174."
+require_text _maintenance/work-issue/RATIONALE.md "| Writing a plan into the repo tree | Row 177."
+# Deliberately Not Built: writing a plan into the repo tree (row 177). A plan
+# there lands in the PR diff. Route 2 names `docs/plans` on purpose, so the
+# refute reads the Plan block alone, and the require on its last bullet proves
+# the cut reached the end of the block rather than coming back empty.
+require_text work-issue/SKILL.md "set to the empty string, or a first entry that sits inside ROOT."
+# Route 4 exits 3 on a set entry that is missing or not a directory, so the block never sees that case; listing it as a refusal described dead text.
+require_text work-issue/SKILL.md "A set first entry that is missing or not a directory never reaches this block"
+awk '/^\*\*Plan block\.\*\*/ { on = 1 } on && /^3\. The plan gate/ { exit } on { print }' work-issue/SKILL.md >"$tmp/plan-block.md"
+require_text "$tmp/plan-block.md" "**Plan block.**"
+require_text "$tmp/plan-block.md" "- **Stop 1.**"
+refute_text "$tmp/plan-block.md" "docs/plans"
+
 # --- Route 4, run for real. Every case pins exact stdout and the exit code,
 # because Step 0 branches on both: one path means use it, empty means fall
 # through to route 5, exit 1 means refuse. Each run gets a temp HOME so the
@@ -931,8 +999,8 @@ awk -v h="$stops_header" '
   on { exit }
 ' work-issue/SKILL.md > "$tmp/stops.txt"
 stops_rows="$(wc -l < "$tmp/stops.txt" | tr -d ' ')"
-[[ "$stops_rows" -eq 30 ]] || {
-  echo "Where a Run Stops lists $stops_rows stops, expected 30" >&2
+[[ "$stops_rows" -eq 35 ]] || {
+  echo "Where a Run Stops lists $stops_rows stops, expected 35" >&2
   exit 1
 }
 while IFS= read -r row; do
