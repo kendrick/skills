@@ -630,7 +630,7 @@ v2_files=()
 v1_files=()
 index=0
 v1_index=0
-for file in "$scope"/notes/*.md "$scope"/_memory/*/*.md "$scope"/entries/*.md; do
+for file in "$scope"/notes/*.md "$scope"/notes/reports/*.md "$scope"/_memory/*/*.md "$scope"/entries/*.md; do
   # Only files the skill itself creates. CLAUDE.md and README.md live alongside
   # them and are hand-maintained, so they carry no schema key and would otherwise
   # inflate the v1 count with files that can never be migrated.
