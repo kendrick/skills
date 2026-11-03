@@ -319,6 +319,23 @@ same_file "$tmp/resolved.md" "$report" "case 11 refused run"
   echo "case 11: a refused run still called ltm: $(cat "$tmp/ltm.log")" >&2
   exit 1
 }
+printf '\xff\xfe' >"$report"
+cp "$report" "$tmp/undecodable.md"
+: >"$tmp/ltm.log"
+set +e
+err="$(run "$fixture/doctor.json" 2>&1 >/dev/null)"
+rc=$?
+set -e
+expect_rc 1 "$rc" "case 11 rerun over an undecodable report"
+grep -Fq "can't read it to check for resolved lines" <<<"$err" && grep -Fq -- "$report" <<<"$err" || {
+  echo "case 11: stderr does not name the unreadable refusal and the report; got: $err" >&2
+  exit 1
+}
+same_file "$tmp/undecodable.md" "$report" "case 11 refused undecodable run"
+[[ ! -s "$tmp/ltm.log" ]] || {
+  echo "case 11: a refused undecodable run still called ltm: $(cat "$tmp/ltm.log")" >&2
+  exit 1
+}
 set +e
 run "$fixture/doctor.json" --force >/dev/null
 rc=$?
