@@ -5,10 +5,9 @@ memory_type: Decision
 title: Per-region invoice sequences
 status: superseded
 date: 2025-06-02
-summary: Each region numbers its invoices from its own sequence, which per-entity sequences later superseded.
+applies_to: [topic:billing]
 supersedes: [Mc4InvNum1]
 superseded_by: Mc6InvNum3
-applies_to: [topic:billing]
 ---
 
 ## Context

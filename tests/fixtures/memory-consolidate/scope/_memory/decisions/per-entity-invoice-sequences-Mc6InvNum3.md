@@ -5,10 +5,9 @@ memory_type: Decision
 title: Per-entity invoice sequences
 status: superseded
 date: 2026-01-15
-summary: Each legal entity numbers its invoices from its own sequence, which prefixed entity sequences later superseded.
+applies_to: [topic:billing]
 supersedes: [Mc5InvNum2]
 superseded_by: Mc7InvNum4
-applies_to: [topic:billing]
 ---
 
 ## Context

@@ -5,7 +5,6 @@ memory_type: Decision
 title: Quarter-close billing freeze
 status: accepted
 date: 2026-07-15
-summary: No billing configuration change ships in the last three business days of a quarter.
 last_confirmed: 2026-09-15
 applies_to: [topic:billing]
 ---

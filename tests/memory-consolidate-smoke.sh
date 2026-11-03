@@ -24,8 +24,8 @@ require_text() {
   }
 }
 
-# The trailing `return 0` matters: under `set -e`, a function ending on a failed
-# grep aborts the script.
+# Without the trailing `return 0`, the passing case (grep finds nothing) returns
+# 1 and `set -e` aborts the script.
 refute_text() {
   local file="$1"
   local text="$2"
@@ -81,23 +81,25 @@ require_file "$fixture/unseen-check.json"
 require_text README.md "--skill memory-consolidate"
 require_text memory-consolidate/README.md "npx skills add kendrick/skills --skill memory-consolidate"
 
-# Model-invocable on purpose (ledger row 6): a misfire writes one report.
+# Model-invocable on purpose (ledger row 6), since a misfire writes one report.
 refute_text memory-consolidate/SKILL.md "disable-model-invocation"
 require_text memory-consolidate/SKILL.md "python3 SCRIPT --scope SCOPE_ROOT"
 require_text memory-consolidate/SKILL.md "Phase 5"
 require_text memory-consolidate/SKILL.md 'ltm confirm <id>'
 require_text memory-consolidate/SKILL.md 'ltm deprecate <id>'
 
-# The cuts in Deliberately Not Built. A list of known checks would name them,
-# so no current check name may appear in the script.
+# The cuts in Deliberately Not Built. A list of known checks would have to name
+# today's checks, so none of their names may appear in the script.
 refute_text "$script" "stale-confirmed"
 refute_text "$script" "long-chain"
 refute_text "$script" "orphan"
-# A similarity search of its own: near-duplicate detection is the kit's (#130).
+# No similarity search of its own, since near-duplicate detection belongs to the
+# kit (long-term-memory-kit#130).
 refute_text "$script" "near-duplicate"
 refute_text "$script" "similarity"
 refute_text memory-consolidate/SKILL.md "near-duplicate"
-# Writing records: the kit's record-writing commands stay in the user's hands.
+# No record writing, since the kit's record-writing commands stay in the user's
+# hands.
 refute_text "$script" "confirm"
 refute_text "$script" "deprecate"
 
@@ -285,8 +287,9 @@ expect_rc 2 "$rc" "case 9 no --scope"
   exit 1
 }
 
-# Case 10: real ltm on the fixture bank gives case 1's bytes. LTM_TODAY is the
-# only date doctor.json reproduces at; unpinned, more records age out.
+# Case 10: real ltm on the fixture bank gives case 1's bytes. doctor.json
+# reproduces only at LTM_TODAY=2026-10-01; unpinned, more records age past
+# doctor's thresholds.
 if command -v ltm >/dev/null 2>&1; then
   rm -f "$report"
   LTM_TODAY=2026-10-01 python3 "$script" --scope "$scope" >/dev/null

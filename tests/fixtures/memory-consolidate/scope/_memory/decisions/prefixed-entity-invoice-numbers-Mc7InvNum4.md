@@ -5,10 +5,9 @@ memory_type: Decision
 title: Prefixed entity invoice numbers
 status: accepted
 date: 2026-08-01
-summary: Invoice numbers carry the legal entity's prefix ahead of that entity's own sequence.
 last_confirmed: 2026-09-10
-supersedes: [Mc6InvNum3]
 applies_to: [topic:billing]
+supersedes: [Mc6InvNum3]
 ---
 
 ## Context

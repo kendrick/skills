@@ -5,7 +5,6 @@ memory_type: PolicyRule
 title: Invoices carry the buyer's tax ID
 status: accepted
 date: 2026-08-20
-summary: Every invoice issued to a business buyer prints that buyer's tax ID.
 last_confirmed: 2026-09-20
 applies_to: [topic:billing]
 ---
