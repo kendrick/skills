@@ -3517,6 +3517,39 @@ lm_vout="$(bash "$lm_verify" "$lm_done" --since "$lm_done_ref" 2>&1)" || lm_rc=$
 }
 require_output "$lm_vout" "FAIL $lm_done: verify-rename: \`notes/memory-bank.yaml\` has unexpected status \`A\`"
 
+# memory-consolidate writes its report to notes/reports/, which a notes/*.md glob doesn't reach, so a miscounted report passed the lint unread (#290). The report comes from the real consolidate.py rather than a frozen copy, so a format change there that the lint rejects fails here. The notes/raw/ sidecar is what pins an explicit glob over a recursive walk: a walk that reaches it counts a tenth file.
+cr_dir="$(mktemp -d "${TMPDIR:-/tmp}/i2m-consolidation-report.XXXXXX")"
+cr_scope="$cr_dir/scope"
+cp -R tests/fixtures/memory-consolidate/scope "$cr_scope"
+mkdir -p "$cr_scope/notes/raw"
+printf 'verbatim transcript text\n' >"$cr_scope/notes/raw/Cr1Sidecar.md"
+LTM_TODAY=2026-10-01 python3 memory-consolidate/scripts/consolidate.py --scope "$cr_scope" --json tests/fixtures/memory-consolidate/doctor.json >/dev/null
+cr_report="$cr_scope/notes/reports/2026-10-01-consolidation.md"
+require_file "$cr_report"
+cr_out="$(run_lint "$cr_scope")"
+require_line "$cr_out" "v1 files: 0" consolidation-report
+require_line "$cr_out" "v2 files: 9" consolidation-report
+require_line "$cr_out" "total files: 9" consolidation-report
+require_line "$cr_out" "failures: 0" consolidation-report
+
+# Phase 5 approves a line by rewriting its prefix to a wiki link, which drops it from the count. The rewritten report is the one a user keeps, so it has to lint clean too.
+awk '!done && /^\[memory candidate: update existing \[\[/ {
+  sub(/^\[memory candidate: update existing \[\[/, "[[")
+  sub(/\|[^]]*\]\]\] /, "|memory — updated]] ")
+  done = 1
+} { print }' "$cr_report" | sed 's/^unpromoted_candidates: 3$/unpromoted_candidates: 2/' >"$cr_dir/approved.md"
+mv "$cr_dir/approved.md" "$cr_report"
+require_text "$cr_report" "[[billing-vendor-landscape-Mc2VndLnd2|memory — updated]] stale-confirmed:"
+require_text "$cr_report" "unpromoted_candidates: 2"
+cr_out="$(run_lint "$cr_scope")"
+require_line "$cr_out" "failures: 0" consolidation-report-approved
+
+sed 's/^unpromoted_candidates: 2$/unpromoted_candidates: 3/' "$cr_report" >"$cr_dir/miscounted.md"
+mv "$cr_dir/miscounted.md" "$cr_report"
+cr_out="$(run_lint "$cr_scope")"
+require_failure "$cr_out" "FAIL $cr_report: derived-counts: \`unpromoted_candidates\` says 3, body has 2"
+rm -rf "$cr_dir"
+
 # Row 36 is the decision the issue asked to have recorded.
 require_text _maintenance/inbox-to-memory/RATIONALE.md "| 36 |"
 require_text _maintenance/inbox-to-memory/RATIONALE.md "A prefix inferred for a bare facet."
@@ -3529,6 +3562,8 @@ require_text _maintenance/inbox-to-memory/RATIONALE.md "| 48 | \`--to-ltm\` writ
 # Rows 49-50 record the CRLF split and the bash 3.2 quoting the cases above pin.
 require_text _maintenance/inbox-to-memory/RATIONALE.md "| 49 | The lint strips a trailing CR before every fence test, and \`--to-ltm\` refuses a record in which any line ends in a CR"
 require_text _maintenance/inbox-to-memory/RATIONALE.md "| 50 | \`ltm_item\` doubles an apostrophe through a variable"
+# Row 51 records the explicit notes/reports/ glob the consolidation-report case pins.
+require_text _maintenance/inbox-to-memory/RATIONALE.md "| 51 | Pass one of the lint walks \`notes/reports/*.md\` as its own glob"
 
 rm -rf "$lm_dir"
 
