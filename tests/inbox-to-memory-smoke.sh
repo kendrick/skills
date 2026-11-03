@@ -3307,6 +3307,27 @@ bash "$lm_migrator" "$lm_crlf_in" --to-ltm --facet-map "$lm_map" --apply >/dev/n
 }
 require_line "$(cat "$lm_crlf_in/$lm_decision")" "schema: 1" "the converted CRLF record"
 
+# A record that opens on an LF fence with CRLF below it once got past a first-line test, so the closing fence went unread and the apply exited 0 with the record at schema: 2.
+lm_mixed="$lm_dir/mixed-endings"
+lm_stage "$lm_mixed"
+awk 'NR == 1 { print; next } { printf "%s\r\n", $0 }' "$lm_fixture/$lm_decision" >"$lm_mixed/$lm_decision"
+[[ "$(head -n 1 "$lm_mixed/$lm_decision")" == "---" ]] || {
+  echo "test setup: the mixed-endings record does not open on a bare LF fence" >&2
+  exit 1
+}
+lm_commit "$lm_mixed" mixed
+for lm_mode in "" --apply; do
+  lm_rc=0
+  lm_out="$(bash "$lm_migrator" "$lm_mixed" --to-ltm --facet-map "$lm_map" $lm_mode 2>&1)" || lm_rc=$?
+  [[ "$lm_rc" -eq 1 ]] || {
+    echo "--to-ltm ${lm_mode:-dry run} on a mixed-endings schema: 2 record exited $lm_rc (want 1)" >&2
+    printf '%s\n' "$lm_out" >&2
+    exit 1
+  }
+  require_line "$lm_out" "  $lm_mixed/$lm_decision: CRLF line endings; convert the record to LF and commit it first" "--to-ltm ${lm_mode:-dry run} on a mixed-endings record"
+  lm_clean "$lm_mixed" "a refused --to-ltm ${lm_mode:-dry run} on a mixed-endings record"
+done
+
 # An apostrophe in a quoted item is doubled. Bash 3.2 wrote the old \'\' replacement with its backslashes, and the frontmatter stopped parsing (#282), so this runs /bin/bash by name: macOS ships 3.2 there whatever leads PATH.
 lm_apos="$lm_dir/apostrophe"
 lm_stage "$lm_apos"
@@ -3506,7 +3527,7 @@ require_text _maintenance/inbox-to-memory/RATIONALE.md "| 46 | Only an ltm \`err
 require_text _maintenance/inbox-to-memory/RATIONALE.md "| 47 | \`--to-ltm\` refuses an existing \`memory-bank.yaml\` whose \`folders\` maps no \`PolicyRule\`"
 require_text _maintenance/inbox-to-memory/RATIONALE.md "| 48 | \`--to-ltm\` writes a flow-list item plain only when it is a facet"
 # Rows 49-50 record the CRLF split and the bash 3.2 quoting the cases above pin.
-require_text _maintenance/inbox-to-memory/RATIONALE.md "| 49 | The lint strips a trailing CR before every fence test, and \`--to-ltm\` refuses a record whose first line ends in a CR"
+require_text _maintenance/inbox-to-memory/RATIONALE.md "| 49 | The lint strips a trailing CR before every fence test, and \`--to-ltm\` refuses a record in which any line ends in a CR"
 require_text _maintenance/inbox-to-memory/RATIONALE.md "| 50 | \`ltm_item\` doubles an apostrophe through a variable"
 
 rm -rf "$lm_dir"
