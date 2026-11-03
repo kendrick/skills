@@ -402,8 +402,7 @@ if [[ "$to_ltm" -eq 1 ]]; then
     if [[ "$v" =~ ^[a-z][a-z0-9-]*:[A-Za-z0-9_./][A-Za-z0-9_./:\ -]*$ && "$v" != *": "* && "$v" != *" " && "$v" != *: ]]; then
       printf '%s' "$v"
     else
-      # Bash 3.2 keeps the backslashes in a quoted \'\' replacement and writes
-      # \'\', which no longer parses; a variable replacement reads the same in 3.2 and 5.
+      # Bash 3.2 keeps the backslashes in a quoted \'\' replacement, which breaks the YAML; a variable replacement behaves the same in 3.2 and 5.
       local q="''"
       printf "'%s'" "${v//\'/$q}"
     fi
@@ -419,10 +418,7 @@ if [[ "$to_ltm" -eq 1 ]]; then
       CLAUDE.md | README.md) continue ;;
     esac
 
-    # A CRLF fence reads as no frontmatter below, and that silent skip once let
-    # an apply exit 0 with the record still at schema 2. Rewriting the block
-    # while keeping a CRLF body byte-identical is a second code path for a rare
-    # input, so hand it back instead.
+    # Skipping a CRLF record let an apply exit 0 with it still at schema 2, and rewriting it byte-safe is a second code path for a rare input, so refuse it.
     if [[ "$(head -n 1 "$file")" == $'---\r' ]]; then
       refuse "$file" "CRLF line endings; convert the record to LF and commit it first"
       continue
