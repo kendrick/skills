@@ -174,7 +174,7 @@ For each `schema: 2` record under `_memory/*/`, the pass:
 - sets `schema: 1`;
 - rewrites `memory_type: Rule` to `PolicyRule`, leaving the file in `_memory/rules/`;
 - in `applies_to` and `owners`, rewrites `<prefix>::<value>` to `<prefix>:<value>`, keeps a `<prefix>:<value>` entry, and maps a bare value through the facet map;
-- rewrites a scalar `supersedes: <id>` to `supersedes: [<id>]`;
+- rewrites a scalar `supersedes: <id>` to `supersedes: ['<id>']`;
 - drops `effective_from`, `effective_to`, `supersedes`, and `superseded_by` where the value is `null` or empty.
 
 Bodies are copied byte for byte. A `schema: 1` record is skipped and counted under `already ltm:`, so a second `--apply` changes nothing.
@@ -195,6 +195,7 @@ owners:
 
 - a bare value the map doesn't cover, which the dry run also lists under `unmapped:`;
 - a v1 record, reason `v1 record; run the Tier 1 migration first`;
+- a record with CRLF line endings, reason `CRLF line endings; convert the record to LF and commit it first` (`perl -pi -e 's/\r$//' <record>` converts it);
 - a `related` entry that fails the kit's `^[a-z_]+::[A-Za-z0-9_-]{10}$`;
 - a record whose rewritten block would overrun the 20-line budget;
 - an empty prefix union, which names the map's `prefixes` key;
@@ -208,7 +209,7 @@ Run the nine steps in order, one scope at a time, from the root of this skill's 
 2. Commit the scope, and keep the commit as the ref verification reads.
 3. If the scope still holds v1 records, run the Tier 1 migration, verify it, and commit it. On a scope with none, Tier 1 writes nothing.
 4. Dry-run `--to-ltm`. It writes nothing.
-5. Write the facet map from the dry run's `unmapped:` lines, one entry per bare value under the key it appeared in, then dry-run again with `--facet-map` until it exits 0.
+5. Write the facet map from the dry run's `unmapped:` lines, one entry per bare value under the key it appeared in. Keep the map outside the scope root, such as `../<scope>.facets.yaml` beside it, because an uncommitted map inside the scope dirties the tree and the apply exits 2. Then dry-run again with `--facet-map` until it exits 0.
 6. Apply.
 7. Run `verify-migration.sh`. It gives the same answer before or after the migration commit: an uncommitted `memory-bank.yaml` is untracked, so the rename sweep never sees it, and a committed one is the single added file the sweep accepts.
 8. Run `ltm validate`. Exit 0 means every record parses, so `ltm doctor` skips none as malformed.
@@ -228,7 +229,7 @@ bash inbox-to-memory/scripts/migrate-scope.sh <scope-root> --apply
 # 4. dry run: lists every bare value under unmapped:
 bash inbox-to-memory/scripts/migrate-scope.sh <scope-root> --to-ltm
 
-# 5. write <facet-map> from the unmapped: lines, then dry-run with it
+# 5. write <facet-map> outside the scope from the unmapped: lines, then dry-run with it
 bash inbox-to-memory/scripts/migrate-scope.sh <scope-root> --to-ltm --facet-map <facet-map>
 
 # 6. apply
