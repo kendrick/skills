@@ -144,8 +144,12 @@ expected="$tmp/expected.md"
 cat >"$expected" <<'EOF'
 ---
 schema: 2
+id: r2S5ygmyBV
 date: 2026-10-01
 type: report
+open_questions: 0
+resolved_questions: 0
+deferred_tensions: 0
 unpromoted_candidates: 3
 ---
 
@@ -162,6 +166,12 @@ out="$(run "$fixture/doctor.json")"
   exit 1
 }
 same_file "$expected" "$report" "case 1 three findings"
+# Phase 5's update-existing path appends the note's id to the record's
+# source_refs, and machine-contracts.md wants the question counts even at 0.
+require_text "$report" "id: r2S5ygmyBV"
+require_text "$report" "open_questions: 0"
+require_text "$report" "resolved_questions: 0"
+require_text "$report" "deferred_tensions: 0"
 [[ "$(cat "$tmp/ltm.log")" == "doctor --bank $scope --json" ]] || {
   echo "case 1: ltm was not called as 'doctor --bank <scope> --json'; got: $(cat "$tmp/ltm.log")" >&2
   exit 1

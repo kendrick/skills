@@ -19,14 +19,15 @@ Resolve once per invocation:
 | Exit | Meaning |
 |---|---|
 | 0 | the report was written |
-| 1 | `ltm doctor` failed or its JSON didn't parse; stderr quotes it |
-| 3 | usage error, or SCOPE_ROOT is unreadable |
+| 1 | `ltm doctor` failed, couldn't run (`ltm` not on PATH), or printed something other than an array of `{file, check}` objects; stderr quotes it |
+| 2 | usage error from argparse, such as a missing `--scope` |
+| 3 | SCOPE_ROOT isn't a readable directory, the `--json` file is unreadable, or `LTM_TODAY` isn't exactly `YYYY-MM-DD` |
 
-On exit 1 or 3, report stderr verbatim and stop. The skill never falls back to reading records itself, since a report that doctor didn't produce can't be traced to a doctor finding.
+On any nonzero exit, report stderr verbatim and stop. The skill never falls back to reading records itself, since a report that doctor didn't produce can't be traced to a doctor finding.
 
 ## Step 1 — Check the Day's Report
 
-The script overwrites REPORT whenever it runs, and the same day maps to the same path. When REPORT already exists, read it. A line Phase 5 has resolved starts with `[[` or carries `| dismissed:`, and a rerun would throw that work away. Show the user which lines are resolved and run Step 2 only on a yes.
+The script overwrites REPORT whenever it runs, and the same day maps to the same path. When REPORT already exists, read it. A line Phase 5 has resolved starts with `[[`, because approving a candidate rewrites its prefix to a wiki link, and a rerun would throw that work away. Show the user which lines are resolved and run Step 2 only on a yes.
 
 **Done when:** REPORT doesn't exist, or it holds no resolved line, or the user confirmed the overwrite, or declined it and the skill stopped.
 
@@ -40,7 +41,7 @@ The script runs `ltm doctor --bank SCOPE_ROOT --json` and writes REPORT. Doctor 
 
 `--json <file>` reads doctor output saved earlier instead of running `ltm`. Use it when the user hands you a saved `ltm doctor --json` file, or when `ltm` isn't on PATH and they can produce that file elsewhere.
 
-**Done when:** the script exited 0 and REPORT exists, or it exited 1 or 3 and its stderr was reported verbatim.
+**Done when:** the script exited 0 and REPORT exists, or it exited nonzero and its stderr was reported verbatim.
 
 ## Step 3 — Present the Report
 
@@ -58,7 +59,7 @@ Give the count from REPORT's `unpromoted_candidates` frontmatter. When it is 0, 
 
 ## Step 4 — Hand Off to Phase 5
 
-Stop after presenting. Resolving a finding is `inbox-to-memory`'s job: point the user to its Phase 5 (Propose and Crystallize), which treats REPORT like any groomed note and resolves each line by approving it as an update to the existing record, superseding the record, or dismissing the line. Phase 5 rewrites each resolved line, so the report doubles as the record of what was decided.
+Stop after presenting. Resolving a finding is `inbox-to-memory`'s job: point the user to its Phase 5 (Propose and Crystallize), which treats REPORT like any groomed note. Approving a line takes Phase 5's update-existing path: it amends the target record, adds REPORT's `id` to that record's `source_refs`, and rewrites the line to `[[<target>|memory — updated]]`, so the report doubles as the record of what was approved. A line the user doesn't approve keeps its candidate prefix and stays counted in `unpromoted_candidates`.
 
 For a `stale-confirmed` finding, the usual fix is a command rather than an edit. A record's id is the nanoid that ends its stem. Have the user re-read the record (`ltm show <id>`), then:
 

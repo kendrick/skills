@@ -18,11 +18,14 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import hashlib
 import json
 import os
 import subprocess
 import sys
 from pathlib import Path
+
+NANOID_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-"
 
 
 def report_date() -> str:
@@ -93,13 +96,23 @@ def finding_line(scope: Path, f: dict) -> str:
     return line
 
 
+def report_id(date: str) -> str:
+    # Hashed from the date, not drawn from `nanoid -s 10` like inbox-to-memory's notes, so a same-day rerun writes the same bytes.
+    digest = hashlib.sha256(f"memory-consolidate:{date}".encode()).digest()
+    return "".join(NANOID_ALPHABET[b % 64] for b in digest[:10])
+
+
 def render(scope: Path, date: str, findings: list[dict]) -> str:
-    # Notes' fixed key order (machine-contracts.md): schema, date, type, unpromoted_candidates.
+    # Notes' fixed key order (machine-contracts.md); the three question counts are written even at 0, as that file requires.
     out = [
         "---",
         "schema: 2",
+        f"id: {report_id(date)}",
         f"date: {date}",
         "type: report",
+        "open_questions: 0",
+        "resolved_questions: 0",
+        "deferred_tensions: 0",
         f"unpromoted_candidates: {len(findings)}",
         "---",
         "",
