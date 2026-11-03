@@ -29,3 +29,11 @@ EMEA invoices are issued from the shared ledger starting in July.
 ## Approved By
 
 Ines Varga, at the 2026-06-03 billing review.
+
+## Context
+
+The regional ledger is being retired, so invoicing needs a single home.
+
+## Consequences
+
+EMEA finance closes against the shared ledger from July.

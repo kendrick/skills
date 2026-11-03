@@ -233,6 +233,7 @@ frontmatter_end() {
 # rule is how a migrated scope ends up failing the check meant to certify it.
 extract_body() {
   awk '
+    { sub(/\r$/, "") }
     f && /^## Raw Content/ { exit }
     f && /<!--/ { in_comment = 1 }
     f && in_comment { if (/-->/) in_comment = 0; next }
@@ -401,7 +402,9 @@ if [[ "$to_ltm" -eq 1 ]]; then
     if [[ "$v" =~ ^[a-z][a-z0-9-]*:[A-Za-z0-9_./][A-Za-z0-9_./:\ -]*$ && "$v" != *": "* && "$v" != *" " && "$v" != *: ]]; then
       printf '%s' "$v"
     else
-      printf "'%s'" "${v//\'/\'\'}"
+      # Bash 3.2 keeps the backslashes in a quoted \'\' replacement, which breaks the YAML; a variable replacement behaves the same in 3.2 and 5.
+      local q="''"
+      printf "'%s'" "${v//\'/$q}"
     fi
   }
 
@@ -415,6 +418,11 @@ if [[ "$to_ltm" -eq 1 ]]; then
       CLAUDE.md | README.md) continue ;;
     esac
 
+    # Skipping a CRLF record let an apply exit 0 with it still at schema 2, and rewriting it byte-safe is a second code path for a rare input, so refuse it. Check every line, since an LF opening fence over CRLF lines hides the closing fence just as well.
+    if grep -q $'\r$' "$file"; then
+      refuse "$file" "CRLF line endings; convert the record to LF and commit it first"
+      continue
+    fi
     end="$(frontmatter_end "$file")"
     [[ "$end" -eq 0 ]] && continue
     sed -n "2,$((end - 1))p" "$file" >"$work/block"

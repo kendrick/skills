@@ -96,6 +96,7 @@ fail() {
 # guarantee downstream rest on a guess about what old files happen to look like.
 has_schema_key() {
   awk '
+    { sub(/\r$/, "") }
     NR == 1 { if ($0 == "---") { in_fm = 1; next } else { exit } }
     in_fm && $0 == "---" { exit }
     in_fm && /^schema:/ { found = 1; exit }
@@ -110,6 +111,7 @@ has_schema_key() {
 # would be editing notes whose whole value is being a record of that day.
 has_v1_body() {
   awk '
+    { sub(/\r$/, "") }
     NR == 1 { if ($0 == "---") { in_fm = 1; next } else { exit } }
     in_fm && $0 == "---" { exit }
     in_fm && /^body_schema:[[:space:]]*1[[:space:]]*$/ { found = 1; exit }
@@ -120,6 +122,7 @@ has_v1_body() {
 # Line number of the closing fence, or 0 if the file doesn't open and close one.
 frontmatter_end() {
   awk '
+    { sub(/\r$/, "") }
     NR == 1 && $0 != "---" { print 0; done = 1; exit }
     NR > 1 && $0 == "---" { print NR; done = 1; exit }
     END { if (!done) print 0 }
@@ -222,6 +225,7 @@ check_frontmatter() {
 # keeps the token scan and the derived counts reading the same body.
 extract_body() {
   awk '
+    { sub(/\r$/, "") }
     f && /^## Raw Content/ { exit }
     f && /<!--/ { in_comment = 1 }
     f && in_comment { if (/-->/) in_comment = 0; next }
@@ -268,6 +272,7 @@ count_open_contradictions() {
 
 frontmatter_number() {
   awk -v key="$2" '
+    { sub(/\r$/, "") }
     NR == 1 && $0 != "---" { exit }
     NR > 1 && $0 == "---" { exit }
     $0 ~ "^" key ":" { sub(/^[^:]*:[[:space:]]*/, ""); print; found = 1; exit }
@@ -438,6 +443,7 @@ check_links() {
 check_raw_file() {
   local file="$1" raw_file
   raw_file="$(awk '
+    { sub(/\r$/, "") }
     NR == 1 { if ($0 == "---") { in_fm = 1; next } else { exit } }
     in_fm && $0 == "---" { exit }
     in_fm && /^raw_file:/ { sub(/^raw_file:[[:space:]]*/, ""); sub(/[[:space:]]+$/, ""); gsub(/^["\047]|["\047]$/, ""); print; exit }

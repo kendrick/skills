@@ -2966,6 +2966,10 @@ require_line "$lm_p5_out" "failures: 0" "a pre-ltm scope given Phase 5 records a
 lm="$lm_dir/scope"
 lm_stage "$lm"
 ref="$(git -C "$lm" rev-parse HEAD)"
+# The map sits where step 5 says, beside the scope root: one inside it is an untracked file that dirties the tree, and the apply exits 2 (#283).
+require_text "$lm_doc" '`../<scope>.facets.yaml`'
+lm_docmap="$lm/../scope.facets.yaml"
+cp "$lm_map" "$lm_docmap"
 
 # A dry run writes nothing either way, and with no map it lists every bare
 # value and exits 1, so it predicts the refused apply. The pass never infers a
@@ -2994,7 +2998,7 @@ lm_alias="$(bash "$lm_migrator" "$lm" --to-ltm --dry-run 2>&1)" || lm_rc=$?
 }
 lm_clean "$lm" "--to-ltm --dry-run"
 
-lm_out="$(bash inbox-to-memory/scripts/migrate-scope.sh "$lm" --to-ltm --facet-map "$lm_map" 2>&1)" || {
+lm_out="$(bash inbox-to-memory/scripts/migrate-scope.sh "$lm" --to-ltm --facet-map "$lm_docmap" 2>&1)" || {
   echo "--to-ltm dry run with the facet map failed" >&2
   printf '%s\n' "$lm_out" >&2
   exit 1
@@ -3015,7 +3019,7 @@ require_output "$lm_out" "needs a human:"
 require_output "$lm_out" "$lm/$lm_decision: applies_to value 'billing' has no prefix and no facet-map entry"
 lm_clean "$lm" "a refused --to-ltm --apply"
 
-lm_out="$(bash inbox-to-memory/scripts/migrate-scope.sh "$lm" --to-ltm --facet-map "$lm_map" --apply 2>&1)" || {
+lm_out="$(bash inbox-to-memory/scripts/migrate-scope.sh "$lm" --to-ltm --facet-map "$lm_docmap" --apply 2>&1)" || {
   echo "--to-ltm --apply with the facet map failed" >&2
   printf '%s\n' "$lm_out" >&2
   exit 1
@@ -3079,6 +3083,23 @@ sed -i.bak 's/^applies_to: \[regions:emea, topic:billing\]$/applies_to: [regions
 rm -f "$lm_planted/$lm_decision.bak"
 require_line "$(cat "$lm_planted/$lm_decision")" "applies_to: [regions::emea, topic:billing]" "the planted record"
 require_failure "$(run_lint "$lm_planted")" "FAIL $lm_planted/$lm_decision: record-facet: \`applies_to\` entry \`regions::emea\` is not <prefix>:<value> with one colon"
+
+# The same broken record saved CRLF opens on `---\r`. A fence test that misses the CR reads it as v1 with no frontmatter and checks nothing, so the lint has to print exactly what it printed for the LF original (#281).
+lm_planted_crlf="$lm_dir/planted-crlf"
+cp -R "$lm_planted/." "$lm_planted_crlf/"
+awk '{ printf "%s\r\n", $0 }' "$lm_planted/$lm_decision" >"$lm_planted_crlf/$lm_decision"
+[[ "$(head -n 1 "$lm_planted_crlf/$lm_decision")" == $'---\r' ]] || {
+  echo "test setup: the CRLF copy of the planted record does not open on ---\\r" >&2
+  exit 1
+}
+lm_lf_lint="$(run_lint "$lm_planted" | sed "s|$lm_planted|<scope>|g")"
+lm_crlf_lint="$(run_lint "$lm_planted_crlf" | sed "s|$lm_planted_crlf|<scope>|g")"
+[[ "$lm_crlf_lint" == "$lm_lf_lint" ]] || {
+  echo "lint on a CRLF copy of the planted record differs from the LF original" >&2
+  diff <(printf '%s\n' "$lm_lf_lint") <(printf '%s\n' "$lm_crlf_lint") >&2 || true
+  exit 1
+}
+require_failure "$lm_crlf_lint" "FAIL <scope>/$lm_decision: record-facet:"
 
 # An undeclared prefix is a record both checkers reject.
 lm_undeclared="$lm_dir/undeclared"
@@ -3256,6 +3277,73 @@ for lm_id in 1234567890 0x12345678 1e10000000; do
   require_line "$(cat "$lm_rec")" "supersedes: ['$lm_id']" "--to-ltm on a numeric-looking supersedes id"
   lm_n=$((lm_n + 1))
 done
+# migration.md's example is the form the apply above wrote (#283).
+require_text "$lm_doc" "\`supersedes: ['<id>']\`"
+
+# A CRLF schema: 2 record once skipped silently: the apply exited 0 and left it at schema: 2 (#281). Both modes refuse it by name and write nothing, and the conversion migration.md names clears the refusal. The exit code is checked first, since a message grep alone passes a refusal that exits 0.
+lm_crlf_in="$lm_dir/crlf-in"
+lm_stage "$lm_crlf_in"
+awk '{ printf "%s\r\n", $0 }' "$lm_fixture/$lm_decision" >"$lm_crlf_in/$lm_decision"
+lm_commit "$lm_crlf_in" crlf
+lm_crlf_msg="  $lm_crlf_in/$lm_decision: CRLF line endings; convert the record to LF and commit it first"
+for lm_mode in "" --apply; do
+  lm_rc=0
+  lm_out="$(bash "$lm_migrator" "$lm_crlf_in" --to-ltm --facet-map "$lm_map" $lm_mode 2>&1)" || lm_rc=$?
+  [[ "$lm_rc" -eq 1 ]] || {
+    echo "--to-ltm ${lm_mode:-dry run} on a CRLF schema: 2 record exited $lm_rc (want 1)" >&2
+    printf '%s\n' "$lm_out" >&2
+    exit 1
+  }
+  require_line "$lm_out" "$lm_crlf_msg" "--to-ltm ${lm_mode:-dry run} on a CRLF schema: 2 record"
+  lm_clean "$lm_crlf_in" "a refused --to-ltm ${lm_mode:-dry run} on a CRLF record"
+done
+require_line "$(cat "$lm_crlf_in/$lm_decision")" $'schema: 2\r' "the refused CRLF record"
+require_text "$lm_doc" "perl -pi -e 's/\\r\$//' <record>"
+perl -pi -e 's/\r$//' "$lm_crlf_in/$lm_decision"
+lm_commit "$lm_crlf_in" lf
+bash "$lm_migrator" "$lm_crlf_in" --to-ltm --facet-map "$lm_map" --apply >/dev/null 2>&1 || {
+  echo "--to-ltm --apply failed once the CRLF record was converted to LF" >&2
+  exit 1
+}
+require_line "$(cat "$lm_crlf_in/$lm_decision")" "schema: 1" "the converted CRLF record"
+
+# A record that opens on an LF fence with CRLF below it once got past a first-line test, so the closing fence went unread and the apply exited 0 with the record at schema: 2.
+lm_mixed="$lm_dir/mixed-endings"
+lm_stage "$lm_mixed"
+awk 'NR == 1 { print; next } { printf "%s\r\n", $0 }' "$lm_fixture/$lm_decision" >"$lm_mixed/$lm_decision"
+[[ "$(head -n 1 "$lm_mixed/$lm_decision")" == "---" ]] || {
+  echo "test setup: the mixed-endings record does not open on a bare LF fence" >&2
+  exit 1
+}
+lm_commit "$lm_mixed" mixed
+for lm_mode in "" --apply; do
+  lm_rc=0
+  lm_out="$(bash "$lm_migrator" "$lm_mixed" --to-ltm --facet-map "$lm_map" $lm_mode 2>&1)" || lm_rc=$?
+  [[ "$lm_rc" -eq 1 ]] || {
+    echo "--to-ltm ${lm_mode:-dry run} on a mixed-endings schema: 2 record exited $lm_rc (want 1)" >&2
+    printf '%s\n' "$lm_out" >&2
+    exit 1
+  }
+  require_line "$lm_out" "  $lm_mixed/$lm_decision: CRLF line endings; convert the record to LF and commit it first" "--to-ltm ${lm_mode:-dry run} on a mixed-endings record"
+  lm_clean "$lm_mixed" "a refused --to-ltm ${lm_mode:-dry run} on a mixed-endings record"
+done
+
+# An apostrophe in a quoted item is doubled. Bash 3.2 wrote the old \'\' replacement with its backslashes, and the frontmatter stopped parsing (#282), so this runs /bin/bash by name: macOS ships 3.2 there whatever leads PATH.
+lm_apos="$lm_dir/apostrophe"
+lm_stage "$lm_apos"
+sed "s/^owners: \[Ines Varga\]$/owners: [person:O'Brien]/" "$lm_fixture/$lm_decision" >"$lm_apos/$lm_decision"
+require_line "$(cat "$lm_apos/$lm_decision")" "owners: [person:O'Brien]" "the apostrophe record"
+lm_commit "$lm_apos" apostrophe
+/bin/bash "$lm_migrator" "$lm_apos" --to-ltm --facet-map "$lm_map" --apply >/dev/null 2>&1 || {
+  echo "--to-ltm --apply under /bin/bash failed on owners: [person:O'Brien]" >&2
+  exit 1
+}
+lm_got="$(sed -n '2,/^---$/p' "$lm_apos/$lm_decision" | sed '$d' | yq '.owners[0]')"
+[[ "$lm_got" == "person:O'Brien" ]] || {
+  echo "--to-ltm under /bin/bash turned person:O'Brien into '$lm_got'" >&2
+  grep '^owners:' "$lm_apos/$lm_decision" >&2
+  exit 1
+}
 
 # With no ltm on PATH the sweep skips and says so, and the run still passes:
 # the skill's scripts stay runnable without the kit.
@@ -3286,6 +3374,8 @@ if command -v ltm >/dev/null 2>&1; then
     printf '%s\n' "$lm_vout" >&2
     exit 1
   }
+  # ltm exits 0 on a warning, so only the text shows a missing section (#284).
+  refute_text <(printf '%s\n' "$lm_vout") "body-sections"
 
   # ltm doctor skips a record only when a field is malformed, and every such
   # field is an ltm validate error, so the exit above is what shows none was
@@ -3355,6 +3445,15 @@ if command -v ltm >/dev/null 2>&1; then
     exit 1
   }
 
+  # The apostrophe item from above, by ltm's own parser.
+  lm_rc=0
+  lm_vout="$(ltm validate "$lm_apos" 2>&1)" || lm_rc=$?
+  [[ "$lm_rc" -eq 0 ]] || {
+    echo "ltm validate rejected the migrated owners: ['person:O''Brien']" >&2
+    printf '%s\n' "$lm_vout" >&2
+    exit 1
+  }
+
   # A freshly scaffolded scope: the lightweight bank and one record from each
   # template, its placeholders filled the way the agent fills them.
   lm_tpl="$lm_dir/scaffolded"
@@ -3374,6 +3473,7 @@ if command -v ltm >/dev/null 2>&1; then
     printf '%s\n' "$lm_vout" >&2
     exit 1
   }
+  refute_text <(printf '%s\n' "$lm_vout") "body-sections"
 else
   echo "ltm not installed; skipped real-ltm checks"
 fi
@@ -3426,6 +3526,9 @@ require_text _maintenance/inbox-to-memory/RATIONALE.md "| 45 | \`verify-ltm:\` h
 require_text _maintenance/inbox-to-memory/RATIONALE.md "| 46 | Only an ltm \`error\` line fails verify."
 require_text _maintenance/inbox-to-memory/RATIONALE.md "| 47 | \`--to-ltm\` refuses an existing \`memory-bank.yaml\` whose \`folders\` maps no \`PolicyRule\`"
 require_text _maintenance/inbox-to-memory/RATIONALE.md "| 48 | \`--to-ltm\` writes a flow-list item plain only when it is a facet"
+# Rows 49-50 record the CRLF split and the bash 3.2 quoting the cases above pin.
+require_text _maintenance/inbox-to-memory/RATIONALE.md "| 49 | The lint strips a trailing CR before every fence test, and \`--to-ltm\` refuses a record in which any line ends in a CR"
+require_text _maintenance/inbox-to-memory/RATIONALE.md "| 50 | \`ltm_item\` doubles an apostrophe through a variable"
 
 rm -rf "$lm_dir"
 

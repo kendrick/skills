@@ -38,3 +38,7 @@ related: []
 ## Context
 
 <!-- Any context that shaped the decision but isn't part of the outcome itself. -->
+
+## Consequences
+
+<!-- What follows from the decision: what gets easier, what gets harder, what to revisit. -->
