@@ -264,15 +264,27 @@ require_text work-issue/SKILL.md "2. the harness's plan mode: in Claude Code, En
 require_text work-issue/SKILL.md "3. neither: refuse with the plan gate's refusal below, as a wrapped invocation does."
 # Stop 1 sees only a draft the gate passed; a failure goes to the planner.
 require_text work-issue/SKILL.md "never to the user as a refusal, and the gate runs again until it passes."
-require_text work-issue/SKILL.md "so \`find-plan.py\` runs after the copy, and a miss there reopens plan mode with the revision note."
+require_text work-issue/SKILL.md "For both planners the file reaches the plan directory only by this copy, so \`find-plan.py\` runs after the copy"
 require_text work-issue/SKILL.md "Inside the Plan block, both halves send the draft back to the planner instead of refusing."
 require_text work-issue/SKILL.md "Stop 1 approves an artifact, the plan, and grants nothing, so the one-confirmation rule holds"
 require_text work-issue/SKILL.md "This message is Stop 2 wherever the Plan block ran, and a plan it drafted shows as \`Plan: <saved path> (planned this run).\`"
 require_text work-issue/SKILL.md "| A wrapped invocation with no plan, or a direct one with neither planner present | 0 |"
 require_text work-issue/SKILL.md "| A direct invocation with no plan and no plan directory | 0 |"
 require_text work-issue/SKILL.md "| Stop 1, the drafted plan put to the user and declined | 0 |"
-# A declined draft left in the plan directory resolves by route 4 next time and runs a plan the user turned down, so the decline deletes it.
-require_text work-issue/SKILL.md "On a decline, delete the drafted file from the plan directory"
+# The draft lives in RUN_DIR, where no PLAN route looks, until Stop 1 approves it (row 179, PR #287): saved in the plan directory, an interrupted session's draft resolved by route 4 and ran unapproved.
+require_text work-issue/SKILL.md "told to save to \`RUN_DIR/draft-plan.md\` and to stop once the plan is saved"
+require_text work-issue/SKILL.md "with the old draft kept as \`draft-plan.md\` in the run dir moved under \`closed/\`"
+# Deliberately Not Built: saving the draft into the plan directory before approval (row 179, PR #287 r4450540721).
+refute_text work-issue/SKILL.md "told to save to that path and to stop once the plan is saved"
+# Stop 1 promises the user a kept cross-repo reference resolves only by path; Stop 2 is where that promise lands.
+require_text work-issue/SKILL.md "Where the Plan block kept a needed reference to another repository, the clause adds that the plan resolves only by path, \`work-issue N <path>\`"
+require_text _maintenance/work-issue/RATIONALE.md "| Saving a draft into the plan directory before Stop 1's approval | Row 179"
+# Another repo's <N>-<slug>.md shares the name and route 4 drops it, so only this check keeps the copy from overwriting it (row 179).
+require_text work-issue/SKILL.md "Check whether that file exists before invoking either planner, and again immediately before that copy."
+require_text work-issue/SKILL.md "| A direct invocation whose \`<plan dir>/<N>-<slug>.md\` already exists, before planning or at the copy after Stop 1 | 0 |"
+require_text work-issue/SKILL.md "\"move it or pass a plan path, then \`work-issue N\`.\""
+require_text _maintenance/work-issue/RATIONALE.md "| 179 | The draft lives in \`RUN_DIR/draft-plan.md\`"
+require_text work-issue/SKILL.md "On a decline, delete \`RUN_DIR/draft-plan.md\`"
 require_text work-issue/SKILL.md "\"Plan declined and deleted; \`work-issue N\` drafts a new one.\""
 # --dry-run previews and must not draft (row 178). drive.py's grant step is a dry run on a wrapped launch, so it halts on an unplanned issue, never plans.
 require_text work-issue/SKILL.md "| \`--dry-run\` on a direct invocation where every PLAN route missed | 0 |"
@@ -987,8 +999,8 @@ awk -v h="$stops_header" '
   on { exit }
 ' work-issue/SKILL.md > "$tmp/stops.txt"
 stops_rows="$(wc -l < "$tmp/stops.txt" | tr -d ' ')"
-[[ "$stops_rows" -eq 34 ]] || {
-  echo "Where a Run Stops lists $stops_rows stops, expected 34" >&2
+[[ "$stops_rows" -eq 35 ]] || {
+  echo "Where a Run Stops lists $stops_rows stops, expected 35" >&2
   exit 1
 }
 while IFS= read -r row; do
