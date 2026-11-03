@@ -242,6 +242,52 @@ require_text work-issue/SKILL.md "names the path PLAN resolved to and its route 
 # has to tell users so, or they keep passing ~/.claude/plans paths by hand.
 require_text work-issue/README.md "a plan made there is found again by its issue number and a resume needs no path"
 
+# --- #144: where every route misses, a direct invocation plans the issue in
+# Step 0's Plan block, and a wrapped one refuses. The direct-versus-wrapped
+# test is prose an agent applies at runtime, so these sentences are the whole
+# mechanism; a quiet edit to any of them changes who gets a plan drafted. ---
+
+require_text work-issue/SKILL.md "including an issue with no plan yet when the user invokes it directly, which it plans and has approved first"
+require_text work-issue/SKILL.md "It is **direct** when the user asked for this run in their own words in this session and no calling skill's grant came with it"
+# Deliberately Not Built: planning on a wrapped invocation (row 174). A lane
+# has nobody to approve a plan, so it must refuse with the old message, and the
+# lane brief has to say the same or a lane reads its grant as leave to plan.
+require_text work-issue/SKILL.md "A wrapped invocation plans nothing and refuses with the plan gate's refusal, \"Plan it first: \`writing-plans\`, then \`work-issue N <plan path>\`.\""
+require_text work-wave/references/lane-brief.md "That grant makes this a wrapped invocation, and a lane never plans."
+require_text work-issue/SKILL.md "**Plan block.** Runs only on a direct invocation where every PLAN route missed"
+require_text work-issue/SKILL.md "The first entry of \`WORK_ISSUE_PLAN_DIRS\` when that is set and non-empty, else \`~/.claude/plans\` when the variable is unset and that directory exists."
+require_text work-issue/SKILL.md "set \`WORK_ISSUE_PLAN_DIRS\` to a plan directory outside this repository, then \`work-issue N\`."
+require_text work-issue/SKILL.md "\`<plan dir>/<N>-<slug>.md\`"
+# Planner order: writing-plans, then plan mode, then the refusal.
+require_text work-issue/SKILL.md "the \`writing-plans\` skill, invoked by name with the issue's title, body, and CRITERIA from \`RUN_DIR/issue.md\`"
+require_text work-issue/SKILL.md "2. the harness's plan mode: in Claude Code, EnterPlanMode, then ExitPlanMode, whose approval is Stop 1's approval."
+require_text work-issue/SKILL.md "3. neither: refuse with the plan gate's refusal below, as a wrapped invocation does."
+# Stop 1 sees only a draft the gate passed; a failure goes to the planner.
+require_text work-issue/SKILL.md "never to the user as a refusal, and the gate runs again until it passes."
+require_text work-issue/SKILL.md "so \`find-plan.py\` runs after the copy, and a miss there reopens plan mode with the revision note."
+require_text work-issue/SKILL.md "Inside the Plan block, both halves send the draft back to the planner instead of refusing."
+require_text work-issue/SKILL.md "Stop 1 approves an artifact, the plan, and grants nothing, so the one-confirmation rule holds"
+require_text work-issue/SKILL.md "This message is Stop 2 wherever the Plan block ran, and a plan it drafted shows as \`Plan: <saved path> (planned this run).\`"
+require_text work-issue/SKILL.md "| A wrapped invocation with no plan, or a direct one with neither planner present | 0 |"
+require_text work-issue/SKILL.md "| A direct invocation with no plan and no plan directory | 0 |"
+require_text work-issue/SKILL.md "| Stop 1, the drafted plan put to the user | 0 |"
+require_text _maintenance/work-issue/RATIONALE.md "| 2 | An approved plan is required, and a thin one is refused rather than planned around—superseded in part by row 174 |"
+require_text _maintenance/work-issue/RATIONALE.md "| 174 | Where every PLAN route misses on a direct invocation, Step 0 plans the issue in a Plan block between items 2 and 3"
+require_text _maintenance/work-issue/RATIONALE.md "| 175 | Two stops. Stop 1 puts the drafted plan and its saved path to the user"
+require_text _maintenance/work-issue/RATIONALE.md "| 176 | The planner is the first one present."
+require_text _maintenance/work-issue/RATIONALE.md "| 177 | The plan directory is the first entry of \`WORK_ISSUE_PLAN_DIRS\`"
+require_text _maintenance/work-issue/RATIONALE.md "| Planning on a wrapped invocation | Row 174."
+require_text _maintenance/work-issue/RATIONALE.md "| Writing a plan into the repo tree | Row 177."
+# Deliberately Not Built: writing a plan into the repo tree (row 177). A plan
+# there lands in the PR diff. Route 2 names `docs/plans` on purpose, so the
+# refute reads the Plan block alone, and the require on its last bullet proves
+# the cut reached the end of the block rather than coming back empty.
+require_text work-issue/SKILL.md "or a first entry that is not a directory or sits inside ROOT"
+awk '/^\*\*Plan block\.\*\*/ { on = 1 } on && /^3\. The plan gate/ { exit } on { print }' work-issue/SKILL.md >"$tmp/plan-block.md"
+require_text "$tmp/plan-block.md" "**Plan block.**"
+require_text "$tmp/plan-block.md" "- **Stop 1.**"
+refute_text "$tmp/plan-block.md" "docs/plans"
+
 # --- Route 4, run for real. Every case pins exact stdout and the exit code,
 # because Step 0 branches on both: one path means use it, empty means fall
 # through to route 5, exit 1 means refuse. Each run gets a temp HOME so the
