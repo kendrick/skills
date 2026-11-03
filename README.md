@@ -49,6 +49,7 @@ Each skill's own README covers any CLI it expects.
 | -------------------------------------------------- | ------------------------------------------------------------------- | ----------------------------- |
 | [inbox-to-memory](inbox-to-memory/)                | Meeting exhaust into groomed notes and durable memory               | `--skill inbox-to-memory`     |
 | [memory-index](memory-index/README.md)             | Registers memory scopes with qmd and keeps the index fresh          | `--skill memory-index`        |
+| [memory-consolidate](memory-consolidate/README.md) | Turns `ltm doctor` findings into memory candidates for review       | `--skill memory-consolidate`  |
 | [jd-file](jd-file/README.md)                       | Gives an arriving thing its Johnny.Decimal number and register line | `--skill jd-file`             |
 | [jd-audit](jd-audit/README.md)                     | Finds drift between a Johnny.Decimal register and its folders       | `--skill jd-audit`            |
 | [technical-writing](technical-writing/README.md)   | Commits, comments, and PR prose against named public standards      | `--skill technical-writing`   |
@@ -73,6 +74,10 @@ Drop your meeting exhaust—transcripts, slide decks, PDFs, half-finished scratc
 #### [memory-index](memory-index/README.md)
 
 Registers a memory scope with [qmd](https://github.com/tobi/qmd) so agents can search it: one collection per `_memory/` record folder, one for the groomed notes with the raw transcripts in `notes/raw/` left out, and a context string for each, written from the scope's own `CLAUDE.md`. Folders decide collections: a record belongs to the collection of the folder it sits in, whatever its frontmatter says. qmd has no file watcher, so `refresh` reindexes after records land, and you can call it from a hook.
+
+#### [memory-consolidate](memory-consolidate/README.md)
+
+Runs `ltm doctor` over a scope's `_memory/` and writes what it finds, such as stale records, long supersession chains, and orphans, as a report of memory candidates. The report uses the same candidate lines a groomed note does, so `inbox-to-memory`'s Phase 5 handles each finding like any other: approving a line amends the target record and rewrites the line, and a line you don't approve stays a candidate and stays counted. The skill writes the report and never touches a record, and it keeps no list of check names, so a check the kit adds later reaches the report unchanged.
 
 #### [jd-file](jd-file/README.md)
 
@@ -138,7 +143,7 @@ A router plus eight domain skills covering the Databricks REST APIs and the Pyth
 
 ## Repository Layout
 
-- [databricks-api/](databricks-api/), [file-issue/](file-issue/), [jira-refine/](jira-refine/), [inbox-to-memory/](inbox-to-memory/), [memory-index/](memory-index/), [jd-file/](jd-file/), [jd-audit/](jd-audit/), [readme-coauthorship/](readme-coauthorship/), [handoff/](handoff/), [adversarial-review/](adversarial-review/), [divvy-up/](divvy-up/), [work-issue/](work-issue/), [mutation-testing/](mutation-testing/), [work-wave/](work-wave/), [technical-writing/](technical-writing/), [eli5/](eli5/): the skills themselves, one directory each
+- [databricks-api/](databricks-api/), [file-issue/](file-issue/), [jira-refine/](jira-refine/), [inbox-to-memory/](inbox-to-memory/), [memory-index/](memory-index/), [memory-consolidate/](memory-consolidate/), [jd-file/](jd-file/), [jd-audit/](jd-audit/), [readme-coauthorship/](readme-coauthorship/), [handoff/](handoff/), [adversarial-review/](adversarial-review/), [divvy-up/](divvy-up/), [work-issue/](work-issue/), [mutation-testing/](mutation-testing/), [work-wave/](work-wave/), [technical-writing/](technical-writing/), [eli5/](eli5/): the skills themselves, one directory each
 - **[\_docs/](_docs/)**: research notes behind the skills, like the [readme-coauthorship writeup](_docs/readme-coauthorship-research.md) and the [issue-authorship survey](_docs/file-issue-research.md)
 - **[\_maintenance/](_maintenance/)**: maintainer tooling, one subdirectory per skill that needs it: the refresh workflow that keeps `databricks-api` synced with upstream Databricks docs, the upstream sync behind `handoff`, the check that holds the `jd` pair's prose to the vault register, and the decision ledgers, evals, and provenance records behind the rest
 - **[tests/](tests/)**: smoke scripts that pin the load-bearing decisions in each skill and in the repo's agent docs; each runs standalone from the repo root, like `bash tests/technical-writing-smoke.sh`

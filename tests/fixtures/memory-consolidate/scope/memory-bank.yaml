@@ -1,0 +1,4 @@
+schema: 1
+name: scope
+facet_prefixes: [topic]
+folders: {PolicyRule: _memory/rules}

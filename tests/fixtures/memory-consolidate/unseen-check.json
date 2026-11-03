@@ -1,0 +1,32 @@
+[
+  {
+    "file": "_memory/context/billing-vendor-landscape-Mc2VndLnd2.md",
+    "check": "stale-confirmed",
+    "message": "date 2026-05-04 is 150 days old and there's no last_confirmed (threshold 90)",
+    "related_files": []
+  },
+  {
+    "file": "_memory/context/tax-engine-overview-Mc3TaxEng3.md",
+    "check": "unseen-check",
+    "message": "a check name memory-consolidate has never seen, stubbed in to prove it routes like any other",
+    "related_files": [
+      "_memory/rules/invoices-carry-tax-id-Mc1TaxIdR1.md"
+    ]
+  },
+  {
+    "file": "_memory/decisions/prefixed-entity-invoice-numbers-Mc7InvNum4.md",
+    "check": "long-chain",
+    "message": "Supersession chain holds 4 Records (threshold 3)",
+    "related_files": [
+      "_memory/decisions/per-entity-invoice-sequences-Mc6InvNum3.md",
+      "_memory/decisions/per-region-invoice-sequences-Mc5InvNum2.md",
+      "_memory/decisions/sequential-invoice-numbers-Mc4InvNum1.md"
+    ]
+  },
+  {
+    "file": "_memory/decisions/quarter-close-billing-freeze-Mc8Orphan8.md",
+    "check": "orphan",
+    "message": "no related, supersedes, or superseded_by, and no Record relates to it (date 2026-07-15, 78 days old, threshold 30)",
+    "related_files": []
+  }
+]
