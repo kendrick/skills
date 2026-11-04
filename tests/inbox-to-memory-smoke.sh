@@ -1334,6 +1334,7 @@ done < <(git -C "$mig" status --porcelain)
 
 # #289: the migrator keeps its own copy of the count, so a dismissed amend it counted would write a note the lint rejects.
 mig_dismiss="$(mktemp -d "${TMPDIR:-/tmp}/i2m-migrate-dismiss.XXXXXX")"
+trap 'rm -rf "$not_a_scope" "$inline_scope" "$dismissal_scope" "$mig" "$mig_dismiss"' EXIT
 cp -R "$fixtures/old-only/." "$mig_dismiss/"
 dnote="$mig_dismiss/notes/2025-11-04-atlas-scoping-call-3iMu15QJ_x.md"
 printf '%s\n' \
