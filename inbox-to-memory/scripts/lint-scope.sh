@@ -270,6 +270,12 @@ count_open_contradictions() {
     { grep -Fvc -- '| dismissed:' || true; } | tr -d ' '
 }
 
+# A dismissed update-existing line keeps its candidate token as provenance, so the token count has to give it back or a declined amend stays "unfinished business" forever.
+count_dismissed_amends() {
+  { grep -F -- '[memory candidate: update existing' "$1" || true; } |
+    { grep -Fc -- '| dismissed:' || true; } | tr -d ' '
+}
+
 frontmatter_number() {
   awk -v key="$2" '
     { sub(/\r$/, "") }
@@ -473,6 +479,7 @@ check_counts() {
       unpromoted_candidates)
         expected="$(count_matches "$body" '\[(memory candidate:|journal candidate:|working-state candidate\])')"
         expected=$((expected + $(count_open_contradictions "$body")))
+        expected=$((expected - $(count_dismissed_amends "$body")))
         ;;
     esac
     stated="$(frontmatter_number "$file" "$key")"

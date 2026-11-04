@@ -35,7 +35,7 @@ The script runs `ltm doctor --bank SCOPE_ROOT --json` and writes REPORT. Doctor 
 
 `--json <file>` reads doctor output saved earlier instead of running `ltm`. Use it when the user hands you a saved `ltm doctor --json` file, or when `ltm` isn't on PATH and they can produce that file elsewhere.
 
-The same day maps to the same REPORT path. When REPORT already holds a line Phase 5 resolved, the script leaves it untouched, exits 1, and prints a stderr line starting `consolidate: refusing to overwrite`. A resolved line starts with `[[`, because approving a candidate rewrites its prefix to a wiki link, and a rewrite would throw that work away. On the refusal, read REPORT and show the user its resolved lines. When stderr says the script can't read REPORT, tell the user that instead. Then ask whether to replace REPORT, and on a yes rerun the same command with `--force` added. On a no, stop.
+The same day maps to the same REPORT path. When REPORT already holds a line Phase 5 resolved, the script leaves it untouched, exits 1, and prints a stderr line starting `consolidate: refusing to overwrite`. A resolved line either starts with `[[`, because approving a candidate rewrites its prefix to a wiki link, or is an update-existing line carrying `| dismissed:`. A rewrite would throw either decision away. On the refusal, read REPORT and show the user its resolved lines. When stderr says the script can't read REPORT, tell the user that instead. Then ask whether to replace REPORT, and on a yes rerun the same command with `--force` added. On a no, stop.
 
 **Done when:** the script exited 0 and REPORT exists; or it refused, the user declined, and the skill stopped; or the user confirmed and the `--force` run exited 0; or a run exited nonzero for any reason other than the refusal and its stderr was reported verbatim.
 
@@ -55,7 +55,7 @@ Give the count from REPORT's `unpromoted_candidates` frontmatter. When it is 0, 
 
 ## Step 3 — Hand Off to Phase 5
 
-Stop after presenting. Resolving a finding is `inbox-to-memory`'s job: point the user to its Phase 5 (Propose and Crystallize), which treats REPORT like any groomed note. Approving a line takes Phase 5's update-existing path: it amends the target record, adds REPORT's `id` to that record's `source_refs`, and rewrites the line to `[[<target>|memory — updated]]`, so the report doubles as the record of what was approved. A line the user doesn't approve keeps its candidate prefix and stays counted in `unpromoted_candidates`.
+Stop after presenting. Resolving a finding is `inbox-to-memory`'s job: point the user to its Phase 5 (Propose and Crystallize), which treats REPORT like any groomed note. Approving a line takes Phase 5's update-existing path: it amends the target record, adds REPORT's `id` to that record's `source_refs`, and rewrites the line to `[[<target>|memory — updated]]`, so the report doubles as the record of what was approved. Declining a line takes Phase 5's dismissal: it appends `| dismissed: <reason, and who decided>` after any `related:` tail and leaves the prefix in place, the same suffix it gives a dismissed contradiction. A dismissed line drops out of `unpromoted_candidates` and stays in REPORT as the record of the decision. A line the user neither approves nor dismisses keeps its candidate prefix and stays counted.
 
 For a `stale-confirmed` finding, the usual fix is a command rather than an edit. A record's id is the nanoid that ends its stem. Have the user re-read the record (`ltm show <id>`), then:
 

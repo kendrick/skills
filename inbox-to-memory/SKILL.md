@@ -186,6 +186,7 @@ For each candidate the user approves:
    - `[memory candidate: <scope>] <claim>` → `[[<record-filename-without-ext>|memory]] <claim>`
    - `[memory candidate: update existing [[<target>|<name>]]] <claim>` → `[[<target>|memory — updated]] <claim>`
    - `[journal candidate: <pattern>]` → `[[<relative-path-to-journal-entry>|journal]] <pattern>`
+   - A declined update-existing line keeps its prefix and takes Dismiss's suffix below, `| dismissed: <reason, and who decided>`, after any `related:` tail.
 4. **For "update existing" promotions** (this is how a record grows over time rather than spawning duplicates):
    - Append the source note's `id` to the target record's `source_refs`.
    - Amend the target record's body. Mark new content inline with `(added YYYY-MM-DD, <note-id>)` so the next reader can trace which source contributed which passage.
