@@ -251,6 +251,12 @@ count_open_contradictions() {
     { grep -Fvc -- '| dismissed:' || true; } | tr -d ' '
 }
 
+# Must match lint-scope.sh: a dismissed update-existing line keeps its candidate token, so the migrated count gives it back or the lint rejects the note.
+count_dismissed_amends() {
+  { grep -F -- '[memory candidate: update existing' "$1" || true; } |
+    { grep -Fc -- '| dismissed:' || true; } | tr -d ' '
+}
+
 props_value() {
   awk -v k="$2" '
     { sep = index($0, " = "); if (sep == 0) next }
@@ -716,7 +722,7 @@ for file in "$scope"/notes/*.md "$scope"/_memory/*/*.md "$scope"/entries/*.md; d
     extras="$extras;open_questions=$(count_matches "$work/body" '\[open question:')"
     extras="$extras;resolved_questions=$(count_matches "$work/body" '\[open question resolved:')"
     extras="$extras;deferred_tensions=$(count_matches "$work/body" '\[tension: deferred\]')"
-    extras="$extras;unpromoted_candidates=$((unpromoted + $(count_open_contradictions "$work/body")))"
+    extras="$extras;unpromoted_candidates=$((unpromoted + $(count_open_contradictions "$work/body") - $(count_dismissed_amends "$work/body")))"
 
     note_id="$(props_value "$work/props" id)"
 

@@ -1332,6 +1332,34 @@ done < <(git -C "$mig" status --porcelain)
   exit 1
 }
 
+# #289: the migrator keeps its own copy of the count, so a dismissed amend it counted would write a note the lint rejects.
+mig_dismiss="$(mktemp -d "${TMPDIR:-/tmp}/i2m-migrate-dismiss.XXXXXX")"
+cp -R "$fixtures/old-only/." "$mig_dismiss/"
+dnote="$mig_dismiss/notes/2025-11-04-atlas-scoping-call-3iMu15QJ_x.md"
+printf '%s\n' \
+  '- [memory candidate: update existing one-vendor-per-region-G2k65qG3Nc] Add the EMEA exception.' \
+  '- [memory candidate: update existing legacy-billing-freeze-Hq3U2Su1gy] Mention Finance sign-off. | dismissed: already covered, Kendrick' \
+  >>"$dnote.add"
+awk -v add="$dnote.add" '{ print } /^- \[memory candidate: client\]/ { while ((getline l < add) > 0) print l }' "$dnote" >"$dnote.new"
+mv "$dnote.new" "$dnote"
+rm "$dnote.add"
+git -C "$mig_dismiss" init -q
+git -C "$mig_dismiss" add -A
+git -C "$mig_dismiss" -c user.email=t@t -c user.name=t commit -qm baseline
+bash "$migrator" "$mig_dismiss" --apply >/dev/null 2>&1
+grep -Fxq 'unpromoted_candidates: 3' "$dnote" || {
+  echo "migrator miscounted unpromoted_candidates with one dismissed amend (want 3: two plain candidates + one open amend)" >&2
+  grep -n 'unpromoted_candidates' "$dnote" >&2
+  exit 1
+}
+dismiss_lint="$(run_lint "$mig_dismiss")"
+grep -Fq 'derived-counts' <<<"$dismiss_lint" && {
+  echo "the lint rejected the migrated counts for a note with a dismissed amend" >&2
+  printf '%s\n' "$dismiss_lint" >&2
+  exit 1
+}
+rm -rf "$mig_dismiss"
+
 # The body is the record of what someone knew that day, and it has to come
 # through untouched to the byte. This is the assertion the whole design serves.
 for f in $(git -C "$mig" ls-files '*.md'); do
