@@ -291,7 +291,7 @@ expect_rc 2 "$rc" "case 9 no --scope"
   exit 1
 }
 
-# Case 11: a same-day rerun over a report holding a line Phase 5 resolved refuses before it runs doctor, and --force replaces the report. It runs ahead of case 10 because case 10 deletes the report.
+# Case 11: a same-day rerun won't overwrite a report holding a line Phase 5 resolved, or one that isn't valid UTF-8, since the script can't check that one for resolved lines. Both refusals come before doctor runs, and --force replaces the report. Case 11 runs ahead of case 10 because case 10 deletes the report.
 run "$fixture/doctor.json" >/dev/null
 same_file "$expected" "$report" "case 11 regenerated report"
 python3 - "$report" <<'PY'
