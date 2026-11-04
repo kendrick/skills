@@ -440,7 +440,7 @@ for record in context decision exception policy-rule rule; do
 done
 require_text inbox-to-memory/assets/records/rule.template.md "memory_type: PolicyRule"
 refute_text inbox-to-memory/assets/records/rule.template.md "memory_type: Rule"
-# The Exception template names its rule twice from one placeholder: `constrained_by` is the link ltm doctor, validate, and retrieval read, and `exception_to` is the Obsidian link the original memory-bank required (#280, RATIONALE row 53). The lint never checks that the two agree; that check belongs in ltm if the kit adopts `exception_to`.
+# ltm doctor, validate, and retrieval read only `constrained_by`; `exception_to` stays as the Obsidian link the original memory-bank required (#280, RATIONALE row 53). The lint never checks that the two agree, since that check belongs in ltm if the kit adopts `exception_to`.
 require_text inbox-to-memory/assets/records/exception.template.md "related: ['constrained_by::{{rule-id}}']"
 require_text inbox-to-memory/assets/records/exception.template.md "exception_to: '[[{{rule-id}}|{{rule-short-name}}]]'"
 refute_text "$lint" "constrained_by"
@@ -3517,20 +3517,20 @@ if command -v ltm >/dev/null 2>&1; then
     inbox-to-memory/assets/records/policy-rule.template.md >"$lm_exc/_memory/rules/policy-rule.md"
   sed -e 's/{{nanoid}}/Ex7Exc0007/' -e 's/{{proposed | accepted}}/accepted/' -e 's/{{YYYY-MM-DD}}/2026-09-30/g' -e 's/{{rule-id}}/Ex6Rul0006/g' \
     inbox-to-memory/assets/records/exception.template.md >"$lm_exc/_memory/exceptions/linked.md"
-  lm_doc="$(LTM_TODAY=2026-10-31 ltm doctor --bank "$lm_exc" --json)"
-  python3 -c 'import json, sys; sys.exit(0 if json.loads(sys.argv[1]) == [] else 1)' "$lm_doc" || {
+  lm_doc_linked="$(LTM_TODAY=2026-10-31 ltm doctor --bank "$lm_exc" --json)"
+  python3 -c 'import json, sys; sys.exit(0 if json.loads(sys.argv[1]) == [] else 1)' "$lm_doc_linked" || {
     echo "ltm doctor reported findings on a scaffolded Exception linked to its PolicyRule" >&2
-    printf '%s\n' "$lm_doc" >&2
+    printf '%s\n' "$lm_doc_linked" >&2
     exit 1
   }
   # The same Exception with the old `related: []` still draws one `orphan`, and nothing else. Its own title keeps it from pairing with the linked one as a near-duplicate.
   sed -e 's/{{nanoid}}/Ex8Exc0008/' -e 's/{{proposed | accepted}}/accepted/' -e 's/{{YYYY-MM-DD}}/2026-09-30/g' -e 's/{{rule-id}}/Ex6Rul0006/g' \
     -e 's/^related: .*/related: []/' -e "s/^title: .*/title: 'Unlinked exception'/" \
     inbox-to-memory/assets/records/exception.template.md >"$lm_exc/_memory/exceptions/unlinked.md"
-  lm_doc="$(LTM_TODAY=2026-10-31 ltm doctor --bank "$lm_exc" --json)"
-  python3 -c 'import json, sys; sys.exit(0 if [(f["check"], f["file"]) for f in json.loads(sys.argv[1])] == [("orphan", "_memory/exceptions/unlinked.md")] else 1)' "$lm_doc" || {
+  lm_doc_unlinked="$(LTM_TODAY=2026-10-31 ltm doctor --bank "$lm_exc" --json)"
+  python3 -c 'import json, sys; sys.exit(0 if [(f["check"], f["file"]) for f in json.loads(sys.argv[1])] == [("orphan", "_memory/exceptions/unlinked.md")] else 1)' "$lm_doc_unlinked" || {
     echo "ltm doctor did not report exactly one orphan for an Exception with related: []" >&2
-    printf '%s\n' "$lm_doc" >&2
+    printf '%s\n' "$lm_doc_unlinked" >&2
     exit 1
   }
 else
