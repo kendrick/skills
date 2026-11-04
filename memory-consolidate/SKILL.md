@@ -19,19 +19,13 @@ Resolve once per invocation:
 | Exit | Meaning |
 |---|---|
 | 0 | the report was written |
-| 1 | `ltm doctor` failed, couldn't run (`ltm` not on PATH), or printed something other than an array of `{file, check}` objects; stderr quotes it |
+| 1 | the script refused to overwrite REPORT, with stderr starting `consolidate: refusing to overwrite`; or `ltm doctor` failed, couldn't run (`ltm` not on PATH), or printed something other than an array of `{file, check}` objects, and stderr quotes it |
 | 2 | usage error from argparse, such as a missing `--scope` |
 | 3 | SCOPE_ROOT isn't a readable directory, the `--json` file is unreadable, or `LTM_TODAY` isn't exactly `YYYY-MM-DD` |
 
-On any nonzero exit, report stderr verbatim and stop. The skill never falls back to reading records itself, since a report that doctor didn't produce can't be traced to a doctor finding.
+Step 1 handles the refusal. On any other nonzero exit, report stderr verbatim and stop. The skill never falls back to reading records itself, since a report that doctor didn't produce can't be traced to a doctor finding.
 
-## Step 1 — Check the Day's Report
-
-The script overwrites REPORT whenever it runs, and the same day maps to the same path. When REPORT already exists, read it. A line Phase 5 has resolved starts with `[[`, because approving a candidate rewrites its prefix to a wiki link, and a rerun would throw that work away. Show the user which lines are resolved and run Step 2 only on a yes.
-
-**Done when:** REPORT doesn't exist, or it holds no resolved line, or the user confirmed the overwrite, or declined it and the skill stopped.
-
-## Step 2 — Run the Pass
+## Step 1 — Run the Pass
 
 ```
 python3 SCRIPT --scope SCOPE_ROOT
@@ -41,9 +35,11 @@ The script runs `ltm doctor --bank SCOPE_ROOT --json` and writes REPORT. Doctor 
 
 `--json <file>` reads doctor output saved earlier instead of running `ltm`. Use it when the user hands you a saved `ltm doctor --json` file, or when `ltm` isn't on PATH and they can produce that file elsewhere.
 
-**Done when:** the script exited 0 and REPORT exists, or it exited nonzero and its stderr was reported verbatim.
+The same day maps to the same REPORT path. When REPORT already holds a line Phase 5 resolved, the script leaves it untouched, exits 1, and prints a stderr line starting `consolidate: refusing to overwrite`. A resolved line starts with `[[`, because approving a candidate rewrites its prefix to a wiki link, and a rewrite would throw that work away. On the refusal, read REPORT and show the user its resolved lines. When stderr says the script can't read REPORT, tell the user that instead. Then ask whether to replace REPORT, and on a yes rerun the same command with `--force` added. On a no, stop.
 
-## Step 3 — Present the Report
+**Done when:** the script exited 0 and REPORT exists; or it refused, the user declined, and the skill stopped; or the user confirmed and the `--force` run exited 0; or a run exited nonzero for any reason other than the refusal and its stderr was reported verbatim.
+
+## Step 2 — Present the Report
 
 Read REPORT and show the user every candidate line, in the order the file holds them. Each line is one doctor finding:
 
@@ -57,7 +53,7 @@ Give the count from REPORT's `unpromoted_candidates` frontmatter. When it is 0, 
 
 **Done when:** the user has seen every candidate line in REPORT and the count, or has been told the bank is clean.
 
-## Step 4 — Hand Off to Phase 5
+## Step 3 — Hand Off to Phase 5
 
 Stop after presenting. Resolving a finding is `inbox-to-memory`'s job: point the user to its Phase 5 (Propose and Crystallize), which treats REPORT like any groomed note. Approving a line takes Phase 5's update-existing path: it amends the target record, adds REPORT's `id` to that record's `source_refs`, and rewrites the line to `[[<target>|memory — updated]]`, so the report doubles as the record of what was approved. A line the user doesn't approve keeps its candidate prefix and stays counted in `unpromoted_candidates`.
 

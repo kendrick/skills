@@ -83,6 +83,10 @@ require_text memory-consolidate/SKILL.md "python3 SCRIPT --scope SCOPE_ROOT"
 require_text memory-consolidate/SKILL.md "Phase 5"
 require_text memory-consolidate/SKILL.md 'ltm confirm <id>'
 require_text memory-consolidate/SKILL.md 'ltm deprecate <id>'
+# The same-day refusal (ledger row 9). SKILL.md's Step 1 tells it apart from doctor's exit-1 failures by this prefix.
+require_text "$script" "--force"
+require_text "$script" "consolidate: refusing to overwrite"
+require_text memory-consolidate/SKILL.md "consolidate: refusing to overwrite"
 
 # The cuts in Deliberately Not Built. A list of known checks would have to name today's checks, so none of their names may appear in the script.
 refute_text "$script" "stale-confirmed"
@@ -286,6 +290,58 @@ expect_rc 2 "$rc" "case 9 no --scope"
   echo "case 9: a malformed LTM_TODAY still wrote a report" >&2
   exit 1
 }
+
+# Case 11: a same-day rerun won't overwrite a report holding a line Phase 5 resolved, or one that isn't valid UTF-8, since the script can't check that one for resolved lines. Both refusals come before doctor runs, and --force replaces the report. Case 11 runs ahead of case 10 because case 10 deletes the report.
+run "$fixture/doctor.json" >/dev/null
+same_file "$expected" "$report" "case 11 regenerated report"
+python3 - "$report" <<'PY'
+import pathlib, sys
+p = pathlib.Path(sys.argv[1])
+old = "[memory candidate: update existing [[billing-vendor-landscape-Mc2VndLnd2|Billing vendor landscape]]] "
+text = p.read_text(encoding="utf-8")
+assert text.count(old) == 1, "case 11: first candidate line not found"
+p.write_text(text.replace(old, "[[billing-vendor-landscape-Mc2VndLnd2|memory — updated]] "), encoding="utf-8")
+PY
+require_text "$report" "[[billing-vendor-landscape-Mc2VndLnd2|memory — updated]] stale-confirmed: "
+cp "$report" "$tmp/resolved.md"
+: >"$tmp/ltm.log"
+set +e
+err="$(run "$fixture/doctor.json" 2>&1 >/dev/null)"
+rc=$?
+set -e
+expect_rc 1 "$rc" "case 11 rerun over a resolved line"
+grep -Fq 'refusing to overwrite' <<<"$err" && grep -Fq -- "$report" <<<"$err" || {
+  echo "case 11: stderr does not name the refusal and the report; got: $err" >&2
+  exit 1
+}
+same_file "$tmp/resolved.md" "$report" "case 11 refused run"
+[[ ! -s "$tmp/ltm.log" ]] || {
+  echo "case 11: a refused run still called ltm: $(cat "$tmp/ltm.log")" >&2
+  exit 1
+}
+printf '\xff\xfe' >"$report"
+cp "$report" "$tmp/undecodable.md"
+: >"$tmp/ltm.log"
+set +e
+err="$(run "$fixture/doctor.json" 2>&1 >/dev/null)"
+rc=$?
+set -e
+expect_rc 1 "$rc" "case 11 rerun over an undecodable report"
+grep -Fq "can't read it to check for resolved lines" <<<"$err" && grep -Fq -- "$report" <<<"$err" || {
+  echo "case 11: stderr does not name the unreadable refusal and the report; got: $err" >&2
+  exit 1
+}
+same_file "$tmp/undecodable.md" "$report" "case 11 refused undecodable run"
+[[ ! -s "$tmp/ltm.log" ]] || {
+  echo "case 11: a refused undecodable run still called ltm: $(cat "$tmp/ltm.log")" >&2
+  exit 1
+}
+set +e
+run "$fixture/doctor.json" --force >/dev/null
+rc=$?
+set -e
+expect_rc 0 "$rc" "case 11 --force"
+same_file "$expected" "$report" "case 11 --force rewrite"
 
 # Case 10: real ltm on the fixture bank gives case 1's bytes. doctor.json reproduces only at LTM_TODAY=2026-10-01; unpinned, more records age past doctor's thresholds.
 if command -v ltm >/dev/null 2>&1; then
