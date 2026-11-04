@@ -5,6 +5,7 @@
     work-issue/scripts/run-state.py review PR --input BUNDLE.json [--save PATH]
     work-issue/scripts/run-state.py probe --run-dir DIR --root ROOT (--issue N | --pr M) [--pr-bundle FILE] [--herdr-state STATE] [--author LOGIN]
     work-issue/scripts/run-state.py phase --probe PROBE.json
+    work-issue/scripts/run-state.py commit-style --run-dir DIR
     work-issue/scripts/run-state.py adopt M --pr-json FILE --bundle FILE --run-dir DIR --root ROOT --default DEFAULT --invoker LOGIN [--max-review-rounds R] [--dry-run]
 
 Neither `review` nor `phase` is a gate. `review` answers `findings`, `cleared`, or
@@ -40,6 +41,17 @@ herdr's. A field it cannot answer is null, with one stderr line saying why.
 enters at Step 6. It reads the `gh pr view` JSON and a `review --save` bundle
 the skill saved, plus git, and never calls `gh` itself. It exits 1 with one
 `run-state: adopt:` line per refusal, every refusal checked before it exits.
+
+`commit-style` prints `bare` or `full`, the commit-message style for the run's
+in-branch commits. It reads DIR/merge_methods.json, the `{"squash", "merge",
+"rebase"}` bundle Step 0 fetched once, and answers `bare` only when `squash` is
+JSON true and both `merge` and `rebase` are JSON false. A `null` (a token that
+cannot administer the repo reads every setting as null), a missing key, a
+missing file, or a file that does not parse answers `full`, the second two with
+one stderr line naming the file; reading `null` as false would skip the prose
+pass on every repo the token cannot see into. DIR/full_commit_pass, an empty
+marker the run writes when the user overrules at Stop 2, forces `full` and
+survives a resume. It never calls `gh` and never exits 1.
 
 Exit codes: 0 with an answer on stdout; 3 usage, a `gh` failure, an unwritable
 `--save` path, or input this script cannot read (an unparseable bundle, a
@@ -2813,6 +2825,32 @@ def cmd_phase(args):
     return 0
 
 
+def cmd_commit_style(args):
+    run_dir = Path(args.run_dir)
+    if not run_dir.is_dir():
+        sys.stderr.write(f"run-state: --run-dir {args.run_dir}: not a directory\n")
+        return 3
+    if (run_dir / "full_commit_pass").exists():
+        print("full")
+        return 0
+    path = run_dir / "merge_methods.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, ValueError) as e:
+        sys.stderr.write(f"run-state: {path}: {e}; using the full commit pass\n")
+        print("full")
+        return 0
+    # `is True` / `is False` keep null and absent keys on the full pass.
+    bare = (
+        isinstance(data, dict)
+        and data.get("squash") is True
+        and data.get("merge") is False
+        and data.get("rebase") is False
+    )
+    print("bare" if bare else "full")
+    return 0
+
+
 def parse_args(argv=None):
     ap = argparse.ArgumentParser(
         description="Read a PR's review state, or map a resume probe to a phase."
@@ -2846,6 +2884,10 @@ def parse_args(argv=None):
     b.add_argument("--ratio", metavar="RATIO", type=float, help="review:build ratio that trips 'over'; beats any 'budget-raised' line, which beats 2.0")
     b.add_argument("--now", metavar="ISO8601", help="close open starts at this UTC moment rather than the log's latest stamp")
     b.set_defaults(func=cmd_budget)
+
+    c = sub.add_parser("commit-style", help="bare or full: the commit-message style for in-branch commits")
+    c.add_argument("--run-dir", metavar="DIR", required=True, help="RUN_DIR; reads merge_methods.json and full_commit_pass")
+    c.set_defaults(func=cmd_commit_style)
 
     g = sub.add_parser("probe", help="gather the resume probe that phase reads")
     g.add_argument("--run-dir", metavar="DIR", required=True, help="RUN_DIR; read, never created")

@@ -4473,4 +4473,61 @@ refute_text work-issue/SKILL.md "issue-<N>:refs/heads/issue-<N>"
 # And Adopt item 8's first wording, which saved raw --json output (PR #274).
 refute_text work-issue/SKILL.md "\`gh issue view <K> --json title,body\` output under"
 
+# #163: bare in-branch subjects only on a squash-only repo. The predicate wants
+# JSON true/false, so `null` (a token that can't administer the repo), a missing
+# file, or a malformed one must all land on the full prose pass, and the
+# overrule marker must beat a squash-only bundle.
+merge_fixtures=tests/fixtures/work-issue/merge-methods
+commit_style_case() {
+  local label="$1" want="$2" dir="$tmp/commit-style-$1" got
+  got="$(python3 "$run_state" commit-style --run-dir "$dir" 2>/dev/null)" || {
+    echo "#163: commit-style on $label should exit 0" >&2
+    exit 1
+  }
+  [[ "$got" == "$want" ]] || {
+    echo "#163: commit-style on $label should print $want, got: $got" >&2
+    exit 1
+  }
+}
+for fixture in squash-only merge-allowed rebase-allowed no-admin; do
+  require_file "$merge_fixtures/$fixture.json"
+  mkdir -p "$tmp/commit-style-$fixture"
+  cp "$merge_fixtures/$fixture.json" "$tmp/commit-style-$fixture/merge_methods.json"
+done
+commit_style_case squash-only bare
+commit_style_case merge-allowed full
+commit_style_case rebase-allowed full
+commit_style_case no-admin full
+# no-admin can't catch null read as false, since its squash is null too; a
+# squash-only token whose merge and rebase come back null can.
+mkdir -p "$tmp/commit-style-squash-null"
+printf '{"squash": true, "merge": null, "rebase": null}' >"$tmp/commit-style-squash-null/merge_methods.json"
+commit_style_case squash-null full
+mkdir -p "$tmp/commit-style-missing" "$tmp/commit-style-malformed" "$tmp/commit-style-marker"
+commit_style_case missing full
+printf '{squash: true' >"$tmp/commit-style-malformed/merge_methods.json"
+commit_style_case malformed full
+cp "$merge_fixtures/squash-only.json" "$tmp/commit-style-marker/merge_methods.json"
+: >"$tmp/commit-style-marker/full_commit_pass"
+commit_style_case marker full
+missing_err="$(python3 "$run_state" commit-style --run-dir "$tmp/commit-style-missing" 2>&1 >/dev/null)"
+grep -Fq "merge_methods.json" <<<"$missing_err" || {
+  echo "#163: commit-style on a missing file should name merge_methods.json on stderr, got: $missing_err" >&2
+  exit 1
+}
+set +e
+python3 "$run_state" commit-style --run-dir "$tmp/commit-style-no-such-dir" >/dev/null 2>&1
+nodir_status=$?
+set -e
+[[ "$nodir_status" == "3" ]] || {
+  echo "#163: commit-style on a missing --run-dir should exit 3, got: $nodir_status" >&2
+  exit 1
+}
+# The Step 2 pin is the whole sentence, because `commit-style --run-dir RUN_DIR`
+# also sits in Step 0 item 8, and a shorter pin would survive Step 2 losing it.
+require_text work-issue/SKILL.md "Before every commit the run makes, each wave's at Step 3 and each repair's at Steps 3, 4, 5, and 7, read \`work-issue/scripts/run-state.py commit-style --run-dir RUN_DIR\`."
+require_text work-issue/SKILL.md "gh api repos/{owner}/{repo} --jq '{squash: .allow_squash_merge, merge: .allow_merge_commit, rebase: .allow_rebase_merge}' > RUN_DIR/merge_methods.json"
+require_text work-issue/SKILL.md "the message carries one more clause, \`squash-only repo: in-branch commits get bare subjects\`, ahead of \"Go?\""
+require_text work-issue/SKILL.md "5. The body goes through \`technical-writing\` on its pull-request-description profile"
+
 echo "work-issue smoke: OK"
