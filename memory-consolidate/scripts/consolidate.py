@@ -5,7 +5,7 @@ Writes <scope>/notes/reports/YYYY-MM-DD-consolidation.md and nothing else. The d
 
 Every finding becomes a line the same way, whatever its `check`. The script deliberately keeps no list of known check names, so a check the kit adds later comes through as a candidate line with no change here.
 
-Exit codes: 0 report written; 1 `ltm doctor` failed or couldn't run, or its output isn't a JSON array of {file, check} objects, with stderr quoting the cause, or the same-day report already holds a line Phase 5 resolved, an approved rewrite or a dismissed update-existing candidate (or can't be read to check) and `--force` is absent, with stderr starting `consolidate: refusing to overwrite` and the report untouched; 2 argparse usage error; 3 unreadable scope, unreadable `--json` file, or an LTM_TODAY not exactly YYYY-MM-DD.
+Exit codes: 0 report written; 1 `ltm doctor` failed or couldn't run, or its output isn't a JSON array of {file, check} objects, with stderr quoting the cause, or the same-day report already holds a line Phase 5 resolved (an approved rewrite or a dismissed update-existing candidate), or can't be read to check, and `--force` is absent, with stderr starting `consolidate: refusing to overwrite` and the report untouched; 2 argparse usage error; 3 unreadable scope, unreadable `--json` file, or an LTM_TODAY not exactly YYYY-MM-DD.
 """
 
 from __future__ import annotations
@@ -135,7 +135,7 @@ def main() -> int:
         return 3
 
     out = scope / "notes" / "reports" / f"{date}-consolidation.md"
-    # Phase 5 settles a candidate two ways: an approved rewrite opens with `[[` (an open one only holds `[[` mid-line, so that half is a prefix test), and a dismissed update-existing line keeps its candidate prefix and gains a `| dismissed:` suffix. Runs before doctor so a refusal costs no ltm call and never depends on doctor succeeding.
+    # Runs before doctor, so a refusal costs no ltm call and never depends on doctor succeeding. An open candidate holds `[[` mid-line too, which is why the approved test checks the prefix.
     if out.exists() and not args.force:
         try:
             resolved = sum(

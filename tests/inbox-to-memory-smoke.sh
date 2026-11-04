@@ -3566,7 +3566,7 @@ require_failure "$cr_out" "FAIL $cr_report: derived-counts: \`unpromoted_candida
 rm -rf "$cr_dir"
 
 # Phase 5 has to say where a declined amend's suffix comes from, and machine-contracts.md has to give the count's grep with the dismissed line skipped (#289).
-require_text inbox-to-memory/SKILL.md "A declined update-existing line keeps its prefix and takes Dismiss's suffix below"
+require_text inbox-to-memory/SKILL.md "A declined update-existing line keeps its prefix too and takes Dismiss's suffix above"
 require_text "$contracts" "grep -F '[memory candidate: update existing' <note> | grep -Fvc '| dismissed:'"
 
 # Row 36 is the decision the issue asked to have recorded.
