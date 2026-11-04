@@ -77,7 +77,7 @@ Registers a memory scope with [qmd](https://github.com/tobi/qmd) so agents can s
 
 #### [memory-consolidate](memory-consolidate/README.md)
 
-Runs `ltm doctor` over a scope's `_memory/` and writes what it finds, such as stale records, long supersession chains, and orphans, as a report of memory candidates. The report uses the same candidate lines a groomed note does, so `inbox-to-memory`'s Phase 5 handles each finding like any other: approving a line amends the target record and rewrites the line, and a line you don't approve stays a candidate and stays counted. The skill writes the report and never touches a record, and it keeps no list of check names, so a check the kit adds later reaches the report unchanged.
+Runs `ltm doctor` over a scope's `_memory/` and writes what it finds, such as stale records, long supersession chains, and orphans, as a report of memory candidates. The report uses the same candidate lines a groomed note does, so `inbox-to-memory`'s Phase 5 handles each finding like any other: approving a line amends the target record and rewrites the line, and declining one adds `| dismissed:` with your reason, which takes it out of the `unpromoted_candidates` count. The skill writes the report and never touches a record, and it keeps no list of check names, so a check the kit adds later reaches the report unchanged.
 
 #### [jd-file](jd-file/README.md)
 

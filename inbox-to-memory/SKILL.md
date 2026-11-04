@@ -201,7 +201,7 @@ A `[contradicts accepted: ...]` flag has three outcomes, and the user picks one 
 
 **A dismissed flag stays in the note permanently.** It is the record that someone looked at this and decided it was nothing, which is what stops the next four notes from re-flagging the same non-conflict. Deleting it throws away the only evidence the question was ever asked.
 
-Never auto-promote. Every record creation requires explicit user approval per candidate. Unpromoted candidates keep their `[memory candidate: ...]` or `[journal candidate: ...]` prefix — the prefix signals "considered, not crystallized," which is itself useful provenance.
+Never auto-promote. Every record creation requires explicit user approval per candidate. Unpromoted candidates keep their `[memory candidate: ...]` or `[journal candidate: ...]` prefix — the prefix signals "considered, not crystallized," which is itself useful provenance. A declined update-existing line keeps its prefix too and takes Dismiss's suffix above, `| dismissed: <reason, and who decided>`, after any `related:` tail.
 
 ### Phase 6 — Verify
 

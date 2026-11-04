@@ -1332,6 +1332,35 @@ done < <(git -C "$mig" status --porcelain)
   exit 1
 }
 
+# #289: the migrator keeps its own copy of the count, so a dismissed amend it counted would write a note the lint rejects.
+mig_dismiss="$(mktemp -d "${TMPDIR:-/tmp}/i2m-migrate-dismiss.XXXXXX")"
+trap 'rm -rf "$not_a_scope" "$inline_scope" "$dismissal_scope" "$mig" "$mig_dismiss"' EXIT
+cp -R "$fixtures/old-only/." "$mig_dismiss/"
+dnote="$mig_dismiss/notes/2025-11-04-atlas-scoping-call-3iMu15QJ_x.md"
+printf '%s\n' \
+  '- [memory candidate: update existing one-vendor-per-region-G2k65qG3Nc] Add the EMEA exception.' \
+  '- [memory candidate: update existing legacy-billing-freeze-Hq3U2Su1gy] Mention Finance sign-off. | dismissed: already covered, Kendrick' \
+  >>"$dnote.add"
+awk -v add="$dnote.add" '{ print } /^- \[memory candidate: client\]/ { while ((getline l < add) > 0) print l }' "$dnote" >"$dnote.new"
+mv "$dnote.new" "$dnote"
+rm "$dnote.add"
+git -C "$mig_dismiss" init -q
+git -C "$mig_dismiss" add -A
+git -C "$mig_dismiss" -c user.email=t@t -c user.name=t commit -qm baseline
+bash "$migrator" "$mig_dismiss" --apply >/dev/null 2>&1
+grep -Fxq 'unpromoted_candidates: 3' "$dnote" || {
+  echo "migrator miscounted unpromoted_candidates with one dismissed amend (want 3: two plain candidates + one open amend)" >&2
+  grep -n 'unpromoted_candidates' "$dnote" >&2
+  exit 1
+}
+dismiss_lint="$(run_lint "$mig_dismiss")"
+grep -Fq 'derived-counts' <<<"$dismiss_lint" && {
+  echo "the lint rejected the migrated counts for a note with a dismissed amend" >&2
+  printf '%s\n' "$dismiss_lint" >&2
+  exit 1
+}
+rm -rf "$mig_dismiss"
+
 # The body is the record of what someone knew that day, and it has to come
 # through untouched to the byte. This is the assertion the whole design serves.
 for f in $(git -C "$mig" ls-files '*.md'); do
@@ -3548,7 +3577,26 @@ sed 's/^unpromoted_candidates: 2$/unpromoted_candidates: 3/' "$cr_report" >"$cr_
 mv "$cr_dir/miscounted.md" "$cr_report"
 cr_out="$(run_lint "$cr_scope")"
 require_failure "$cr_out" "FAIL $cr_report: derived-counts: \`unpromoted_candidates\` says 3, body has 2"
+
+# A declined amend keeps its prefix and takes `| dismissed:`, so the count has to give it back or the report never reads as settled (#289). The open amend left beside it proves the subtraction is per line. The dismissed contradiction proves it keys on the amend token: a subtraction keyed on `| dismissed:` alone also takes that line, which the token count never held.
+awk '/^\[memory candidate: update existing \[\[prefixed-entity-invoice-numbers-/ { $0 = $0 " | dismissed: the chain is the audit trail, kendrick" } { print }' "$cr_report" | sed 's/^unpromoted_candidates: 3$/unpromoted_candidates: 1/' >"$cr_dir/dismissed.md"
+printf '%s\n' '[contradicts accepted: [[billing-vendor-landscape-Mc2VndLnd2|Billing vendor landscape]]] procurement now owns the vendor list | claims: billing owns the vendor list | dismissed: procurement only mirrors it, kendrick' >>"$cr_dir/dismissed.md"
+mv "$cr_dir/dismissed.md" "$cr_report"
+require_text "$cr_report" "[[sequential-invoice-numbers-Mc4InvNum1]] | dismissed: the chain is the audit trail, kendrick"
+require_text "$cr_report" "[memory candidate: update existing [[quarter-close-billing-freeze-Mc8Orphan8|"
+require_text "$cr_report" "unpromoted_candidates: 1"
+cr_out="$(run_lint "$cr_scope")"
+require_line "$cr_out" "failures: 0" consolidation-report-dismissed
+
+sed 's/^unpromoted_candidates: 1$/unpromoted_candidates: 2/' "$cr_report" >"$cr_dir/miscounted.md"
+mv "$cr_dir/miscounted.md" "$cr_report"
+cr_out="$(run_lint "$cr_scope")"
+require_failure "$cr_out" "FAIL $cr_report: derived-counts: \`unpromoted_candidates\` says 2, body has 1"
 rm -rf "$cr_dir"
+
+# Phase 5 has to say where a declined amend's suffix comes from, and machine-contracts.md has to give the count's grep with the dismissed line skipped (#289).
+require_text inbox-to-memory/SKILL.md "A declined update-existing line keeps its prefix too and takes Dismiss's suffix above"
+require_text "$contracts" "grep -F '[memory candidate: update existing' <note> | grep -Fvc '| dismissed:'"
 
 # Row 36 is the decision the issue asked to have recorded.
 require_text _maintenance/inbox-to-memory/RATIONALE.md "| 36 |"
@@ -3564,6 +3612,8 @@ require_text _maintenance/inbox-to-memory/RATIONALE.md "| 49 | The lint strips a
 require_text _maintenance/inbox-to-memory/RATIONALE.md "| 50 | \`ltm_item\` doubles an apostrophe through a variable"
 # Row 51 records the explicit notes/reports/ glob the consolidation-report case pins.
 require_text _maintenance/inbox-to-memory/RATIONALE.md "| 51 | Pass one of the lint walks \`notes/reports/*.md\` as its own glob"
+# Row 52 records the dismissal grammar for a declined amend the consolidation-report case pins.
+require_text _maintenance/inbox-to-memory/RATIONALE.md "| 52 | A declined update-existing line keeps its prefix and takes the contradiction flag's \`dismissed:\` suffix"
 
 rm -rf "$lm_dir"
 

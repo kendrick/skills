@@ -87,6 +87,8 @@ require_text memory-consolidate/SKILL.md 'ltm deprecate <id>'
 require_text "$script" "--force"
 require_text "$script" "consolidate: refusing to overwrite"
 require_text memory-consolidate/SKILL.md "consolidate: refusing to overwrite"
+# Step 3 has to name dismissal, or a declined finding has no way out of the count (#289).
+require_text memory-consolidate/SKILL.md "Declining a line takes Phase 5's dismissal: it appends \`| dismissed: <reason, and who decided>\`"
 
 # The cuts in Deliberately Not Built. A list of known checks would have to name today's checks, so none of their names may appear in the script.
 refute_text "$script" "stale-confirmed"
@@ -342,6 +344,35 @@ rc=$?
 set -e
 expect_rc 0 "$rc" "case 11 --force"
 same_file "$expected" "$report" "case 11 --force rewrite"
+
+# Case 12: a dismissed update-existing line counts as resolved, though it keeps its candidate prefix and never starts with `[[` (#289, ledger row 12). Under the `[[`-only test a rerun replaced the report and the dismissal with it.
+dismissed_line="[memory candidate: update existing [[quarter-close-billing-freeze-Mc8Orphan8|Quarter-close billing freeze]]] orphan: no related, supersedes, or superseded_by, and no Record relates to it (date 2026-07-15, 78 days old, threshold 30) | dismissed: the freeze stands alone, kendrick"
+python3 - "$report" "$dismissed_line" <<'PY'
+import pathlib, sys
+p, new = pathlib.Path(sys.argv[1]), sys.argv[2]
+old = new.split(" | dismissed: ")[0]
+text = p.read_text(encoding="utf-8")
+assert text.count(old + "\n") == 1, "case 12: orphan candidate line not found"
+p.write_text(text.replace(old + "\n", new + "\n"), encoding="utf-8")
+PY
+require_text "$report" "$dismissed_line"
+refute_text "$report" "|memory — updated]]"
+cp "$report" "$tmp/dismissed.md"
+: >"$tmp/ltm.log"
+set +e
+err="$(run "$fixture/doctor.json" 2>&1 >/dev/null)"
+rc=$?
+set -e
+expect_rc 1 "$rc" "case 12 rerun over a dismissed amend"
+grep -Fq 'refusing to overwrite' <<<"$err" && grep -Fq -- "$report" <<<"$err" || {
+  echo "case 12: stderr does not name the refusal and the report; got: $err" >&2
+  exit 1
+}
+same_file "$tmp/dismissed.md" "$report" "case 12 refused run"
+[[ ! -s "$tmp/ltm.log" ]] || {
+  echo "case 12: a refused run still called ltm: $(cat "$tmp/ltm.log")" >&2
+  exit 1
+}
 
 # Case 10: real ltm on the fixture bank gives case 1's bytes. doctor.json reproduces only at LTM_TODAY=2026-10-01; unpinned, more records age past doctor's thresholds.
 if command -v ltm >/dev/null 2>&1; then

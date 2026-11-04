@@ -5,7 +5,7 @@ Writes <scope>/notes/reports/YYYY-MM-DD-consolidation.md and nothing else. The d
 
 Every finding becomes a line the same way, whatever its `check`. The script deliberately keeps no list of known check names, so a check the kit adds later comes through as a candidate line with no change here.
 
-Exit codes: 0 report written; 1 `ltm doctor` failed or couldn't run, or its output isn't a JSON array of {file, check} objects, with stderr quoting the cause, or the same-day report already holds a line Phase 5 resolved (or can't be read to check) and `--force` is absent, with stderr starting `consolidate: refusing to overwrite` and the report untouched; 2 argparse usage error; 3 unreadable scope, unreadable `--json` file, or an LTM_TODAY not exactly YYYY-MM-DD.
+Exit codes: 0 report written; 1 `ltm doctor` failed or couldn't run, or its output isn't a JSON array of {file, check} objects, with stderr quoting the cause, or the same-day report already holds a line Phase 5 resolved (an approved rewrite or a dismissed update-existing candidate), or can't be read to check, and `--force` is absent, with stderr starting `consolidate: refusing to overwrite` and the report untouched; 2 argparse usage error; 3 unreadable scope, unreadable `--json` file, or an LTM_TODAY not exactly YYYY-MM-DD.
 """
 
 from __future__ import annotations
@@ -135,10 +135,14 @@ def main() -> int:
         return 3
 
     out = scope / "notes" / "reports" / f"{date}-consolidation.md"
-    # Phase 5 rewrites an approved candidate to a line opening `[[`; an open one only holds `[[` mid-line, so the test is a prefix test. Runs before doctor so a refusal costs no ltm call and never depends on doctor succeeding.
+    # Runs before doctor, so a refusal costs no ltm call and never depends on doctor succeeding. An open candidate holds `[[` mid-line too, which is why the approved test checks the prefix.
     if out.exists() and not args.force:
         try:
-            resolved = sum(1 for ln in out.read_text(encoding="utf-8").splitlines() if ln.startswith("[["))
+            resolved = sum(
+                1
+                for ln in out.read_text(encoding="utf-8").splitlines()
+                if ln.startswith("[[") or (ln.startswith("[memory candidate: update existing") and "| dismissed:" in ln)
+            )
         except (OSError, UnicodeDecodeError):
             print(f"consolidate: refusing to overwrite {out}: can't read it to check for resolved lines; rerun with --force to replace it", file=sys.stderr)
             return 1
