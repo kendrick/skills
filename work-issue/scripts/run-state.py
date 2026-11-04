@@ -1093,7 +1093,12 @@ def phase_of(probe):
         # and dispatched workers with no fixed point and no baseline.
         if flag(probe, "has_waves") and not (flag(probe, "base_sha") and flag(probe, "baseline")):
             return "1", "row 7: the Waves table is written but Step 1 left no base_sha or baseline.txt; resume at Step 1"
-        if flag(probe, "has_waves") and wave_reports < wave_tasks:
+        # The wave legs end once a self-review exists, because Step 3 writes
+        # one only after every wave settles. Past that point a dirty wave-owned
+        # path is a repair's uncommitted edit, and reading it as an unreported
+        # task stopped the run instead of resuming the repair at row 9, 10, or
+        # 16 (#147).
+        if flag(probe, "has_waves") and wave_reports < wave_tasks and count(probe, "self_reviews") == 0:
             # A commit past base_sha on an unreported task's owned paths is a
             # gated wave whose report is missing, not a half-written one. On
             # cambium #78 a filename glob read five committed waves as 0 of 5,
@@ -2206,6 +2211,24 @@ def g_queue_unfiled_rows(ctx):
     return sum(1 for l in lines if QUEUE_ROW.match(l) and last_cell(l) == "queued")
 
 
+def rebasing_branch(tree):
+    """The ref a rebase in `tree` is rewriting, else None. A tree git cannot
+    read, or one with no rebase, answers None, which leaves `find_tree` to
+    report the branch as checked out nowhere."""
+    for name in ("rebase-merge", "rebase-apply"):
+        done = run_git(tree, "rev-parse", "--git-path", f"{name}/head-name")
+        if done.returncode != 0:
+            return None
+        where = Path(chomp(done.stdout))
+        if not where.is_absolute():
+            where = Path(tree) / where
+        try:
+            return chomp(read_text(where))
+        except OSError:
+            continue
+    return None
+
+
 def find_tree(root, branch, terminal=False):
     """`(tree, problem)`: the worktree holding `branch`, else ROOT where no
     local `branch` exists, since rows 1 and 4 through 7 own those runs.
@@ -2222,12 +2245,22 @@ def find_tree(root, branch, terminal=False):
     if done.returncode != 0:
         return None, git_failure(("worktree", "list"), done)
     current = None
+    detached = []
     for line in done.stdout.split("\n"):
         if line.startswith("worktree "):
             current = line[len("worktree "):]
         elif line == f"branch refs/heads/{branch}" and current:
             return Path(current), None
-    local = run_git(root, "show-ref", "--verify", "--quiet", f"refs/heads/{branch}")
+        elif line == "detached" and current:
+            detached.append(current)
+    # A rebase stopped on a conflict detaches HEAD, so the porcelain list names
+    # no branch for that tree, and row 12's rebase leg was unreachable behind
+    # this function's exit 3 (#147). git records the branch being rebased in
+    # head-name under the tree's own git dir.
+    for tree in detached:
+        if rebasing_branch(tree) == f"refs/heads/{branch}":
+            return Path(tree), None
+    local =run_git(root, "show-ref", "--verify", "--quiet", f"refs/heads/{branch}")
     if local.returncode == 0 and not terminal:
         return None, (
             f"{branch} exists locally but is not checked out in any worktree, so "
