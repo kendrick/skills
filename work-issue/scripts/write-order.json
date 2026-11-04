@@ -1,0 +1,346 @@
+{
+  "about": "The order work-issue writes its artifacts, and where a crash just before each write must resume. Read by resume_checks.py crash-points. Every resume value comes from references/resume.md's phase table and SKILL.md's steps, never from phase's output.",
+  "bundles": {
+    "open-quiet": {
+      "state": "OPEN", "author": "kendrick", "reactions": [], "reviews": [], "threads": [], "comments": []
+    },
+    "open-round1": {
+      "state": "OPEN", "author": "kendrick", "reactions": [], "reviews": [], "comments": [],
+      "threads": [
+        {"id": "T1", "is_resolved": false, "root_created_at": "2026-01-01T11:30:00Z", "root_author": "chatgpt-codex-connector", "root_body": "**P1** the guard reads the wrong field", "root_comment_id": 101, "root_url": "https://github.com/o/r/pull/9#discussion_r1", "comments": []},
+        {"id": "T2", "is_resolved": false, "root_created_at": "2026-01-01T11:31:00Z", "root_author": "chatgpt-codex-connector", "root_body": "**P2** rename the helper", "root_comment_id": 102, "root_url": "https://github.com/o/r/pull/9#discussion_r2", "comments": []}
+      ]
+    },
+    "open-round1-deferred": {
+      "state": "OPEN", "author": "kendrick", "reactions": [], "reviews": [],
+      "threads": [
+        {"id": "T1", "is_resolved": false, "root_created_at": "2026-01-01T11:30:00Z", "root_author": "chatgpt-codex-connector", "root_body": "**P1** the guard reads the wrong field", "root_comment_id": 101, "root_url": "https://github.com/o/r/pull/9#discussion_r1", "comments": []},
+        {"id": "T2", "is_resolved": false, "root_created_at": "2026-01-01T11:31:00Z", "root_author": "chatgpt-codex-connector", "root_body": "**P2** rename the helper", "root_comment_id": 102, "root_url": "https://github.com/o/r/pull/9#discussion_r2", "comments": []}
+      ],
+      "comments": [
+        {"author": "kendrick", "created_at": "2026-01-01T12:15:00Z", "url": "https://github.com/o/r/pull/9#issuecomment-1", "body": "## Deferred findings\n\n| # | Source | Finding | Outside because | Recommendation | Status |\n|---|---|---|---|---|---|\n| 1 | https://github.com/o/r/pull/9#discussion_r2 | rename the helper | not in the diff under review | `file-issue` - rename the helper | queued |\n"}
+      ]
+    },
+    "open-round2": {
+      "state": "OPEN", "author": "kendrick", "reactions": [], "reviews": [],
+      "threads": [
+        {"id": "T1", "is_resolved": false, "root_created_at": "2026-01-01T11:30:00Z", "root_author": "chatgpt-codex-connector", "root_body": "**P1** the guard reads the wrong field", "root_comment_id": 101, "root_url": "https://github.com/o/r/pull/9#discussion_r1", "comments": []},
+        {"id": "T2", "is_resolved": false, "root_created_at": "2026-01-01T11:31:00Z", "root_author": "chatgpt-codex-connector", "root_body": "**P2** rename the helper", "root_comment_id": 102, "root_url": "https://github.com/o/r/pull/9#discussion_r2", "comments": []},
+        {"id": "T3", "is_resolved": false, "root_created_at": "2026-01-01T13:30:00Z", "root_author": "chatgpt-codex-connector", "root_body": "**P2** tidy the loop", "root_comment_id": 103, "root_url": "https://github.com/o/r/pull/9#discussion_r3", "comments": []}
+      ],
+      "comments": [
+        {"author": "kendrick", "created_at": "2026-01-01T12:15:00Z", "url": "https://github.com/o/r/pull/9#issuecomment-1", "body": "## Deferred findings\n\n| # | Source | Finding | Outside because | Recommendation | Status |\n|---|---|---|---|---|---|\n| 1 | https://github.com/o/r/pull/9#discussion_r2 | rename the helper | not in the diff under review | `file-issue` - rename the helper | queued |\n"}
+      ]
+    },
+    "open-round2-deferred": {
+      "state": "OPEN", "author": "kendrick", "reactions": [], "reviews": [],
+      "threads": [
+        {"id": "T1", "is_resolved": false, "root_created_at": "2026-01-01T11:30:00Z", "root_author": "chatgpt-codex-connector", "root_body": "**P1** the guard reads the wrong field", "root_comment_id": 101, "root_url": "https://github.com/o/r/pull/9#discussion_r1", "comments": []},
+        {"id": "T2", "is_resolved": false, "root_created_at": "2026-01-01T11:31:00Z", "root_author": "chatgpt-codex-connector", "root_body": "**P2** rename the helper", "root_comment_id": 102, "root_url": "https://github.com/o/r/pull/9#discussion_r2", "comments": []},
+        {"id": "T3", "is_resolved": false, "root_created_at": "2026-01-01T13:30:00Z", "root_author": "chatgpt-codex-connector", "root_body": "**P2** tidy the loop", "root_comment_id": 103, "root_url": "https://github.com/o/r/pull/9#discussion_r3", "comments": []}
+      ],
+      "comments": [
+        {"author": "kendrick", "created_at": "2026-01-01T12:15:00Z", "url": "https://github.com/o/r/pull/9#issuecomment-1", "body": "## Deferred findings\n\n| # | Source | Finding | Outside because | Recommendation | Status |\n|---|---|---|---|---|---|\n| 1 | https://github.com/o/r/pull/9#discussion_r2 | rename the helper | not in the diff under review | `file-issue` - rename the helper | queued |\n| 2 | https://github.com/o/r/pull/9#discussion_r3 | tidy the loop | review round cap reached (2) | `file-issue` - tidy the loop | queued |\n"}
+      ]
+    },
+    "open-cleared": {
+      "state": "OPEN", "author": "kendrick", "reactions": [],
+      "reviews": [
+        {"state": "APPROVED", "author": "reviewer", "submitted_at": "2026-01-01T14:00:00Z", "url": "https://github.com/o/r/pull/9#pullrequestreview-1"}
+      ],
+      "threads": [
+        {"id": "T1", "is_resolved": true, "root_created_at": "2026-01-01T11:30:00Z", "root_author": "chatgpt-codex-connector", "root_body": "**P1** the guard reads the wrong field", "root_comment_id": 101, "root_url": "https://github.com/o/r/pull/9#discussion_r1", "comments": []},
+        {"id": "T2", "is_resolved": true, "root_created_at": "2026-01-01T11:31:00Z", "root_author": "chatgpt-codex-connector", "root_body": "**P2** rename the helper", "root_comment_id": 102, "root_url": "https://github.com/o/r/pull/9#discussion_r2", "comments": []},
+        {"id": "T3", "is_resolved": true, "root_created_at": "2026-01-01T13:30:00Z", "root_author": "chatgpt-codex-connector", "root_body": "**P2** tidy the loop", "root_comment_id": 103, "root_url": "https://github.com/o/r/pull/9#discussion_r3", "comments": []}
+      ],
+      "comments": [
+        {"author": "kendrick", "created_at": "2026-01-01T12:15:00Z", "url": "https://github.com/o/r/pull/9#issuecomment-1", "body": "## Deferred findings\n\n| # | Source | Finding | Outside because | Recommendation | Status |\n|---|---|---|---|---|---|\n| 1 | https://github.com/o/r/pull/9#discussion_r2 | rename the helper | not in the diff under review | `file-issue` - rename the helper | queued |\n| 2 | https://github.com/o/r/pull/9#discussion_r3 | tidy the loop | review round cap reached (2) | `file-issue` - tidy the loop | queued |\n"}
+      ]
+    },
+    "merged": {
+      "state": "MERGED", "author": "kendrick", "reactions": [], "reviews": [], "threads": [], "comments": []
+    },
+    "adopt-open": {
+      "state": "OPEN", "author": "alice", "reactions": [], "reviews": [], "comments": [],
+      "threads": [
+        {"id": "T9", "is_resolved": false, "root_created_at": "2026-01-01T09:00:00Z", "root_author": "chatgpt-codex-connector", "root_body": "**P1** the retry never backs off", "root_comment_id": 901, "root_url": "https://github.com/o/r/pull/7#discussion_r9", "comments": []}
+      ]
+    }
+  },
+  "sequences": [
+    {
+      "name": "main",
+      "about": "One issue from Step 0 through Step 8: two waves, a self-review, a clean red-team round, one triage round with an in-scope finding, its repair, replies, a second finding after those replies on a capped round, a cleared review, then the merge and the filing pass.",
+      "run_dir": "issue-1",
+      "probe": {"issue": 1},
+      "entries": [
+        {"step": 0, "subpath": "issue.md", "op": "write", "path": "issue.md", "content": "# Issue 1\n\n## Acceptance\n\n- [ ] the guard reads the right field\n",
+         "resume": {"phase": "0", "row": 4}, "cite": "resume.md row 4: no branch, no RUN_DIR"},
+        {"step": 0, "subpath": "max_review_rounds", "op": "write", "path": "max_review_rounds", "content": "2\n",
+         "resume": {"phase": "0", "row": 5}, "cite": "resume.md row 5: RUN_DIR exists, no branch; plan.md without ## Waves goes to closed/ and Step 0"},
+        {"step": 0, "subpath": "merge_methods.json", "op": "write", "path": "merge_methods.json", "content": "{\"squash\": true, \"merge\": false, \"rebase\": false}\n",
+         "blind": "probe never reads merge_methods.json; only commit-style does, and SKILL.md Step 0 item 2 says a missing file reads as the full pass"},
+        {"step": 0, "subpath": "draft-plan.md", "op": "write", "path": "draft-plan.md", "content": "# Draft plan\n",
+         "blind": "probe never reads draft-plan.md; no PLAN route searches RUN_DIR, and row 5's first leg moves the dir to closed/ with the draft inside it (SKILL.md Plan block)"},
+        {"step": 0, "subpath": "plan.md", "op": "write", "path": "plan.md", "content": "# Plan\n\nBuild it.\n",
+         "resume": {"phase": "0", "row": 5}, "cite": "resume.md row 5, first leg"},
+        {"step": 0, "subpath": "plan.md", "op": "write", "path": "plan.md", "content": "# Plan\n\nBuild it.\n\n## Waves\n\n| Wave | Task | Files owned | Model | Done when | Constraints |\n|---|---|---|---|---|---|\n| 0 | alpha | a.py | sonnet | a.py exists | |\n| 1 | beta | b.py | sonnet | b.py exists | |\n",
+         "resume": {"phase": "0", "row": 5}, "cite": "resume.md row 5, first leg: plan.md has no ## Waves yet, since divvy-up writes the table at Step 0 item 5"},
+        {"step": 0, "subpath": "full_commit_pass", "op": "write", "path": "full_commit_pass", "content": "",
+         "blind": "probe never reads full_commit_pass; only commit-style does, and Step 0 item 8 writes it again on the re-asked confirmation row 5 leads to"},
+        {"step": 0, "subpath": "redteam/mode.txt", "op": "write", "path": "redteam/mode.txt", "content": "reproduce claims\n",
+         "blind": "probe never reads redteam/mode.txt; row 5's second leg re-asks the confirmation, and the yes rewrites it (resume.md row 5 prose)"},
+        {"step": 1, "subpath": "timing.log", "op": "append", "path": "timing.log", "content": "1 start 2026-01-01T07:00:00Z\n",
+         "blind": "probe reads timing.log only through review_over_budget, and a Step 1 stamp adds no build or review time"},
+        {"step": 1, "subpath": "branch", "op": "branch",
+         "resume": {"phase": "0", "row": 5}, "cite": "resume.md row 5, second leg: plan.md has ## Waves, so Step 0 redoes items 4, 6, and 7 before the confirmation, then Step 1"},
+        {"step": 1, "subpath": "base_sha", "op": "write", "path": "base_sha", "content": "{merge_base}\n",
+         "resume": {"phase": "1", "row": 7}, "cite": "resume.md row 7: ## Waves present, no base_sha, so Step 1 at the missing artifact"},
+        {"id": "baseline", "step": 1, "subpath": "baseline.txt", "op": "write", "path": "baseline.txt", "content": "exit: 0\nok\n",
+         "resume": {"phase": "1", "row": 7}, "cite": "resume.md row 7: no baseline.txt, so Step 1 at the missing artifact"},
+        {"step": 2, "subpath": "timing.log", "op": "append", "path": "timing.log", "content": "1 end 2026-01-01T07:10:00Z\n2 start 2026-01-01T07:10:00Z\n",
+         "blind": "a build stamp only lowers the review-to-build ratio, which review_over_budget reads, and this run stays under 2.0"},
+        {"step": 2, "subpath": "tree", "op": "edit", "file": "a.py", "content": "alpha = 1\n",
+         "resume": {"phase": "2", "row": 7}, "cite": "resume.md row 7: task alpha has no report, so Step 2 at wave 0"},
+        {"step": 2, "subpath": "reports/<wave>-<task>.json", "op": "write", "path": "reports/0-alpha.json", "content": "{\"task\": \"alpha\", \"status\": \"done\"}\n",
+         "resume": {"phase": "2", "row": 7}, "cite": "resume.md row 7: no report under either name, so Step 2 at that wave, reverting a.py first"},
+        {"step": 3, "subpath": "baseline-<wave>.txt", "op": "write", "path": "baseline-0.txt", "content": "exit: 0\nok\n",
+         "blind": "resume.md's baseline field: the probe never reads baseline-<wave>.txt, because Step 3 saves it before the commit or marker the probe reads"},
+        {"step": 3, "subpath": "branch", "op": "commit", "paths": ["a.py"], "message": "feat: alpha",
+         "resume": {"phase": "2", "row": 7}, "cite": "resume.md row 7: a report beside uncommitted changes in its owned paths is unreported, and no commit touched them, so Step 2"},
+        {"step": 3, "subpath": "gated/<wave>-<task>", "op": "write", "path": "gated/0-alpha", "content": "",
+         "resume": {"phase": "2", "row": 7}, "cite": "resume.md wave_reports: with no gated/ dir yet, wave 0 counts through its commit, so alpha is reported and beta, with no report, sends row 7 to Step 2 at wave 1"},
+        {"step": 2, "subpath": "tree", "op": "edit", "file": "b.py", "content": "beta = 2\n",
+         "resume": {"phase": "2", "row": 7}, "cite": "resume.md row 7: beta has no report, Step 2 at wave 1"},
+        {"step": 2, "subpath": "reports/<task>.json", "op": "write", "path": "reports/beta.json", "content": "{\"task\": \"beta\", \"status\": \"done\"}\n",
+         "resume": {"phase": "2", "row": 7}, "cite": "resume.md row 7: beta has no report under either name"},
+        {"step": 3, "subpath": "baseline-<wave>.txt", "op": "write", "path": "baseline-1.txt", "content": "exit: 0\nok\n",
+         "blind": "resume.md's baseline field: the probe never reads baseline-<wave>.txt"},
+        {"step": 3, "subpath": "branch", "op": "commit", "paths": ["b.py"], "message": "feat: beta",
+         "resume": {"phase": "2", "row": 7}, "cite": "resume.md row 7: beta's report sits beside an uncommitted b.py"},
+        {"id": "waves-settled", "step": 3, "subpath": "gated/<wave>-<task>", "op": "write", "path": "gated/1-beta", "content": "",
+         "resume": {"phase": "2", "row": 7}, "cite": "resume.md wave_reports: a run with a gated/ dir counts only markers, so beta, reported under <task>.json with clean paths and no marker, is unreported and row 7 reverts and re-dispatches it"},
+        {"step": 3, "subpath": "timing.log", "op": "append", "path": "timing.log", "content": "2 end 2026-01-01T09:00:00Z\n3 start 2026-01-01T09:00:00Z\n",
+         "blind": "a build stamp only lowers the ratio review_over_budget reads"},
+        {"step": 3, "subpath": "review/self-<round>.md.tmp", "op": "write", "path": "review/self-1.md.tmp", "content": "## Standards\n\nok\n\n## Spec\n\nok\n\n## Ponytail\n\nponytail-review not installed; skipped\n",
+         "blind": "SKILL.md Step 3: the probe counts review/self-*.md alone, so a stop before the rename leaves no self-review and row 8 runs code-review again"},
+        {"step": 3, "subpath": "review/self-<round>.md", "op": "rename", "path": "review/self-1.md.tmp", "to": "review/self-1.md",
+         "resume": {"phase": "3", "row": 8}, "cite": "resume.md row 8: every wave task reported, beta through reports/<task>.json and its marker; no review/self-*.md"},
+        {"id": "build-final", "step": 3, "subpath": "reports/build-final.json", "op": "write", "path": "reports/build-final.json", "content": "{\"task\": \"build\", \"claims\": [{\"claim\": \"alpha is set\", \"path\": \"a.py\"}]}\n",
+         "resume": {"phase": "3", "row": 9}, "cite": "resume.md row 9: review/self-* present, no reports/build-final.json"},
+        {"step": 4, "subpath": "timing.log", "op": "append", "path": "timing.log", "content": "3 end 2026-01-01T10:00:00Z\n4 start 2026-01-01T10:00:00Z\n",
+         "blind": "the Step 4 start adds no review time until a later stamp closes it"},
+        {"step": 4, "subpath": "redteam/round-<k>.json", "op": "write", "path": "redteam/round-1.json", "content": "```json\n{\"verdicts\": [{\"claim\": \"alpha is set\", \"verdict\": \"REPRODUCED\", \"reproduced_at\": \"seam\"}], \"left_checks\": []}\n```\n",
+         "resume": {"phase": "4", "row": 10}, "cite": "resume.md row 10: build-final.json, no redteam/round-*.json"},
+        {"step": 4, "subpath": "redteam/trigger.txt", "op": "write", "path": "redteam/trigger.txt", "content": "fired: yes\ngit diff BASE_SHA..HEAD | adversarial-review/scripts/match-triggers.py rows --only 1,2,4\n2 authz\n",
+         "resume": {"phase": "4", "row": 11}, "cite": "resume.md row 11: red-team clean, trigger.txt absent, so Step 4 at the trigger"},
+        {"id": "ar-state", "step": 4, "subpath": "redteam/ar-state.txt", "op": "write", "path": "redteam/ar-state.txt", "content": ".adversarial-review/runs/1\nblocking (REPRODUCED): 0 UNVERIFIED: 0\n",
+         "resume": {"phase": "4", "row": 11}, "cite": "resume.md row 11: fired: yes with no ar-state.txt showing UNVERIFIED: 0, so Step 4 at the adversarial-review invocation"},
+        {"step": 5, "subpath": "timing.log", "op": "append", "path": "timing.log", "content": "4 end 2026-01-01T10:30:00Z\n5 start 2026-01-01T10:30:00Z\n",
+         "blind": "Step 5's label counts toward neither total (run-state.py budget)"},
+        {"step": 5, "subpath": "origin", "op": "upstream", "file": "upstream.txt", "content": "one\n",
+         "blind": "origin's default branch moving is the world's write, not the skill's, and resume.md's base_sha_state stays current until the branch takes it"},
+        {"step": 5, "subpath": "branch", "op": "rebase",
+         "resume": {"phase": "5", "row": 13}, "cite": "resume.md row 13: red-team clean, trigger recorded, no triage round, no PR"},
+        {"step": 5, "subpath": "base_sha", "op": "write", "path": "base_sha", "content": "{merge_base}\n",
+         "resume": {"phase": "stop", "row": null}, "cite": "resume.md: a base_sha_state of not-merge-base answers stop naming the mismatch unless conflict or rebase_in_progress; Step 5 item 2 rewrites the file only after the rebase it proves"},
+        {"step": 5, "subpath": "pushed_at", "op": "write", "path": "pushed_at", "content": "2026-01-01T10:45:00Z\n",
+         "resume": {"phase": "5", "row": 13}, "cite": "resume.md row 13: no PR"},
+        {"step": 5, "subpath": "push", "op": "push",
+         "resume": {"phase": "5", "row": 13}, "cite": "resume.md row 13: no PR, and local HEAD ahead of origin"},
+        {"step": 5, "subpath": "pr-body.md", "op": "write", "path": "pr-body.md", "content": "Closes #1\n",
+         "blind": "probe never reads pr-body.md; Step 5 item 5 renders it again before gh pr create"},
+        {"step": 5, "subpath": "pr", "op": "pr", "bundle": "open-quiet",
+         "resume": {"phase": "5", "row": 13}, "cite": "resume.md row 13: no PR yet"},
+        {"step": 6, "subpath": "timing.log", "op": "append", "path": "timing.log", "content": "5 end 2026-01-01T10:50:00Z\n6 start 2026-01-01T10:50:00Z\npoll start 2026-01-01T10:50:00Z\n",
+         "blind": "poll time comes off review, so these stamps add none"},
+        {"step": 6, "subpath": "review/poll-<k>.json", "op": "write", "path": "review/poll-1.json", "content": "{}\n",
+         "blind": "probe never reads review/poll-<k>.json; it scores the bundle the gather block saves outside RUN_DIR"},
+        {"step": 6, "subpath": "timing.log", "op": "append", "path": "timing.log", "content": "poll end 2026-01-01T11:20:00Z\n6 end 2026-01-01T11:20:00Z\n",
+         "blind": "the poll covers the whole Step 6 bracket, so these stamps add no review time"},
+        {"step": 6, "subpath": "triage/waiting", "op": "write", "path": "triage/waiting", "content": "no review yet\n",
+         "blind": "probe never reads triage/waiting; row 14 polls again (SKILL.md Step 6's cap stop)"},
+        {"step": 6, "subpath": "pr", "op": "pr", "bundle": "open-round1",
+         "resume": {"phase": "6", "row": 14}, "cite": "resume.md row 14: PR open, review pending, no triage row, no queue row"},
+        {"step": 6, "subpath": "timing.log", "op": "append", "path": "timing.log", "content": "6 start 2026-01-01T11:35:00Z\npoll start 2026-01-01T11:35:00Z\npoll end 2026-01-01T11:36:00Z\n",
+         "blind": "poll stamps add no review time"},
+        {"step": 6, "subpath": "review/poll-<k>.json", "op": "write", "path": "review/poll-1.json", "content": "{\"state\": \"findings\"}\n",
+         "blind": "probe never reads review/poll-<k>.json"},
+        {"step": 6, "subpath": "triage/round-<k>.md", "op": "write", "path": "triage/round-1.md", "content": "# Triage round 1, since 2026-01-01T10:45:00Z\n\n| # | Source | Finding | Severity | Scope | Reply |\n|---|---|---|---|---|---|\n| 1 | https://github.com/o/r/pull/9#discussion_r1 | the guard reads the wrong field | P1 | in scope | |\n| 2 | https://github.com/o/r/pull/9#discussion_r2 | rename the helper | P2 | out of scope: not in the diff | |\n",
+         "resume": {"phase": "6", "row": 15}, "cite": "resume.md row 15: PR open, findings, no triage round against the current SINCE"},
+        {"step": 6, "subpath": "queue.md", "op": "write", "path": "queue.md", "content": "| # | Source | Finding | Outside because | Recommendation | Status |\n|---|---|---|---|---|---|\n| 1 | https://github.com/o/r/pull/9#discussion_r2 | rename the helper | not in the diff under review | `file-issue` - rename the helper | queued |\n",
+         "resume": {"phase": "7", "row": 16}, "cite": "resume.md row 16: newest round has an in-scope row not yet queued, no reports/repair-1.json; triage_rounds 1 is under the cap of 2"},
+        {"step": 7, "subpath": "timing.log", "op": "append", "path": "timing.log", "content": "6 end 2026-01-01T11:40:00Z\n7 start 2026-01-01T11:40:00Z\n",
+         "blind": "four minutes of review against 170 of build stays far under the ratio"},
+        {"step": 7, "subpath": "redteam/repair-base-<k>", "op": "write", "path": "redteam/repair-base-1", "content": "{head}\n",
+         "resume": {"phase": "7", "row": 16}, "cite": "resume.md row 16"},
+        {"step": 7, "subpath": "tree", "op": "edit", "file": "a.py", "content": "alpha = 1\nguard = alpha\n",
+         "resume": {"phase": "7", "row": 16}, "cite": "resume.md row 16: still no repair-1.json"},
+        {"step": 7, "subpath": "baseline-repair-<n>.txt", "op": "write", "path": "baseline-repair-1.txt", "content": "exit: 0\nok\n",
+         "blind": "resume.md's baseline field: the probe never reads baseline-repair-<n>.txt"},
+        {"step": 7, "subpath": "branch", "op": "commit", "paths": ["a.py"], "message": "fix: read the right field",
+         "resume": {"phase": "7", "row": 16}, "cite": "resume.md row 16: still no repair-1.json"},
+        {"step": 7, "subpath": "reports/repair-<k>.json", "op": "write", "path": "reports/repair-1.json", "content": "{\"task\": \"repair\", \"claims\": [{\"claim\": \"guard reads alpha\", \"path\": \"a.py\"}]}\n",
+         "resume": {"phase": "7", "row": 16}, "cite": "resume.md row 16: no reports/repair-1.json for round 1"},
+        {"step": 8, "subpath": "timing.log", "op": "append", "path": "timing.log", "content": "7 end 2026-01-01T12:00:00Z\n8 start 2026-01-01T12:00:00Z\n",
+         "blind": "twenty minutes of review stays under the ratio"},
+        {"step": 8, "subpath": "redteam/trigger-repair-<k>.txt", "op": "write", "path": "redteam/trigger-repair-1.txt", "content": "fired: yes\ncondition: severity\n",
+         "resume": {"phase": "8", "row": 17}, "cite": "resume.md row 17: a repair report whose triage round held a P1 row, its adversarial-review not settled, so Step 8 item 1 at the reproducer"},
+        {"step": 8, "subpath": "redteam/ar-state-repair-<k>.txt", "op": "write", "path": "redteam/ar-state-repair-1.txt", "content": ".adversarial-review/runs/2\nblocking (REPRODUCED): 0 UNVERIFIED: 0\n",
+         "resume": {"phase": "8", "row": 17}, "cite": "resume.md row 17: trigger-repair-1.txt fired: yes and no ar-state-repair-1.txt, so the adversarial-review invocation"},
+        {"step": 8, "subpath": "origin", "op": "upstream", "file": "upstream.txt", "content": "one\ntwo\n",
+         "blind": "origin's default branch moving is the world's write; base_sha_state stays current until the branch takes it"},
+        {"step": 8, "subpath": "branch", "op": "rebase",
+         "resume": {"phase": "8", "row": 17}, "cite": "resume.md row 17: a repair report with local ahead of origin"},
+        {"step": 8, "subpath": "base_sha", "op": "write", "path": "base_sha", "content": "{merge_base}\n",
+         "resume": {"phase": "stop", "row": null}, "cite": "resume.md: not-merge-base stops naming the mismatch; Step 8 item 2 repeats Step 5 item 2's rewrite after the rebase"},
+        {"step": 8, "subpath": "pushed_at", "op": "write", "path": "pushed_at", "content": "2026-01-01T12:10:00Z\n",
+         "resume": {"phase": "8", "row": 17}, "cite": "resume.md row 17: a repair report with local ahead of origin"},
+        {"step": 8, "subpath": "push", "op": "push", "force": true,
+         "resume": {"phase": "8", "row": 17}, "cite": "resume.md row 17: still ahead of origin; the round is now stale against SINCE, which row 17's unanswered leg ignores"},
+        {"step": 8, "subpath": "triage/round-<k>.md", "op": "write", "path": "triage/round-1.md", "content": "# Triage round 1, since 2026-01-01T10:45:00Z\n\n| # | Source | Finding | Severity | Scope | Reply |\n|---|---|---|---|---|---|\n| 1 | https://github.com/o/r/pull/9#discussion_r1 | the guard reads the wrong field | P1 | in scope | https://github.com/o/r/pull/9#discussion_r11 |\n| 2 | https://github.com/o/r/pull/9#discussion_r2 | rename the helper | P2 | out of scope: not in the diff | https://github.com/o/r/pull/9#discussion_r12 |\n",
+         "resume": {"phase": "8", "row": 17}, "cite": "resume.md row 17: a repair report with a triage row without a reply URL; SKILL.md Step 8 item 3 says a stop between push and replies resumes at row 17"},
+        {"step": 8, "subpath": "pr", "op": "pr", "bundle": "open-round1-deferred",
+         "resume": {"phase": "8", "row": 17}, "cite": "resume.md row 17: a queue row missing from the Deferred findings comment"},
+        {"step": 8, "subpath": "timing.log", "op": "append", "path": "timing.log", "content": "8 end 2026-01-01T12:20:00Z\n",
+         "blind": "closes Step 8 at twenty minutes, still under the ratio"},
+        {"step": 6, "subpath": "pr", "op": "pr", "bundle": "open-round2",
+         "resume": {"phase": "6", "row": 14}, "cite": "resume.md row 14: PR open, pending against the new SINCE, every triage row answered, every queue row in the comment"},
+        {"step": 6, "subpath": "timing.log", "op": "append", "path": "timing.log", "content": "6 start 2026-01-01T13:35:00Z\npoll start 2026-01-01T13:35:00Z\npoll end 2026-01-01T13:36:00Z\n",
+         "blind": "poll stamps add no review time"},
+        {"step": 6, "subpath": "review/poll-<k>.json", "op": "write", "path": "review/poll-1.json", "content": "{\"state\": \"findings\"}\n",
+         "blind": "probe never reads review/poll-<k>.json"},
+        {"step": 6, "subpath": "triage/round-<k>.md", "op": "write", "path": "triage/round-2.md", "content": "# Triage round 2, since 2026-01-01T12:10:00Z\n\n| # | Source | Finding | Severity | Scope | Reply |\n|---|---|---|---|---|---|\n| 1 | https://github.com/o/r/pull/9#discussion_r3 | tidy the loop | P2 | in scope; queued: review round cap reached (2) | |\n",
+         "resume": {"phase": "6", "row": 15}, "cite": "resume.md row 15 and triage_newer_than_since: a finding posted after Step 8's replies, and round 1's heading records the old SINCE, so it is not current however recently its replies touched the file (#139)"},
+        {"step": 6, "subpath": "queue.md", "op": "append", "path": "queue.md", "content": "| 2 | https://github.com/o/r/pull/9#discussion_r3 | tidy the loop | review round cap reached (2) | `file-issue` - tidy the loop | queued |\n",
+         "resume": {"phase": "8", "row": 17}, "cite": "resume.md row 17: an all-queued triage round with a triage row without a reply URL; row 16 skips it because its only in-scope row is queued at the cap"},
+        {"step": 8, "subpath": "timing.log", "op": "append", "path": "timing.log", "content": "6 end 2026-01-01T13:40:00Z\n8 start 2026-01-01T13:40:00Z\n",
+         "blind": "a few minutes of review stays under the ratio"},
+        {"step": 8, "subpath": "triage/round-<k>.md", "op": "write", "path": "triage/round-2.md", "content": "# Triage round 2, since 2026-01-01T12:10:00Z\n\n| # | Source | Finding | Severity | Scope | Reply |\n|---|---|---|---|---|---|\n| 1 | https://github.com/o/r/pull/9#discussion_r3 | tidy the loop | P2 | in scope; queued: review round cap reached (2) | https://github.com/o/r/pull/9#discussion_r13 |\n",
+         "resume": {"phase": "8", "row": 17}, "cite": "resume.md row 17: an all-queued round with a triage row without a reply URL"},
+        {"step": 8, "subpath": "pr", "op": "pr", "bundle": "open-round2-deferred",
+         "resume": {"phase": "8", "row": 17}, "cite": "resume.md row 17: queue row 2 missing from the Deferred findings comment"},
+        {"step": 8, "subpath": "timing.log", "op": "append", "path": "timing.log", "content": "8 end 2026-01-01T13:50:00Z\n",
+         "blind": "closes Step 8, still under the ratio"},
+        {"step": 8, "subpath": "pr", "op": "pr", "bundle": "open-cleared",
+         "resume": {"phase": "done", "row": 18}, "cite": "resume.md row 18: findings with the round triaged, answered, and its queue published"},
+        {"step": 8, "subpath": "pr", "op": "pr", "bundle": "merged",
+         "resume": {"phase": "done", "row": 18}, "cite": "resume.md row 18: cleared"},
+        {"step": 8, "subpath": "queue.md", "op": "write", "path": "queue.md", "content": "| # | Source | Finding | Outside because | Recommendation | Status |\n|---|---|---|---|---|---|\n| 1 | https://github.com/o/r/pull/9#discussion_r2 | rename the helper | not in the diff under review | `file-issue` - rename the helper | filed #12 |\n| 2 | https://github.com/o/r/pull/9#discussion_r3 | tidy the loop | review round cap reached (2) | `file-issue` - tidy the loop | dismissed: duplicate of #12 |\n",
+         "resume": {"phase": "stop", "row": 1}, "cite": "resume.md row 1: PR merged, queue_unfiled_rows is 2, so stop for the filing pass"}
+      ],
+      "end": {"phase": "done", "row": 1}, "end_cite": "resume.md row 1: merged, every queue row filed or dismissed, so done and offer cleanup"
+    },
+    {
+      "name": "herdr",
+      "about": "A herdr agent working, then blocked, mid-Step 2.",
+      "run_dir": "issue-1",
+      "probe": {"issue": 1},
+      "prefix": {"sequence": "main", "through": "baseline"},
+      "entries": [
+        {"step": 2, "subpath": "herdr", "op": "herdr", "state": "working",
+         "resume": {"phase": "2", "row": 7}, "cite": "resume.md row 7: no task reported, Step 2 at wave 0"},
+        {"step": 2, "subpath": "tree", "op": "edit", "file": "a.py", "content": "alpha = 1\n",
+         "resume": {"phase": "wait", "row": 2}, "cite": "resume.md row 2: HERDR and agent working, wait and re-probe"},
+        {"step": 2, "subpath": "reports/<task>.json", "op": "write", "path": "reports/alpha.json", "content": "{\"task\": \"alpha\", \"status\": \"done\"}\n",
+         "resume": {"phase": "wait", "row": 2}, "cite": "resume.md row 2"},
+        {"step": 2, "subpath": "herdr", "op": "herdr", "state": "blocked",
+         "resume": {"phase": "wait", "row": 2}, "cite": "resume.md row 2"},
+        {"step": 2, "subpath": "herdr", "op": "herdr", "state": "idle",
+         "resume": {"phase": "stop", "row": 3}, "cite": "resume.md row 3: HERDR and agent blocked, show the blocked UI and stop"}
+      ],
+      "end": {"phase": "2", "row": 7}, "end_cite": "resume.md row 7: alpha's report sits beside an uncommitted a.py, so it is unreported and Step 2 reverts and re-dispatches it"
+    },
+    {
+      "name": "conflict",
+      "about": "A Step 5 rebase that stops on a conflict, resolved by hand.",
+      "run_dir": "issue-1",
+      "probe": {"issue": 1},
+      "prefix": {"sequence": "main", "through": "ar-state"},
+      "entries": [
+        {"step": 5, "subpath": "origin", "op": "upstream", "file": "a.py", "content": "alpha = 99\n",
+         "blind": "origin's default branch moving is the world's write; base_sha_state stays current until the branch takes it"},
+        {"step": 5, "subpath": "branch", "op": "rebase", "conflict": true,
+         "resume": {"phase": "5", "row": 13}, "cite": "resume.md row 13: red-team clean, trigger recorded, no triage round, no PR"},
+        {"step": 5, "subpath": "conflict.txt", "op": "write", "path": "conflict.txt", "content": "a.py\n",
+         "resume": {"phase": "5", "row": 12}, "cite": "resume.md row 12: a rebase in progress, so Step 5 item 1"},
+        {"step": 5, "subpath": "branch", "op": "resolve", "file": "a.py", "content": "alpha = 99\n",
+         "resume": {"phase": "5", "row": 12}, "cite": "resume.md row 12: conflict.txt exists and a rebase is in progress"},
+        {"step": 5, "subpath": "base_sha", "op": "write", "path": "base_sha", "content": "{merge_base}\n",
+         "resume": {"phase": "5", "row": 12}, "cite": "resume.md: base_sha drift does not stop while conflict.txt exists, and row 12 sends the run to Step 5 item 1, then item 2, which rewrites it"},
+        {"step": 5, "subpath": "conflict.txt", "op": "remove", "path": "conflict.txt",
+         "resume": {"phase": "5", "row": 12}, "cite": "resume.md conflict field: a marker with no rebase in progress is a stop between items 1 and 2, and row 12 sends it back to item 1"}
+      ],
+      "end": {"phase": "5", "row": 13}, "end_cite": "resume.md row 13: red-team clean, trigger recorded, no triage round, no PR"
+    },
+    {
+      "name": "redteam-fail",
+      "about": "Two failed red-team rounds with a repair between them.",
+      "run_dir": "issue-1",
+      "probe": {"issue": 1},
+      "prefix": {"sequence": "main", "through": "build-final"},
+      "entries": [
+        {"step": 4, "subpath": "redteam/round-<k>.json", "op": "write", "path": "redteam/round-1.json", "content": "{\"verdicts\": [{\"claim\": \"alpha is set\", \"verdict\": \"NOT_REPRODUCED\", \"reproduced_at\": null}]}\n",
+         "resume": {"phase": "4", "row": 10}, "cite": "resume.md row 10: build-final.json, no redteam round"},
+        {"step": 4, "subpath": "tree", "op": "edit", "file": "a.py", "content": "alpha = 2\n",
+         "resume": {"phase": "4", "row": 10}, "cite": "resume.md row 10: newest round failed, so the repair dispatch"},
+        {"step": 4, "subpath": "baseline-repair-<n>.txt", "op": "write", "path": "baseline-repair-1.txt", "content": "exit: 0\nok\n",
+         "blind": "resume.md's baseline field: the probe never reads baseline-repair-<n>.txt"},
+        {"step": 4, "subpath": "branch", "op": "commit", "paths": ["a.py"], "message": "fix: alpha",
+         "resume": {"phase": "4", "row": 10}, "cite": "resume.md row 10: newest round failed, no repair report after it, so the repair dispatch"},
+        {"step": 4, "subpath": "reports/redteam-repair-<k>.json", "op": "write", "path": "reports/redteam-repair-1.json", "content": "{\"task\": \"repair\", \"claims\": [{\"claim\": \"alpha is set\", \"path\": \"a.py\"}]}\n",
+         "resume": {"phase": "4", "row": 10}, "cite": "resume.md row 10: the repair dispatch"},
+        {"step": 4, "subpath": "redteam/round-<k>.json", "op": "write", "path": "redteam/round-2.json", "content": "{\"verdicts\": [{\"claim\": \"alpha is set\", \"verdict\": \"NOT_REPRODUCED\", \"reproduced_at\": null}]}\n",
+         "resume": {"phase": "4", "row": 10}, "cite": "resume.md row 10: a repair report followed the failed round, so round k+1"}
+      ],
+      "end": {"phase": "stop", "row": 10}, "end_cite": "resume.md row 10: two failed rounds in a row stop with the evidence"
+    },
+    {
+      "name": "plan-gate",
+      "about": "A branch that exists before the plan carries its ## Waves table.",
+      "run_dir": "issue-1",
+      "probe": {"issue": 1},
+      "entries": [
+        {"step": 0, "subpath": "branch", "op": "branch",
+         "resume": {"phase": "0", "row": 4}, "cite": "resume.md row 4: no branch, no RUN_DIR"},
+        {"step": 0, "subpath": "issue.md", "op": "write", "path": "issue.md", "content": "# Issue 1\n",
+         "resume": {"phase": "0", "row": 6}, "cite": "resume.md row 6: branch exists, no plan.md, so no ## Waves"},
+        {"step": 0, "subpath": "plan.md", "op": "write", "path": "plan.md", "content": "# Plan\n",
+         "resume": {"phase": "0", "row": 6}, "cite": "resume.md row 6: Step 0 at the plan gate"},
+        {"step": 0, "subpath": "plan.md", "op": "write", "path": "plan.md", "content": "# Plan\n\n## Waves\n\n| Wave | Task | Files owned | Model | Done when | Constraints |\n|---|---|---|---|---|---|\n| 0 | alpha | a.py | sonnet | a.py exists | |\n",
+         "resume": {"phase": "0", "row": 6}, "cite": "resume.md row 6: plan.md has no ## Waves"}
+      ],
+      "end": {"phase": "1", "row": 7}, "end_cite": "resume.md row 7: ## Waves present, no base_sha, so Step 1"
+    },
+    {
+      "name": "adopted",
+      "about": "A pull request this skill did not open, adopted at Step 6.",
+      "run_dir": "pr-7",
+      "probe": {"pr": 7},
+      "branch": "fix/thing",
+      "bundle": "adopt-open",
+      "setup": [
+        {"op": "upstream", "branch": "fix/thing", "file": "c.py", "content": "gamma = 3\n"}
+      ],
+      "entries": [
+        {"step": 6, "subpath": "branch", "op": "worktree",
+         "resume": {"exit": 3}, "cite": "resume.md Gather item 4: --pr M with adopted.json missing exits 3; SKILL.md Adopt item 4 reruns adoption from item 5"},
+        {"step": 6, "subpath": "issue.md", "op": "write", "path": "issue.md", "content": "# PR #7\n\nFix the retry.\n",
+         "resume": {"exit": 3}, "cite": "resume.md Gather item 4: no adopted.json"},
+        {"step": 6, "subpath": "baseline.txt", "op": "write", "path": "baseline.txt", "content": "exit: 0\nok\n",
+         "resume": {"exit": 3}, "cite": "resume.md Gather item 4: no adopted.json"},
+        {"step": 6, "subpath": "base_sha", "op": "write", "path": "base_sha", "content": "{merge_base}\n",
+         "resume": {"exit": 3}, "cite": "resume.md Gather item 4: no adopted.json"},
+        {"step": 6, "subpath": "pushed_at", "op": "write", "path": "pushed_at", "content": "2026-01-01T09:30:00Z\n",
+         "resume": {"exit": 3}, "cite": "resume.md Gather item 4: no adopted.json"},
+        {"step": 6, "subpath": "max_review_rounds", "op": "write", "path": "max_review_rounds", "content": "2\n",
+         "resume": {"exit": 3}, "cite": "resume.md Gather item 4: no adopted.json"},
+        {"step": 6, "subpath": "adopted.json", "op": "write", "path": "adopted.json", "content": "{\"pr\": 7, \"head\": \"fix/thing\", \"invoker\": \"kendrick\"}\n",
+         "resume": {"exit": 3}, "cite": "resume.md Gather item 4: no adopted.json; SKILL.md Adopt item 9 writes it last"},
+        {"step": 6, "subpath": "triage/round-<k>.md", "op": "write", "path": "triage/round-1.md", "content": "# Triage round 1, since 2026-01-01T09:30:00Z\n\n| # | Source | Finding | Severity | Scope | Reply |\n|---|---|---|---|---|---|\n| 1 | https://github.com/o/r/pull/7#discussion_r9 | the retry never backs off | P1 | in scope | |\n",
+         "resume": {"phase": "6", "row": 19}, "cite": "resume.md row 19: adopted.json, no triage round yet, so Step 6's first adopted pass"}
+      ],
+      "end": {"phase": "7", "row": 16}, "end_cite": "resume.md row 19 falls through to row 16: the newest round has an in-scope row not yet queued and no repair-1.json"
+    }
+  ]
+}
