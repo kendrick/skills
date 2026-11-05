@@ -4530,4 +4530,148 @@ require_text work-issue/SKILL.md "gh api repos/{owner}/{repo} --jq '{squash: .al
 require_text work-issue/SKILL.md "the message carries one more clause, \`squash-only repo: in-branch commits get bare subjects\`, ahead of \"Go?\""
 require_text work-issue/SKILL.md "5. The body goes through \`technical-writing\` on its pull-request-description profile"
 
+# --- crash points ---
+# #147: resume_checks.py replays every write the skill makes and asks the real
+# probe and phase where a crash before each one resumes. The model is checked
+# against SKILL.md's own words, so a subpath the prose gains and the model never
+# writes is a crash point nobody checked.
+crash_checks=work-issue/scripts/resume_checks.py
+crash_model=work-issue/scripts/write-order.json
+require_file "$crash_checks"
+require_file "$crash_model"
+python3 - "$crash_model" work-issue/SKILL.md <<'PY'
+import json, re, sys
+model = json.load(open(sys.argv[1]))
+skill = open(sys.argv[2]).read().splitlines()
+bullet = [line for line in skill if line.startswith("- **RUN_DIR** —")]
+if len(bullet) != 1:
+    sys.exit(f"#147: expected one RUN_DIR bullet in SKILL.md, found {len(bullet)}")
+listed = re.search(r"Subpaths: (.*?)\. ", bullet[0])
+prose = set(re.findall(r"`([^`]+)`", listed.group(1))) if listed else set()
+# Under a dozen means the parse broke, and an empty set would pass every check below.
+if len(prose) < 12:
+    sys.exit(f"#147: parsed only {sorted(prose)} from SKILL.md's RUN_DIR subpaths")
+for line in skill:
+    if line.startswith("**Done when:**"):
+        prose |= set(re.findall(r"`RUN_DIR/([^`]+)`", line))
+entries = [e for seq in model["sequences"] for e in seq["entries"]]
+modelled = {e["subpath"] for e in entries}
+def covers(spelled, sub):
+    return sub == spelled or (spelled.endswith("/") and sub.startswith(spelled))
+problems = [f"SKILL.md names RUN_DIR/{p} and no model entry writes it" for p in sorted(prose) if not any(covers(p, s) for s in modelled)]
+# The world-side writes SKILL.md names in its steps rather than its RUN_DIR bullet.
+world = {"branch", "push", "pr", "tree", "herdr", "origin"}
+problems += [f"model writes {s}, which SKILL.md never names" for s in sorted(modelled - world) if not any(covers(p, s) for p in prose)]
+problems += [f"model entry {e.get('id', e['subpath'])} is blind with no reason" for e in entries if "blind" in e and not str(e["blind"]).strip()]
+if problems:
+    sys.exit("#147: " + "\n#147: ".join(problems))
+PY
+# The pin above checks the shipped model; this checks that the generator itself
+# refuses an unexplained blind write, rather than counting it as checked.
+python3 - "$crash_model" "$tmp/crash-blank-blind.json" <<'PY'
+import json, sys
+model = json.load(open(sys.argv[1]))
+next(e for s in model["sequences"] for e in s["entries"] if "blind" in e)["blind"] = " "
+json.dump(model, open(sys.argv[2], "w"))
+PY
+set +e
+blank_err="$(python3 "$crash_checks" crash-points --model "$tmp/crash-blank-blind.json" 2>&1)"
+blank_status=$?
+set -e
+[[ "$blank_status" == "3" ]] && grep -Fq "blind needs a reason" <<<"$blank_err" || {
+  echo "#147: crash-points on a blind entry with a blank reason should exit 3 naming it, got $blank_status: $blank_err" >&2
+  exit 1
+}
+
+# Each copy holds adversarial-review/ too, since probe runs its
+# match-triggers.py from beside this skill. The copies sit under $tmp with no
+# .git, so nothing run in them can reach this checkout's index.
+crash_copy() {
+  mkdir -p "$1/tests/fixtures"
+  cp -R work-issue adversarial-review "$1/"
+  cp -R tests/fixtures/work-issue "$1/tests/fixtures/"
+  if git -C "$1" rev-parse --git-dir >/dev/null 2>&1; then
+    echo "#147: scratch copy $1 sits inside a git repository" >&2
+    exit 1
+  fi
+}
+# Removing one row from phase_of must fail the check, or the row isn't part
+# of the answer. Row 19's returns become assignments, found with ast so a
+# reworded reason can't make the rewrite miss in silence. Only the adopted
+# sequence runs, since it alone expects row 19 and the full model costs over a
+# minute more.
+crash_copy "$tmp/crash-row"
+python3 - "$tmp/crash-row/work-issue/scripts/run-state.py" 19 <<'PY'
+import ast, re, sys
+path, row = sys.argv[1], int(sys.argv[2])
+tree = ast.parse(open(path).read())
+def head(node):
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.JoinedStr) and node.values:
+        return head(node.values[0])
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        return head(node.left)
+    return ""
+class Disable(ast.NodeTransformer):
+    hits = 0
+    def visit_Return(self, node):
+        value = node.value
+        if isinstance(value, ast.Tuple) and len(value.elts) == 2 and re.match(rf"row {row}:", head(value.elts[1])):
+            self.hits += 1
+            return ast.copy_location(ast.Assign(targets=[ast.Name("_disabled", ast.Store())], value=value), node)
+        return node
+fn = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "phase_of")
+disable = Disable()
+disable.visit(fn)
+if not disable.hits:
+    sys.exit(f"#147: no return in phase_of starts row {row}:")
+open(path, "w").write(ast.unparse(ast.fix_missing_locations(tree)) + "\n")
+PY
+if cmp -s "$run_state" "$tmp/crash-row/work-issue/scripts/run-state.py"; then
+  echo "#147: the row 19 rewrite left run-state.py unchanged" >&2
+  exit 1
+fi
+python3 - "$crash_model" "$tmp/crash-row/adopted.json" <<'PY'
+import json, sys
+model = json.load(open(sys.argv[1]))
+model["sequences"] = [s for s in model["sequences"] if s["name"] == "adopted"]
+json.dump(model, open(sys.argv[2], "w"))
+PY
+# The generator must never read tests/fixtures/, since a fixture is the one
+# state somebody thought of, so renaming one must leave its output byte for
+# byte as it was.
+crash_copy "$tmp/crash-fixture"
+mv "$tmp/crash-fixture/tests/fixtures/work-issue/probes/row-01.json" "$tmp/crash-fixture/tests/fixtures/work-issue/probes/row-01-renamed.json"
+# All three replays at once: each builds its own scratch repos and spends its
+# time waiting on probe subprocesses, so together they take about as long as
+# the shipped run alone.
+crash_run() {
+  set +e
+  python3 "$1" crash-points --model "$2" >"$3.out" 2>"$3.err"
+  echo "$?" >"$3.status"
+}
+crash_run "$crash_checks" "$crash_model" "$tmp/crash-shipped" &
+crash_run "$tmp/crash-row/$crash_checks" "$tmp/crash-row/adopted.json" "$tmp/crash-row" &
+crash_run "$tmp/crash-fixture/$crash_checks" "$tmp/crash-fixture/$crash_model" "$tmp/crash-fixture" &
+wait
+[[ "$(cat "$tmp/crash-shipped.status")" == "0" ]] \
+  && [[ "$(cat "$tmp/crash-shipped.out")" == "rows covered: 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19" ]] || {
+  echo "#147: crash-points on the shipped model should exit 0 with every row covered, got $(cat "$tmp/crash-shipped.status"):" >&2
+  cat "$tmp/crash-shipped.out" "$tmp/crash-shipped.err" >&2
+  exit 1
+}
+[[ "$(cat "$tmp/crash-row.status")" == "1" ]] \
+  && grep -Eq '^adopted#[0-9]+ [^:]+: expected [^ ]+ row 19, got ' "$tmp/crash-row.out" || {
+  echo "#147: crash-points with row 19 disabled should exit 1 naming a prefix that expected row 19, got $(cat "$tmp/crash-row.status"):" >&2
+  cat "$tmp/crash-row.out" "$tmp/crash-row.err" >&2
+  exit 1
+}
+cmp -s "$tmp/crash-shipped.out" "$tmp/crash-fixture.out" \
+  && [[ "$(cat "$tmp/crash-fixture.status")" == "0" ]] || {
+  echo "#147: renaming a probe fixture changed crash-points' output:" >&2
+  diff "$tmp/crash-shipped.out" "$tmp/crash-fixture.out" >&2 || true
+  exit 1
+}
+
 echo "work-issue smoke: OK"

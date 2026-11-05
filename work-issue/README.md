@@ -47,7 +47,7 @@ git clone git@github.com:kendrick/skills.git
 cp -R skills/work-issue ~/.claude/skills/work-issue
 ```
 
-Needs a git repo and Python 3 for the five bundled scripts, which are stdlib-only. Needs `gh` authenticated too, since the opening gate cannot read the issue without it and would invent the acceptance criteria. It invokes `divvy-up`, `code-review`, `adversarial-review`, and `technical-writing` by name, and the step that needs a missing one stops and says which. An issue with no plan needs a planner: `writing-plans` where it's installed, otherwise the harness's plan mode, and with neither the run refuses. `ponytail-review` is optional: where it's installed, the run invokes it after `code-review` over the same assembled diff, and where it isn't, the run skips it and goes on. `herdr` is optional; without it the run falls back to `git worktree` and plain subagents.
+Needs a git repo and Python 3 for the six bundled scripts, which are stdlib-only. Needs `gh` authenticated too, since the opening gate cannot read the issue without it and would invent the acceptance criteria. It invokes `divvy-up`, `code-review`, `adversarial-review`, and `technical-writing` by name, and the step that needs a missing one stops and says which. An issue with no plan needs a planner: `writing-plans` where it's installed, otherwise the harness's plan mode, and with neither the run refuses. `ponytail-review` is optional: where it's installed, the run invokes it after `code-review` over the same assembled diff, and where it isn't, the run skips it and goes on. `herdr` is optional; without it the run falls back to `git worktree` and plain subagents.
 
 ## Use
 
@@ -88,7 +88,9 @@ work-issue/
     ├── check-inflight.py       # proves no run in flight owns a path this plan owns
     ├── find-plan.py            # finds issue N's plan in WORK_ISSUE_PLAN_DIRS, ~/.claude/plans by default
     ├── drive.py                # relaunches a confirmed run from outside the session until it reaches a stop that needs you
-    └── run-state.py            # gathers the resume probe and places a run on the phase table; scores a pull request's review; weighs review time against build time
+    ├── run-state.py            # gathers the resume probe and places a run on the phase table; scores a pull request's review; weighs review time against build time
+    ├── resume_checks.py        # replays every write the skill makes and checks where a crash before each one resumes
+    └── write-order.json        # those writes, in order, each with the phase and row a crash before it resumes at
 ```
 
 ## Gotchas
