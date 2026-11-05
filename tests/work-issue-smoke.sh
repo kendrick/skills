@@ -4602,6 +4602,22 @@ set -e
   echo "#147: crash-points on a model removing a file nothing wrote should exit 3 with a replay line, got $replay_status: $replay_err" >&2
   exit 1
 }
+# A null setup crashed the validator with a TypeError, which exits 1 and reads
+# as a resume hole (PR #295 review).
+python3 - "$crash_model" "$tmp/crash-null-setup.json" <<'PY'
+import json, sys
+model = json.load(open(sys.argv[1]))
+model["sequences"][0]["setup"] = None
+json.dump(model, open(sys.argv[2], "w"))
+PY
+set +e
+setup_err="$(python3 "$crash_checks" crash-points --model "$tmp/crash-null-setup.json" 2>&1)"
+setup_status=$?
+set -e
+[[ "$setup_status" == "3" ]] && grep -Fq "setup must be a list" <<<"$setup_err" || {
+  echo "#147: crash-points on a null setup should exit 3 naming it, got $setup_status: $setup_err" >&2
+  exit 1
+}
 
 # Each copy holds adversarial-review/ too, since probe runs its
 # match-triggers.py from beside this skill. The copies sit under $tmp with no

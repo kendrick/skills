@@ -124,7 +124,9 @@ def check_entry(entry, where, bundles, problems, checked):
         problems.append(f"{where}: expected an object")
         return
     op = entry.get("op")
-    if op not in OPS:
+    # A list or object in a field tested with `in` against a dict raises
+    # TypeError, which would exit 1 as if it were a resume hole.
+    if not isinstance(op, str) or op not in OPS:
         problems.append(f"{where}: op {op!r} is not one of {', '.join(OPS)}")
         return
     for key in OPS[op]:
@@ -137,7 +139,9 @@ def check_entry(entry, where, bundles, problems, checked):
             not isinstance(value, str) or not value or value.startswith("/") or ".." in Path(value).parts
         ):
             problems.append(f"{where}: {key} {value!r} must be a relative path with no '..' part")
-    if op == "pr" and entry.get("bundle") is not None and entry.get("bundle") not in bundles:
+    if op == "pr" and entry.get("bundle") is not None and (
+        not isinstance(entry["bundle"], str) or entry["bundle"] not in bundles
+    ):
         problems.append(f"{where}: no bundle named {entry.get('bundle')!r}")
     if op == "herdr" and entry.get("state") not in HERDR_STATES:
         problems.append(f"{where}: herdr state {entry.get('state')!r} is not one of {', '.join(HERDR_STATES)}")
@@ -193,16 +197,25 @@ def check_model(model):
             problems.append(f"{where}: probe must be {{\"issue\": N}} or {{\"pr\": M}}")
         if "branch" in seq and (not isinstance(seq["branch"], str) or not seq["branch"]):
             problems.append(f"{where}: branch must be a non-empty string")
-        if seq.get("bundle") is not None and seq["bundle"] not in bundles:
+        if seq.get("bundle") is not None and (not isinstance(seq["bundle"], str) or seq["bundle"] not in bundles):
             problems.append(f"{where}: no bundle named {seq['bundle']!r}")
-        for i, entry in enumerate(seq.get("setup", [])):
+        setup = seq.get("setup", [])
+        if not isinstance(setup, list):
+            problems.append(f"{where}: setup must be a list")
+            setup = []
+        for i, entry in enumerate(setup):
             check_entry(entry, f"{where} setup[{i}]", bundles, problems, checked=False)
         prefix = seq.get("prefix")
         if prefix is not None:
-            source = seen.get(prefix.get("sequence")) if isinstance(prefix, dict) else None
+            named = prefix.get("sequence") if isinstance(prefix, dict) else None
+            source = seen.get(named) if isinstance(named, str) else None
             if source is None:
                 problems.append(f"{where}: prefix must name an earlier sequence")
-            elif not any(e.get("id") == prefix.get("through") for e in source.get("entries", []) if isinstance(e, dict)):
+            elif not any(
+                e.get("id") == prefix.get("through")
+                for e in (source.get("entries") if isinstance(source.get("entries"), list) else [])
+                if isinstance(e, dict)
+            ):
                 problems.append(f"{where}: {prefix.get('sequence')} has no entry with id {prefix.get('through')!r}")
         entries = seq.get("entries")
         if not isinstance(entries, list) or not entries:
