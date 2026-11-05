@@ -962,6 +962,19 @@ def unknown_fields_stop(names):
     )
 
 
+def null_fields(probe):
+    """The fields `phase_of`'s generic null check stops on, in table order.
+
+    A module-level function so `resume_checks.py invariants` and `liveness`
+    can stub it out: it reads all 39 fields, and their search splits on every
+    field `phase_of` tests."""
+    return [
+        name
+        for name, _, _ in PROBE_FIELDS
+        if name not in ("pr_state", "review_state") and probe[name] is None
+    ]
+
+
 def phase_of(probe):
     """The Resume table, in its own order, first match wins.
 
@@ -991,11 +1004,7 @@ def phase_of(probe):
     # failed `git ls-remote` would then restart a run three steps in as fresh.
     # `pr_state` and `review_state` are the two fields where null is an answer
     # (no pull request yet), so they are exempt.
-    unknown = [
-        name
-        for name, _, _ in PROBE_FIELDS
-        if name not in ("pr_state", "review_state") and probe[name] is None
-    ]
+    unknown = null_fields(probe)
     if unknown:
         return unknown_fields_stop(unknown)
     herdr = probe["herdr_agent_state"]
