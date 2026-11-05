@@ -1107,6 +1107,13 @@ def phase_of(probe):
         # path is a repair's uncommitted edit, and reading it as an unreported
         # task stopped the run instead of resuming the repair at row 9, 10, or
         # 16 (#147).
+        # A `## Waves` table with no numbered task row passes check-plan.py's
+        # has_waves but gives wave_tasks 0, so every wave leg below misses and a
+        # stray rebase sent it to row 12's publish of a build that never ran
+        # (invariants, #148). Nothing in the write order makes this table and
+        # no step can fill it unattended.
+        if flag(probe, "has_waves") and wave_tasks == 0 and count(probe, "self_reviews") == 0:
+            return "stop", "row 7: plan.md's ## Waves table has no task rows; fix the table, then re-invoke"
         if flag(probe, "has_waves") and wave_reports < wave_tasks and count(probe, "self_reviews") == 0:
             # A commit past base_sha on an unreported task's owned paths is a
             # gated wave whose report is missing, not a half-written one. On
