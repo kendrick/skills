@@ -440,6 +440,10 @@ for record in context decision exception policy-rule rule; do
 done
 require_text inbox-to-memory/assets/records/rule.template.md "memory_type: PolicyRule"
 refute_text inbox-to-memory/assets/records/rule.template.md "memory_type: Rule"
+# ltm doctor, validate, and retrieval read only `constrained_by`; `exception_to` stays as the Obsidian link the original memory-bank required (#280, RATIONALE row 53). The lint never checks that the two agree, since that check belongs in ltm if the kit adopts `exception_to`.
+require_text inbox-to-memory/assets/records/exception.template.md "related: ['constrained_by::{{rule-id}}']"
+require_text inbox-to-memory/assets/records/exception.template.md "exception_to: '[[{{rule-id}}|{{rule-short-name}}]]'"
+refute_text "$lint" "constrained_by"
 
 # Relationships and journal sources are flat compound strings now. The refutes are
 # the load-bearing half: the nested forms are what v1 files carry, and a template
@@ -3492,7 +3496,8 @@ if command -v ltm >/dev/null 2>&1; then
   for record in context:context:Sc1Ctx0001 decision:decisions:Sc2Dec0002 exception:exceptions:Sc3Exc0003 policy-rule:rules:Sc4Pol0004 rule:rules:Sc5Rul0005; do
     IFS=: read -r name folder id <<<"$record"
     mkdir -p "$lm_tpl/_memory/$folder"
-    sed -e "s/{{nanoid}}/$id/" -e 's/{{proposed | accepted}}/proposed/' -e 's/{{YYYY-MM-DD}}/2026-11-02/g' \
+    # {{rule-id}} gets the PolicyRule this bank holds, as the agent fills it; ltm rejects the bare placeholder in `related`.
+    sed -e "s/{{nanoid}}/$id/" -e 's/{{proposed | accepted}}/proposed/' -e 's/{{YYYY-MM-DD}}/2026-11-02/g' -e 's/{{rule-id}}/Sc4Pol0004/g' \
       "inbox-to-memory/assets/records/$name.template.md" >"$lm_tpl/_memory/$folder/$name.md"
   done
   lm_rc=0
@@ -3503,6 +3508,31 @@ if command -v ltm >/dev/null 2>&1; then
     exit 1
   }
   refute_text <(printf '%s\n' "$lm_vout") "body-sections"
+
+  # An Exception scaffolded from the template and 31 days old draws no `orphan`, because its `constrained_by` entry is a link doctor reads (#280). The case holds doctor's whole output to `[]`, so a link to a PolicyRule the bank lacks fails here as `broken-related` instead of passing for want of an `orphan`.
+  lm_exc="$lm_dir/exception-link"
+  mkdir -p "$lm_exc/_memory/exceptions" "$lm_exc/_memory/rules"
+  sed 's/{{SCOPE_NAME}}/exception-link/' inbox-to-memory/assets/memory-bank.template.yaml >"$lm_exc/memory-bank.yaml"
+  sed -e 's/{{nanoid}}/Ex6Rul0006/' -e 's/{{proposed | accepted}}/accepted/' -e 's/{{YYYY-MM-DD}}/2026-09-30/g' \
+    inbox-to-memory/assets/records/policy-rule.template.md >"$lm_exc/_memory/rules/policy-rule.md"
+  sed -e 's/{{nanoid}}/Ex7Exc0007/' -e 's/{{proposed | accepted}}/accepted/' -e 's/{{YYYY-MM-DD}}/2026-09-30/g' -e 's/{{rule-id}}/Ex6Rul0006/g' \
+    inbox-to-memory/assets/records/exception.template.md >"$lm_exc/_memory/exceptions/linked.md"
+  lm_doc_linked="$(LTM_TODAY=2026-10-31 ltm doctor --bank "$lm_exc" --json)"
+  python3 -c 'import json, sys; sys.exit(0 if json.loads(sys.argv[1]) == [] else 1)' "$lm_doc_linked" || {
+    echo "ltm doctor reported findings on a scaffolded Exception linked to its PolicyRule" >&2
+    printf '%s\n' "$lm_doc_linked" >&2
+    exit 1
+  }
+  # The same Exception with the old `related: []` still draws one `orphan`, and nothing else. Its own title keeps it from pairing with the linked one as a near-duplicate.
+  sed -e 's/{{nanoid}}/Ex8Exc0008/' -e 's/{{proposed | accepted}}/accepted/' -e 's/{{YYYY-MM-DD}}/2026-09-30/g' -e 's/{{rule-id}}/Ex6Rul0006/g' \
+    -e 's/^related: .*/related: []/' -e "s/^title: .*/title: 'Unlinked exception'/" \
+    inbox-to-memory/assets/records/exception.template.md >"$lm_exc/_memory/exceptions/unlinked.md"
+  lm_doc_unlinked="$(LTM_TODAY=2026-10-31 ltm doctor --bank "$lm_exc" --json)"
+  python3 -c 'import json, sys; sys.exit(0 if [(f["check"], f["file"]) for f in json.loads(sys.argv[1])] == [("orphan", "_memory/exceptions/unlinked.md")] else 1)' "$lm_doc_unlinked" || {
+    echo "ltm doctor did not report exactly one orphan for an Exception with related: []" >&2
+    printf '%s\n' "$lm_doc_unlinked" >&2
+    exit 1
+  }
 else
   echo "ltm not installed; skipped real-ltm checks"
 fi
@@ -3614,6 +3644,9 @@ require_text _maintenance/inbox-to-memory/RATIONALE.md "| 50 | \`ltm_item\` doub
 require_text _maintenance/inbox-to-memory/RATIONALE.md "| 51 | Pass one of the lint walks \`notes/reports/*.md\` as its own glob"
 # Row 52 records the dismissal grammar for a declined amend the consolidation-report case pins.
 require_text _maintenance/inbox-to-memory/RATIONALE.md "| 52 | A declined update-existing line keeps its prefix and takes the contradiction flag's \`dismissed:\` suffix"
+# Row 53 records the Exception template's `constrained_by` link the exception-link case pins, and its Not Built row the lint refute.
+require_text _maintenance/inbox-to-memory/RATIONALE.md "| 53 | The Exception template writes \`related: ['constrained_by::{{rule-id}}']\`"
+require_text _maintenance/inbox-to-memory/RATIONALE.md "| A lint check that \`constrained_by\` and \`exception_to\` name the same rule. |"
 
 rm -rf "$lm_dir"
 

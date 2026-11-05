@@ -104,7 +104,7 @@ These appear as `## Section` headings in the record body, not as frontmatter key
 - Justification
 - Approved by
 - Expires (date or condition)
-- frontmatter: `exception_to: [[<rule-id>|<rule-short-name>]]`
+- frontmatter: `related: ['constrained_by::<rule-id>']` and `exception_to: [[<rule-id>|<rule-short-name>]]`, both naming the same PolicyRule. The `constrained_by` entry is the link `ltm` reads, in doctor, validate, and retrieval; an Exception without it draws `orphan` from `ltm doctor`. `exception_to` is the Obsidian link.
 
 In lightweight mode, the same content gets captured as a Decision record whose decision question is "should we deviate from `<rule>` for `<scope>`?" The crystallized fact is the same; only the record type and its discoverability path differ.
 

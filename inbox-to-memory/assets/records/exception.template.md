@@ -12,7 +12,7 @@ source_refs: ['{{note-id}}']
 applies_to: []
 owners: []
 tags: []
-related: []
+related: ['constrained_by::{{rule-id}}']
 exception_to: '[[{{rule-id}}|{{rule-short-name}}]]'
 # supersedes: [<id>]
 # superseded_by: <id>
