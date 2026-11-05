@@ -130,12 +130,13 @@ def check_entry(entry, where, bundles, problems, checked):
     for key in OPS[op]:
         if key not in entry:
             problems.append(f"{where}: {op} needs {key}")
-    for key in ("path", "to"):
+    # file lands in the work tree or an upstream clone, so a stray ".." or "/" would write outside the scratch tree
+    for key in ("path", "to", "file"):
         value = entry.get(key)
         if value is not None and (
             not isinstance(value, str) or not value or value.startswith("/") or ".." in Path(value).parts
         ):
-            problems.append(f"{where}: {key} {value!r} must be a relative path inside RUN_DIR")
+            problems.append(f"{where}: {key} {value!r} must be a relative path with no '..' part")
     if op == "pr" and entry.get("bundle") is not None and entry.get("bundle") not in bundles:
         problems.append(f"{where}: no bundle named {entry.get('bundle')!r}")
     if op == "herdr" and entry.get("state") not in HERDR_STATES:
