@@ -382,8 +382,8 @@
     {"name": "no-local-branch-nothing-ahead", "cite": "resume.md ahead_of_origin: `false` with no local branch, which has nothing ahead", "if": [["branch_local", "==", false]], "then": [["ahead_of_origin", "==", false]]}
   ],
   "effects": [
-    {"step": 0, "done_when": ["max_review_rounds", "merge_methods.json", "full_commit_pass", "redteam/mode.txt"], "cite": "SKILL.md Step 0 Done when: the plan gate passed and the confirmation was answered yes, with `RUN_DIR/redteam/mode.txt` written, or the run stopped at a refusal, a stop, a dry-run, or a no", "outcomes": [
-      {"name": "confirmed", "set": {"run_dir": true, "has_waves": true}},
+    {"step": 0, "done_when": ["max_review_rounds", "merge_methods.json", "full_commit_pass", "redteam/mode.txt"], "cite": "SKILL.md Step 0 Done when: the plan gate passed and the confirmation was answered yes, with `RUN_DIR/redteam/mode.txt` written, or the run stopped at a refusal, a stop, a dry-run, or a no; and a yes runs on into Step 1 with no re-probe between them (Step 0 item 8: \"On yes: execute\", and row 5: \"then Step 1\")", "outcomes": [
+      {"name": "confirmed, then Step 1 in the same invocation", "set": {"run_dir": true, "has_waves": true, "branch_local": true, "base_sha": true, "baseline": true, "base_sha_state": "current"}},
       {"name": "refused or declined", "terminal": "stop"}]},
     {"step": 1, "done_when": ["base_sha", "baseline.txt"], "cite": "SKILL.md Step 1 Done when: BRANCH exists at `origin/DEFAULT`'s SHA, `RUN_DIR/base_sha` holds that SHA, and `RUN_DIR/baseline.txt` opens with `exit: <status>`", "outcomes": [
       {"name": "isolated", "set": {"branch_local": true, "base_sha": true, "baseline": true, "base_sha_state": "current"}},
@@ -401,8 +401,8 @@
     {"step": 5, "done_when": ["base_sha"], "cite": "SKILL.md Step 5 Done when: `origin/issue-N` equals local HEAD, rebased; `RUN_DIR/base_sha` holds the merge-base; `pushed_at` written; exactly one open pull request; or the run stopped on a conflict or on unauthenticated `gh`, with nothing pushed", "outcomes": [
       {"name": "published", "set": {"pr_state": "OPEN", "review_state": "pending", "branch_remote": true, "ahead_of_origin": false, "conflict": false, "rebase_in_progress": false, "base_sha_state": "current", "triage_newer_than_since": false}},
       {"name": "conflict or unauthenticated gh", "terminal": "stop"}]},
-    {"step": 6, "done_when": [], "cite": "SKILL.md Step 6 Done when: `review` returned `cleared`; or `findings`, with the round's heading recording its SINCE and every finding in scope or queued; or `pending` reached its cap and `triage/waiting` says so", "outcomes": [
-      {"name": "cleared", "set": {"review_state": "cleared"}},
+    {"step": 6, "done_when": [], "cite": "SKILL.md Step 6 Done when: `review` returned `cleared`; or `findings`, with the round's heading recording its SINCE and every finding in scope or queued; or `pending` reached its cap and `triage/waiting` says so; `cleared` goes to Step 8's final report, the last stop under Where a Run Stops", "outcomes": [
+      {"name": "cleared: Step 8's final report ends the run", "terminal": "stop"},
       {"name": "findings, all queued", "add": {"triage_rounds": 1, "triage_rows_unanswered": 1}, "set": {"review_state": "findings", "triage_newer_than_since": true, "triage_inscope_rows": 0, "triage_blocking_rows": 0, "triage_stop_rows": 0, "newest_repair_report": false, "repair_ar_settled": false, "repair_diff_triggers": false, "deferred_comment_needed": true}},
       {"name": "findings, an in-scope P1", "add": {"triage_rounds": 1, "triage_rows_unanswered": 1}, "set": {"review_state": "findings", "triage_newer_than_since": true, "triage_inscope_rows": 1, "triage_blocking_rows": 1, "triage_stop_rows": 0, "newest_repair_report": false, "repair_ar_settled": false, "repair_diff_triggers": false}},
       {"name": "findings, an in-scope P2", "add": {"triage_rounds": 1, "triage_rows_unanswered": 1}, "set": {"review_state": "findings", "triage_newer_than_since": true, "triage_inscope_rows": 1, "triage_blocking_rows": 0, "triage_stop_rows": 0, "newest_repair_report": false, "repair_ar_settled": false, "repair_diff_triggers": false}},
