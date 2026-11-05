@@ -2260,7 +2260,7 @@ def find_tree(root, branch, terminal=False):
     for tree in detached:
         if rebasing_branch(tree) == f"refs/heads/{branch}":
             return Path(tree), None
-    local =run_git(root, "show-ref", "--verify", "--quiet", f"refs/heads/{branch}")
+    local = run_git(root, "show-ref", "--verify", "--quiet", f"refs/heads/{branch}")
     if local.returncode == 0 and not terminal:
         return None, (
             f"{branch} exists locally but is not checked out in any worktree, so "

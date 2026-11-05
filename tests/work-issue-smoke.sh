@@ -4562,6 +4562,9 @@ problems = [f"SKILL.md names RUN_DIR/{p} and no model entry writes it" for p in 
 # The world-side writes SKILL.md names in its steps rather than its RUN_DIR bullet.
 world = {"branch", "push", "pr", "tree", "herdr", "origin"}
 problems += [f"model writes {s}, which SKILL.md never names" for s in sorted(modelled - world) if not any(covers(p, s) for p in prose)]
+# The issue's AC names these three beside the RUN_DIR subpaths, and the check
+# above only allows them.
+problems += [f"no model entry writes {s}" for s in ("branch", "push", "pr") if s not in modelled]
 problems += [f"model entry {e.get('id', e['subpath'])} is blind with no reason" for e in entries if "blind" in e and not str(e["blind"]).strip()]
 if problems:
     sys.exit("#147: " + "\n#147: ".join(problems))
@@ -4580,6 +4583,23 @@ blank_status=$?
 set -e
 [[ "$blank_status" == "3" ]] && grep -Fq "blind needs a reason" <<<"$blank_err" || {
   echo "#147: crash-points on a blind entry with a blank reason should exit 3 naming it, got $blank_status: $blank_err" >&2
+  exit 1
+}
+# A write the model can't make, here removing a file nothing wrote, is a bad
+# model and must exit 3, not 1, which reads as a resume hole.
+python3 - "$crash_model" "$tmp/crash-replay-fail.json" <<'PY'
+import json, sys
+model = json.load(open(sys.argv[1]))
+model["sequences"] = [s for s in model["sequences"] if s["name"] == "adopted"]
+model["sequences"][0]["entries"].insert(0, {"step": 0, "subpath": "conflict.txt", "op": "remove", "path": "nope.txt", "blind": "test"})
+json.dump(model, open(sys.argv[2], "w"))
+PY
+set +e
+replay_err="$(python3 "$crash_checks" crash-points --model "$tmp/crash-replay-fail.json" 2>&1)"
+replay_status=$?
+set -e
+[[ "$replay_status" == "3" ]] && grep -Eq '^resume_checks: replay: sequence adopted#0: FileNotFoundError: .*nope\.txt' <<<"$replay_err" || {
+  echo "#147: crash-points on a model removing a file nothing wrote should exit 3 with a replay line, got $replay_status: $replay_err" >&2
   exit 1
 }
 

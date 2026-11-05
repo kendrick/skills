@@ -418,21 +418,34 @@ def agrees(expected, got):
     return "exit" not in got and got["phase"] == expected["phase"] and got["row"] == expected["row"]
 
 
+def apply_entry(scratch, entry, where):
+    """Apply one entry, turning a write the model can't make into a ModelError."""
+    try:
+        scratch.apply(entry)
+    except ModelError as e:
+        raise ModelError([f"{where}: {problem}" for problem in e.problems])
+    except (OSError, KeyError, TypeError) as e:
+        # A model typo, such as removing a file nothing wrote, exits 3 so it
+        # can't pass for a resume hole's 1. answer() stays unguarded, so a wrong
+        # answer from probe or phase still exits 1.
+        raise ModelError([f"{where}: {type(e).__name__}: {e}"])
+
+
 def run_sequence(model, seq, base):
     """Replay one sequence and return its wrong prefixes as printable lines."""
     by_name = {s["name"]: s for s in model["sequences"]}
     scratch = Scratch(base, seq, model.get("bundles", {}))
-    replay = []
+    unchecked = [(f"setup[{j}]", entry) for j, entry in enumerate(seq.get("setup", []))]
     prefix = seq.get("prefix")
     if prefix:
         source = by_name[prefix["sequence"]]
-        replay += source.get("setup", [])
-        for entry in source["entries"]:
-            replay.append(entry)
+        unchecked += [(f"prefix {source['name']} setup[{j}]", entry) for j, entry in enumerate(source.get("setup", []))]
+        for k, entry in enumerate(source["entries"]):
+            unchecked.append((f"prefix {source['name']}#{k}", entry))
             if entry.get("id") == prefix["through"]:
                 break
-    for entry in seq.get("setup", []) + replay:
-        scratch.apply(entry)
+    for label, entry in unchecked:
+        apply_entry(scratch, entry, f"sequence {seq['name']} {label}")
     wrong = []
     entries = seq["entries"]
     for i, expected in enumerate(expectations(seq)):
@@ -442,7 +455,7 @@ def run_sequence(model, seq, base):
             shown = show(got) + (f" ({got['why']})" if got.get("why") else "")
             wrong.append(f"{seq['name']}#{i} {where}: expected {show(expected)}, got {shown}")
         if i < len(entries):
-            scratch.apply(entries[i])
+            apply_entry(scratch, entries[i], f"sequence {seq['name']}#{i}")
     for tool in scratch.called():
         wrong.append(f"{seq['name']}: probe called {tool}, which it must never do")
     return wrong
