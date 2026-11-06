@@ -11,6 +11,7 @@ The local template keeps the upstream write and resume loop but makes these deli
 - It stores handoff files in the OS temp directory, namespaced by project (`<TMP>/agent-handoff/<project-slug>/`), and uses each host's task or plan mechanism when available.
 - Storage now converges with mattpocock's "Save to the temporary directory of the user's OS - not the current workspace", which the initial merge rejected in favour of a repository folder. The template arrived at the same place independently, on durability and cleanliness grounds rather than by adopting upstream.
 - It adds a canvas destination for hosts with no durable filesystem, and accepts a pasted document or an attached `.md` on resume. Neither upstream describes a non-filesystem host.
+- It adds an `inline` destination that returns the document as the whole reply, for a program that runs the skill and keeps what comes back. Both upstreams always write a file.
 - Resume stops after restoring tasks and asks before doing any work. harpb ends its resume phase with "pick up the in-progress task (or the first pending one) and keep going"; do not carry that sentence back in on a sync. `tests/handoff-smoke.sh` fails if it returns.
 - Both ends of the handoff offer the user a session name, which neither upstream does. Both assume the session at hand is the only one open.
 - It removes harpb's repository-specific exceptions and service names.
