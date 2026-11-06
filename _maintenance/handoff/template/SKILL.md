@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: Save a session handoff to a file or a side-panel canvas, or resume one after clearing a session. Use ONLY when the user explicitly invokes handoff or asks to hand off / resume a handoff. Never use for summaries, status updates, or note-taking.
+description: Save a session handoff to a file, a side-panel canvas, or the reply itself, or resume one after clearing a session. Use ONLY when the user explicitly invokes handoff or asks to hand off / resume a handoff. Never use for summaries, status updates, or note-taking.
 disable-model-invocation: true
 argument-hint: '[handoff id or pasted doc to resume | a prompt to hand off | md for a canvas | inline for the document alone | empty for whole session]'
 ---
@@ -31,7 +31,7 @@ When `inline` and `md` or `markdown` both appear, `inline` wins: a caller asking
 
 A sandboxed VM accepts writes into a container that is discarded with the session, so a successful write is not evidence of durability.
 
-`md`, `markdown`, and `inline` are destination flags, as is a leading `to`, `in`, or `as`. Strip them from ARGS before detecting the phase, so `handoff md` is write-session on a canvas and `handoff md convert the probes` is write-prompt on a canvas. Keep the word in the prompt when the remainder needs it to read as a complete instruction, as in `handoff markdown parsing is broken` or `handoff the inline cache is broken`.
+`md`, `markdown`, and `inline` are destination flags, as is a leading `to`, `in`, or `as`. Strip them from ARGS before detecting the phase, so `handoff md` is write-session on a canvas and `handoff md convert the probes` is write-prompt on a canvas. Keep the word in the prompt when the remainder needs it to read as a complete instruction, as in `handoff markdown parsing is broken` or `handoff the inline cache is broken`. A word kept in the prompt is not a flag and picks no destination.
 
 Choose a phase:
 
