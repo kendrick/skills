@@ -50,7 +50,7 @@ require_file _maintenance/handoff/sync-upstream.ps1
 require_file _maintenance/handoff/template/SKILL.md
 
 require_text handoff/SKILL.md "disable-model-invocation: true"
-require_text handoff/SKILL.md "argument-hint: '[handoff id or pasted doc to resume | a prompt to hand off | md for a canvas | empty for whole session]'"
+require_text handoff/SKILL.md "argument-hint: '[handoff id or pasted doc to resume | a prompt to hand off | md for a canvas | inline for the document alone | empty for whole session]'"
 require_text handoff/SKILL.md "## How to Verify"
 require_text handoff/SKILL.md "**Skills.**"
 require_text handoff/SKILL.md "This workflow is designed to work across coding agents and operating systems."
@@ -66,6 +66,18 @@ require_text handoff/SKILL.md "still reachable after this session ends"
 require_text handoff/SKILL.md "## Render a Canvas"
 require_text handoff/SKILL.md "pasted into the message"
 refute_text handoff/SKILL.md ".agents/handoff"
+
+# kendrick/handoff-on-compact runs this skill in a forked model call with every
+# tool denied and takes the reply as the document. That caller breaks if the
+# skill stops stripping `inline`, lets `md` outrank it, adds anything to the
+# reply, or tells the fork to write a file. An upstream sync is how these
+# sentences would vanish.
+require_text handoff/SKILL.md "The inline destination writes nothing to disk"
+require_text handoff/SKILL.md "the reply is the document alone"
+require_text handoff/SKILL.md "\`md\`, \`markdown\`, and \`inline\` are destination flags"
+require_text handoff/SKILL.md "Strip them from ARGS before detecting the phase"
+require_text handoff/SKILL.md "When \`inline\` and \`md\`"
+require_text handoff/SKILL.md "Strip \`inline\` from ARGS on resume"
 
 # Resume stops for the user instead of working. The refute matters most: this
 # instruction arrived by inheriting harpb's "keep going", so a sync is exactly
