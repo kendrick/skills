@@ -748,6 +748,9 @@ def check_effects(effects, domains, problems):
             for field, value in (outcome.get("add") or {}).items():
                 if field not in domains or domains[field] != COUNT_DOMAIN or type(value) is not int:
                     problems.append(f"{at}: add needs a count field and an integer, got {field} {value!r}")
+            # One outcome that writes a field two ways has no single meaning.
+            for field in sorted(set(outcome.get("set") or {}) & set(outcome.get("add") or {})):
+                problems.append(f"{at}: {field} is in both set and add")
     missing = [n for n in range(9) if n not in seen]
     if missing:
         problems.append("effects: no effect for step " + ", ".join(str(n) for n in missing))
@@ -1561,6 +1564,14 @@ def cmd_invariants(args):
     return 1 if found else 0
 
 
+def apply_effect(outcome, add, set_):
+    """Apply an outcome's `add`, then its `set`, through the two callbacks."""
+    for field, n in (outcome.get("add") or {}).items():
+        add(field, n)
+    for field, value in (outcome.get("set") or {}).items():
+        set_(field, value)
+
+
 def cmd_liveness(args):
     setup = logic_setup(args)
     if setup is None:
@@ -1618,10 +1629,7 @@ def cmd_liveness(args):
                 moves.append((label(answer), path.store, None, None))
                 return
             child = path.store.copy()
-            for field, n in (outcome.get("add") or {}).items():
-                child.add(field, n)
-            for field, value in (outcome.get("set") or {}).items():
-                child.set(field, value)
+            apply_effect(outcome, child.add, child.set)
             # A child with no probe the assumptions allow is an effect writing
             # a state no real run reaches, so liveness reports it. Pruning it
             # would drop every path behind it with nothing said: a Step 1 that
@@ -1629,9 +1637,10 @@ def cmd_liveness(args):
             # A child with some allowed probe is narrowed leaf by leaf once expanded.
             # The parent's allowed probe, carried through the effect, is a
             # probe of the child, so a child it satisfies needs no search.
-            carried = dict(witness, **(outcome.get("set") or {}))
-            for field, n in (outcome.get("add") or {}).items():
-                carried[field] = witness[field] + n
+            carried = dict(witness)
+            # The same updates in the same order as `child`, so the shortcut
+            # never accepts a probe the child doesn't hold.
+            apply_effect(outcome, lambda f, n: carried.__setitem__(f, carried[f] + n), carried.__setitem__)
             if child.key() not in possible_child:
                 possible_child[child.key()] = all(holds(rule, carried) for rule in assumptions) \
                     or first_probe(child, assumptions, fields) is not None
