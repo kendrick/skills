@@ -71,8 +71,8 @@ refute_text handoff/SKILL.md ".agents/handoff"
 # tool denied and takes the reply as the document. That caller breaks if the
 # skill stops stripping `inline`, lets `md` outrank it, adds anything to the
 # reply, or tells the fork to write a file. An upstream sync is how these
-# sentences would vanish. The last pin keeps a prompt that only mentions the
-# word, like `handoff the inline cache is broken`, writing its file.
+# sentences would vanish. The last pin keeps a prompt that only mentions
+# `inline`, like `handoff the inline cache is broken`, writing its file.
 require_text handoff/SKILL.md "The inline destination writes nothing to disk"
 require_text handoff/SKILL.md "the reply is the document alone"
 require_text handoff/SKILL.md "opens with the \`# Handoff: <slug>\` heading"
