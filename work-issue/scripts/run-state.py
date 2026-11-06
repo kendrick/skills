@@ -962,6 +962,19 @@ def unknown_fields_stop(names):
     )
 
 
+def null_fields(probe):
+    """The fields `phase_of`'s generic null check stops on, in table order.
+
+    A module-level function so `resume_checks.py invariants` and `liveness`
+    can stub it out: it reads all 39 fields, and their search splits on every
+    field `phase_of` tests."""
+    return [
+        name
+        for name, _, _ in PROBE_FIELDS
+        if name not in ("pr_state", "review_state") and probe[name] is None
+    ]
+
+
 def phase_of(probe):
     """The Resume table, in its own order, first match wins.
 
@@ -991,11 +1004,7 @@ def phase_of(probe):
     # failed `git ls-remote` would then restart a run three steps in as fresh.
     # `pr_state` and `review_state` are the two fields where null is an answer
     # (no pull request yet), so they are exempt.
-    unknown = [
-        name
-        for name, _, _ in PROBE_FIELDS
-        if name not in ("pr_state", "review_state") and probe[name] is None
-    ]
+    unknown = null_fields(probe)
     if unknown:
         return unknown_fields_stop(unknown)
     herdr = probe["herdr_agent_state"]
@@ -1098,6 +1107,13 @@ def phase_of(probe):
         # path is a repair's uncommitted edit, and reading it as an unreported
         # task stopped the run instead of resuming the repair at row 9, 10, or
         # 16 (#147).
+        # A `## Waves` table with no numbered task row passes check-plan.py's
+        # has_waves but gives wave_tasks 0, so every wave leg below misses and a
+        # stray rebase sent it to row 12's publish of a build that never ran
+        # (invariants, #148). Nothing in the write order makes this table and
+        # no step can fill it unattended.
+        if flag(probe, "has_waves") and wave_tasks == 0 and count(probe, "self_reviews") == 0:
+            return "stop", "row 7: plan.md's ## Waves table has no task rows; fix the table, then re-invoke"
         if flag(probe, "has_waves") and wave_reports < wave_tasks and count(probe, "self_reviews") == 0:
             # A commit past base_sha on an unreported task's owned paths is a
             # gated wave whose report is missing, not a half-written one. On

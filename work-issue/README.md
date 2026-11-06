@@ -89,8 +89,8 @@ work-issue/
     ├── find-plan.py            # finds issue N's plan in WORK_ISSUE_PLAN_DIRS, ~/.claude/plans by default
     ├── drive.py                # relaunches a confirmed run from outside the session until it reaches a stop that needs you
     ├── run-state.py            # gathers the resume probe and places a run on the phase table; scores a pull request's review; weighs review time against build time
-    ├── resume_checks.py        # replays every write the skill makes and checks where a crash before each one resumes
-    └── write-order.json        # those writes, in order, each with the phase and row a crash before it resumes at
+    ├── resume_checks.py        # checks the phase table three ways: `crash-points` replays every write and checks where a crash before each one resumes, `invariants` holds every probe `phase_of` can tell apart to the model's safety rules, and `liveness` follows each probe through the step effects to a stop, a wait, or done
+    └── write-order.json        # those writes in order, each with the phase and row a crash before it resumes at, plus the invariants, assumptions, and step effects the other two checks read
 ```
 
 ## Gotchas
@@ -106,7 +106,7 @@ work-issue/
 
 ## Maintainers
 
-The decision ledger and eval suite live in [`_maintenance/work-issue/`](../_maintenance/work-issue/). Every contested choice has a row in [RATIONALE.md](../_maintenance/work-issue/RATIONALE.md), including where each borrowed mechanism came from and everything deliberately cut. Smoke tests: `bash tests/work-issue-smoke.sh` from the repo root, which pins the documents and runs the five scripts against fixtures, and `bash tests/work-issue-resume-tables-smoke.sh`, which checks that both copies of the Resume table and `run-state.py` agree row for row. [EVALS.md](../_maintenance/work-issue/EVALS.md) carries the live end-to-end scenarios, unrun until somebody runs one.
+The decision ledger and eval suite live in [`_maintenance/work-issue/`](../_maintenance/work-issue/). Every contested choice has a row in [RATIONALE.md](../_maintenance/work-issue/RATIONALE.md), including where each borrowed mechanism came from and everything deliberately cut. Run the smoke tests from the repo root. `bash tests/work-issue-smoke.sh` pins the documents, runs the five scripts against fixtures, and runs all three `resume_checks.py` subcommands, which takes several minutes. `bash tests/work-issue-resume-tables-smoke.sh` checks that both copies of the Resume table and `run-state.py` agree row for row. [EVALS.md](../_maintenance/work-issue/EVALS.md) carries the live end-to-end scenarios, unrun until somebody runs one.
 
 ## License
 

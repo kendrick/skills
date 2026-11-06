@@ -4710,4 +4710,300 @@ cmp -s "$tmp/crash-shipped.out" "$tmp/crash-fixture.out" \
   exit 1
 }
 
+# --- invariants and liveness ---
+# #148: crash points test the states a crash can leave. These two test every
+# state phase_of can tell apart: `invariants` holds each to the model's safety
+# rules, and `liveness` follows each through the step effects to a stop, a
+# wait, or done. Wave 0 changed what the counts on the last line mean, so the
+# line's shape is pinned and its numbers aren't.
+#
+# CHECKS SUBCOMMAND MODEL OUT. No subshell body: a backgrounded `( )` adds a
+# second shell between the job and python, and the trap's `pkill -P` below
+# then kills that shell and leaves python running.
+logic_run() {
+  local status=0
+  python3 "$1" "$2" --model "$3" >"$4.out" 2>"$4.err" || status=$?
+  echo "$status" >"$4.status"
+}
+# Falsifier 3: with Step 3's effect a no-op, a run sent to Step 3 comes back
+# to it, and liveness has to say so.
+python3 - "$crash_model" "$tmp/live-step3-noop.json" <<'PY'
+import json, sys
+model = json.load(open(sys.argv[1]))
+emptied = 0
+for outcome in next(e for e in model["effects"] if e["step"] == 3)["outcomes"]:
+    if "terminal" not in outcome and (outcome.get("set") or outcome.get("add")):
+        outcome["set"], outcome["add"] = {}, {}
+        emptied += 1
+if not emptied:
+    sys.exit("#148: step 3's effect has no outcome with a set or add to empty")
+json.dump(model, open(sys.argv[2], "w"))
+PY
+# Falsifier 6: an effect that writes a state the assumptions rule out. Step 1
+# writing base_sha false loops 1 -> 1, and liveness once pruned the child as
+# impossible and passed, which hid the loop behind it.
+python3 -c 'import json, sys
+model = json.load(open(sys.argv[1]))
+outcome = next(o for e in model["effects"] if e["step"] == 1 for o in e["outcomes"] if o["name"] == "isolated")
+outcome["set"]["base_sha"] = False
+json.dump(model, open(sys.argv[2], "w"))' "$crash_model" "$tmp/live-step1-impossible.json"
+# Liveness takes minutes where everything else here takes seconds, so all
+# three runs start now, side by side, and the checks below run while they do.
+logic_run "$crash_checks" liveness "$crash_model" "$tmp/live-shipped" &
+logic_run "$crash_checks" liveness "$tmp/live-step3-noop.json" "$tmp/live-step3" &
+logic_run "$crash_checks" liveness "$tmp/live-step1-impossible.json" "$tmp/live-step1" &
+# A check that fails before the `wait` below would otherwise leave the runs
+# going for minutes after the suite exits. Each kill has its `|| true` because
+# `set -e` holds inside the trap: once the runs are reaped, a failed kill
+# exited 1 there and skipped the cleanup.
+trap 'for job in $(jobs -p); do pkill -P "$job" || true; kill "$job" 2>/dev/null || true; done; rm -rf "$tmp"' EXIT
+
+logic_run "$crash_checks" invariants "$crash_model" "$tmp/inv-shipped"
+[[ "$(cat "$tmp/inv-shipped.status")" == "0" ]] && [[ ! -s "$tmp/inv-shipped.err" ]] \
+  && grep -Eqx 'probes: [0-9]+ leaves, [0-9]+ pruned' "$tmp/inv-shipped.out" || {
+  echo "#148: invariants on the shipped model should exit 0 with only a probes: line, got $(cat "$tmp/inv-shipped.status"):" >&2
+  cat "$tmp/inv-shipped.out" "$tmp/inv-shipped.err" >&2
+  exit 1
+}
+
+# invariants' first run found a `## Waves` table with no numbered row
+# publishing at row 12 behind a stray rebase. row-12.json is that rebase.
+python3 -c 'import json, sys
+probe = json.load(open(sys.argv[1]))
+assert probe["has_waves"] and probe["rebase_in_progress"]
+probe.update(wave_tasks=0, wave_reports=0, self_reviews=0, build_final=False, redteam_rounds=0, redteam_last_failed=False, repair_after_last_round=False)
+json.dump(probe, open(sys.argv[2], "w"))' "$probes_dir/row-12.json" "$tmp/empty-waves.json"
+empty_waves_out="$(python3 "$run_state" phase --probe "$tmp/empty-waves.json")"
+grep -Fq "phase: stop reason: row 7: plan.md's ## Waves table has no task rows" <<<"$empty_waves_out" || {
+  echo "#148: a ## Waves table with no task rows should stop at row 7, got: $empty_waves_out" >&2
+  exit 1
+}
+
+# Each step's effect is what liveness believes the step leaves behind, so it
+# has to answer to that step's Done-when line, in both directions. Model path
+# first, so falsifier 5 can hand it a copy.
+cat >"$tmp/effect-pin.py" <<'PY'
+import json, re, sys
+model = json.load(open(sys.argv[1]))
+skill = open(sys.argv[2]).read().splitlines()
+done_when = {}
+section = None
+for line in skill:
+    if line.startswith("## "):
+        numbered = re.match(r"## Step (\d) — ", line)
+        section = int(numbered.group(1)) if numbered else line[3:]
+    elif line.startswith("**Done when:**"):
+        done_when.setdefault(section, []).append(line)
+steps = sorted(k for k in done_when if isinstance(k, int))
+problems = []
+# Adopt enters at Step 6 and is no step of its own, so no effect keys to it.
+# Any other unnumbered section with a Done-when line is one this pin would skip.
+others = sorted(k for k in done_when if not isinstance(k, int))
+if others != ["Adopt — enter at Step 6"]:
+    problems.append(f"Done-when lines outside Steps 0-8 and Adopt: {others}")
+if steps != list(range(9)):
+    problems.append(f"expected a Done-when line under each of Steps 0-8, found {steps}")
+effects = model.get("effects") or []
+for step in steps:
+    if len(done_when[step]) != 1:
+        problems.append(f"step {step}: {len(done_when[step])} Done-when lines")
+        continue
+    mine = [e for e in effects if isinstance(e, dict) and e.get("step") == step]
+    if len(mine) != 1:
+        problems.append(f"step {step} has a Done-when line and {len(mine)} effects in the model")
+        continue
+    prose = set(re.findall(r"`RUN_DIR/([^`]+)`", done_when[step][0]))
+    modelled = set(mine[0].get("done_when") or [])
+    problems += [f"step {step}: its effect names RUN_DIR/{p}, which its Done-when line doesn't" for p in sorted(modelled - prose)]
+    problems += [f"step {step}: its Done-when line names RUN_DIR/{p}, which its effect doesn't" for p in sorted(prose - modelled)]
+if problems:
+    sys.exit("#148: " + "\n#148: ".join(problems))
+PY
+python3 "$tmp/effect-pin.py" "$crash_model" work-issue/SKILL.md
+# Falsifier 5: a step with no effect must fail the pin by name.
+python3 -c 'import json, sys
+model = json.load(open(sys.argv[1]))
+kept = [e for e in model["effects"] if e["step"] != 4]
+assert len(kept) == len(model["effects"]) - 1
+model["effects"] = kept
+json.dump(model, open(sys.argv[2], "w"))' "$crash_model" "$tmp/no-step4-effect.json"
+set +e
+pin_err="$(python3 "$tmp/effect-pin.py" "$tmp/no-step4-effect.json" work-issue/SKILL.md 2>&1)"
+pin_status=$?
+set -e
+[[ "$pin_status" == "1" ]] && grep -Fq "step 4 has a Done-when line and 0 effects in the model" <<<"$pin_err" || {
+  echo "#148: the effect pin on a model with no step 4 effect should fail naming step 4, got $pin_status: $pin_err" >&2
+  exit 1
+}
+
+# A rule nobody read from the prose, and a model with nothing to check, are
+# malformed models and exit 3, as crash-points' blank blind reason does.
+python3 -c 'import json, sys
+model = json.load(open(sys.argv[1]))
+model["invariants"][0]["cite"] = "  "
+json.dump(model, open(sys.argv[2], "w"))
+del model["invariants"]
+json.dump(model, open(sys.argv[3], "w"))' "$crash_model" "$tmp/logic-blank-cite.json" "$tmp/logic-no-invariants.json"
+logic_run "$crash_checks" invariants "$tmp/logic-blank-cite.json" "$tmp/logic-blank-cite"
+[[ "$(cat "$tmp/logic-blank-cite.status")" == "3" ]] && grep -Fq "cite must name the prose it was read from" "$tmp/logic-blank-cite.err" || {
+  echo "#148: invariants on a blank cite should exit 3 naming it, got $(cat "$tmp/logic-blank-cite.status"): $(cat "$tmp/logic-blank-cite.err")" >&2
+  exit 1
+}
+logic_run "$crash_checks" invariants "$tmp/logic-no-invariants.json" "$tmp/logic-no-invariants"
+[[ "$(cat "$tmp/logic-no-invariants.status")" == "3" ]] && grep -Fq "invariants: expected a non-empty list" "$tmp/logic-no-invariants.err" || {
+  echo "#148: invariants on a model with no invariants should exit 3, got $(cat "$tmp/logic-no-invariants.status"): $(cat "$tmp/logic-no-invariants.err")" >&2
+  exit 1
+}
+# A `set` that isn't an object crashed the loader with an AttributeError, an
+# exit 1 that reads as a violation. And `phase` against a field reference was
+# compared with the reference dict, so this invariant passed while a merged PR
+# with herdr reporting done answers done.
+python3 -c 'import json, sys
+model = json.load(open(sys.argv[1]))
+next(o for o in model["effects"][0]["outcomes"] if "set" in o)["set"] = ["base_sha"]
+json.dump(model, open(sys.argv[2], "w"))
+model = json.load(open(sys.argv[1]))
+model["invariants"].append({"name": "phase-ref", "cite": "PR 297 review", "if": [["pr_state", "==", "MERGED"]], "then": [["phase", "!=", {"field": "herdr_agent_state"}]]})
+json.dump(model, open(sys.argv[3], "w"))' "$crash_model" "$tmp/logic-set-list.json" "$tmp/logic-phase-ref.json"
+logic_run "$crash_checks" invariants "$tmp/logic-set-list.json" "$tmp/logic-set-list"
+[[ "$(cat "$tmp/logic-set-list.status")" == "3" ]] && grep -Fq "set must be an object of field: value" "$tmp/logic-set-list.err" || {
+  echo "#148: invariants on a list-valued set should exit 3 naming it, got $(cat "$tmp/logic-set-list.status"): $(cat "$tmp/logic-set-list.err")" >&2
+  exit 1
+}
+# Malformed models the loader once read wrong. The type cases crashed it with
+# exit 1. The count cases ran on probes 0-2 can't stand for, so split-at-1
+# exited 1 on a probe it reached and count-past-2 and linked-counts exited 0.
+# set-and-add loaded clean, and liveness then checked a carried probe the
+# child didn't hold. NAME, the edit to the model, and the stderr text exit 3
+# has to name.
+while IFS='|' read -r name edit want; do
+  python3 -c "import json, sys
+model = json.load(open(sys.argv[1]))
+$edit
+json.dump(model, open(sys.argv[2], 'w'))" "$crash_model" "$tmp/logic-$name.json"
+  logic_run "$crash_checks" invariants "$tmp/logic-$name.json" "$tmp/logic-$name"
+  [[ "$(cat "$tmp/logic-$name.status")" == "3" ]] && grep -Fq -- "$want" "$tmp/logic-$name.err" || {
+    echo "#148: invariants on a model with $name should exit 3 naming it, got $(cat "$tmp/logic-$name.status"): $(cat "$tmp/logic-$name.err")" >&2
+    exit 1
+  }
+done <<'CASES'
+list-lhs|model["invariants"][0]["then"] = [[["x"], "==", 1]]|['x'] is neither phase nor a probe field
+list-ref|model["invariants"][0]["then"] = [["pr_state", "==", {"field": ["x"]}]]|rhs {'field': ['x']} must be
+string-if|model["assumptions"][0]["if"] = "x"|.if: expected a list of atoms
+bool-lt-str|model["invariants"][0]["then"] = [["branch_local", "<", {"field": "pr_state"}]]|< needs counts on both sides, got branch_local and pr_state
+phase-lt-count|model["invariants"][0]["then"] = [["phase", "<", {"field": "wave_tasks"}]]|< needs counts on both sides, got phase and wave_tasks
+list-step|model["effects"][0]["step"] = [1]|step [1] is not a unique 0-8
+count-past-2|model["invariants"].append({"name": "queue-le-2", "cite": "PR 297 review", "if": [["pr_state", "==", "MERGED"]], "then": [["queue_unfiled_rows", "<=", 2]]})|queue_unfiled_rows <= 2 tells 2 from a larger count
+split-at-1|model["invariants"].append({"name": "one-wave-task", "cite": "PR 297 review", "if": [], "then": [["wave_tasks", "!=", 1]]})|wave_tasks is split at 1 by invariants one-wave-task.then[0] and compared with another count at run-state.py line
+linked-counts|model["invariants"].append({"name": "chain", "cite": "PR 297 review", "if": [["wave_unreported_committed", "<", {"field": "queue_unfiled_rows"}], ["queue_unfiled_rows", "<", {"field": "triage_blocking_rows"}], ["triage_blocking_rows", "<", {"field": "triage_inscope_rows"}]], "then": [["wave_unreported_committed", "!=", 0]]})|counts queue_unfiled_rows, triage_blocking_rows, triage_inscope_rows, wave_unreported_committed are linked by comparisons
+set-and-add|next(o for e in model["effects"] if e["step"] == 3 for o in e["outcomes"] if o["name"] == "built").setdefault("add", {})["self_reviews"] = 1|self_reviews is in both set and add
+CASES
+logic_run "$crash_checks" invariants "$tmp/logic-phase-ref.json" "$tmp/logic-phase-ref"
+[[ "$(cat "$tmp/logic-phase-ref.status")" == "1" ]] \
+  && grep -Eq '^phase-ref: done row [0-9]+ on \{.*"herdr_agent_state": "done".*"pr_state": "MERGED"' "$tmp/logic-phase-ref.err" || {
+  echo "#148: invariants with phase != {field: herdr_agent_state} should exit 1 on a merged PR answering done, got $(cat "$tmp/logic-phase-ref.status"): $(cat "$tmp/logic-phase-ref.err")" >&2
+  exit 1
+}
+
+# The run-state.py mutations, each found with ast so a reworded row can't make
+# one miss in silence. Each copy's resume_checks.py imports its own run-state.py.
+cat >"$tmp/logic-mutate.py" <<'PY'
+import ast, sys
+path, kind = sys.argv[1], sys.argv[2]
+tree = ast.parse(open(path).read())
+fn = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "phase_of")
+def is_flag(node, name):
+    return (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "flag"
+            and len(node.args) == 2 and isinstance(node.args[1], ast.Constant) and node.args[1].value == name)
+def reason(node):
+    if isinstance(node, ast.If) and node.body and isinstance(node.body[0], ast.Return):
+        value = node.body[0].value
+        if isinstance(value, ast.Tuple) and len(value.elts) == 2 and isinstance(value.elts[1], ast.Constant):
+            return str(value.elts[1].value)
+    return ""
+hits = 0
+if kind == "ignore-failed":
+    class Ignore(ast.NodeTransformer):
+        def visit_Call(self, node):
+            global hits
+            if is_flag(node, "redteam_last_failed"):
+                hits += 1
+                return ast.copy_location(ast.Constant(False), node)
+            return self.generic_visit(node)
+    Ignore().visit(fn)
+elif kind == "swap-8-9":
+    for node in ast.walk(fn):
+        body = getattr(node, "body", None)
+        for i in range(len(body) - 1 if isinstance(body, list) else 0):
+            if reason(body[i]).startswith("row 8:") and reason(body[i + 1]).startswith("row 9:"):
+                body[i], body[i + 1] = body[i + 1], body[i]
+                hits += 1
+                break
+elif kind == "literal-3":
+    for node in ast.walk(fn):
+        if (isinstance(node, ast.Compare) and isinstance(node.left, ast.Name) and node.left.id == "redteam_rounds"
+                and isinstance(node.comparators[0], ast.Constant) and node.comparators[0].value == 0):
+            node.comparators[0] = ast.Constant(3)
+            hits += 1
+            break
+if not hits:
+    sys.exit(f"#148: mutation {kind} matched nothing in phase_of")
+open(path, "w").write(ast.unparse(ast.fix_missing_locations(tree)) + "\n")
+PY
+for kind in ignore-failed swap-8-9 literal-3; do
+  crash_copy "$tmp/logic-$kind"
+  python3 "$tmp/logic-mutate.py" "$tmp/logic-$kind/$run_state" "$kind"
+  if cmp -s "$run_state" "$tmp/logic-$kind/$run_state"; then
+    echo "#148: the $kind mutation left run-state.py unchanged" >&2
+    exit 1
+  fi
+  logic_run "$tmp/logic-$kind/$crash_checks" invariants "$tmp/logic-$kind/$crash_model" "$tmp/inv-$kind"
+done
+# Falsifier 1: the property, not the row. Row 10 takes every failed round
+# before row 13 can, so dropping the flag from one publish row changes no
+# answer; dropping it from all of phase_of has to publish a failed round.
+[[ "$(cat "$tmp/inv-ignore-failed.status")" == "1" ]] \
+  && grep -Eq '^publish-needs-clean-redteam: 5 row 1[23] on \{.*"redteam_last_failed": true' "$tmp/inv-ignore-failed.err" || {
+  echo "#148: invariants with redteam_last_failed ignored should exit 1 naming publish-needs-clean-redteam on a failed round, got $(cat "$tmp/inv-ignore-failed.status"):" >&2
+  cat "$tmp/inv-ignore-failed.out" "$tmp/inv-ignore-failed.err" >&2
+  exit 1
+}
+# Falsifier 2: rows 8 and 9 are disjoint on self_reviews, so swapping them
+# changes no answer, and output that moved would be reading row order.
+cmp -s "$tmp/inv-shipped.out" "$tmp/inv-swap-8-9.out" && cmp -s "$tmp/inv-shipped.err" "$tmp/inv-swap-8-9.err" \
+  && [[ "$(cat "$tmp/inv-swap-8-9.status")" == "0" ]] || {
+  echo "#148: swapping rows 8 and 9 changed invariants' output:" >&2
+  diff "$tmp/inv-shipped.out" "$tmp/inv-swap-8-9.out" >&2 || true
+  cat "$tmp/inv-swap-8-9.err" >&2
+  exit 1
+}
+# Falsifier 4: counts run 0-2 only while phase_of compares them with 0, so a
+# literal 3 has to stop the run before it enumerates anything, at that line.
+bound_line="$(sed -nE 's/^resume_checks: run-state\.py line ([0-9]+): phase_of compares with literal 3, .*/\1/p' "$tmp/inv-literal-3.err")"
+[[ "$(cat "$tmp/inv-literal-3.status")" == "3" ]] && [[ -n "$bound_line" ]] \
+  && sed -n "${bound_line}p" "$tmp/logic-literal-3/$run_state" | grep -Eq 'redteam_rounds [=<>!]+ 3' || {
+  echo "#148: invariants with a literal 3 in phase_of should exit 3 naming its line, got $(cat "$tmp/inv-literal-3.status"): $(cat "$tmp/inv-literal-3.err")" >&2
+  exit 1
+}
+
+wait
+[[ "$(cat "$tmp/live-shipped.status")" == "0" ]] && [[ ! -s "$tmp/live-shipped.err" ]] \
+  && grep -Eqx 'paths: [0-9]+' "$tmp/live-shipped.out" || {
+  echo "#148: liveness on the shipped model should exit 0 with only a paths: line, got $(cat "$tmp/live-shipped.status"):" >&2
+  cat "$tmp/live-shipped.out" "$tmp/live-shipped.err" >&2
+  exit 1
+}
+[[ "$(cat "$tmp/live-step3.status")" == "1" ]] \
+  && grep -Eq '^cycle: (.* -> )?3 row [0-9]+ -> ' "$tmp/live-step3.err" || {
+  echo "#148: liveness with Step 3's effect a no-op should exit 1 with a cycle through 3, got $(cat "$tmp/live-step3.status"):" >&2
+  cat "$tmp/live-step3.out" "$tmp/live-step3.err" >&2
+  exit 1
+}
+[[ "$(cat "$tmp/live-step1.status")" == "1" ]] \
+  && grep -Eq '^impossible: 1 row [0-9]+ -> isolated on \{' "$tmp/live-step1.err" || {
+  echo "#148: liveness with Step 1 writing base_sha false should exit 1 naming the impossible isolated outcome, got $(cat "$tmp/live-step1.status"):" >&2
+  cat "$tmp/live-step1.out" "$tmp/live-step1.err" >&2
+  exit 1
+}
+
 echo "work-issue smoke: OK"

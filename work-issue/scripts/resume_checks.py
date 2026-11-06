@@ -55,9 +55,61 @@ origin's `branch`, `main` by default, from a throwaway clone; `pr` swaps in a
 named bundle, or none; `herdr` sets the state passed as `--herdr-state`. A
 `content` of `{head}` or `{merge_base}` is replaced with that SHA.
 
+    work-issue/scripts/resume_checks.py invariants --model work-issue/scripts/write-order.json
+    work-issue/scripts/resume_checks.py liveness --model work-issue/scripts/write-order.json
+
+These two read the model's `invariants`, `assumptions`, and `effects`, import
+`run-state.py` from beside this script, and run `phase_of` in-process over
+every non-null probe, with no git and no subprocess.
+
+They don't list probes one at a time. A field `phase_of` hasn't tested yet is
+open, and each test it makes of an open field splits the search, so one search
+path stands for every probe that takes it. Before the search, each local in
+`phase_of` that holds a pure probe read is inlined where it's used: computed up
+front, those locals tested a dozen fields on every path. Counts run 0-2, and
+the run exits 3 where `phase_of` compares a count with a literal other than 0,
+where a model atom answers 2 differently from a larger count, where a count a
+model atom tells apart at 1 and 2 is also compared with another count, and
+where comparisons between counts link three or more of them.
+
+`invariants` prints one line per invariant and answer, naming the first probe
+in field order that breaks it:
+
+    <invariant name>: <phase> row <n> on {<the fields phase_of and the invariant read>}
+
+A null sweep then sets each field but `pr_state` and `review_state` to null in
+turn, and prints `null: ...` where a null answers a step number. The last line
+is `probes: <n> leaves, <m> pruned`: the distinct answers reached, and how many
+of them only probes the assumptions rule out can reach.
+
+`liveness` follows every path from every probe: `phase_of`, one outcome of that
+step's effect, `phase_of` again, until a stop, a wait, or done. A path that
+comes back to a state it already held prints
+`cycle: <phase> row <n> -> ... -> <phase> row <n> on {...}`, and one still
+going after 40 transitions prints `unbounded: ...`. The last line is
+`paths: <n>`, the distinct moves from one answer to the next. It takes
+minutes, where `invariants` takes seconds.
+
+Both exit 0 when nothing printed on stderr, 1 on a violation or a loop, and 3
+on a usage error, a malformed model, a blank `cite`, a failed count bound, or
+an inlined `phase_of` that answers differently from the real one.
+
+`invariants` and `assumptions` are lists of
+`{"name", "cite", "if": [atoms], "then": [atoms]}`. An atom is
+`[lhs, op, rhs]`: `lhs` is a probe field or `phase`, which an assumption may
+not read; `op` is `==`, `!=`, `in`, `<`, `<=`, `>`, or `>=`; `rhs` is a
+literal, a list for `in`, or `{"field": name}`. An empty `if` always holds. A
+probe where an assumption's `if` holds and its `then` fails is pruned, and one
+where an invariant's does is a violation. `effects` holds one entry per step,
+`{"step", "done_when": [RUN_DIR paths], "cite", "outcomes"}`, and each outcome
+is `{"name", "set", "add", "if"}` or `{"name", "terminal": "stop"}`. Every
+step needs one outcome with no `if`.
+
 Standard library only, so the skill stays copy-in portable.
 """
 import argparse
+import ast
+import itertools
 import json
 import os
 import re
@@ -524,12 +576,1163 @@ def cmd_crash_points(args):
     return 1 if wrong or missing else 0
 
 
+# The `invariants` and `liveness` subcommands. Both run `phase_of` in-process
+# on probes they enumerate, so they need no git and no subprocess.
+
+ATOM_OPS = ("==", "!=", "in", "<", "<=", ">", ">=")
+STEPS = tuple(str(n) for n in range(9))
+# A full run is under 20 transitions, and two review rounds add about 6, so a
+# path still going at 40 has no end the model can see.
+PATH_CAP = 40
+# Null is an answer for these two (no pull request yet), so they keep it in
+# their domains, and the null sweep never nulls them.
+NULLABLE = ("pr_state", "review_state")
+# The fields the null sweep enumerates: the two above, and the one row 1
+# reads ahead of the generic null check.
+NULL_SWEEP_FREE = NULLABLE + ("queue_unfiled_rows",)
+# Enough only while `phase_of` compares counts with 0 and with each other,
+# which `bound_check` enforces.
+COUNT_DOMAIN = (0, 1, 2)
+
+
+def load_run_state():
+    """Import `run-state.py` from beside this script, so a scratch copy's
+    mutated script is the one checked."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("run_state_under_check", RUN_STATE)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def domains_of(run_state):
+    domains = {}
+    for name, kind, allowed in run_state.PROBE_FIELDS:
+        values = (False, True) if kind == "bool" else COUNT_DOMAIN if kind == "int" else tuple(allowed)
+        domains[name] = ((None,) + values) if name in NULLABLE else values
+    return domains
+
+
+def check_atoms(atoms, where, domains, problems):
+    if not isinstance(atoms, list):
+        problems.append(f"{where}: expected a list of atoms")
+        return
+    for i, atom in enumerate(atoms):
+        at = f"{where}[{i}]"
+        if not (isinstance(atom, list) and len(atom) == 3):
+            problems.append(f"{at}: an atom is [lhs, op, rhs]")
+            continue
+        lhs, op, rhs = atom
+        # A list or object name is unhashable, so the domain lookup would
+        # crash with exit 1 where a malformed model wants exit 3.
+        if not isinstance(lhs, str) or (lhs != "phase" and lhs not in domains):
+            problems.append(f"{at}: {lhs!r} is neither phase nor a probe field")
+            continue
+        if op not in ATOM_OPS:
+            problems.append(f"{at}: op {op!r} is not one of {', '.join(ATOM_OPS)}")
+            continue
+        allowed = PHASES if lhs == "phase" else domains[lhs] + (None,)
+        if isinstance(rhs, dict):
+            if set(rhs) != {"field"} or not isinstance(rhs["field"], str) or rhs["field"] not in domains or op == "in":
+                problems.append(f"{at}: rhs {rhs!r} must be {{\"field\": <probe field>}}, never with in")
+                continue
+            # The real domains, not `allowed`, which adds null to every field
+            # for a literal null and would let any two fields share it.
+            lefts, rights = PHASES if lhs == "phase" else domains[lhs], domains[rhs["field"]]
+            # `_lt` on a bool or a string against a count raises TypeError, an
+            # exit 1, and an equality between two disjoint domains never holds.
+            if op in ("<", "<=", ">", ">="):
+                if not all(type(v) is int for v in lefts + rights if v is not None):
+                    problems.append(f"{at}: {op} needs counts on both sides, got {lhs} and {rhs['field']}")
+            elif not any(same(a, b) for a in lefts for b in rights):
+                problems.append(f"{at}: {lhs} and {rhs['field']} share no value, so {op} can't vary")
+            continue
+        values = rhs if op == "in" else [rhs]
+        if op == "in" and not isinstance(rhs, list):
+            problems.append(f"{at}: in needs a list")
+            continue
+        # A typo such as "OPENED" never matches, and an invariant that can't
+        # match passes every probe.
+        for value in values:
+            if isinstance(value, (list, dict)) or not any(
+                value == a and type(value) is type(a) for a in allowed
+            ):
+                problems.append(f"{at}: {value!r} is not a value {lhs} can take")
+        if op in ("<", "<=", ">", ">=") and not all(type(v) is int for v in values):
+            problems.append(f"{at}: {op} needs an integer")
+        # 2 stands for every larger count, so an atom that answers 2 one way
+        # and 3 the other passes probes it never built: `<= 2` held on all of
+        # them while a queue of 3 broke it.
+        elif domains.get(lhs) == COUNT_DOMAIN and values and all(type(v) is int for v in values):
+            if len({ATOM_TESTS[op](n, rhs) for n in range(2, max(values) + 3)}) > 1:
+                problems.append(f"{at}: {lhs} {op} {rhs!r} tells 2 from a larger count, past what counts of 0-2 can test")
+
+
+def check_rules(rules, key, domains, problems):
+    if not isinstance(rules, list):
+        problems.append(f"{key}: expected a list")
+        return
+    names = set()
+    for i, rule in enumerate(rules):
+        where = f"{key}[{i}]"
+        if not isinstance(rule, dict):
+            problems.append(f"{where}: expected an object")
+            continue
+        name = rule.get("name")
+        if not isinstance(name, str) or not name.strip() or name in names:
+            problems.append(f"{where}: name must be a unique non-empty string")
+        names.add(name)
+        where = f"{key} {name}"
+        # A rule with no cite is one nobody read from the prose, which is the
+        # failure this field exists to rule out.
+        if not isinstance(rule.get("cite"), str) or not rule["cite"].strip():
+            problems.append(f"{where}: cite must name the prose it was read from")
+        check_atoms(rule.get("if"), f"{where}.if", domains, problems)
+        if not rule.get("then"):
+            problems.append(f"{where}: then must be a non-empty list of atoms")
+        check_atoms(rule.get("then", []), f"{where}.then", domains, problems)
+
+
+def check_effects(effects, domains, problems):
+    if not isinstance(effects, list):
+        problems.append("effects: expected a list")
+        return
+    seen = set()
+    for i, effect in enumerate(effects):
+        where = f"effects[{i}]"
+        if not isinstance(effect, dict):
+            problems.append(f"{where}: expected an object")
+            continue
+        step = effect.get("step")
+        if isinstance(step, bool) or step not in range(9) or step in seen:
+            problems.append(f"{where}: step {step!r} is not a unique 0-8")
+        else:
+            # Only a valid step goes in: a list one is unhashable.
+            seen.add(step)
+        where = f"effects step {step}"
+        if not isinstance(effect.get("cite"), str) or not effect["cite"].strip():
+            problems.append(f"{where}: cite must name the Done-when line it was read from")
+        done_when = effect.get("done_when")
+        if not isinstance(done_when, list) or not all(isinstance(p, str) and p for p in done_when):
+            problems.append(f"{where}: done_when must be a list of RUN_DIR paths")
+        outcomes = effect.get("outcomes")
+        if not isinstance(outcomes, list) or not outcomes:
+            problems.append(f"{where}: outcomes must be a non-empty list")
+            continue
+        # With every outcome guarded, a state matching no guard would end a
+        # path as if the step had finished.
+        if not any(isinstance(o, dict) and "if" not in o for o in outcomes):
+            problems.append(f"{where}: needs at least one outcome with no if")
+        for j, outcome in enumerate(outcomes):
+            at = f"{where} outcomes[{j}]"
+            if not isinstance(outcome, dict) or not isinstance(outcome.get("name"), str) or not outcome["name"].strip():
+                problems.append(f"{at}: expected an object with a name")
+                continue
+            check_atoms(outcome.get("if", []), f"{at}.if", domains, problems)
+            if "terminal" in outcome:
+                if outcome["terminal"] != "stop" or set(outcome) - {"name", "terminal", "if"}:
+                    problems.append(f"{at}: a terminal outcome is {{\"name\", \"terminal\": \"stop\"}} and an optional if")
+                continue
+            if set(outcome) - {"name", "set", "add", "if"}:
+                problems.append(f"{at}: keys are name, set, add, and if")
+            # Both loops below and liveness call .items(), and a list there
+            # crashes with exit 1, which reads as a violation.
+            bad = [k for k in ("set", "add") if not isinstance(outcome.get(k, {}), dict)]
+            for key in bad:
+                problems.append(f"{at}: {key} must be an object of field: value")
+            if bad:
+                continue
+            for field, value in (outcome.get("set") or {}).items():
+                if field not in domains or not any(value == a and type(value) is type(a) for a in domains[field]):
+                    problems.append(f"{at}: set {field} to {value!r}, which it can't take")
+            for field, value in (outcome.get("add") or {}).items():
+                if field not in domains or domains[field] != COUNT_DOMAIN or type(value) is not int:
+                    problems.append(f"{at}: add needs a count field and an integer, got {field} {value!r}")
+            # One outcome that writes a field two ways has no single meaning.
+            for field in sorted(set(outcome.get("set") or {}) & set(outcome.get("add") or {})):
+                problems.append(f"{at}: {field} is in both set and add")
+    missing = [n for n in range(9) if n not in seen]
+    if missing:
+        problems.append("effects: no effect for step " + ", ".join(str(n) for n in missing))
+
+
+def load_logic_model(path, domains):
+    """The model's `invariants`, `assumptions`, and `effects`, or ModelError."""
+    try:
+        with open(path, encoding="utf-8") as handle:
+            model = json.load(handle)
+    except FileNotFoundError:
+        raise ModelError([f"--model {path}: no such file"])
+    except (OSError, UnicodeDecodeError, ValueError) as e:
+        raise ModelError([f"--model {path}: {e}"])
+    if not isinstance(model, dict):
+        raise ModelError([f"model: expected a JSON object, got {type(model).__name__}"])
+    problems = []
+    if not model.get("invariants"):
+        problems.append("invariants: expected a non-empty list")
+    check_rules(model.get("invariants", []), "invariants", domains, problems)
+    check_rules(model.get("assumptions", []), "assumptions", domains, problems)
+    # An assumption that reads the answer prunes a probe by what phase_of
+    # says about it, so it could hide the very hole the check is after.
+    for rule in model.get("assumptions", []) if isinstance(model.get("assumptions"), list) else []:
+        if isinstance(rule, dict) and any(
+            isinstance(a, list) and a[:1] == ["phase"]
+            for part in (rule.get("if"), rule.get("then")) if isinstance(part, list) for a in part
+        ):
+            problems.append(f"assumptions {rule.get('name')}: an assumption may not read phase")
+    check_effects(model.get("effects"), domains, problems)
+    if not problems:
+        problems = split_count_pairs(model, domains)
+    if problems:
+        raise ModelError(problems)
+    return model
+
+
+def model_atoms(model):
+    """Each atom of a loaded model, with where it sits."""
+    for key in ("invariants", "assumptions"):
+        for rule in model.get(key, []):
+            for part in ("if", "then"):
+                for i, atom in enumerate(rule[part]):
+                    yield f"{key} {rule['name']}.{part}[{i}]", atom
+    for effect in model["effects"]:
+        for j, outcome in enumerate(effect["outcomes"]):
+            for i, atom in enumerate(outcome.get("if", [])):
+                yield f"effects step {effect['step']} outcomes[{j}].if[{i}]", atom
+
+
+def split_count_pairs(model, domains):
+    """Problems where counts compared with each other, by the model or by
+    `phase_of`, need a value past 2.
+
+    0-2 gives a count split at 1 just one value, 2, past the split, so two
+    such counts can't be told apart by `<` or `!=`, and a count past the
+    split can't sit above one that isn't: each needs a 3. Three counts
+    linked by comparisons can chain `0 < a < b < c`, which needs a 3 as
+    well, so each linked group holds at most two counts."""
+    counts = {f for f, values in domains.items() if values == COUNT_DOMAIN}
+    split = {}
+    pairs = []
+    for where, (lhs, op, rhs) in model_atoms(model):
+        if isinstance(rhs, dict):
+            if lhs in counts and rhs["field"] in counts:
+                pairs.append((where, (lhs, rhs["field"])))
+        elif lhs in counts and ATOM_TESTS[op](1, rhs) != ATOM_TESTS[op](2, rhs):
+            split.setdefault(lhs, where)
+    pairs += [(f"{RUN_STATE.name} line {line}", pair) for line, pair in phase_of_count_pairs(counts)]
+    problems = [
+        f"{field} is split at 1 by {split[field]} and compared with another count at {where}, "
+        f"which needs a count of 3"
+        for where, pair in pairs for field in dict.fromkeys(pair) if field in split
+    ]
+    group = {}
+    for _, (a, b) in pairs:
+        merged = group.get(a, {a}) | group.get(b, {b})
+        for f in merged:
+            group[f] = merged
+    for members in {frozenset(g) for g in group.values() if len(g) > 2}:
+        edges = "; ".join(f"{a}-{b} at {where}" for where, (a, b) in pairs if a in members)
+        problems.append(
+            f"counts {', '.join(sorted(members))} are linked by comparisons ({edges}), "
+            f"and three linked counts need a count of 3"
+        )
+    return problems
+
+
+def phase_of_ast():
+    tree = ast.parse(RUN_STATE.read_text(encoding="utf-8"))
+    return next((n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "phase_of"), None)
+
+
+def compares(func):
+    return [node for node in ast.walk(func) if isinstance(node, ast.Compare)]
+
+
+def phase_of_count_pairs(counts):
+    """(line, (field, field)) for each comparison in `phase_of` of one count
+    with another, read through `count(probe, name)`, `probe[name]`, and any
+    local assigned once from either."""
+    func = phase_of_ast()
+    if func is None:
+        return []
+
+    def read(expr):
+        if (isinstance(expr, ast.Call) and isinstance(expr.func, ast.Name) and expr.func.id == "count"
+                and len(expr.args) == 2 and isinstance(expr.args[1], ast.Constant)):
+            return expr.args[1].value
+        if isinstance(expr, ast.Subscript) and isinstance(expr.slice, ast.Constant):
+            return expr.slice.value
+        return None
+
+    # Only a local bound once, as `lazy_phase_of` counts stores, names one field.
+    stores = {}
+    assigned = {}
+    for node in ast.walk(func):
+        if isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del)):
+            stores[node.id] = stores.get(node.id, 0) + 1
+        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+            assigned[node.targets[0].id] = read(node.value)
+    assigned = {name: field for name, field in assigned.items() if stores.get(name) == 1}
+    pairs = []
+    for node in compares(func):
+        sides = [node.left] + node.comparators
+        fields = [assigned.get(s.id) if isinstance(s, ast.Name) else read(s) for s in sides]
+        for a, b in zip(fields, fields[1:]):
+            if a in counts and b in counts:
+                pairs.append((node.lineno, (a, b)))
+    return pairs
+
+
+def bound_check():
+    """Problems with the count bound: each `Compare` in `phase_of` with an
+    integer literal other than 0 on either side.
+
+    Counts run 0-2 because `phase_of` compares a count only with 0 and with
+    another count, and 0-2 realizes every ordering of each pair alongside the
+    zero test. A literal 3 needs a 3 and a 4 to test both sides of it."""
+    func = phase_of_ast()
+    if func is None:
+        return [f"{RUN_STATE.name}: no phase_of"]
+    problems = []
+    for node in compares(func):
+        for side in [node.left] + node.comparators:
+            while isinstance(side, ast.UnaryOp):
+                side = side.operand
+            if isinstance(side, ast.Constant) and type(side.value) is int and side.value != 0:
+                problems.append(
+                    f"{RUN_STATE.name} line {node.lineno}: phase_of compares with literal "
+                    f"{side.value}, past what counts of 0-2 can test"
+                )
+    return problems
+
+
+class Chooser:
+    """One leaf of a stateless depth-first search over choice sequences.
+
+    Replays `prefix`, takes the first option past it, and keeps the trail so
+    `next_prefix` can step to the next untried choice."""
+
+    def __init__(self, prefix):
+        self.prefix = prefix
+        self.trail = []
+
+    def pick(self, options):
+        i = self.prefix[len(self.trail)] if len(self.trail) < len(self.prefix) else 0
+        self.trail.append((i, len(options)))
+        return options[i]
+
+    def next_prefix(self):
+        trail = list(self.trail)
+        while trail and trail[-1][0] + 1 >= trail[-1][1]:
+            trail.pop()
+        if not trail:
+            return None
+        last, _ = trail.pop()
+        return [i for i, _ in trail] + [last + 1]
+
+
+def search(run):
+    """Call `run(chooser)` once per leaf of the choice tree it walks."""
+    prefix = []
+    while prefix is not None:
+        chooser = Chooser(prefix)
+        run(chooser)
+        prefix = chooser.next_prefix()
+
+
+def same(a, b):
+    # Strict, so true never matches 1 and a typo'd type never matches at all.
+    return a is b or (type(a) is type(b) and a == b)
+
+
+class Store:
+    """What one path knows about the probe. A field nothing has tested is
+    absent and may hold any value in its domain. A tested field sits in a
+    component, a tuple of fields with the set of value rows still possible,
+    and fields compared with each other share one."""
+
+    def __init__(self, domains, comps=None):
+        self.domains = domains
+        self.comps = dict(comps or {})
+
+    def copy(self):
+        return Store(self.domains, self.comps)
+
+    def comp(self, field):
+        found = self.comps.get(field)
+        if found is None:
+            return (field,), frozenset((v,) for v in self.domains[field])
+        return found
+
+    def cut(self, fields, test):
+        """The component joining `fields`, cut to the rows where `test` holds."""
+        names, yes, _ = self.partition(fields, test)
+        return names, yes
+
+    def partition(self, fields, test):
+        """The component joining `fields`, as (names, rows where `test`
+        holds, rows where it doesn't)."""
+        comps = []
+        for f in fields:
+            c = self.comp(f)
+            if c not in comps:
+                comps.append(c)
+        names = tuple(n for c in comps for n in c[0])
+        rows = comps[0][1]
+        for c in comps[1:]:
+            rows = [r + t for r in rows for t in c[1]]
+        at = [names.index(f) for f in fields]
+        yes = []
+        no = []
+        for r in rows:
+            (yes if test(*(r[i] for i in at)) else no).append(r)
+        return names, frozenset(yes), frozenset(no)
+
+    def keep(self, comp):
+        for part in split(comp):
+            for f in part[0]:
+                self.comps[f] = part
+
+    def values(self, field):
+        names, rows = self.comp(field)
+        i = names.index(field)
+        return sorted({r[i] for r in rows}, key=lambda v: order(self.domains[field], v))
+
+    def set(self, field, value):
+        names, rows = self.comp(field)
+        if len(names) > 1:
+            i = names.index(field)
+            rest = (names[:i] + names[i + 1:], frozenset(r[:i] + r[i + 1:] for r in rows))
+            self.keep(rest)
+        self.comps[field] = ((field,), frozenset({(value,)}))
+
+    def add(self, field, n):
+        names, rows = self.comp(field)
+        i = names.index(field)
+        self.keep((names, frozenset(r[:i] + (r[i] + n,) + r[i + 1:] for r in rows)))
+
+    def key(self):
+        return frozenset(
+            c for c in set(self.comps.values())
+            if not (len(c[0]) == 1 and c[1] == frozenset((v,) for v in self.domains[c[0][0]]))
+        )
+
+
+MERGE_ROWS = 4096
+
+
+def union(a, b):
+    """One Store holding exactly the probes of `a` and of `b`, or None where
+    the component that would take would pass MERGE_ROWS rows.
+
+    The fields where the two differ are joined into one component on each
+    side, and the rows of the two joined components are pooled."""
+    differ = {f for f in set(a.comps) | set(b.comps) if a.comp(f) != b.comp(f)}
+    if not differ:
+        return a
+    close = set()
+    while differ:
+        f = differ.pop()
+        close.add(f)
+        differ |= {g for st in (a, b) for g in st.comp(f)[0]} - close
+    names = tuple(sorted(close))
+    for st in (a, b):
+        size = 1
+        for comp in {st.comp(f) for f in names}:
+            size *= len(comp[1])
+        if size > MERGE_ROWS:
+            return None
+    pooled = set()
+    for st in (a, b):
+        joined, rows = st.cut(names, lambda *v: True)
+        at = [joined.index(f) for f in names]
+        pooled |= {tuple(r[i] for i in at) for r in rows}
+    if len(pooled) > MERGE_ROWS:
+        return None
+    out = a.copy()
+    out.keep((names, frozenset(pooled)))
+    return out
+
+
+def split(comp):
+    """`comp` as independent components: a field whose rows are every
+    pairing of its values with the rest's goes off alone. Two paths that
+    know the same thing then hold the same Store, which liveness relies on
+    to see a state twice."""
+    names, rows = comp
+    parts = []
+    while len(names) > 1:
+        for i in range(len(names)):
+            mine = {r[i] for r in rows}
+            rest = {r[:i] + r[i + 1:] for r in rows}
+            if len(mine) * len(rest) == len(rows):
+                parts.append(((names[i],), frozenset((v,) for v in mine)))
+                names, rows = names[:i] + names[i + 1:], frozenset(rest)
+                break
+        else:
+            break
+    return parts + [(names, frozenset(rows))]
+
+
+def order(domain, value):
+    for i, v in enumerate(domain):
+        if same(v, value):
+            return i
+    if value is None:
+        return -1
+    # A count `add` pushed past the domain sorts after it, in numeric order.
+    return len(domain) + value
+
+
+class SearchPath:
+    """One run of `phase_of` or of the model's atoms over a Store, where each
+    test whose answer the store doesn't settle becomes a choice."""
+
+    def __init__(self, store, chooser):
+        self.store = store
+        self.chooser = chooser
+
+    def decide(self, fields, test):
+        names, yes, no = self.store.partition(fields, test)
+        # A test the store already settles is no choice, and leaves the
+        # store as it was.
+        if not no:
+            return True
+        if not yes:
+            return False
+        answer = self.chooser.pick((True, False))
+        self.store.keep((names, yes if answer else no))
+        return answer
+
+    def concrete(self, field):
+        value = self.chooser.pick(self.store.values(field))
+        self.store.keep(self.store.cut((field,), lambda v: same(v, value)))
+        return value
+
+    def atom(self, atom, phase):
+        fields, test = atom_test(atom, phase)
+        return test() if not fields else self.decide(fields, test)
+
+
+def atom_test(atom, phase):
+    """One reading of an atom for every place that evaluates one, so a
+    `{"field": name}` reference resolves the same way whatever its left side.
+
+    Returns the probe fields `atom` reads and a test over their values, with
+    `phase` in place of the answer. No fields means the answer alone settles
+    the atom, and the test takes no argument.
+
+    `phase` against `{"field": name}` reads that field, so the search splits
+    on it. Compared with the reference dict itself, the answer never matches,
+    and an invariant such as `phase != {"field": "herdr_agent_state"}` passes
+    every probe."""
+    lhs, op, rhs = atom
+    test = ATOM_TESTS[op]
+    if isinstance(rhs, dict):
+        if lhs == "phase":
+            return (rhs["field"],), lambda v: test(phase, v)
+        return (lhs, rhs["field"]), test
+    if lhs == "phase":
+        return (), lambda: test(phase, rhs)
+    return (lhs,), lambda v: test(v, rhs)
+
+
+def _lt(a, b):
+    return a is not None and b is not None and a < b
+
+
+ATOM_TESTS = {
+    "==": same,
+    "!=": lambda a, b: not same(a, b),
+    "in": lambda a, b: any(same(a, x) for x in b),
+    "<": _lt,
+    "<=": lambda a, b: same(a, b) or _lt(a, b),
+    ">": lambda a, b: _lt(b, a),
+    ">=": lambda a, b: same(a, b) or _lt(b, a),
+}
+
+
+class Sym:
+    """A probe field `phase_of` has read but not yet tested. Each comparison
+    or truth test asks the SearchPath, so the field is narrowed only as far
+    as the code looks."""
+
+    __slots__ = ("path", "field")
+
+    def __init__(self, path, field):
+        self.path = path
+        self.field = field
+
+    def _test(self, other, op):
+        if isinstance(other, Sym):
+            return self.path.decide((self.field, other.field), op)
+        return self.path.decide((self.field,), lambda v: op(v, other))
+
+    def __eq__(self, other):
+        return self._test(other, lambda a, b: a == b)
+
+    def __ne__(self, other):
+        return self._test(other, lambda a, b: a != b)
+
+    def __lt__(self, other):
+        return self._test(other, lambda a, b: a < b)
+
+    def __le__(self, other):
+        return self._test(other, lambda a, b: a <= b)
+
+    def __gt__(self, other):
+        return self._test(other, lambda a, b: a > b)
+
+    def __ge__(self, other):
+        return self._test(other, lambda a, b: a >= b)
+
+    def __bool__(self):
+        return self.path.decide((self.field,), bool)
+
+    __hash__ = None
+
+    # Reason text only: the checker reads nothing from it but the row prefix.
+    def __str__(self):
+        return f"<{self.field}>"
+
+    __format__ = lambda self, spec: str(self)
+
+
+class SymProbe:
+    """The probe `phase_of` sees on a SearchPath. A field that may be null is
+    pinned to one value at its first read, because `is None` can't be asked
+    of a stand-in. Every other field is a Sym: in the non-null space no such
+    field is None, so `is None` on a Sym answers right."""
+
+    def __init__(self, path):
+        self.path = path
+
+    def __getitem__(self, name):
+        if any(v is None for v in self.path.store.domains[name]):
+            return self.path.concrete(name)
+        return Sym(self.path, name)
+
+
+INLINE_NODES = (
+    "Name", "Constant", "Subscript", "Compare", "BoolOp", "UnaryOp", "Call", "Tuple", "Load",
+    "And", "Or", "Not", "Gt", "GtE", "Lt", "LtE", "Eq", "NotEq", "In", "NotIn", "Is", "IsNot",
+)
+
+
+def lazy_phase_of(run_state):
+    """`phase_of` with each single-assignment local whose value is a pure
+    probe read inlined at its uses, compiled into a copy of run-state's
+    globals with `count` and `null_fields` swapped for the search.
+
+    `phase_of` computes `branch_anywhere`, `redteam_clean`, and the rest up
+    front, so every field they read is tested on every path, and the search
+    ran past 20 million leaves. Inlined, a field is tested only where a row
+    looks at it. The answers are the same, since a pure read gives the same
+    value wherever it runs, and `check_inlined` holds the copy to that."""
+    tree = ast.parse(RUN_STATE.read_text(encoding="utf-8"))
+    func = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "phase_of")
+    stores = {}
+    values = {}
+    for node in ast.walk(func):
+        if isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del)):
+            stores[node.id] = stores.get(node.id, 0) + 1
+        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+            values[node.targets[0].id] = node.value
+    allowed = tuple(getattr(ast, n) for n in INLINE_NODES)
+
+    def pure(expr, inlinable):
+        for x in ast.walk(expr):
+            if not isinstance(x, allowed):
+                return False
+            if isinstance(x, ast.Call) and not (isinstance(x.func, ast.Name) and x.func.id in ("flag", "count")):
+                return False
+            if isinstance(x, ast.Name) and x.id not in ("probe", "flag", "count") and x.id not in inlinable:
+                return False
+        return True
+
+    inlinable = {name for name in values if stores.get(name) == 1}
+    while True:
+        kept = {name for name in inlinable if pure(values[name], inlinable)}
+        if kept == inlinable:
+            break
+        inlinable = kept
+
+    class Inline(ast.NodeTransformer):
+        def visit_Name(self, node):
+            if isinstance(node.ctx, ast.Load) and node.id in inlinable:
+                return self.visit(ast.parse(ast.unparse(values[node.id]), mode="eval").body)
+            return node
+
+        def visit_Assign(self, node):
+            if len(node.targets) == 1 and isinstance(node.targets[0], ast.Name) and node.targets[0].id in inlinable:
+                return ast.copy_location(ast.Pass(), node)
+            self.generic_visit(node)
+            return node
+
+    func = ast.fix_missing_locations(Inline().visit(func))
+    namespace = dict(vars(run_state))
+    exec(compile(ast.Module(body=[func], type_ignores=[]), str(RUN_STATE), "exec"), namespace)
+    return namespace
+
+
+def check_inlined(run_state, namespace, domains):
+    """Problems where the inlined copy answers differently from `phase_of`,
+    over a fixed sample of full non-null probes."""
+    import random
+    rng = random.Random(148)
+    fields = [name for name, _, _ in run_state.PROBE_FIELDS]
+    for _ in range(3000):
+        probe = {name: rng.choice([v for v in domains[name] if v is not None or name in NULLABLE]) for name in fields}
+        if run_state.phase_of(probe) != namespace["phase_of"](probe):
+            return [f"inlined phase_of disagrees with phase_of on {shown(probe)}"]
+    return []
+
+
+def label(answer):
+    phase, reason = answer
+    row = ROW_REASON.match(reason)
+    return f"{phase} row {row.group(1) if row else 'none'}"
+
+
+def shown(bound):
+    return json.dumps(bound, sort_keys=True)
+
+
+def narrow(store, rules, fields, phase):
+    """Each field's values the store allows, cut by propagation until no
+    rule or component rules out another value; None once a field runs dry.
+
+    A test that fails only with every field assigned would otherwise be
+    found by trying each value of every field ahead of it."""
+    dom = {f: store.values(f) for f in fields}
+
+    def can(atom, want, fixed=None):
+        fs, test = atom_test(atom, phase)
+        if not fs:
+            return test() == want
+        values = [[fixed[1]] if fixed and fixed[0] == f else dom[f] for f in fs]
+        return any(test(*combo) == want for combo in itertools.product(*values))
+
+    def fields_of(atom):
+        return [x for x in (atom[0], atom[2]["field"] if isinstance(atom[2], dict) else None) if x not in (None, "phase")]
+
+    def supported(rule, fixed):
+        if any(can(a, False, fixed) for a in rule["if"]):
+            return True
+        return all(can(a, True, fixed) for a in rule["then"])
+
+    comps = set(store.comps.values())
+    changed = True
+    while changed:
+        changed = False
+        for rule in rules:
+            for f in {x for a in rule["if"] + rule["then"] for x in fields_of(a)}:
+                kept = [v for v in dom[f] if supported(rule, (f, v))]
+                if len(kept) != len(dom[f]):
+                    dom[f] = kept
+                    changed = True
+                    if not kept:
+                        return None
+        for names, rows in comps:
+            live = [r for r in rows if all(any(same(r[j], v) for v in dom[n]) for j, n in enumerate(names))]
+            for j, n in enumerate(names):
+                kept = [v for v in dom[n] if any(same(r[j], v) for r in live)]
+                if len(kept) != len(dom[n]):
+                    dom[n] = kept
+                    changed = True
+                    if not kept:
+                        return None
+    return dom
+
+
+def holds(rule, probe):
+    """Whether `rule` holds on a full probe. Assumptions never read phase."""
+    def atom(a):
+        lhs, op, rhs = a
+        return ATOM_TESTS[op](probe[lhs], probe[rhs["field"]] if isinstance(rhs, dict) else rhs)
+    return not all(atom(a) for a in rule["if"]) or all(atom(a) for a in rule["then"])
+
+
+def first_probe(store, rules, fields, phase=None):
+    """The first full probe, in field order and each field's domain order,
+    that the store allows and every rule holds on; None where there is none.
+
+    Doubles as the satisfiability test the assumptions prune with, and,
+    since it's the first in a fixed order, it names the same probe however
+    the search reached the store."""
+    dom = narrow(store, rules, fields, phase)
+    if dom is None:
+        return None
+    index = {f: i for i, f in enumerate(fields)}
+    checks = []
+    for rule in rules:
+        atoms = rule["if"] + rule["then"]
+        named = {a[0] for a in atoms if a[0] != "phase"} | {a[2]["field"] for a in atoms if isinstance(a[2], dict)}
+        checks.append((named, ("rule", rule)))
+    for comp in set(store.comps.values()):
+        checks.append((set(comp[0]), ("comp", comp)))
+    # A rule is tried at each of its fields, since one then-atom can fail
+    # long before the rule's last field is assigned. A component waits for
+    # its last field.
+    at = {}
+    for named, check in checks:
+        if check[0] == "rule":
+            for i in {index[f] for f in named} or {-1}:
+                at.setdefault(i, []).append(check)
+        else:
+            at.setdefault(max(index[f] for f in named), []).append(check)
+    # The assigned fields that some check still waiting on a later field reads.
+    frontier = [
+        tuple(sorted(
+            {f for named, _ in checks if any(index[g] >= i for g in named) for f in named if index[f] < i},
+            key=index.get,
+        ))
+        for i in range(len(fields) + 1)
+    ]
+    probe = {}
+
+    def ok(check):
+        kind, what = check
+        if kind == "comp":
+            names, rows = what
+            return any(all(same(r[j], probe[n]) for j, n in enumerate(names)) for r in rows)
+
+        def atom(a):
+            """True, False, or None while a field it reads is unassigned."""
+            lhs, op, rhs = a
+            if lhs != "phase" and lhs not in probe:
+                return None
+            if isinstance(rhs, dict) and rhs["field"] not in probe:
+                return None
+            left = phase if lhs == "phase" else probe[lhs]
+            return ATOM_TESTS[op](left, probe[rhs["field"]] if isinstance(rhs, dict) else rhs)
+        return not (
+            all(atom(a) is True for a in what["if"]) and any(atom(a) is False for a in what["then"])
+        )
+
+    failed = set()
+
+    def walk(i):
+        if i == len(fields):
+            return True
+        key = (i, tuple(probe[f] for f in frontier[i]))
+        if key in failed:
+            return False
+        for value in dom[fields[i]]:
+            probe[fields[i]] = value
+            if all(ok(c) for c in at.get(i, ())) and walk(i + 1):
+                return True
+        del probe[fields[i]]
+        failed.add(key)
+        return False
+
+    if not all(ok(c) for c in at.get(-1, ())):
+        return None
+    return dict(probe) if walk(0) else None
+
+
+def read_set(run_state, probe):
+    """The fields the real `phase_of` reads on a full probe, with the generic
+    null check stubbed out since it reads every field."""
+
+    class Reads(dict):
+        def __getitem__(self, name):
+            seen.add(name)
+            return dict.__getitem__(self, name)
+
+    seen = set()
+    real = run_state.null_fields
+    run_state.null_fields = lambda probe: []
+    try:
+        run_state.phase_of(Reads(probe))
+    finally:
+        run_state.null_fields = real
+    return seen
+
+
+def logic_setup(args):
+    """The imported run-state module, its field domains, the model, and the
+    inlined `phase_of` namespace, or None after reporting an exit 3."""
+    try:
+        run_state = load_run_state()
+    except Exception as e:
+        sys.stderr.write(f"resume_checks: {RUN_STATE}: {type(e).__name__}: {e}\n")
+        return None
+    domains = domains_of(run_state)
+    try:
+        model = load_logic_model(args.model, domains)
+    except ModelError as e:
+        for problem in e.problems:
+            sys.stderr.write(f"resume_checks: {problem}\n")
+        return None
+    problems = bound_check()
+    if not problems:
+        namespace = lazy_phase_of(run_state)
+        # In the non-null space `count` is `int` of a non-null value, so it
+        # can hand back the Sym and let the comparison decide.
+        namespace["count"] = lambda probe, name: probe[name]
+        namespace["null_fields"] = lambda probe: []
+        problems = check_inlined(run_state, namespace, domains)
+    for problem in problems:
+        sys.stderr.write(f"resume_checks: {problem}\n")
+    return None if problems else (run_state, domains, model, namespace)
+
+
+def non_null(domains):
+    return {
+        name: values if name in NULLABLE else tuple(v for v in values if v is not None)
+        for name, values in domains.items()
+    }
+
+
+def cmd_invariants(args):
+    setup = logic_setup(args)
+    if setup is None:
+        return 3
+    run_state, domains, model, namespace = setup
+    fields = [name for name, _, _ in run_state.PROBE_FIELDS]
+    assumptions = model.get("assumptions", [])
+    found = {}
+    # Counted by answer: the search paths depend on the order phase_of tests
+    # its fields, and a reordering that changes no answer must print the
+    # same line.
+    reached = set()
+    live = set()
+
+    def report(name, answer, probe, atoms):
+        reads = read_set(run_state, probe) | {
+            f for a in atoms for f in ([a[0]] + ([a[2]["field"]] if isinstance(a[2], dict) else []))
+            if f != "phase"
+        }
+        rank = tuple(order(domains[f], probe[f]) for f in fields)
+        key = f"{name}: {label(answer)}"
+        if key not in found or rank < found[key][0]:
+            found[key] = (rank, shown({f: probe[f] for f in reads}))
+
+    def one(chooser):
+        path = SearchPath(Store(non_null(domains)), chooser)
+        answer = namespace["phase_of"](SymProbe(path))
+        reached.add(answer)
+        if first_probe(path.store, assumptions, fields, answer[0]) is None:
+            return
+        live.add(answer)
+        for rule in model["invariants"]:
+            for broken in rule["then"]:
+                store = path.store.copy()
+                ok = True
+                for atom, want in [(a, True) for a in rule["if"]] + [(broken, False)]:
+                    fs, test = atom_test(atom, answer[0])
+                    if not fs:
+                        ok = test() == want
+                    else:
+                        comp = store.cut(fs, lambda *v, t=test, w=want: t(*v) == w)
+                        ok = bool(comp[1])
+                        store.keep(comp)
+                    if not ok:
+                        break
+                if not ok:
+                    continue
+                probe = first_probe(store, assumptions, fields, answer[0])
+                if probe is not None:
+                    report(rule["name"], answer, probe, rule["if"] + rule["then"])
+
+    search(one)
+
+    # Once any field but the exempt three is null, phase_of stops before
+    # reading another field's value, so the rest can sit at one value each.
+    first = {name: values[0] for name, values in non_null(domains).items()}
+    for name in fields:
+        if name in NULLABLE:
+            continue
+
+        def nulled(chooser, name=name):
+            probe = dict(first, **{name: None})
+            for free in NULL_SWEEP_FREE:
+                if free != name:
+                    probe[free] = chooser.pick(domains[free])
+            answer = run_state.phase_of(probe)
+            reached.add(answer)
+            live.add(answer)
+            if answer[0] in STEPS:
+                report("null", answer, probe, [])
+
+        search(nulled)
+
+    for key in sorted(found):
+        sys.stderr.write(f"{key} on {found[key][1]}\n")
+    print(f"probes: {len(reached)} leaves, {len(reached - live)} pruned")
+    return 1 if found else 0
+
+
+def apply_effect(outcome, add, set_):
+    """Apply an outcome's `add`, then its `set`, through the two callbacks."""
+    for field, n in (outcome.get("add") or {}).items():
+        add(field, n)
+    for field, value in (outcome.get("set") or {}).items():
+        set_(field, value)
+
+
+def cmd_liveness(args):
+    setup = logic_setup(args)
+    if setup is None:
+        return 3
+    run_state, domains, model, namespace = setup
+    fields = [name for name, _, _ in run_state.PROBE_FIELDS]
+    effects = {str(e["step"]): e["outcomes"] for e in model["effects"]}
+    assumptions = model.get("assumptions", [])
+    sys.setrecursionlimit(max(sys.getrecursionlimit(), 20 * PATH_CAP))
+    possible_child = {}
+
+    def expand(store):
+        """Every way one resume can go from `store`, as (label, resolved
+        store, child store or None for an end), then each outcome whose child
+        holds no probe the assumptions allow, as (label, outcome name,
+        resolved store). Leaves of phase_of that end on the same label and
+        outcome are pooled into as few child Stores as `union` allows.
+
+        Unpooled, every start probe's path stays its own Store and the graph
+        runs past 100,000 nodes. Pooling hides no loop: a pooled Store that
+        comes back to itself is a set each probe of which comes back into
+        it, and a probe whose own path runs past PATH_CAP takes its Store
+        past PATH_CAP with it."""
+        moves = []
+
+        possible = {}
+        impossible = []
+
+        def one(chooser):
+            path = SearchPath(store.copy(), chooser)
+            answer = namespace["phase_of"](SymProbe(path))
+            seen = (path.store.key(), answer[0])
+            if seen not in possible:
+                possible[seen] = first_probe(path.store, assumptions, fields, answer[0])
+            witness = possible[seen]
+            if witness is None:
+                return
+            if answer[0] not in STEPS:
+                moves.append((label(answer), path.store, None, None))
+                return
+            outcome = chooser.pick(effects[answer[0]])
+            if not all(path.atom(a, answer[0]) for a in outcome.get("if", [])):
+                return
+            # A guard can narrow the leaf to probes the assumptions rule out.
+            # No real run takes that outcome, so its child says nothing about
+            # the effect.
+            if outcome.get("if"):
+                seen = (path.store.key(), answer[0])
+                if seen not in possible:
+                    possible[seen] = first_probe(path.store, assumptions, fields, answer[0])
+                witness = possible[seen]
+                if witness is None:
+                    return
+            if "terminal" in outcome:
+                moves.append((label(answer), path.store, None, None))
+                return
+            child = path.store.copy()
+            apply_effect(outcome, child.add, child.set)
+            # A child with no probe the assumptions allow is an effect writing
+            # a state no real run reaches, so liveness reports it. Pruning it
+            # would drop every path behind it with nothing said: a Step 1 that
+            # also wrote base_sha false looped 1 -> 1 and passed that way.
+            # A child with some allowed probe is narrowed leaf by leaf once expanded.
+            # The parent's allowed probe, carried through the effect, is a
+            # probe of the child, so a child it satisfies needs no search.
+            carried = dict(witness)
+            # The same updates in the same order as `child`, so the shortcut
+            # never accepts a probe the child doesn't hold.
+            apply_effect(outcome, lambda f, n: carried.__setitem__(f, carried[f] + n), carried.__setitem__)
+            if child.key() not in possible_child:
+                possible_child[child.key()] = all(holds(rule, carried) for rule in assumptions) \
+                    or first_probe(child, assumptions, fields) is not None
+            if not possible_child[child.key()]:
+                impossible.append((label(answer), outcome["name"], path.store))
+                return
+            moves.append((label(answer), path.store, child, outcome["name"]))
+
+        search(one)
+        pooled = {}
+        for move in moves:
+            if move[2] is None:
+                key = (move[0], None)
+                if key not in pooled:
+                    pooled[key] = [move]
+                continue
+            group = pooled.setdefault((move[0], move[3]), [])
+            # Only the newest Store of a group takes a merge, which keeps
+            # pooling linear in the leaves rather than quadratic.
+            merged = union(group[-1][2], move[2]) if group else None
+            if merged is not None:
+                group[-1] = group[-1][:2] + (merged,) + group[-1][3:]
+            else:
+                group.append(move)
+        return [m[:3] for key in sorted(pooled, key=str) for m in pooled[key]], impossible
+
+    gray = {}
+    done = {}
+    # Each (answer, next answer) a resume can take, "end" for a stop, a
+    # wait, or done. Pooling decides how many search paths there are, so the
+    # count printed is of these, which pooling can't change.
+    steps = set()
+    found = {}
+    stack = []
+
+    def report(kind, labels, start):
+        probe = first_probe(start, assumptions, fields)
+        rank = tuple(order(domains[f], probe[f]) for f in fields)
+        line = f"{kind}: " + " -> ".join(labels)
+        if line not in found or rank < found[line][0]:
+            found[line] = (rank, shown({f: probe[f] for f in read_set(run_state, probe)}))
+
+    def visit(store, depth):
+        """The most transitions any path from `store` takes to an end."""
+        key = store.key()
+        if key in done:
+            height, firsts = done[key]
+            steps.update((stack[-1][0] if stack else "start", f) for f in firsts)
+            if depth + height > PATH_CAP:
+                report("unbounded", [l for l, _ in stack] + ["..."], stack[0][1])
+            return height
+        gray[key] = len(stack)
+        height = 0
+        moves, impossible = expand(store)
+        for here, outcome, resolved in impossible:
+            report("impossible", [here, outcome], resolved)
+        steps.update((stack[-1][0] if stack else "start", m[0]) for m in moves)
+        for here, resolved, child in moves:
+            stack.append((here, resolved))
+            if child is None:
+                steps.add((here, "end"))
+            elif child.key() in gray:
+                entry = gray[child.key()]
+                report("cycle", [l for l, _ in stack[entry:]] + [stack[entry][0]], stack[entry][1])
+            elif depth + 1 > PATH_CAP:
+                report("unbounded", [l for l, _ in stack], stack[0][1])
+            else:
+                height = max(height, visit(child, depth + 1) + 1)
+            stack.pop()
+        del gray[key]
+        done[key] = (height, {m[0] for m in moves})
+        return height
+
+    visit(Store(non_null(domains)), 0)
+    for line in sorted(found):
+        sys.stderr.write(f"{line} on {found[line][1]}\n")
+    print(f"paths: {len(steps)}")
+    return 1 if found else 0
+
+
 def parse_args(argv):
     ap = argparse.ArgumentParser(description="End-to-end checks of work-issue's resume table.")
     sub = ap.add_subparsers(dest="command", required=True)
     c = sub.add_parser("crash-points", help="replay every write-sequence prefix through probe and phase")
     c.add_argument("--model", metavar="MODEL", required=True, help="write-order.json")
     c.set_defaults(func=cmd_crash_points)
+    i = sub.add_parser("invariants", help="check the model's invariants over every probe phase_of can tell apart")
+    i.add_argument("--model", metavar="MODEL", required=True, help="write-order.json")
+    i.set_defaults(func=cmd_invariants)
+    v = sub.add_parser("liveness", help="check every path through the step effects reaches a stop, a wait, or done")
+    v.add_argument("--model", metavar="MODEL", required=True, help="write-order.json")
+    v.set_defaults(func=cmd_liveness)
     return ap.parse_args(argv)
 
 
