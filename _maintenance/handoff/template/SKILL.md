@@ -1,8 +1,8 @@
 ---
 name: handoff
-description: Save a session handoff to a file or a side-panel canvas, or resume one after clearing a session. Use ONLY when the user explicitly invokes handoff or asks to hand off / resume a handoff. Never use for summaries, status updates, or note-taking.
+description: Save a session handoff to a file, a side-panel canvas, or the reply itself, or resume one after clearing a session. Use ONLY when the user explicitly invokes handoff or asks to hand off / resume a handoff. Never use for summaries, status updates, or note-taking.
 disable-model-invocation: true
-argument-hint: '[handoff id or pasted doc to resume | a prompt to hand off | md for a canvas | empty for whole session]'
+argument-hint: '[handoff id or pasted doc to resume | a prompt to hand off | md for a canvas | inline for the document alone | empty for whole session]'
 ---
 
 # Handoff
@@ -23,12 +23,15 @@ Resolve once per invocation:
 
 Choose a destination:
 
+- `inline` in ARGS returns the document as the whole reply on any host.
 - Write a **file** when HANDOFF_DIR is **durable**: on the user's own machine, still reachable after this session ends. A coding agent running on a laptop or workstation qualifies.
 - Otherwise render a **canvas**. `md` or `markdown` in ARGS picks the canvas on any host.
 
+When `inline` and `md` or `markdown` both appear, `inline` wins: a caller asking for `inline` is a program reading the reply, and a canvas would hide the document from it.
+
 A sandboxed VM accepts writes into a container that is discarded with the session, so a successful write is not evidence of durability.
 
-`md` and `markdown` are destination flags, as is a leading `to`, `in`, or `as`. Strip them from ARGS before detecting the phase, so `handoff md` is write-session on a canvas and `handoff md convert the probes` is write-prompt on a canvas. Keep the word in the prompt when the remainder needs it to read as a complete instruction, as in `handoff markdown parsing is broken`.
+`md`, `markdown`, and `inline` are destination flags, as is a leading `to`, `in`, or `as`. Strip them from ARGS before detecting the phase, so `handoff md` is write-session on a canvas and `handoff md convert the probes` is write-prompt on a canvas. Keep the word in the prompt when the remainder needs it to read as a complete instruction, as in `handoff markdown parsing is broken` or `handoff the inline cache is broken`. A word kept in the prompt is not a flag and picks no destination.
 
 Choose a phase:
 
@@ -68,13 +71,17 @@ Close with this in place of the file pointer:
 Handoff ready in the panel. Start a new session, then paste this document back or attach the file.
 ```
 
+## Return Inline
+
+On an inline destination, the reply is the document alone. It opens with the `# Handoff: <slug>` heading and keeps the datetime line under it, because a caller derives the filename from those two lines. The inline destination writes nothing to disk, creates no tasks, and prints no pointer, no `/clear` line, and no closing text.
+
 ## Finish a Write
 
-For either write branch, a write is complete when the document is delivered (a file at the path, or a canvas on the panel), the closing pointer names it, and the response stops.
+For either write branch, a write is complete when the document is delivered (a file at the path, a canvas on the panel, or the reply itself on an inline destination), the closing pointer names it where the destination has one, and the response stops.
 
 ## Resume a Handoff
 
-Take the document from whichever source the user gave you: a matched file in HANDOFF_DIR, the text pasted into the message, or an attached `.md`. If a named file is missing, list available handoffs and stop. All three sources rebuild state the same way.
+Take the document from whichever source the user gave you: a matched file in HANDOFF_DIR, the text pasted into the message, or an attached `.md`. If a named file is missing, list available handoffs and stop. All three sources rebuild state the same way. Strip `inline` from ARGS on resume and ignore it; a resume always rebuilds tasks and briefs the user.
 
 Recreate every unfinished task using your platform's task or plan tool, preserving each subject and description verbatim, and restore the task marked `in_progress` to that state:
 

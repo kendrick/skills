@@ -61,6 +61,8 @@ Add `md` or `markdown` and the handoff opens beside the chat as a document (a Cl
 
 Long technical markdown reads cleanly in a panel and copies out whole, where a fenced block in a chat transcript tends to break up. This is also the default on hosts without a durable filesystem of your own, like Claude or ChatGPT on the web. Those hosts run in a sandbox that gets discarded when the session ends, so a file written there would be gone by the time you looked for it.
 
+When a program runs the skill and keeps its reply, add `inline` instead, which returns the document alone and writes nothing to disk.
+
 ## Resume Work
 
 In the fresh session, invoke the skill with the datetime prefix or any unique part of the filename:
