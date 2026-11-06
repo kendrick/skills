@@ -105,6 +105,7 @@ step needs one outcome with no `if`.
 Standard library only, so the skill stays copy-in portable.
 """
 import argparse
+import itertools
 import json
 import os
 import re
@@ -620,7 +621,7 @@ def check_atoms(atoms, where, domains, problems):
         lhs, op, rhs = atom
         # A list or object name is unhashable, so the domain lookup would
         # crash with exit 1 where a malformed model wants exit 3.
-        if not isinstance(lhs, str) or lhs != "phase" and lhs not in domains:
+        if not isinstance(lhs, str) or (lhs != "phase" and lhs not in domains):
             problems.append(f"{at}: {lhs!r} is neither phase nor a probe field")
             continue
         if op not in ATOM_OPS:
@@ -630,6 +631,17 @@ def check_atoms(atoms, where, domains, problems):
         if isinstance(rhs, dict):
             if set(rhs) != {"field"} or not isinstance(rhs["field"], str) or rhs["field"] not in domains or op == "in":
                 problems.append(f"{at}: rhs {rhs!r} must be {{\"field\": <probe field>}}, never with in")
+                continue
+            # The real domains, not `allowed`, which adds null to every field
+            # for a literal null and would let any two fields share it.
+            lefts, rights = PHASES if lhs == "phase" else domains[lhs], domains[rhs["field"]]
+            # `_lt` on a bool or a string against a count raises TypeError, an
+            # exit 1, and an equality between two disjoint domains never holds.
+            if op in ("<", "<=", ">", ">="):
+                if not all(type(v) is int for v in lefts + rights if v is not None):
+                    problems.append(f"{at}: {op} needs counts on both sides, got {lhs} and {rhs['field']}")
+            elif not any(same(a, b) for a in lefts for b in rights):
+                problems.append(f"{at}: {lhs} and {rhs['field']} share no value, so {op} can't vary")
             continue
         values = rhs if op == "in" else [rhs]
         if op == "in" and not isinstance(rhs, list):
@@ -684,7 +696,9 @@ def check_effects(effects, domains, problems):
         step = effect.get("step")
         if isinstance(step, bool) or step not in range(9) or step in seen:
             problems.append(f"{where}: step {step!r} is not a unique 0-8")
-        seen.add(step)
+        else:
+            # Only a valid step goes in: a list one is unhashable.
+            seen.add(step)
         where = f"effects step {step}"
         if not isinstance(effect.get("cite"), str) or not effect["cite"].strip():
             problems.append(f"{where}: cite must name the Done-when line it was read from")
@@ -997,7 +1011,10 @@ class SearchPath:
 
 
 def atom_test(atom, phase):
-    """The probe fields `atom` reads, and a test over their values, with
+    """One reading of an atom for every place that evaluates one, so a
+    `{"field": name}` reference resolves the same way whatever its left side.
+
+    Returns the probe fields `atom` reads and a test over their values, with
     `phase` in place of the answer. No fields means the answer alone settles
     the atom, and the test takes no argument.
 
@@ -1187,16 +1204,11 @@ def narrow(store, rules, fields, phase):
     dom = {f: store.values(f) for f in fields}
 
     def can(atom, want, fixed=None):
-        lhs, op, rhs = atom
-        test = ATOM_TESTS[op]
-        if lhs == "phase" and not isinstance(rhs, dict):
-            return test(phase, rhs) == want
-        lefts = [phase] if lhs == "phase" else [fixed[1]] if fixed and fixed[0] == lhs else dom[lhs]
-        if isinstance(rhs, dict):
-            g = rhs["field"]
-            rights = [fixed[1]] if fixed and fixed[0] == g else dom[g]
-            return any(test(x, y) == want for x in lefts for y in rights)
-        return any(test(x, rhs) == want for x in lefts)
+        fs, test = atom_test(atom, phase)
+        if not fs:
+            return test() == want
+        values = [[fixed[1]] if fixed and fixed[0] == f else dom[f] for f in fs]
+        return any(test(*combo) == want for combo in itertools.product(*values))
 
     def fields_of(atom):
         return [x for x in (atom[0], atom[2]["field"] if isinstance(atom[2], dict) else None) if x not in (None, "phase")]

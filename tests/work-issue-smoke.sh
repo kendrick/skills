@@ -4870,6 +4870,26 @@ logic_run "$crash_checks" invariants "$tmp/logic-set-list.json" "$tmp/logic-set-
   echo "#148: invariants on a list-valued set should exit 3 naming it, got $(cat "$tmp/logic-set-list.status"): $(cat "$tmp/logic-set-list.err")" >&2
   exit 1
 }
+# Each of these once crashed the loader with a TypeError, exit 1. NAME, the
+# edit to the model, and the stderr text exit 3 has to name.
+while IFS='|' read -r name edit want; do
+  python3 -c "import json, sys
+model = json.load(open(sys.argv[1]))
+$edit
+json.dump(model, open(sys.argv[2], 'w'))" "$crash_model" "$tmp/logic-$name.json"
+  logic_run "$crash_checks" invariants "$tmp/logic-$name.json" "$tmp/logic-$name"
+  [[ "$(cat "$tmp/logic-$name.status")" == "3" ]] && grep -Fq -- "$want" "$tmp/logic-$name.err" || {
+    echo "#148: invariants on a model with $name should exit 3 naming it, got $(cat "$tmp/logic-$name.status"): $(cat "$tmp/logic-$name.err")" >&2
+    exit 1
+  }
+done <<'CASES'
+list-lhs|model["invariants"][0]["then"] = [[["x"], "==", 1]]|['x'] is neither phase nor a probe field
+list-ref|model["invariants"][0]["then"] = [["pr_state", "==", {"field": ["x"]}]]|rhs {'field': ['x']} must be
+string-if|model["assumptions"][0]["if"] = "x"|.if: expected a list of atoms
+bool-lt-str|model["invariants"][0]["then"] = [["branch_local", "<", {"field": "pr_state"}]]|< needs counts on both sides, got branch_local and pr_state
+phase-lt-count|model["invariants"][0]["then"] = [["phase", "<", {"field": "wave_tasks"}]]|< needs counts on both sides, got phase and wave_tasks
+list-step|model["effects"][0]["step"] = [1]|step [1] is not a unique 0-8
+CASES
 logic_run "$crash_checks" invariants "$tmp/logic-phase-ref.json" "$tmp/logic-phase-ref"
 [[ "$(cat "$tmp/logic-phase-ref.status")" == "1" ]] \
   && grep -Eq '^phase-ref: done row [0-9]+ on \{.*"herdr_agent_state": "done".*"pr_state": "MERGED"' "$tmp/logic-phase-ref.err" || {
