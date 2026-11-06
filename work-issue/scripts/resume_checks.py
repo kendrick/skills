@@ -618,7 +618,9 @@ def check_atoms(atoms, where, domains, problems):
             problems.append(f"{at}: an atom is [lhs, op, rhs]")
             continue
         lhs, op, rhs = atom
-        if lhs != "phase" and lhs not in domains:
+        # A list or object name is unhashable, so the domain lookup would
+        # crash with exit 1 where a malformed model wants exit 3.
+        if not isinstance(lhs, str) or lhs != "phase" and lhs not in domains:
             problems.append(f"{at}: {lhs!r} is neither phase nor a probe field")
             continue
         if op not in ATOM_OPS:
@@ -626,7 +628,7 @@ def check_atoms(atoms, where, domains, problems):
             continue
         allowed = PHASES if lhs == "phase" else domains[lhs] + (None,)
         if isinstance(rhs, dict):
-            if set(rhs) != {"field"} or rhs["field"] not in domains or op == "in":
+            if set(rhs) != {"field"} or not isinstance(rhs["field"], str) or rhs["field"] not in domains or op == "in":
                 problems.append(f"{at}: rhs {rhs!r} must be {{\"field\": <probe field>}}, never with in")
             continue
         values = rhs if op == "in" else [rhs]
@@ -709,6 +711,13 @@ def check_effects(effects, domains, problems):
                 continue
             if set(outcome) - {"name", "set", "add", "if"}:
                 problems.append(f"{at}: keys are name, set, add, and if")
+            # Both loops below and liveness call .items(), and a list there
+            # crashes with exit 1, which reads as a violation.
+            bad = [k for k in ("set", "add") if not isinstance(outcome.get(k, {}), dict)]
+            for key in bad:
+                problems.append(f"{at}: {key} must be an object of field: value")
+            if bad:
+                continue
             for field, value in (outcome.get("set") or {}).items():
                 if field not in domains or not any(value == a and type(value) is type(a) for a in domains[field]):
                     problems.append(f"{at}: set {field} to {value!r}, which it can't take")
@@ -740,7 +749,8 @@ def load_logic_model(path, domains):
     # says about it, so it could hide the very hole the check is after.
     for rule in model.get("assumptions", []) if isinstance(model.get("assumptions"), list) else []:
         if isinstance(rule, dict) and any(
-            isinstance(a, list) and a[:1] == ["phase"] for a in (rule.get("if") or []) + (rule.get("then") or [])
+            isinstance(a, list) and a[:1] == ["phase"]
+            for part in (rule.get("if"), rule.get("then")) if isinstance(part, list) for a in part
         ):
             problems.append(f"assumptions {rule.get('name')}: an assumption may not read phase")
     check_effects(model.get("effects"), domains, problems)
@@ -982,13 +992,28 @@ class SearchPath:
         return value
 
     def atom(self, atom, phase):
-        lhs, op, rhs = atom
-        test = ATOM_TESTS[op]
+        fields, test = atom_test(atom, phase)
+        return test() if not fields else self.decide(fields, test)
+
+
+def atom_test(atom, phase):
+    """The probe fields `atom` reads, and a test over their values, with
+    `phase` in place of the answer. No fields means the answer alone settles
+    the atom, and the test takes no argument.
+
+    `phase` against `{"field": name}` reads that field, so the search splits
+    on it. Compared with the reference dict itself, the answer never matches,
+    and an invariant such as `phase != {"field": "herdr_agent_state"}` passes
+    every probe."""
+    lhs, op, rhs = atom
+    test = ATOM_TESTS[op]
+    if isinstance(rhs, dict):
         if lhs == "phase":
-            return test(phase, rhs)
-        if isinstance(rhs, dict):
-            return self.decide((lhs, rhs["field"]), test)
-        return self.decide((lhs,), lambda v: test(v, rhs))
+            return (rhs["field"],), lambda v: test(phase, v)
+        return (lhs, rhs["field"]), test
+    if lhs == "phase":
+        return (), lambda: test(phase, rhs)
+    return (lhs,), lambda v: test(v, rhs)
 
 
 def _lt(a, b):
@@ -1164,9 +1189,9 @@ def narrow(store, rules, fields, phase):
     def can(atom, want, fixed=None):
         lhs, op, rhs = atom
         test = ATOM_TESTS[op]
-        if lhs == "phase":
+        if lhs == "phase" and not isinstance(rhs, dict):
             return test(phase, rhs) == want
-        lefts = [fixed[1]] if fixed and fixed[0] == lhs else dom[lhs]
+        lefts = [phase] if lhs == "phase" else [fixed[1]] if fixed and fixed[0] == lhs else dom[lhs]
         if isinstance(rhs, dict):
             g = rhs["field"]
             rights = [fixed[1]] if fixed and fixed[0] == g else dom[g]
@@ -1381,14 +1406,11 @@ def cmd_invariants(args):
                 store = path.store.copy()
                 ok = True
                 for atom, want in [(a, True) for a in rule["if"]] + [(broken, False)]:
-                    lhs, op, rhs = atom
-                    if lhs == "phase":
-                        ok = ATOM_TESTS[op](answer[0], rhs) == want
+                    fs, test = atom_test(atom, answer[0])
+                    if not fs:
+                        ok = test() == want
                     else:
-                        fs = (lhs, rhs["field"]) if isinstance(rhs, dict) else (lhs,)
-                        test = ATOM_TESTS[op]
-                        comp = store.cut(fs, (lambda a, b, t=test, w=want: t(a, b) == w) if len(fs) == 2
-                                         else (lambda v, t=test, r=rhs, w=want: t(v, r) == w))
+                        comp = store.cut(fs, lambda *v, t=test, w=want: t(*v) == w)
                         ok = bool(comp[1])
                         store.keep(comp)
                     if not ok:

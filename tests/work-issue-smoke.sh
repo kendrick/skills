@@ -4854,6 +4854,28 @@ logic_run "$crash_checks" invariants "$tmp/logic-no-invariants.json" "$tmp/logic
   echo "#148: invariants on a model with no invariants should exit 3, got $(cat "$tmp/logic-no-invariants.status"): $(cat "$tmp/logic-no-invariants.err")" >&2
   exit 1
 }
+# A `set` that isn't an object crashed the loader with an AttributeError, an
+# exit 1 that reads as a violation. And `phase` against a field reference was
+# compared with the reference dict, so this invariant passed while a merged PR
+# with herdr reporting done answers done.
+python3 -c 'import json, sys
+model = json.load(open(sys.argv[1]))
+next(o for o in model["effects"][0]["outcomes"] if "set" in o)["set"] = ["base_sha"]
+json.dump(model, open(sys.argv[2], "w"))
+model = json.load(open(sys.argv[1]))
+model["invariants"].append({"name": "phase-ref", "cite": "PR 297 review", "if": [["pr_state", "==", "MERGED"]], "then": [["phase", "!=", {"field": "herdr_agent_state"}]]})
+json.dump(model, open(sys.argv[3], "w"))' "$crash_model" "$tmp/logic-set-list.json" "$tmp/logic-phase-ref.json"
+logic_run "$crash_checks" invariants "$tmp/logic-set-list.json" "$tmp/logic-set-list"
+[[ "$(cat "$tmp/logic-set-list.status")" == "3" ]] && grep -Fq "set must be an object of field: value" "$tmp/logic-set-list.err" || {
+  echo "#148: invariants on a list-valued set should exit 3 naming it, got $(cat "$tmp/logic-set-list.status"): $(cat "$tmp/logic-set-list.err")" >&2
+  exit 1
+}
+logic_run "$crash_checks" invariants "$tmp/logic-phase-ref.json" "$tmp/logic-phase-ref"
+[[ "$(cat "$tmp/logic-phase-ref.status")" == "1" ]] \
+  && grep -Eq '^phase-ref: done row [0-9]+ on \{.*"herdr_agent_state": "done".*"pr_state": "MERGED"' "$tmp/logic-phase-ref.err" || {
+  echo "#148: invariants with phase != {field: herdr_agent_state} should exit 1 on a merged PR answering done, got $(cat "$tmp/logic-phase-ref.status"): $(cat "$tmp/logic-phase-ref.err")" >&2
+  exit 1
+}
 
 # The run-state.py mutations, each found with ast so a reworded row can't make
 # one miss in silence. Each copy's resume_checks.py imports its own run-state.py.
