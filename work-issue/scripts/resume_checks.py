@@ -702,13 +702,13 @@ def check_effects(effects, domains, problems):
             if not isinstance(outcome, dict) or not isinstance(outcome.get("name"), str) or not outcome["name"].strip():
                 problems.append(f"{at}: expected an object with a name")
                 continue
+            check_atoms(outcome.get("if", []), f"{at}.if", domains, problems)
             if "terminal" in outcome:
-                if outcome["terminal"] != "stop" or set(outcome) - {"name", "terminal"}:
-                    problems.append(f"{at}: a terminal outcome is {{\"name\", \"terminal\": \"stop\"}}")
+                if outcome["terminal"] != "stop" or set(outcome) - {"name", "terminal", "if"}:
+                    problems.append(f"{at}: a terminal outcome is {{\"name\", \"terminal\": \"stop\"}} and an optional if")
                 continue
             if set(outcome) - {"name", "set", "add", "if"}:
                 problems.append(f"{at}: keys are name, set, add, and if")
-            check_atoms(outcome.get("if", []), f"{at}.if", domains, problems)
             for field, value in (outcome.get("set") or {}).items():
                 if field not in domains or not any(value == a and type(value) is type(a) for a in domains[field]):
                     problems.append(f"{at}: set {field} to {value!r}, which it can't take")
@@ -749,7 +749,7 @@ def load_logic_model(path, domains):
     return model
 
 
-def bound_check(run_state):
+def bound_check():
     """Problems with the count bound: each `Compare` in `phase_of` with an
     integer literal other than 0 on either side.
 
@@ -1205,6 +1205,14 @@ def narrow(store, rules, fields, phase):
     return dom
 
 
+def holds(rule, probe):
+    """Whether `rule` holds on a full probe. Assumptions never read phase."""
+    def atom(a):
+        lhs, op, rhs = a
+        return ATOM_TESTS[op](probe[lhs], probe[rhs["field"]] if isinstance(rhs, dict) else rhs)
+    return not all(atom(a) for a in rule["if"]) or all(atom(a) for a in rule["then"])
+
+
 def first_probe(store, rules, fields, phase=None):
     """The first full probe, in field order and each field's domain order,
     that the store allows and every rule holds on; None where there is none.
@@ -1317,7 +1325,7 @@ def logic_setup(args):
         for problem in e.problems:
             sys.stderr.write(f"resume_checks: {problem}\n")
         return None
-    problems = bound_check(run_state)
+    problems = bound_check()
     if not problems:
         namespace = lazy_phase_of(run_state)
         # In the non-null space `count` is `int` of a non-null value, so it
@@ -1428,12 +1436,14 @@ def cmd_liveness(args):
     effects = {str(e["step"]): e["outcomes"] for e in model["effects"]}
     assumptions = model.get("assumptions", [])
     sys.setrecursionlimit(max(sys.getrecursionlimit(), 20 * PATH_CAP))
+    possible_child = {}
 
     def expand(store):
         """Every way one resume can go from `store`, as (label, resolved
-        store, child store or None for an end). Leaves of phase_of that end
-        on the same label and outcome are pooled into as few child Stores as
-        `union` allows.
+        store, child store or None for an end), then each outcome whose child
+        holds no probe the assumptions allow, as (label, outcome name,
+        resolved store). Leaves of phase_of that end on the same label and
+        outcome are pooled into as few child Stores as `union` allows.
 
         Unpooled, every start probe's path stays its own Store and the graph
         runs past 100,000 nodes. Pooling hides no loop: a pooled Store that
@@ -1443,14 +1453,16 @@ def cmd_liveness(args):
         moves = []
 
         possible = {}
+        impossible = []
 
         def one(chooser):
             path = SearchPath(store.copy(), chooser)
             answer = namespace["phase_of"](SymProbe(path))
             seen = (path.store.key(), answer[0])
             if seen not in possible:
-                possible[seen] = first_probe(path.store, assumptions, fields, answer[0]) is not None
-            if not possible[seen]:
+                possible[seen] = first_probe(path.store, assumptions, fields, answer[0])
+            witness = possible[seen]
+            if witness is None:
                 return
             if answer[0] not in STEPS:
                 moves.append((label(answer), path.store, None, None))
@@ -1458,6 +1470,16 @@ def cmd_liveness(args):
             outcome = chooser.pick(effects[answer[0]])
             if not all(path.atom(a, answer[0]) for a in outcome.get("if", [])):
                 return
+            # A guard can narrow the leaf to probes the assumptions rule out.
+            # No real run takes that outcome, so its child says nothing about
+            # the effect.
+            if outcome.get("if"):
+                seen = (path.store.key(), answer[0])
+                if seen not in possible:
+                    possible[seen] = first_probe(path.store, assumptions, fields, answer[0])
+                witness = possible[seen]
+                if witness is None:
+                    return
             if "terminal" in outcome:
                 moves.append((label(answer), path.store, None, None))
                 return
@@ -1466,6 +1488,22 @@ def cmd_liveness(args):
                 child.add(field, n)
             for field, value in (outcome.get("set") or {}).items():
                 child.set(field, value)
+            # A child with no probe the assumptions allow is an effect writing
+            # a state no real run reaches, so liveness reports it. Pruning it
+            # would drop every path behind it with nothing said: a Step 1 that
+            # also wrote base_sha false looped 1 -> 1 and passed that way.
+            # A child with some allowed probe is narrowed leaf by leaf once expanded.
+            # The parent's allowed probe, carried through the effect, is a
+            # probe of the child, so a child it satisfies needs no search.
+            carried = dict(witness, **(outcome.get("set") or {}))
+            for field, n in (outcome.get("add") or {}).items():
+                carried[field] = witness[field] + n
+            if child.key() not in possible_child:
+                possible_child[child.key()] = all(holds(rule, carried) for rule in assumptions) \
+                    or first_probe(child, assumptions, fields) is not None
+            if not possible_child[child.key()]:
+                impossible.append((label(answer), outcome["name"], path.store))
+                return
             moves.append((label(answer), path.store, child, outcome["name"]))
 
         search(one)
@@ -1484,7 +1522,7 @@ def cmd_liveness(args):
                 group[-1] = group[-1][:2] + (merged,) + group[-1][3:]
             else:
                 group.append(move)
-        return [m[:3] for key in sorted(pooled, key=str) for m in pooled[key]]
+        return [m[:3] for key in sorted(pooled, key=str) for m in pooled[key]], impossible
 
     gray = {}
     done = {}
@@ -1513,7 +1551,9 @@ def cmd_liveness(args):
             return height
         gray[key] = len(stack)
         height = 0
-        moves = expand(store)
+        moves, impossible = expand(store)
+        for here, outcome, resolved in impossible:
+            report("impossible", [here, outcome], resolved)
         steps.update((stack[-1][0] if stack else "start", m[0]) for m in moves)
         for here, resolved, child in moves:
             stack.append((here, resolved))

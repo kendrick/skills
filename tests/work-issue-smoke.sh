@@ -4739,11 +4739,20 @@ if not emptied:
     sys.exit("#148: step 3's effect has no outcome with a set or add to empty")
 json.dump(model, open(sys.argv[2], "w"))
 PY
-# Liveness takes minutes where everything else here takes seconds, so both
-# runs start now, side by side, and the checks below run while they do.
+# Falsifier 6: an effect that writes a state the assumptions rule out. Step 1
+# writing base_sha false loops 1 -> 1, and liveness once pruned the child as
+# impossible and passed, which hid the loop behind it.
+python3 -c 'import json, sys
+model = json.load(open(sys.argv[1]))
+outcome = next(o for e in model["effects"] if e["step"] == 1 for o in e["outcomes"] if o["name"] == "isolated")
+outcome["set"]["base_sha"] = False
+json.dump(model, open(sys.argv[2], "w"))' "$crash_model" "$tmp/live-step1-impossible.json"
+# Liveness takes minutes where everything else here takes seconds, so all
+# three runs start now, side by side, and the checks below run while they do.
 logic_run "$crash_checks" liveness "$crash_model" "$tmp/live-shipped" &
 logic_run "$crash_checks" liveness "$tmp/live-step3-noop.json" "$tmp/live-step3" &
-# A check that fails before the `wait` below would otherwise leave both runs
+logic_run "$crash_checks" liveness "$tmp/live-step1-impossible.json" "$tmp/live-step1" &
+# A check that fails before the `wait` below would otherwise leave the runs
 # going for minutes after the suite exits. Each kill has its `|| true` because
 # `set -e` holds inside the trap: once the runs are reaped, a failed kill
 # exited 1 there and skipped the cleanup.
@@ -4938,6 +4947,12 @@ wait
   && grep -Eq '^cycle: (.* -> )?3 row [0-9]+ -> ' "$tmp/live-step3.err" || {
   echo "#148: liveness with Step 3's effect a no-op should exit 1 with a cycle through 3, got $(cat "$tmp/live-step3.status"):" >&2
   cat "$tmp/live-step3.out" "$tmp/live-step3.err" >&2
+  exit 1
+}
+[[ "$(cat "$tmp/live-step1.status")" == "1" ]] \
+  && grep -Eq '^impossible: 1 row [0-9]+ -> isolated on \{' "$tmp/live-step1.err" || {
+  echo "#148: liveness with Step 1 writing base_sha false should exit 1 naming the impossible isolated outcome, got $(cat "$tmp/live-step1.status"):" >&2
+  cat "$tmp/live-step1.out" "$tmp/live-step1.err" >&2
   exit 1
 }
 
