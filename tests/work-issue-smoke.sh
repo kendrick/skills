@@ -4870,8 +4870,10 @@ logic_run "$crash_checks" invariants "$tmp/logic-set-list.json" "$tmp/logic-set-
   echo "#148: invariants on a list-valued set should exit 3 naming it, got $(cat "$tmp/logic-set-list.status"): $(cat "$tmp/logic-set-list.err")" >&2
   exit 1
 }
-# Each of these once crashed the loader with a TypeError, exit 1. NAME, the
-# edit to the model, and the stderr text exit 3 has to name.
+# Malformed models the loader once read wrong. The type cases crashed it with
+# exit 1. The count cases ran on probes 0-2 can't stand for, so split-at-1
+# exited 1 on a probe it reached and count-past-2 and linked-counts exited 0.
+# NAME, the edit to the model, and the stderr text exit 3 has to name.
 while IFS='|' read -r name edit want; do
   python3 -c "import json, sys
 model = json.load(open(sys.argv[1]))
@@ -4889,6 +4891,9 @@ string-if|model["assumptions"][0]["if"] = "x"|.if: expected a list of atoms
 bool-lt-str|model["invariants"][0]["then"] = [["branch_local", "<", {"field": "pr_state"}]]|< needs counts on both sides, got branch_local and pr_state
 phase-lt-count|model["invariants"][0]["then"] = [["phase", "<", {"field": "wave_tasks"}]]|< needs counts on both sides, got phase and wave_tasks
 list-step|model["effects"][0]["step"] = [1]|step [1] is not a unique 0-8
+count-past-2|model["invariants"].append({"name": "queue-le-2", "cite": "PR 297 review", "if": [["pr_state", "==", "MERGED"]], "then": [["queue_unfiled_rows", "<=", 2]]})|queue_unfiled_rows <= 2 tells 2 from a larger count
+split-at-1|model["invariants"].append({"name": "one-wave-task", "cite": "PR 297 review", "if": [], "then": [["wave_tasks", "!=", 1]]})|wave_tasks is split at 1 by invariants one-wave-task.then[0] and compared with another count at run-state.py line
+linked-counts|model["invariants"].append({"name": "chain", "cite": "PR 297 review", "if": [["wave_unreported_committed", "<", {"field": "queue_unfiled_rows"}], ["queue_unfiled_rows", "<", {"field": "triage_blocking_rows"}], ["triage_blocking_rows", "<", {"field": "triage_inscope_rows"}]], "then": [["wave_unreported_committed", "!=", 0]]})|counts queue_unfiled_rows, triage_blocking_rows, triage_inscope_rows, wave_unreported_committed are linked by comparisons
 CASES
 logic_run "$crash_checks" invariants "$tmp/logic-phase-ref.json" "$tmp/logic-phase-ref"
 [[ "$(cat "$tmp/logic-phase-ref.status")" == "1" ]] \

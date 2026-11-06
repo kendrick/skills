@@ -67,7 +67,10 @@ open, and each test it makes of an open field splits the search, so one search
 path stands for every probe that takes it. Before the search, each local in
 `phase_of` that holds a pure probe read is inlined where it's used: computed up
 front, those locals tested a dozen fields on every path. Counts run 0-2, and
-the run exits 3 where `phase_of` compares a count with a literal other than 0.
+the run exits 3 where `phase_of` compares a count with a literal other than 0,
+where a model atom answers 2 differently from a larger count, where a count a
+model atom tells apart at 1 and 2 is also compared with another count, and
+where comparisons between counts link three or more of them.
 
 `invariants` prints one line per invariant and answer, naming the first probe
 in field order that breaks it:
@@ -105,6 +108,7 @@ step needs one outcome with no `if`.
 Standard library only, so the skill stays copy-in portable.
 """
 import argparse
+import ast
 import itertools
 import json
 import os
@@ -656,6 +660,12 @@ def check_atoms(atoms, where, domains, problems):
                 problems.append(f"{at}: {value!r} is not a value {lhs} can take")
         if op in ("<", "<=", ">", ">=") and not all(type(v) is int for v in values):
             problems.append(f"{at}: {op} needs an integer")
+        # 2 stands for every larger count, so an atom that answers 2 one way
+        # and 3 the other passes probes it never built: `<= 2` held on all of
+        # them while a queue of 3 broke it.
+        elif domains.get(lhs) == COUNT_DOMAIN and values and all(type(v) is int for v in values):
+            if len({ATOM_TESTS[op](n, rhs) for n in range(2, max(values) + 3)}) > 1:
+                problems.append(f"{at}: {lhs} {op} {rhs!r} tells 2 from a larger count, past what counts of 0-2 can test")
 
 
 def check_rules(rules, key, domains, problems):
@@ -768,9 +778,106 @@ def load_logic_model(path, domains):
         ):
             problems.append(f"assumptions {rule.get('name')}: an assumption may not read phase")
     check_effects(model.get("effects"), domains, problems)
+    if not problems:
+        problems = split_count_pairs(model, domains)
     if problems:
         raise ModelError(problems)
     return model
+
+
+def model_atoms(model):
+    """Each atom of a loaded model, with where it sits."""
+    for key in ("invariants", "assumptions"):
+        for rule in model.get(key, []):
+            for part in ("if", "then"):
+                for i, atom in enumerate(rule[part]):
+                    yield f"{key} {rule['name']}.{part}[{i}]", atom
+    for effect in model["effects"]:
+        for j, outcome in enumerate(effect["outcomes"]):
+            for i, atom in enumerate(outcome.get("if", [])):
+                yield f"effects step {effect['step']} outcomes[{j}].if[{i}]", atom
+
+
+def split_count_pairs(model, domains):
+    """Problems where counts compared with each other, by the model or by
+    `phase_of`, need a value past 2.
+
+    0-2 gives a count split at 1 just one value, 2, past the split, so two
+    such counts can't be told apart by `<` or `!=`, and a count past the
+    split can't sit above one that isn't: each needs a 3. Three counts
+    linked by comparisons can chain `0 < a < b < c`, which needs a 3 as
+    well, so each linked group holds at most two counts."""
+    counts = {f for f, values in domains.items() if values == COUNT_DOMAIN}
+    split = {}
+    pairs = []
+    for where, (lhs, op, rhs) in model_atoms(model):
+        if isinstance(rhs, dict):
+            if lhs in counts and rhs["field"] in counts:
+                pairs.append((where, (lhs, rhs["field"])))
+        elif lhs in counts and ATOM_TESTS[op](1, rhs) != ATOM_TESTS[op](2, rhs):
+            split.setdefault(lhs, where)
+    pairs += [(f"{RUN_STATE.name} line {line}", pair) for line, pair in phase_of_count_pairs(counts)]
+    problems = [
+        f"{field} is split at 1 by {split[field]} and compared with another count at {where}, "
+        f"which needs a count of 3"
+        for where, pair in pairs for field in dict.fromkeys(pair) if field in split
+    ]
+    group = {}
+    for _, (a, b) in pairs:
+        merged = group.get(a, {a}) | group.get(b, {b})
+        for f in merged:
+            group[f] = merged
+    for members in {frozenset(g) for g in group.values() if len(g) > 2}:
+        edges = "; ".join(f"{a}-{b} at {where}" for where, (a, b) in pairs if a in members)
+        problems.append(
+            f"counts {', '.join(sorted(members))} are linked by comparisons ({edges}), "
+            f"and three linked counts need a count of 3"
+        )
+    return problems
+
+
+def phase_of_ast():
+    tree = ast.parse(RUN_STATE.read_text(encoding="utf-8"))
+    return next((n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "phase_of"), None)
+
+
+def compares(func):
+    return [node for node in ast.walk(func) if isinstance(node, ast.Compare)]
+
+
+def phase_of_count_pairs(counts):
+    """(line, (field, field)) for each comparison in `phase_of` of one count
+    with another, read through `count(probe, name)`, `probe[name]`, and any
+    local assigned once from either."""
+    func = phase_of_ast()
+    if func is None:
+        return []
+
+    def read(expr):
+        if (isinstance(expr, ast.Call) and isinstance(expr.func, ast.Name) and expr.func.id == "count"
+                and len(expr.args) == 2 and isinstance(expr.args[1], ast.Constant)):
+            return expr.args[1].value
+        if isinstance(expr, ast.Subscript) and isinstance(expr.slice, ast.Constant):
+            return expr.slice.value
+        return None
+
+    # Only a local bound once, as `lazy_phase_of` counts stores, names one field.
+    stores = {}
+    assigned = {}
+    for node in ast.walk(func):
+        if isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del)):
+            stores[node.id] = stores.get(node.id, 0) + 1
+        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+            assigned[node.targets[0].id] = read(node.value)
+    assigned = {name: field for name, field in assigned.items() if stores.get(name) == 1}
+    pairs = []
+    for node in compares(func):
+        sides = [node.left] + node.comparators
+        fields = [assigned.get(s.id) if isinstance(s, ast.Name) else read(s) for s in sides]
+        for a, b in zip(fields, fields[1:]):
+            if a in counts and b in counts:
+                pairs.append((node.lineno, (a, b)))
+    return pairs
 
 
 def bound_check():
@@ -780,17 +887,11 @@ def bound_check():
     Counts run 0-2 because `phase_of` compares a count only with 0 and with
     another count, and 0-2 realizes every ordering of each pair alongside the
     zero test. A literal 3 needs a 3 and a 4 to test both sides of it."""
-    import ast
-    tree = ast.parse(RUN_STATE.read_text(encoding="utf-8"))
-    func = next(
-        (n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "phase_of"), None
-    )
+    func = phase_of_ast()
     if func is None:
         return [f"{RUN_STATE.name}: no phase_of"]
     problems = []
-    for node in ast.walk(func):
-        if not isinstance(node, ast.Compare):
-            continue
+    for node in compares(func):
         for side in [node.left] + node.comparators:
             while isinstance(side, ast.UnaryOp):
                 side = side.operand
@@ -1125,7 +1226,6 @@ def lazy_phase_of(run_state):
     ran past 20 million leaves. Inlined, a field is tested only where a row
     looks at it. The answers are the same, since a pure read gives the same
     value wherever it runs, and `check_inlined` holds the copy to that."""
-    import ast
     tree = ast.parse(RUN_STATE.read_text(encoding="utf-8"))
     func = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "phase_of")
     stores = {}
