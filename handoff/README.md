@@ -108,7 +108,7 @@ You get the state back and still decide what happens next, which matters because
 
 ## What Goes in a Handoff
 
-Each handoff begins with unfinished tasks. It then records the goal, completed work, next action, relevant paths, decisions, helpful skills, and verification commands. It links to plans, issues, ADRs, commits, and diffs instead of copying them.
+Each handoff begins with unfinished tasks. It then records the goal, your recent prompts word for word, completed work, next action, relevant paths, decisions, helpful skills, and verification commands. It links to plans, issues, ADRs, commits, and diffs instead of copying them.
 
 See [SKILL.md](SKILL.md) for the full workflow and document template.
 

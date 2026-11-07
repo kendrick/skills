@@ -95,6 +95,16 @@ require_text handoff/SKILL.md "Clear this session: /clear <Title Case Name> â˜‘ï
 require_text handoff/SKILL.md "it does not start the work"
 require_text handoff/SKILL.md "the response stops for the user's answer"
 refute_text handoff/SKILL.md "Continuing:"
+
+# Recent Asks quotes the user's prompts only. A quoted answer can carry an old "go" or "yes, push it" that a resumed session would read as permission, and the resume rule says only the user's current message grants that. RATIONALE's Deliberately Not Built row records the cut, and the refutes catch the likeliest wordings an edit would use to let answers back in.
+require_text handoff/SKILL.md "## Recent Asks (Verbatim)"
+require_text handoff/SKILL.md "Quote the user's prompts only, never your own answers"
+require_text handoff/SKILL.md "Omit \`Recent Asks (Verbatim)\` when the session had no prompts worth quoting"
+require_text handoff/SKILL.md "any prompt quoted under \`Recent Asks (Verbatim)\`"
+refute_text handoff/SKILL.md "prompts and answers"
+refute_text handoff/SKILL.md "prompts and replies"
+refute_text handoff/SKILL.md "and your answers"
+
 require_text handoff/README.md "agent-handoff"
 
 require_text _maintenance/handoff/PROVENANCE.md "## Deviations From Upstream"
