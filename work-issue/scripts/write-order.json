@@ -108,7 +108,7 @@
          "blind": "resume.md's baseline field: the probe never reads baseline-<wave>.txt, because Step 3 saves it before the commit or marker the probe reads"},
         {"step": 3, "subpath": "branch", "op": "commit", "paths": ["a.py"], "message": "feat: alpha",
          "resume": {"phase": "2", "row": 7}, "cite": "resume.md row 7: a report beside uncommitted changes in its owned paths is unreported, and no commit touched them, so Step 2"},
-        {"step": 3, "subpath": "gated/<wave>-<task>", "op": "write", "path": "gated/0-alpha", "content": "",
+        {"id": "wave-0-settled", "step": 3, "subpath": "gated/<wave>-<task>", "op": "write", "path": "gated/0-alpha", "content": "",
          "resume": {"phase": "2", "row": 7}, "cite": "resume.md wave_reports: with no gated/ dir yet, wave 0 counts through its commit, so alpha is reported and beta, with no report, sends row 7 to Step 2 at wave 1"},
         {"step": 2, "subpath": "tree", "op": "edit", "file": "b.py", "content": "beta = 2\n",
          "resume": {"phase": "2", "row": 7}, "cite": "resume.md row 7: beta has no report, Step 2 at wave 1"},
@@ -230,6 +230,18 @@
          "resume": {"phase": "stop", "row": 1}, "cite": "resume.md row 1: PR merged, queue_unfiled_rows is 2, so stop for the filing pass"}
       ],
       "end": {"phase": "done", "row": 1}, "end_cite": "resume.md row 1: merged, every queue row filed or dismissed, so done and offer cleanup"
+    },
+    {
+      "name": "until-boundary",
+      "about": "An invocation under --until-boundary that ends once wave 0 settles, with wave 1 still pending.",
+      "run_dir": "issue-1",
+      "probe": {"issue": 1},
+      "prefix": {"sequence": "main", "through": "wave-0-settled"},
+      "entries": [
+        {"step": 2, "subpath": "timing.log", "op": "append", "path": "timing.log", "content": "2 end 2026-01-01T08:00:00Z\n",
+         "blind": "the boundary stop closes Step 2's open bracket, as every stop does under Where a Run Stops, and a build stamp only lowers the ratio review_over_budget reads"}
+      ],
+      "end": {"phase": "2", "row": 7}, "end_cite": "SKILL.md Where a Run Stops: A wave settles under --until-boundary with a later wave in `## Waves` pending; resume.md row 7: alpha is reported through its marker and beta has no report, so the next launch resumes at Step 2 for wave 1"
     },
     {
       "name": "herdr",
@@ -388,7 +400,7 @@
     {"step": 1, "done_when": ["base_sha", "baseline.txt"], "cite": "SKILL.md Step 1 Done when: BRANCH exists at `origin/DEFAULT`'s SHA, `RUN_DIR/base_sha` holds that SHA, and `RUN_DIR/baseline.txt` opens with `exit: <status>`", "outcomes": [
       {"name": "isolated", "set": {"branch_local": true, "base_sha": true, "baseline": true, "base_sha_state": "current"}},
       {"name": "no-isolate on a dirty tree", "terminal": "stop"}]},
-    {"step": 2, "done_when": [], "cite": "SKILL.md Step 2 Done when: every task of the wave in hand dispatched and every report on disk; once Step 3 settles that wave, the next wave is dispatched", "outcomes": [
+    {"step": 2, "done_when": [], "cite": "SKILL.md Step 2 Done when: every task of the wave in hand dispatched and every report on disk; once Step 3 settles that wave, the next wave is dispatched, or the invocation carries `--until-boundary` and ended at the boundary stop (Where a Run Stops: A wave settles under --until-boundary), which leaves the same state as `wave settled` and resumes at the pending wave through row 7", "outcomes": [
       {"name": "wave settled", "add": {"wave_reports": 1}},
       {"name": "a task stops for an answer", "terminal": "stop"}]},
     {"step": 3, "done_when": [], "cite": "SKILL.md Step 3 Done when: every wave settled, `code-review` ran and its findings went into `self-<round>.md`, and `build-final.json` exists with non-empty `claims`", "outcomes": [
