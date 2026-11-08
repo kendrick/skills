@@ -16,7 +16,7 @@ The local template keeps the upstream write and resume loop but makes these deli
 - It adds an optional `Recent Asks (Verbatim)` section that quotes the user's last few prompts word for word. harpb's write-prompt mode quotes only the prompt the handoff is for. Neither upstream quotes the session's earlier prompts.
 - It adds an `Open Questions` section and omits any section that would be empty. harpb omits only the tasks section, and neither upstream has a place for undecided points.
 - Both ends of the handoff offer the user a session name, which neither upstream does. Both assume the session at hand is the only one open.
-- Outside git it takes the project name from a `project:` token where one is given. Otherwise it keeps harpb's working-directory fallback (`|| echo "$PWD"`) for locating the handoff directory, but leaves that name out of a canvas or inline header. It also leaves a `Source:` line where the host has no session id. Neither upstream describes the token or the `Source:` line.
+- Outside git it takes the project name from a `project:` token where one is given. Otherwise the current folder's name still locates the handoff directory, but ROOT no longer falls back to the working directory as harpb's `|| echo "$PWD"` does, so a canvas or inline header leaves that name out. It also leaves a `Source:` line where the host has no session id. Neither upstream describes the token or the `Source:` line.
 - It removes harpb's repository-specific exceptions and service names.
 - It keeps the merged skill in `template/SKILL.md`; `sync-upstream.mjs --write` emits the shipped `handoff/SKILL.md` only after upstream checks pass.
 

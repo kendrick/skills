@@ -41,7 +41,7 @@ Update this document whenever a sync changes one of these decisions. `PROVENANCE
 | Cut | Reason |
 | --- | --- |
 | Quoting the agent's answers in Recent Asks | An answer repeats what Done and In Progress already say. It can also carry an old approval such as "go" or "yes, push it", and a resumed session would read that as permission. That is the document granting what the "Stop after restoring tasks and ask before working" row reserves for the user's invocation. `tests/handoff-smoke.sh` refutes "prompts and answers", "prompts and replies", and "and your answers" in `handoff/SKILL.md`. |
-| Naming a canvas or inline document's header after the working directory outside git (the folder still locates HANDOFF_DIR) | In a sandbox that folder belongs to the host, not the user, and harpb's `\|\| echo "$PWD"` is how a sync would restore it. `tests/handoff-smoke.sh` refutes both "fall back to the current working directory if not in a git repo" and `echo "$PWD"` in `handoff/SKILL.md`. |
+| Naming a canvas or inline document's header after the working directory outside git (the folder still locates HANDOFF_DIR) | In a sandbox that folder belongs to the host, not the user, and harpb's `\|\| echo "$PWD"` makes ROOT itself fall back to that folder, which puts it back in every header. That is how a sync would restore it. `tests/handoff-smoke.sh` refutes both "fall back to the current working directory if not in a git repo" and `echo "$PWD"` in `handoff/SKILL.md`. |
 
 ## Known Limitations
 
