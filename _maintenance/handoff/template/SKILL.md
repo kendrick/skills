@@ -15,11 +15,11 @@ This workflow is designed to work across coding agents and operating systems. Wh
 
 Resolve once per invocation:
 
-- **ROOT**: the output of `git rev-parse --show-toplevel` (identical on every OS); fall back to the current working directory if not in a git repo.
-- **PROJECT**: ROOT's final path segment, lowercased to `a-z0-9-`. It keeps one project's handoffs clear of another's.
+- **ROOT**: the output of `git rev-parse --show-toplevel` (identical on every OS). Outside a git repo there is no ROOT.
+- **PROJECT**: ROOT's final path segment, lowercased to `a-z0-9-`. It keeps one project's handoffs clear of another's. With no ROOT, PROJECT is the name a `project:<name>` token in ARGS gives, lowercased the same way. Without the token, a file destination uses the current directory's final segment, because a durable destination is a folder on the user's own machine. A canvas or inline destination without the token has no PROJECT: never name one after a sandbox path, which the host chose and which has nothing to do with the work. Inside a git repo, ROOT names the project and a `project:` token is ignored.
 - **TMP**: the OS temp directory: `${TMPDIR:-/tmp}` in bash or zsh, `$env:TEMP` in PowerShell, `require('os').tmpdir()` in Node. Inside WSL2, use the Linux temp directory rather than a mounted Windows one.
 - **HANDOFF_DIR**: `<TMP>/agent-handoff/<PROJECT>/`, created on the first file write.
-- **ARGS**: the text following the skill invocation. (Claude Code exposes this as `$ARGUMENTS`; on other agents it is simply the rest of the user's message.)
+- **ARGS**: the text following the skill invocation. (Claude Code exposes this as `$ARGUMENTS`; on other agents it is simply the rest of the user's message.) Strip a `project:<name>` token from ARGS before detecting the phase, as the destination flags below are stripped. Only `project:` followed directly by a name is the token.
 
 Choose a destination:
 
@@ -117,7 +117,8 @@ The next session should be able to act from this document and the linked artifac
 # Handoff: <slug>
 
 <YYYY-MM-DD HH:MM TZ> · <project / branch> · Agent: <agent name>
-Session: <session id, if your platform exposes one; omit otherwise>
+Session: <session id, if your platform exposes one>
+Source: <paste this chat's URL>
 
 ## Unfinished Tasks
 
@@ -159,4 +160,4 @@ Session: <session id, if your platform exposes one; omit otherwise>
 <Commands or checks that confirm the work still holds. Prefer cross-platform commands (git, node, package scripts); note the shell if one is required.>
 ```
 
-The `Session:` line is optional metadata for transcript correlation (e.g. Claude Code's `$CLAUDE_CODE_SESSION_ID`). Omit any section that would be empty, `Unfinished Tasks`, `Open Questions`, `Key Files & Paths`, and `How to Verify` included: an empty heading tells the next session nothing. `Open Questions` holds what the session left undecided. A point it settled belongs under `Decisions & Gotchas`, and work it started belongs under `In Progress / Next`. `Recent Asks (Verbatim)` holds the user's last 3–5 prompts, quoted word for word, oldest first, leaving out slash-command boilerplate and pasted blocks. Quote the user's prompts only, never your own answers: an answer repeats Done and In Progress, and it can carry an old approval such as "go" or "yes, push it" that a resumed session would read as permission. Omit `Recent Asks (Verbatim)` when the session had no prompts worth quoting. Handoff files belong to the user: leave them in place for the OS or the user to clear.
+Write one of the two lines under the header, never both. `Session:` carries the host's session id for transcript correlation (e.g. Claude Code's `$CLAUDE_CODE_SESSION_ID`). Where the host exposes none, write the `Source:` line verbatim, placeholder included, for the user to replace with the chat's URL; dropping it leaves the document with no way back to the chat it came from. Outside a git repo the header has no branch, and with no PROJECT it drops that slot and its separator: `<YYYY-MM-DD HH:MM TZ> · Agent: <agent name>`. Omit any section that would be empty, `Unfinished Tasks`, `Open Questions`, `Key Files & Paths`, and `How to Verify` included: an empty heading tells the next session nothing. `Open Questions` holds what the session left undecided. A point it settled belongs under `Decisions & Gotchas`, and work it started belongs under `In Progress / Next`. `Recent Asks (Verbatim)` holds the user's last 3–5 prompts, quoted word for word, oldest first, leaving out slash-command boilerplate and pasted blocks. Quote the user's prompts only, never your own answers: an answer repeats Done and In Progress, and it can carry an old approval such as "go" or "yes, push it" that a resumed session would read as permission. Omit `Recent Asks (Verbatim)` when the session had no prompts worth quoting. Handoff files belong to the user: leave them in place for the OS or the user to clear.
