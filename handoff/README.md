@@ -104,11 +104,11 @@ You get the state back and still decide what happens next, which matters because
 | Linux, WSL2 | `/tmp/agent-handoff/<project>/` (the Linux side, not `/mnt/c`) |
 | Windows     | `%TEMP%\agent-handoff\<project>\`                              |
 
-`<project>` is your repository's folder name, so handoffs from different projects stay apart.
+`<project>` is your repository's folder name, so handoffs from different projects stay apart. Outside a git repository, pass the name yourself with `project:<name>`, as in `/handoff inline project:garage-shelving`. Without it, the current folder's name is where handoffs are stored and looked up, so resuming from the same folder finds them. A canvas or inline handoff written outside a git repository without a `project:` token leaves the project out of its header, since a hosted sandbox's folder name says nothing about your work.
 
 ## What Goes in a Handoff
 
-Each handoff begins with any unfinished tasks. It then records the goal, your recent prompts word for word, completed work, next action, open questions, relevant paths, decisions, helpful skills, and verification commands. A section with nothing in it is left out. It links to plans, issues, ADRs, commits, and diffs instead of copying them.
+Each handoff begins with any unfinished tasks. It then records the goal, your recent prompts word for word, completed work, next action, open questions, relevant paths, decisions, helpful skills, and verification commands. A section with nothing in it is left out. It links to plans, issues, ADRs, commits, and diffs instead of copying them. On a host that exposes no session id, such as a web chat, the document carries a `Source:` line for you to paste the chat's URL into.
 
 See [SKILL.md](SKILL.md) for the full workflow and document template.
 
