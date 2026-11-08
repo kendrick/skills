@@ -170,7 +170,7 @@ require_text work-issue/SKILL.md "name: work-issue"
 # from siblings too—a wave reaches it once per lane. Refuted on the bare
 # key so `: false` fails here as loudly as `: true`.
 refute_text work-issue/SKILL.md "disable-model-invocation"
-require_text work-issue/SKILL.md "argument-hint: '<issue or pull request number or URL> [plan path] [--isolate | --no-isolate] [--deep] [--max-review-rounds N] [--no-publish] [--dry-run]'"
+require_text work-issue/SKILL.md "argument-hint: '<issue or pull request number or URL> [plan path] [--isolate | --no-isolate] [--deep] [--max-review-rounds N] [--no-publish] [--until-boundary] [--dry-run]'"
 
 # A description that summarizes the steps becomes the shortcut the model takes
 # instead of reading the body, which is how a nine-step skill collapses into
@@ -965,6 +965,18 @@ require_text work-issue/README.md "dispatches the next one in the same turn"
 refute_text work-issue/SKILL.md "next gate and stops."
 refute_text work-issue/README.md "next gate and stops."
 
+# #189: the one exception to the rule above. The flag is the driver's, so a
+# hand-typed `work-issue N` and a work-wave lane keep row 132, and the last
+# wave is no boundary: "a later wave ... still pending" is the condition, and
+# the sentence after it says Step 3 runs on in the same turn.
+require_text work-issue/SKILL.md "\`--until-boundary\` is the driver's flag, which \`work-issue/scripts/drive.py N --until-boundary\` carries to every launch"
+require_text work-issue/SKILL.md "never written to RUN_DIR, because a persisted copy would make a later hand-typed \`work-issue N\` stop at every wave too"
+require_text work-issue/SKILL.md "The one exception is an invocation carrying \`--until-boundary\`: once a wave settles and a later wave in \`## Waves\` is still pending, it ends at the boundary stop"
+require_text work-issue/SKILL.md "After the last wave settles the flag changes nothing, and Step 3's self-review runs in the same turn."
+require_text work-issue/SKILL.md "| A wave settles under --until-boundary with a later wave in \`## Waves\` pending | 2 | \"wave <k> settled; \`work-issue N\` dispatches wave <k+1>.\" |"
+require_text work-issue/SKILL.md "\`--no-publish\`, or \`--until-boundary\` refuses the run, naming the flag"
+require_text work-issue/SKILL.md "or the invocation carries \`--until-boundary\` and ended at the boundary stop."
+
 # PR #178 review: a wave that changed nothing passes its gate with no
 # commit, so a loop that waits on "committed" stalls there. The loop advances
 # on "settled", which covers both.
@@ -999,8 +1011,8 @@ awk -v h="$stops_header" '
   on { exit }
 ' work-issue/SKILL.md > "$tmp/stops.txt"
 stops_rows="$(wc -l < "$tmp/stops.txt" | tr -d ' ')"
-[[ "$stops_rows" -eq 35 ]] || {
-  echo "Where a Run Stops lists $stops_rows stops, expected 35" >&2
+[[ "$stops_rows" -eq 36 ]] || {
+  echo "Where a Run Stops lists $stops_rows stops, expected 36" >&2
   exit 1
 }
 while IFS= read -r row; do
@@ -1175,9 +1187,10 @@ for doc in "${work_issue_docs[@]}"; do
   refute_text "$doc" "Co-Authored-By"
   refute_text "$doc" "Generated with"
 
-  # Ending an invocation at a committed wave for the user to re-invoke. Row 7
+  # Ending an invocation at a committed wave for a person to re-invoke. Row 7
   # resumes it, but every wave then costs a human turn in a run promised
-  # unattended past one confirmation (#135).
+  # unattended past one confirmation (#135). The driven boundary stop (#189)
+  # is worded to stay clear of this phrase, so the refute holds for it too.
   refute_text "$doc" "stop after each wave"
 done
 
@@ -3905,9 +3918,19 @@ require_text _maintenance/work-issue/RATIONALE.md "only an EVALS scenario can sh
 require_text _maintenance/work-issue/RATIONALE.md "| 135 | The per-wave alternation adds no timing rule"
 require_text _maintenance/work-issue/RATIONALE.md "| 136 | The per-wave loop advances on a settled wave, not only a committed one"
 require_text _maintenance/work-issue/RATIONALE.md "| Advancing the wave loop only on a committed wave | Row 136."
-require_text _maintenance/work-issue/RATIONALE.md "Ending an invocation at a committed wave for the user to re-invoke"
+require_text _maintenance/work-issue/RATIONALE.md "Ending an invocation at a committed wave for a person to re-invoke"
 require_text _maintenance/work-issue/EVALS.md "A Two-Wave Plan Runs Both Waves in One Invocation"
 require_text _maintenance/work-issue/EVALS.md "fails as well if it ends there with a message"
+require_text _maintenance/work-issue/RATIONALE.md "except in an invocation carrying the driver's \`--until-boundary\` (row 191)"
+require_text _maintenance/work-issue/RATIONALE.md "| 191 | Under \`--until-boundary\`, an invocation ends once a wave settles"
+require_text _maintenance/work-issue/RATIONALE.md "Reasoned from the issue and the code, nothing measured. EVALS scenario 20b holds the measurement, and #299 runs it"
+require_text _maintenance/work-issue/RATIONALE.md "Row 191 builds the driven case, since neither reason holds when \`work-issue/scripts/drive.py N --until-boundary\` does the re-invoking."
+# Scenario 20b's results stay unrun until #299 runs both drives; a filled
+# row without that run would read as a measurement nobody made.
+require_text _maintenance/work-issue/EVALS.md "### 20b. A Driven Two-Wave Plan, With and Without \`--until-boundary\`"
+require_text _maintenance/work-issue/EVALS.md "| Driven with \`--until-boundary\` | unrun | unrun | unrun | unrun |"
+require_text _maintenance/work-issue/EVALS.md "| Driven without \`--until-boundary\` | unrun | unrun | unrun | unrun |"
+require_text _maintenance/work-issue/EVALS.md "Neither run carries \`--until-boundary\`"
 
 # The root README carries this skill's own install flag, in the map
 # table's third column. The command form around it is pinned once, in
@@ -4179,14 +4202,60 @@ else
   grep -Fqs "drive: done after 1 launches" "$dlog" || { echo "drive --detach: no done line in $dlog within 10 s" >&2; exit 1; }
 fi
 
+# 16. #189's boundary stop relaunches, and the flag reaches every launch line.
+# Without the flag the same output still relaunches: the driver keys on the
+# message, not on its own flag, and a run without the flag never prints it.
+# Each case asserts the `wave boundary` line, since a launch matching no row
+# relaunches too and would pass on exit and count alone.
+boundary_out='wave 0 settled; `work-issue 187` dispatches wave 1.'
+drive_fixture c16a
+printf '%s\n' "$boundary_out" >"$sd/out-1.txt"
+printf 'a human merges\n' >"$sd/out-2.txt"
+run_drive
+expect_drive boundary-no-flag 0 2
+grep -Fq "launch 1: exit 0, wave boundary" <<<"$dout" || { echo "drive boundary-no-flag: stdout lacks the boundary line: $dout" >&2; exit 1; }
+[[ "$(head -n 1 "$sd/prompt-1")" == "work-issue 187" ]] || { echo "drive boundary-no-flag: prompt-1 opens '$(head -n 1 "$sd/prompt-1")'" >&2; exit 1; }
+# Phase 0, so the grant's dry run carries the flag too.
+drive_fixture c16b g
+touch "$sd/still"
+printf 'Go?\n' >"$sd/out-1.txt"
+printf '%s\n' "$boundary_out" >"$sd/out-2.txt"
+printf 'a human merges\n' >"$sd/out-3.txt"
+drive_in="$dv/yes"
+run_drive --until-boundary
+drive_in=/dev/null
+expect_drive boundary-flag 0 3
+grep -Fq "launch 1: exit 0, wave boundary" <<<"$dout" || { echo "drive boundary-flag: stdout lacks the boundary line: $dout" >&2; exit 1; }
+[[ "$(head -n 1 "$sd/prompt-1")" == "work-issue 187 --until-boundary --dry-run" ]] || { echo "drive boundary-flag: prompt-1 opens '$(head -n 1 "$sd/prompt-1")'" >&2; exit 1; }
+for k in 2 3; do
+  [[ "$(head -n 1 "$sd/prompt-$k")" == "work-issue 187 --until-boundary" ]] || { echo "drive boundary-flag: prompt-$k opens '$(head -n 1 "$sd/prompt-$k")'" >&2; exit 1; }
+done
+# A boundary that leaves nothing new on disk still meets the no-progress halt.
+drive_fixture c16c
+touch "$sd/still"
+for k in 1 2; do printf '%s\n' "$boundary_out" >"$sd/out-$k.txt"; done
+run_drive --until-boundary
+expect_drive boundary-no-progress 1 2
+grep -Fq "drive: halted: no progress" <<<"$derr" || { echo "drive boundary-no-progress: stderr lacks the halt: $derr" >&2; exit 1; }
+# A renamed boundary row would fall among the halting stops and end every
+# driven run at its first wave, so the driver refuses to start without it.
+cp -R work-issue "$dv/wi189"
+sed -i.bak '/^| A wave settles under --until-boundary /s/^| A wave settles/| Once a wave settles/' "$dv/wi189/SKILL.md"
+grep -Fq '| Once a wave settles under --until-boundary' "$dv/wi189/SKILL.md" || {
+  echo "drive boundary-row-missing: the scratch SKILL.md edit did not land" >&2; exit 1; }
+drive_fixture c16d
+run_drive "$dv/wi189/scripts/drive.py"
+expect_drive boundary-row-missing 3 0
+grep -Fq "no row whose Stop starts \`A wave settles under --until-boundary\`" <<<"$derr" || { echo "drive boundary-row-missing: stderr does not name the row: $derr" >&2; exit 1; }
+
 # #187's prose: the budget row's quoted line is what the driver matches, and
 # the ledger keeps row 132's no-early-stop rule standing.
 require_text work-issue/SKILL.md "the \`budget\` line, \"build: <m>m review: <m>m ratio: <r> over: yes\", and the question"
 require_text work-issue/SKILL.md "and so does \`work-issue/scripts/drive.py\`, which reads this table at run time to tell how a launch ended."
 require_text work-issue/README.md "and choosing it is your call: the driver picks none."
 require_text work-issue/README.md "To keep a confirmed run going after its session ends, run \`work-issue/scripts/drive.py N\` from the repo."
-require_text _maintenance/work-issue/RATIONALE.md "The driver leaves row 132 and the Deliberately Not Built row \"Ending an invocation at a committed wave for the user to re-invoke\" untouched, because it never ends an invocation early."
-require_text _maintenance/work-issue/RATIONALE.md "| Ending an invocation at a committed wave for the user to re-invoke, with or without a marker | Row 132."
+require_text _maintenance/work-issue/RATIONALE.md "The driver leaves row 132 and the Deliberately Not Built row \"Ending an invocation at a committed wave for a person to re-invoke\" standing, because it ends an invocation early only where it passes \`--until-boundary\` (row 191)."
+require_text _maintenance/work-issue/RATIONALE.md "| Ending an invocation at a committed wave for a person to re-invoke, with or without a marker | Row 132."
 # Deliberately Not Built: a copy of the stop messages, and a default
 # --agent-cmd that picks a permission mode.
 refute_text work-issue/scripts/drive.py "no review yet on"

@@ -208,7 +208,7 @@ python3 work-issue/scripts/run-state.py review <PR> --since "$(cat RUN_DIR/pushe
 
 ### 20. A Two-Wave Plan Runs Both Waves in One Invocation
 
-**Setup:** a sandbox issue whose approved plan derives to exactly two waves: wave 0 one contract task (a types or schema file), wave 1 one task that consumes it, so `divvy-up`'s Step 3 cannot put them in one wave. Clean tree, `gh` authenticated. A second sandbox issue with a plan of the same shape for the resumed run.
+**Setup:** a sandbox issue whose approved plan derives to exactly two waves: wave 0 one contract task (a types or schema file), wave 1 one task that consumes it, so `divvy-up`'s Step 3 cannot put them in one wave. Clean tree, `gh` authenticated. A second sandbox issue with a plan of the same shape for the resumed run. Neither run carries `--until-boundary`, so this scenario holds a hand-typed invocation to row 132.
 
 **Commands:** for the first issue, answer the one confirmation yes and leave the session alone until it reports. Then read the transcript, the log since the base, and the reports directory:
 
@@ -221,6 +221,28 @@ ls RUN_DIR/reports/
 For the second issue, start it the same way, kill the session as soon as the wave-0 commit lands, re-invoke `/work-issue <N2>`, and read the same three things.
 
 **Pass condition:** in both runs the wave-1 dispatch follows the wave-0 commit in the same turn, with no message to the user and no invocation boundary between them. Both waves' commits are in the log and both waves' reports are on disk. The resumed run places itself at row 7, dispatches wave 1 without re-dispatching wave 0, and carries on past it the same way. Each invocation's last output is the message or marker a row of `Where a Run Stops` names, normally `RUN_DIR/triage/waiting` with "no review yet on <PR URL>; `work-issue N` resumes here." Fails if an invocation ends between the waves with no message and no marker, which is the stall #135 recorded, and fails as well if it ends there with a message, since a committed wave with a later wave pending is not a stop.
+
+### 20b. A Driven Two-Wave Plan, With and Without `--until-boundary`
+
+**Setup:** two sandbox issues with the same body, each with a copy of one approved plan that derives to scenario 20's two waves, and each on a clean clone at the same commit, `gh` authenticated. Pick an `--agent-cmd` that keeps each launch's full transcript with its token usage and compaction records, and use it for both runs.
+
+**Commands:** drive the first issue with the flag and the second without it, each to the pull request's first no-review stop, and time each. Answer each driver's one confirmation yes:
+
+```
+time work-issue/scripts/drive.py <N1> PLAN.md --until-boundary --max-review-waits 0 --agent-cmd '<CMD>'
+time work-issue/scripts/drive.py <N2> PLAN.md --max-review-waits 0 --agent-cmd '<CMD>'
+```
+
+Then, for each run, read the driver's output, the launch logs in `RUN_DIR/drive/`, each launch's transcript, `RUN_DIR/review/self-*.md`, and `RUN_DIR/redteam/`.
+
+**Pass condition:** the flagged run's first launch ends at the boundary stop with "wave 0 settled; `work-issue <N1>` dispatches wave 1.", and the driver prints `wave boundary` for it. Its second launch resumes at row 7 and dispatches wave 1 without re-dispatching wave 0. Once wave 1 settles, that launch goes on to Step 3's `code-review` in the same turn, because no later wave is pending. The run without the flag dispatches wave 1 in the same launch that settled wave 0, and no launch of it prints the boundary message, though the driver is running. Both runs end at "no review yet on <PR URL>; `work-issue N` resumes here." with both waves' commits in the log. Fails if the flagged run ends at the boundary after its last wave, or if the run without the flag stops between the waves, which would show the stop keyed on a driver being present rather than on the flag.
+
+**Results:** record wall clock from `time`, total tokens summed across every launch's transcript, compactions counted across the same transcripts, and the defects found, counted as the findings in `self-*.md` plus the blocking findings in the red-team's `ar-state.txt` or its reproducer verdicts. #299 fills this table and rules on keeping the flag, as RATIONALE row 191 says.
+
+| Run | Wall clock | Total tokens | Compactions | Defects (`code-review` / red-team) |
+|---|---|---|---|---|
+| Driven with `--until-boundary` | unrun | unrun | unrun | unrun |
+| Driven without `--until-boundary` | unrun | unrun | unrun | unrun |
 
 ### 21. A Ponytail Group Decides the Routing, Not the Wording
 
