@@ -3,7 +3,8 @@
 ends on a stop that needs a person.
 
     work-issue/scripts/drive.py N [PLAN] [--isolate | --no-isolate] [--deep]
-        [--max-review-rounds R] [--no-publish] [--detach] [--max-launches K]
+        [--max-review-rounds R] [--no-publish] [--until-boundary] [--detach]
+        [--max-launches K]
         [--max-review-waits W] [--agent-cmd CMD]
 
 work-issue resumes from disk, but nothing outside the session starts the next
@@ -85,6 +86,7 @@ def parse_args(argv):
     ap.add_argument("--deep", nargs=0, action=_Pass)
     ap.add_argument("--max-review-rounds", metavar="R", type=positive, action=_Pass)
     ap.add_argument("--no-publish", nargs=0, action=_Pass)
+    ap.add_argument("--until-boundary", nargs=0, action=_Pass)
     ap.add_argument("--detach", action="store_true")
     ap.add_argument("--max-launches", metavar="K", type=positive, default=20)
     ap.add_argument("--max-review-waits", metavar="W", type=nonnegative, default=6)
@@ -133,8 +135,9 @@ def message_pattern(msg, n):
 
 
 def read_table(n):
-    """Return (stops, no_review, done): every row with quoted text as
-    (stop cell, [patterns]), plus the two rows the driver keys by Stop cell.
+    """Return (stops, no_review, done, boundary): every row with quoted text
+    as (stop cell, [patterns]), plus the three rows the driver keys by Stop
+    cell.
 
     The cut matches the suite's drift-check awk: the lines after the header,
     minus the separator, up to the first line not starting with `|`."""
@@ -161,15 +164,18 @@ def read_table(n):
         rows.append((stop, pats))
     no_review = next((r for r in rows if r[0].startswith("No review")), None)
     done = next((r for r in rows if r[0].startswith("The final report")), None)
+    boundary = next((r for r in rows if r[0].startswith("A wave settles under --until-boundary")), None)
     # A renamed or unquoted special row fails here, at startup, rather than
-    # silently turning a wait into a halt or a finish into a relaunch.
-    for name, row in (("No review", no_review), ("The final report", done)):
+    # silently turning a wait into a halt, a finish into a relaunch, or a
+    # wave boundary into a halt.
+    for name, row in (("No review", no_review), ("The final report", done),
+                      ("A wave settles under --until-boundary", boundary)):
         if row is None:
             usage_exit(f"{where}: no row whose Stop starts `{name}`")
         if not row[1]:
             usage_exit(f"{where}: the `{name}` row has no quoted message")
-    stops = [r for r in rows if r[1] and r is not no_review and r is not done]
-    return stops, no_review, done
+    stops = [r for r in rows if r[1] and r not in (no_review, done, boundary)]
+    return stops, no_review, done, boundary
 
 
 def tail_text(log):
@@ -393,7 +399,7 @@ def main(argv):
     ctx = {"n": n, "root": root, "common": common, "agent": agent,
            "run_dir": common / "work-issue" / f"issue-{n}",
            "plan": args.plan, "passthrough": args.passthrough}
-    stops, no_review, done = read_table(n)
+    stops, no_review, done, boundary = read_table(n)
 
     phase, err = gather(ctx)
     if err:
@@ -428,6 +434,18 @@ def main(argv):
             say(f"launch {k}: exit {rc}, done, log {log}")
             say(f"drive: done after {k} launches")
             return 0
+        # Checked before stops, and keyed on the message alone rather than on
+        # this driver's --until-boundary, because a launch that printed the
+        # message has left the next wave to the next launch either way.
+        hit = first_match(boundary, text)
+        if hit:
+            waits = 0
+            say(f"launch {k}: exit {rc}, wave boundary, log {log}")
+            # A boundary stays under the no-progress halt, since each one leaves
+            # new commits and markers.
+            if k >= 2 and prints[-1] == prints[-2] == prints[-3]:
+                halt(f"no progress in {logs[-2]} and {logs[-1]}")
+            continue
         for row in stops:
             hit = first_match(row, text)
             if hit:
