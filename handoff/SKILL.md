@@ -44,7 +44,7 @@ Name every new document `<YYYY-MM-DD-HHMM>-<slug>.md`. Datetime-first keeps late
 
 ## Write a Session Handoff
 
-Write one document for the whole session. Copy pending and in-progress tasks from the task list, then write only the context the next session needs. Link material already captured in a plan, issue, ADR, commit, or diff by path or URL rather than repeating it.
+Write one document for the whole session. Copy pending and in-progress tasks from the task list. List what the session left undecided under `Open Questions`, whether or not the host has a task tool. Then write only the context the next session needs. Link material already captured in a plan, issue, ADR, commit, or diff by path or URL rather than repeating it.
 
 On a file destination, print this pointer and stop working:
 
@@ -100,6 +100,7 @@ Name this session: /rename 📍 <Title Case Name>
 Goal: <one line from Goal.>
 Done: <one line from Done.>
 Next up: <the in-progress task, or the first pending one.>
+Open: <the open questions in one line; drop this line when there are none.>
 
 Start on "<subject>"?
 ```
@@ -139,6 +140,10 @@ Session: <session id, if your platform exposes one; omit otherwise>
 
 <The exact next action and any partial state.>
 
+## Open Questions
+
+- <A point the session left undecided, and who or what it waits on, where known.>
+
 ## Key Files & Paths
 
 - <Path and why it matters. Forward slashes.>
@@ -154,4 +159,4 @@ Session: <session id, if your platform exposes one; omit otherwise>
 <Commands or checks that confirm the work still holds. Prefer cross-platform commands (git, node, package scripts); note the shell if one is required.>
 ```
 
-The `Session:` line is optional metadata for transcript correlation (e.g. Claude Code's `$CLAUDE_CODE_SESSION_ID`). Omit `Unfinished Tasks` only when there are none. `Recent Asks (Verbatim)` holds the user's last 3–5 prompts, quoted word for word, oldest first, leaving out slash-command boilerplate and pasted blocks. Quote the user's prompts only, never your own answers: an answer repeats Done and In Progress, and it can carry an old approval such as "go" or "yes, push it" that a resumed session would read as permission. Omit `Recent Asks (Verbatim)` when the session had no prompts worth quoting. Handoff files belong to the user: leave them in place for the OS or the user to clear.
+The `Session:` line is optional metadata for transcript correlation (e.g. Claude Code's `$CLAUDE_CODE_SESSION_ID`). Omit any section that would be empty, `Unfinished Tasks`, `Open Questions`, `Key Files & Paths`, and `How to Verify` included: an empty heading tells the next session nothing. `Open Questions` holds what the session left undecided. A point it settled belongs under `Decisions & Gotchas`, and work it started belongs under `In Progress / Next`. `Recent Asks (Verbatim)` holds the user's last 3–5 prompts, quoted word for word, oldest first, leaving out slash-command boilerplate and pasted blocks. Quote the user's prompts only, never your own answers: an answer repeats Done and In Progress, and it can carry an old approval such as "go" or "yes, push it" that a resumed session would read as permission. Omit `Recent Asks (Verbatim)` when the session had no prompts worth quoting. Handoff files belong to the user: leave them in place for the OS or the user to clear.
