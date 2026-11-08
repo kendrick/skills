@@ -105,6 +105,11 @@ refute_text handoff/SKILL.md "prompts and answers"
 refute_text handoff/SKILL.md "prompts and replies"
 refute_text handoff/SKILL.md "and your answers"
 
+# An empty heading tells the next session nothing, and a talk-only chat has nowhere else to put what is undecided.
+require_text handoff/SKILL.md "## Open Questions"
+require_text handoff/SKILL.md "Omit any section that would be empty"
+require_text handoff/SKILL.md "Open: <the open questions in one line"
+
 require_text handoff/README.md "agent-handoff"
 
 require_text _maintenance/handoff/PROVENANCE.md "## Deviations From Upstream"
