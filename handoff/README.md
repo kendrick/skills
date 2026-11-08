@@ -73,7 +73,7 @@ In the fresh session, invoke the skill with the datetime prefix or any unique pa
 
 You can also paste the handoff document into the message, or attach the `.md`. All three sources rebuild the same state, so a handoff written to a canvas on the web resumes just as well as one on disk.
 
-Use the matching invocation form for Codex or Copilot. A bare invocation in a fresh session resumes the newest handoff. When several files match, the skill lists them and asks you to choose.
+Use the matching invocation form for Codex or Copilot. A bare invocation in a fresh session resumes the newest handoff. A session is fresh only when the invocation is its first message. After any conversation, even one with no tool use, a bare invocation (including `handoff inline`) writes a handoff instead. When several files match, the skill lists them and asks you to choose.
 
 Resuming does not start the work. Whichever source you use, the skill reads the document, rebuilds your unfinished tasks, and then stops for your answer:
 
