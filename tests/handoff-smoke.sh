@@ -70,6 +70,7 @@ refute_text handoff/SKILL.md ".agents/handoff"
 # A sandbox folder name says nothing about the work, and harpb's `|| echo "$PWD"` is how it would come back on a sync.
 require_text handoff/SKILL.md "Strip a \`project:<name>\` token from ARGS before detecting the phase"
 require_text handoff/SKILL.md "never name one after a sandbox path"
+require_text handoff/SKILL.md "PROJECT still locates HANDOFF_DIR on resume"
 require_text handoff/SKILL.md "Source: <paste this chat's URL>"
 require_text handoff/SKILL.md "write the \`Source:\` line verbatim"
 refute_text handoff/SKILL.md "fall back to the current working directory if not in a git repo"

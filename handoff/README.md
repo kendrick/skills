@@ -104,7 +104,7 @@ You get the state back and still decide what happens next, which matters because
 | Linux, WSL2 | `/tmp/agent-handoff/<project>/` (the Linux side, not `/mnt/c`) |
 | Windows     | `%TEMP%\agent-handoff\<project>\`                              |
 
-`<project>` is your repository's folder name, so handoffs from different projects stay apart. Outside a git repository, pass the name yourself with `project:<name>`, as in `/handoff inline project:garage-shelving`. Without it, a handoff written to a file uses the current folder's name, and a canvas or inline handoff gets no project name, since a hosted sandbox's folder name says nothing about your work.
+`<project>` is your repository's folder name, so handoffs from different projects stay apart. Outside a git repository, pass the name yourself with `project:<name>`, as in `/handoff inline project:garage-shelving`. Without it, the current folder's name is where handoffs are stored and looked up, so resuming from the same folder finds them. A canvas or inline handoff leaves the project out of its header, since a hosted sandbox's folder name says nothing about your work.
 
 ## What Goes in a Handoff
 
