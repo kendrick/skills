@@ -94,6 +94,12 @@ require_text handoff/SKILL.md "Strip them from ARGS before detecting the phase"
 require_text handoff/SKILL.md "When \`inline\` and \`md\`"
 require_text handoff/SKILL.md "Strip \`inline\` from ARGS on resume"
 
+# A talk-only chat has no tasks or files, so the old empty-task-list test read a long discussion as fresh and resumed. harpb's definition is how a sync would bring it back.
+require_text handoff/SKILL.md "The session is fresh only when this invocation is the conversation's first turn"
+require_text handoff/SKILL.md "whether or not those turns used tools"
+require_text handoff/SKILL.md "\`handoff inline\` or \`handoff md\` alone leaves ARGS empty"
+refute_text handoff/SKILL.md "empty task list, no changed files, no work done"
+
 # Resume stops for the user instead of working. The refute matters most: this
 # instruction arrived by inheriting harpb's "keep going", so a sync is exactly
 # how it comes back.

@@ -13,6 +13,7 @@ harpb provides the write and resume loop: three phases, sortable filenames, task
 | Decision | Source | Reason |
 | --- | --- | --- |
 | Three write and resume phases, sortable names, task restoration, and verification | harpb | They make the handoff usable at both ends. |
+| Judge a fresh session by prior conversation turns, not by tasks, file changes, or tool use | local | [P] Prior art is harpb's own gloss, "the conversation effectively just started", which it tests with an empty task list and no edited files. A planning or design chat has neither, so the test read a long discussion as fresh and resumed instead of writing. Counting turns makes the flag-only `handoff inline` behave the same in a chat and in a coding session. |
 | Link to existing artifacts and suggest follow-on skills | mattpocock | The document stays short without hiding useful context. |
 | Remove the dev-root exception and repeated root-resolution blocks | local | Those rules are private to harpb's environment and add noise. |
 | Rebuild tasks through whatever task or plan tool the host exposes | local | The workflow runs in Claude Code, Codex, and Copilot without depending on one host's task API. |
@@ -42,6 +43,7 @@ Update this document whenever a sync changes one of these decisions. `PROVENANCE
 | --- | --- |
 | Quoting the agent's answers in Recent Asks | An answer repeats what Done and In Progress already say. It can also carry an old approval such as "go" or "yes, push it", and a resumed session would read that as permission. That is the document granting what the "Stop after restoring tasks and ask before working" row reserves for the user's invocation. `tests/handoff-smoke.sh` refutes "prompts and answers", "prompts and replies", and "and your answers" in `handoff/SKILL.md`. |
 | Naming a canvas or inline document's header after the working directory outside git (the folder still locates HANDOFF_DIR) | In a sandbox that folder belongs to the host, not the user, and harpb's `\|\| echo "$PWD"` makes ROOT itself fall back to that folder, which puts it back in every header. That is how a sync would restore it. `tests/handoff-smoke.sh` refutes both "fall back to the current working directory if not in a git repo" and `echo "$PWD"` in `handoff/SKILL.md`. |
+| Judging freshness by an empty task list, no changed files, and no work done | A talk-only chat meets all three, so a bare or `inline` invocation resumed instead of writing. harpb's definition is how a sync would restore it. `tests/handoff-smoke.sh` refutes "empty task list, no changed files, no work done" in `handoff/SKILL.md`. |
 
 ## Known Limitations
 
