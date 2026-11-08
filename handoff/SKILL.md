@@ -55,6 +55,8 @@ Then invoke: handoff <YYYY-MM-DD-HHMM>-<slug>
 (Temp storage: your OS may sweep this file eventually.)
 ```
 
+Where PROJECT came from a `project:<name>` token, append the same token to the invoke line, `Then invoke: handoff <YYYY-MM-DD-HHMM>-<slug> project:<name>`, because resume finds HANDOFF_DIR through PROJECT and outside git nothing else carries the name.
+
 Propose that name from the session you just wrote up, not from the handoff. Title Case it and end it with `☑️`, the mark of work that is finished and parked. Where this session already carries a `📍` name from a handoff it picked up, keep that name, drop the pin, and add the check. Claude Code's `/clear <name>` labels the outgoing session so `/resume` can find it later. A bare `/clear` carries the current name onto the next session instead. On a host that clears without taking a name, print the plain instruction to clear and invoke.
 
 ## Write a Prompt Handoff

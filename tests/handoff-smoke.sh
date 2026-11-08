@@ -73,6 +73,8 @@ require_text handoff/SKILL.md "never name one after a sandbox path"
 require_text handoff/SKILL.md "Source: <paste this chat's URL>"
 require_text handoff/SKILL.md "write the \`Source:\` line verbatim"
 refute_text handoff/SKILL.md "fall back to the current working directory if not in a git repo"
+refute_text handoff/SKILL.md 'echo "$PWD"'
+require_text handoff/SKILL.md "append the same token to the invoke line"
 
 # kendrick/handoff-on-compact runs this skill in a forked model call with every
 # tool denied and takes the reply as the document. That caller breaks if the
