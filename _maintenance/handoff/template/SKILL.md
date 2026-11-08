@@ -37,7 +37,7 @@ Choose a phase:
 
 - The message carries a handoff document (text pasted under a `# Handoff:` heading, or an attached `.md`) → **resume**.
 - ARGS starts with a `YYYY-MM-DD-HHMM` datetime, or uniquely matches part of exactly one filename in HANDOFF_DIR → **resume**. If a partial match hits more than one file, list them and ask.
-- ARGS is empty → **write-session** — unless the session is fresh (empty task list, no changed files, no work done), in which case **resume** the lexicographically last filename in HANDOFF_DIR. If HANDOFF_DIR is missing or empty, ask for the document instead.
+- ARGS is empty → **write-session**, unless the session is fresh. The session is fresh only when this invocation is the conversation's first turn. A conversation with prior turns is never fresh, whether or not those turns used tools, made tasks, or changed files, and injected system context is not a turn. A fresh session **resumes** the lexicographically last filename in HANDOFF_DIR; if HANDOFF_DIR is missing or empty, ask for the document instead. `handoff inline` or `handoff md` alone leaves ARGS empty once the flag is stripped, so it writes the session after a discussion and resumes only as a conversation's first turn.
 - Anything else → **write-prompt**.
 
 Name every new document `<YYYY-MM-DD-HHMM>-<slug>.md`. Datetime-first keeps latest = lexicographically last. Build the slug from the session theme or prompt; lowercase `a-z0-9-` only (Windows-safe, sort-safe). If the exact filename already exists, append `-<SS>` (seconds).
