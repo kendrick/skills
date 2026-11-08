@@ -441,8 +441,8 @@ def main(argv):
         if hit:
             waits = 0
             say(f"launch {k}: exit {rc}, wave boundary, log {log}")
-            # A boundary stays under the no-progress halt, since each one leaves
-            # new commits and markers.
+            # A boundary that left no new commits or markers went nowhere, so it
+            # halts like any other launch that made no progress.
             if k >= 2 and prints[-1] == prints[-2] == prints[-3]:
                 halt(f"no progress in {logs[-2]} and {logs[-1]}")
             continue
