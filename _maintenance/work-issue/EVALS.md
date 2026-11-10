@@ -133,9 +133,11 @@ Then let it run, and re-invoke after the reviewer answers.
 
 **Setup:** `HERDR_ENV=1` with herdr installed, and two plans in the sandbox repo: one with a single task in a single wave, one with a wave of three.
 
+**Focus case:** before the single-task run reaches Step 1, focus a herdr workspace that belongs to another repo, and run the invocation from a pane whose own workspace was opened in a third repo.
+
 **Commands:** the same invocation as Scenario 10, for each plan. Check the created worktree against `herdr worktree list` and the agent against `herdr agent list`.
 
-**Pass condition:** on the single-task plan the worktree came from `herdr worktree create` with the flag names the installed binary's help actually prints, the agent `issue-<N>` was started and prompted, the preamble headed the whole prompt, and the report JSON is on disk at `RUN_DIR/reports/<task>.json`. On the three-task plan the wave went to plain subagents and no agent hosted it. Fails if a wave is serialized onto the herdr agent, if the report exists only in the agent's screen output, or if a renamed herdr flag stops the run instead of falling back to `git worktree`.
+**Pass condition:** on the single-task plan the worktree came from `herdr worktree create` with the flag names the installed binary's help actually prints, the agent `issue-<N>` was started and prompted, the preamble headed the whole prompt, and the report JSON is on disk at `RUN_DIR/reports/<task>.json`. On the three-task plan the wave went to plain subagents and no agent hosted it. Fails if a wave is serialized onto the herdr agent, if the report exists only in the agent's screen output, or if a renamed herdr flag stops the run instead of falling back to `git worktree`. The focus case passes only when the worktree's `git rev-parse --git-common-dir` is ROOT's, herdr created it (it shows in `herdr worktree list --cwd ROOT`), and the run never fell back to `git worktree add`.
 
 ### 12. A Scope-Expanding Finding Is Queued, Not Built
 

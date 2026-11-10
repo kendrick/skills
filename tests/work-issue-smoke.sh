@@ -229,6 +229,11 @@ require_text work-issue/SKILL.md "A file matches when its name contains N as a w
 require_text work-issue/SKILL.md "Route 5 is where missing"
 require_text work-issue/SKILL.md "starts over at Step 0, where PLAN resolves in a session that no longer holds the plan"
 
+# #209: without --cwd, herdr branches the worktree off the focused workspace's
+# repo, or off the repo a --workspace was opened in, and reports success.
+require_text work-issue/SKILL.md "\`herdr worktree create\` with \`--cwd ROOT --branch issue-N --base origin/DEFAULT --path WORKTREE --no-focus\`"
+require_text work-issue/SKILL.md "\`.result.workspace.worktree.repo_root\` must equal ROOT"
+
 # The README's resume line used to say "type the first line again", pointing at
 # the pathless example. A user whose plan lives outside the tree would then
 # resume without the path and land in exactly the row-5 window the paragraph
@@ -1011,8 +1016,8 @@ awk -v h="$stops_header" '
   on { exit }
 ' work-issue/SKILL.md > "$tmp/stops.txt"
 stops_rows="$(wc -l < "$tmp/stops.txt" | tr -d ' ')"
-[[ "$stops_rows" -eq 36 ]] || {
-  echo "Where a Run Stops lists $stops_rows stops, expected 36" >&2
+[[ "$stops_rows" -eq 37 ]] || {
+  echo "Where a Run Stops lists $stops_rows stops, expected 37" >&2
   exit 1
 }
 while IFS= read -r row; do

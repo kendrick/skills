@@ -178,7 +178,7 @@ A stop anywhere in this section comes before any step opens, so, like a stop at 
 | A worktree this skill did not create exists | ask |
 | `--isolate` / `--no-isolate` | pins the row; `--no-isolate` on a dirty tree still stops with "commit or stash first" |
 
-Take with HERDR: `herdr worktree create` with `--branch issue-N --base origin/DEFAULT --path WORKTREE --no-focus`, reading the IDs back out of the JSON response. Check those flag names against `herdr worktree` help at run time — the installed binary is the authority, and this line is a cache of what it printed once. Take without herdr: `git fetch origin DEFAULT && git worktree add -b issue-N WORKTREE origin/DEFAULT`.
+Take with HERDR: `herdr worktree create` with `--cwd ROOT --branch issue-N --base origin/DEFAULT --path WORKTREE --no-focus`, reading the IDs back out of the JSON response. `--cwd ROOT` is what names the source repo: with no source flag herdr branches off the focused workspace's repo, and `--workspace` branches off whatever repo herdr bound that workspace to when it opened, which a later `cd` never updates, so either one can put the worktree in another repo with no error. The response's `.result.workspace.worktree.repo_root` must equal ROOT; on a mismatch, stop with "herdr made <WORKTREE> in <repo_root>, not <ROOT>; remove that worktree, then `work-issue N`.", because herdr just made a worktree in someone else's repo and removing it is the user's call. Check those flag names against `herdr worktree` help at run time — the installed binary is the authority, and this line is a cache of what it printed once. Take without herdr: `git fetch origin DEFAULT && git worktree add -b issue-N WORKTREE origin/DEFAULT`.
 
 Then INSTALL_CMD, then VERIFY_CMD, saved to `RUN_DIR/baseline.txt` as a first line `exit: <status>` holding its exit status, then its output tail. `divvy-up` reads the status from that line, because output alone can't show a non-zero exit that printed no failure. With VERIFY_CMD `absent`, run nothing and write `RUN_DIR/baseline.txt` holding the single line `absent`, because the resume probe reads the file's existence as Step 1 finished. A baseline captured before any worker runs is what tells the first wave's workers and gate, and Step 4, whether a red suite belongs to this run or was already red.
 
@@ -355,6 +355,7 @@ An invocation ends at one of these stops and no other. Each prints its message a
 | The forecast or trigger match, or Step 8's repair diff, exits non-zero | 0, 4, 8 | the failing command's stderr, quoted |
 | The confirmation, answered no or rendered by `--dry-run` | 0, Adopt | the one confirmation message |
 | `--no-isolate` on a dirty tree | 1 | "commit or stash first" |
+| herdr made the worktree in another repo: the response's `repo_root` is not ROOT | 1 | "herdr made <WORKTREE> in <repo_root>, not <ROOT>; remove that worktree, then `work-issue N`." |
 | A wave settles under --until-boundary with a later wave in `## Waves` pending | 2 | "wave <k> settled; `work-issue N` dispatches wave <k+1>." |
 | A task stops for an answer | 2, 3 | the held question, put to the user once the rest of the wave lands |
 | A task fails twice, or fails on `fable` | 3 | `divvy-up`'s stop report naming the task and its failure |
