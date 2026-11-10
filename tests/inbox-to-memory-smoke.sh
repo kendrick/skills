@@ -341,6 +341,18 @@ ws_write '- [working-state candidate: this is in motion, leave in working-state]
 require_failure "$(run_lint "$ws_scope")" "token-grammar: \`[working-state candidate:\` is not in the grammar table"
 rm -rf "$ws_scope"
 
+# The prose half of #319: the reference text once taught the colon form the lint
+# rejects, and SKILL.md's taxonomy left the token out. Literal path here because
+# this runs before the suite assigns `$contracts`.
+require_text inbox-to-memory/references/machine-contracts.md "- [working-state candidate] <claim> | landed: working-state"
+require_text inbox-to-memory/SKILL.md "[working-state candidate] <claim>"
+require_text inbox-to-memory/SKILL.md "| landed: working-state"
+require_text inbox-to-memory/references/scope-decisions.md "[working-state candidate] <claim>"
+if grep -rnF -- '[working-state candidate:' inbox-to-memory >&2; then
+  echo "the skill still teaches the colon form of the working-state token" >&2
+  exit 1
+fi
+
 # Phase 2.5 can only hold to five body reads per input if the scope it runs over
 # has records to spare. This is the fixture-side half of that promise: the budget
 # itself is a property of an agent run and nothing here can assert it.

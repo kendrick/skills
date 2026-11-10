@@ -70,7 +70,7 @@ A scaffolded project has three places candidate-shaped content can live, and cho
 
 When proposing a memory candidate during inbox grooming:
 
-- If the decision is still in flight (the user is talking it through, not announcing it as done), don't crystallize. Suggest it lands in `working-state.md` instead. Phrase the candidate as `[working-state candidate: this is in motion, leave in working-state]` so the user knows you considered crystallization and decided against.
+- If the decision is still in flight (the user is talking it through, not announcing it as done), don't crystallize. Suggest it lands in `working-state.md` instead. Phrase the candidate as `[working-state candidate] <claim>` so the user knows you considered crystallization and decided against. Once the user confirms they moved the claim into `working-state.md`, append `| landed: working-state` to the line and keep the token.
 - If the claim is durable and specific to this client, propose `[memory candidate: project|client]` per the table above.
 - If the observation might generalize beyond this client, propose `[journal candidate: <pattern>]`. This routes to the cross-client journal at sign-off — fast path.
 - If the observation is interesting but not yet pattern-shaped (one data point, not three), there's no candidate flag. The user can hand-log it to `patterns-journal/journal.md` with `#pattern-emerging`. The patterns journal is a slower path: it accumulates observations the user reviews weekly, with promotion to the cross-client journal happening only after deliberate review.

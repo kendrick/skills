@@ -108,7 +108,7 @@ Every inline token the skill emits is registered here with the grep that finds i
 | Memory candidate, client  | `[memory candidate: client] <claim>`                             | `grep -F '[memory candidate: client]'`                |
 | Memory candidate, amend   | `[memory candidate: update existing [[<file>\|<label>]]] <claim>` | `grep -F '[memory candidate: update existing'`; open ones drop lines holding `\| dismissed:` |
 | Journal candidate         | `[journal candidate: <generalized pattern>]`                     | `grep -F '[journal candidate:'`                       |
-| Working-state candidate   | `[working-state candidate] <claim>`                              | `grep -F '[working-state candidate]'`                 |
+| Working-state candidate   | `[working-state candidate] <claim>`                              | `grep -F '[working-state candidate]'`; open ones drop lines holding `\| landed:` |
 | Contradiction             | `[contradicts accepted: [[<file>\|<label>]]] <statement>`         | `grep -F '[contradicts accepted:'`                    |
 | Open question             | `[open question: <slug>] <question>`                             | `grep -F '[open question:'`                           |
 | Open question, resolved   | `[open question resolved: <slug>] <question>`                    | `grep -F '[open question resolved:'`                  |
@@ -131,6 +131,7 @@ Fields are pipe-delimited and named. Order is not enforced; presence is.
 - [contradicts accepted: [[<record>|<label>]]] <what the new input says> | claims: <what the record says>
 - [contradicts accepted: [[<record>|<label>]]] <statement> | claims: <what the record says> | dismissed: <reason, and who decided>
 - [memory candidate: update existing [[<file>|<label>]]] <claim> | dismissed: <reason, and who decided>
+- [working-state candidate] <claim> | landed: working-state
 ```
 
 The discarded alternatives are a decision's payload. What got decided is usually recoverable from the transcript; what got ruled out, and the reason someone gave for ruling it out, is the part with a six-month shelf life, and it is the only part that tells you later whether the reason still holds.
@@ -190,9 +191,9 @@ Four keys on every v2 note, counted from body tokens and never estimated:
 | `open_questions`         | `[open question:` tokens                                            |
 | `resolved_questions`     | `[open question resolved:` tokens                                   |
 | `deferred_tensions`      | `[tension: deferred]` tokens                                        |
-| `unpromoted_candidates`  | candidate tokens still carrying their prefix rather than a wiki link, minus update-existing lines carrying `dismissed:`, plus contradiction flags carrying no `dismissed:` |
+| `unpromoted_candidates`  | candidate tokens still carrying their prefix rather than a wiki link, minus update-existing lines carrying `dismissed:` and working-state candidates carrying `landed:`, plus contradiction flags carrying no `dismissed:` |
 
-A contradiction or an update-existing candidate counts as unpromoted until it is settled, and it settles two ways. Approving it rewrites the line to a wiki link, like any other candidate. Dismissing it leaves the prefix where it is and adds `dismissed:`, so the count has to read the field rather than the prefix. The open amends in a note are `grep -F '[memory candidate: update existing' <note> | grep -Fvc '| dismissed:'`. A declined new-record candidate takes no `dismissed:` and stays counted, since its prefix already reads as considered, not crystallized. Counting dismissals forever would make "every note with unfinished business" a query that never comes back empty, which is the one thing these keys exist to answer.
+A contradiction or an update-existing candidate counts as unpromoted until it is settled, and it settles two ways. Approving it rewrites the line to a wiki link, like any other candidate. Dismissing it leaves the prefix where it is and adds `dismissed:`, so the count has to read the field rather than the prefix. The open amends in a note are `grep -F '[memory candidate: update existing' <note> | grep -Fvc '| dismissed:'`. A declined new-record candidate takes no `dismissed:` and stays counted, since its prefix already reads as considered, not crystallized. A working-state candidate settles when the user moves its claim into `working-state.md`: the line keeps its token as provenance and takes `| landed: working-state` at the end, after any other field. The count reads the presence of `| landed:` on a working-state line only, so the same suffix on any other token leaves that token counted. The skill never writes `working-state.md` itself, so the suffix goes on only after the user confirms the claim is there. Counting dismissals or landed lines forever would make "every note with unfinished business" a query that never comes back empty, which is the one thing these keys exist to answer.
 
 These four are an explicit exception to omit-if-empty: a v2 note carries all four even when the value is zero. Without the exception a legitimate zero and a missing key look identical, which defeats the query the counts exist to serve. Finding every note with unfinished business is `grep -L 'open_questions: 0'`, and that only works if the key is always there.
 
