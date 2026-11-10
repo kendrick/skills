@@ -2,7 +2,7 @@
 
 This skill's record types come from the memory-bank reference architecture: structured project memory that both people and agents can query, descended from the architecture decision record as Nygard framed it and extended past the decision itself into standing rules, sanctioned exceptions, and environmental context.
 
-The upstream for the record format is long-term-memory-kit at `6a23584083a59721c2f4d009941ff07a6a61b228`, whose `schema/record.schema.json` and `schema/memory-bank.schema.json` are authoritative. A record carrying `schema: 1` is a record in that format, and a scope holding one is a bank `ltm validate` can check. The skill follows the kit, so where this summary and the kit disagree, the kit wins and this document gets updated by hand.
+The upstream for the record format is long-term-memory-kit at `fa45506a64d7d51c5521d038bee8a138980c9605`, whose `schema/record.schema.json` and `schema/memory-bank.schema.json` are authoritative, and whose `src/core/canonical.ts` sets the frontmatter key order. A record carrying `schema: 1` is a record in that format, and a scope holding one is a bank `ltm validate` can check. The skill follows the kit, so where this summary and the kit disagree, the kit wins and this document gets updated by hand.
 
 ## Mode Selection
 
@@ -58,24 +58,22 @@ memory_type: Decision | PolicyRule | Exception | Context # canonical
 title: '...' # required
 status: proposed | accepted | superseded | deprecated | rejected # required
 date: YYYY-MM-DD # required — when the record was first established
-
-# Time bounds (optional)
-effective_from: YYYY-MM-DD
-effective_to: YYYY-MM-DD
-
-# Provenance (required by this skill; the kit leaves it optional)
-source_refs: [<note-id>, ...] # ids of groomed notes that contributed to this record
-
-# Scope and discoverability (optional)
-applies_to: [<prefix>:<value>] # facets where the record applies
-owners: [<prefix>:<value>] # facets responsible for keeping this current, e.g. team:ops
-tags: [] # free-form keywords for search
-
-# Relationships (optional)
-related: [<relation>::<id>] # links to other records
-supersedes: [<id>] # always a list, even with one id
-superseded_by: <id> # one id
+last_confirmed: YYYY-MM-DD # required by this skill; the stamper advances it
+source_refs: [<note-id>, ...] # required by this skill; ids of groomed notes that contributed
 ```
+
+This block is the required keys. Every key is one line with no `#` comment in a real record, because `ltm fmt` refuses frontmatter holding one. The full order, which `ltm` owns, with the optional keys in place:
+
+```
+schema, id, memory_type, title, status, date, effective_from, effective_to, last_confirmed, review_by, summary, superseded_by, supersedes, promoted_from, promoted_to, subject, applies_to, owners, tags, source_refs, related, body_schema, exception_to
+```
+
+Where each optional key goes:
+
+- `effective_from`, `effective_to` (`YYYY-MM-DD`) follow `date`. Set `effective_to` on an Exception when the exception expires.
+- `superseded_by: <id>` (one id) and `supersedes: [<id>]` (always a list, even with one id) follow `last_confirmed`, `superseded_by` first.
+- `applies_to: [<prefix>:<value>]` (facets where the record applies), `owners: [<prefix>:<value>]` (facets responsible for keeping it current, e.g. `team:ops`), and `tags: []` (free-form keywords) come before `source_refs`.
+- `related: [<relation>::<id>]` follows `source_refs`, then `body_schema` and `exception_to` where the record carries them.
 
 Omit an optional key that has no value. The kit's date and id patterns reject a literal `null`, so `effective_to: null` or `superseded_by: null` fails `ltm validate`.
 
@@ -133,7 +131,7 @@ See [retrieval-funnel.md](retrieval-funnel.md) for the four-stage querying patte
 
 ## What This Skill Does NOT Adopt From memory-bank
 
-- The kit's optional record keys `review_by`, `summary`, `promoted_from`, `promoted_to`, and `subject`. Neither key order in [machine-contracts.md](machine-contracts.md) lists them, so the lint fails a record carrying one as `frontmatter-known-keys`, and adding one means dropping another name from the record order to stay inside the 20-line budget.
+- The kit's optional record keys `review_by`, `summary`, `promoted_from`, `promoted_to`, and `subject` as keys this skill writes. They sit in the order in [machine-contracts.md](machine-contracts.md) and the lint accepts them on a `schema: 1` record, since `ltm` writes `promoted_*`; the 20-line budget limits how many one record carries.
 - The kit's `consumers`, `heading_aliases`, and `doctor` keys in `memory-bank.yaml`. The scaffold writes none of them; a scope that wants one adds it by hand.
 - The hydrator agent's scaffold-via-CLI workflow. This skill's process+scaffold modes serve a different ergonomic.
 

@@ -420,11 +420,21 @@ require_file "$contracts"
 require_text "$contracts" "$note_key_order"
 require_text "$contracts" "$record_key_order"
 
+# schema: 1 records follow long-term-memory-kit's order, which ltm fmt and every
+# ltm writer rewrite a file into (#318). body_schema and exception_to trail
+# related because ltm appends keys its schema lacks after its own.
+ltm_record_key_order="schema, id, memory_type, title, status, date, effective_from, effective_to, last_confirmed, review_by, summary, superseded_by, supersedes, promoted_from, promoted_to, subject, applies_to, owners, tags, source_refs, related, body_schema, exception_to"
+require_text "$contracts" "$ltm_record_key_order"
+require_text inbox-to-memory/SKILL.md "$ltm_record_key_order"
+require_text inbox-to-memory/references/memory-bank-schema.md "$ltm_record_key_order"
+require_text inbox-to-memory/references/memory-bank-schema.md "fa45506a64d7d51c5521d038bee8a138980c9605"
+require_text "$lint" "LTM_RECORD_KEY_ORDER=\"schema id memory_type title status date effective_from effective_to last_confirmed review_by summary superseded_by supersedes promoted_from promoted_to subject applies_to owners tags source_refs related body_schema exception_to\""
+require_text inbox-to-memory/scripts/migrate-scope.sh "LTM_RECORD_KEY_ORDER=\"schema id memory_type title status date effective_from effective_to last_confirmed review_by summary superseded_by supersedes promoted_from promoted_to subject applies_to owners tags source_refs related body_schema exception_to\""
+
 # SKILL.md carries the same two strings verbatim rather than a paraphrase. A quick
 # reference that drifts from the contract is worse than no quick reference: it is
 # the copy an agent actually reads before writing a file.
 require_text inbox-to-memory/SKILL.md "$note_key_order"
-require_text inbox-to-memory/SKILL.md "$record_key_order"
 
 # Twenty lines is what makes a header read a contract instead of a habit. It is
 # the number every retrieval claim in the funnel doc rests on.

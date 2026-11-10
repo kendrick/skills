@@ -175,7 +175,8 @@ For each `schema: 2` record under `_memory/*/`, the pass:
 - rewrites `memory_type: Rule` to `PolicyRule`, leaving the file in `_memory/rules/`;
 - in `applies_to` and `owners`, rewrites `<prefix>::<value>` to `<prefix>:<value>`, keeps a `<prefix>:<value>` entry, and maps a bare value through the facet map;
 - rewrites a scalar `supersedes: <id>` to `supersedes: ['<id>']`;
-- drops `effective_from`, `effective_to`, `supersedes`, and `superseded_by` where the value is `null` or empty.
+- drops `effective_from`, `effective_to`, `supersedes`, and `superseded_by` where the value is `null` or empty;
+- writes the keys in long-term-memory-kit's order, and refuses a record holding a key outside it (`themes`, for one), because the lint would fail the record on its next run.
 
 Bodies are copied byte for byte. A `schema: 1` record is skipped and counted under `already ltm:`, so a second `--apply` changes nothing.
 
