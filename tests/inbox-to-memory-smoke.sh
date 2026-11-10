@@ -3867,7 +3867,11 @@ lo_commented=_memory/context/regional-ledger-closes-June-Lm3LdgCls3.md
 awk '{ print } /^tags:/ { print "# note" }' "$lo_mig/$lo_commented" >"$lo_dir/planted.md"
 mv "$lo_dir/planted.md" "$lo_mig/$lo_commented"
 require_line "$(cat "$lo_mig/$lo_commented")" "# note" "case F's planted comment"
-lm_commit "$lo_mig" "plant themes and a comment"
+lo_dup=_memory/rules/dunning-notices-need-ops-signoff-Lm2DunOps2.md
+awk '{ print } /^tags:/ { print }' "$lo_mig/$lo_dup" >"$lo_dir/planted.md"
+mv "$lo_dir/planted.md" "$lo_mig/$lo_dup"
+require_line "$(grep -c '^tags:' "$lo_mig/$lo_dup")" "2" "case F's planted duplicate key"
+lm_commit "$lo_mig" "plant themes, a comment and a duplicate key"
 lo_rc=0
 lo_mig_out="$(bash "$lm_migrator" "$lo_mig" --to-ltm --facet-map "$lm_map" 2>&1)" || lo_rc=$?
 [[ "$lo_rc" -eq 1 ]] || {
@@ -3877,6 +3881,7 @@ lo_mig_out="$(bash "$lm_migrator" "$lo_mig" --to-ltm --facet-map "$lm_map" 2>&1)
 }
 require_output "$lo_mig_out" "$lm_decision: key 'themes' is not in long-term-memory-kit's key order"
 require_output "$lo_mig_out" "$lo_commented: frontmatter holds a comment, which long-term-memory-kit's writers drop"
+require_output "$lo_mig_out" "$lo_dup: key 'tags' appears more than once in the frontmatter"
 
 # G: ltm fmt refuses a frontmatter comment and ltm confirm drops it silently,
 # so a schema: 1 template can't carry one.

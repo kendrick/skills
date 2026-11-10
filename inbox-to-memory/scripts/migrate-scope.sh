@@ -588,7 +588,9 @@ if [[ "$to_ltm" -eq 1 ]]; then
     # other order hands the user a lint failure (#318). Refuse an unknown key,
     # since the lint fails any key outside this order. A comment line gets its
     # own sentinel: it has no colon, so its key reads as empty, and an empty
-    # bad would let END print a block truncated at the comment.
+    # bad would let END print a block truncated at the comment. A repeated key
+    # gets a sentinel too: line[] keeps one line per key and yq accepts
+    # duplicates, so the reorder would silently drop a value from the user's file.
     if ! awk -v order="$LTM_RECORD_KEY_ORDER" '
       BEGIN { n = split(order, o, " "); for (i = 1; i <= n; i++) at[o[i]] = i }
       /^[[:space:]]*$/ { next }
@@ -596,6 +598,7 @@ if [[ "$to_ltm" -eq 1 ]]; then
       {
         k = substr($0, 1, index($0, ":") - 1)
         if (!(k in at)) { bad = k; exit }
+        if (at[k] in line) { bad = "dup:" k; exit }
         line[at[k]] = $0
       }
       END {
@@ -605,6 +608,8 @@ if [[ "$to_ltm" -eq 1 ]]; then
     ' "$work/new-fm" >"$work/new-fm.ordered" 2>"$work/bad-key"; then
       if [[ "$(cat "$work/bad-key")" == "#" ]]; then
         refuse "$file" "frontmatter holds a comment, which long-term-memory-kit's writers drop"
+      elif [[ "$(cat "$work/bad-key")" == dup:* ]]; then
+        refuse "$file" "key '$(cat "$work/bad-key" | sed 's/^dup://')' appears more than once in the frontmatter"
       else
         refuse "$file" "key '$(cat "$work/bad-key")' is not in long-term-memory-kit's key order"
       fi
