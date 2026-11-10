@@ -1016,8 +1016,8 @@ awk -v h="$stops_header" '
   on { exit }
 ' work-issue/SKILL.md > "$tmp/stops.txt"
 stops_rows="$(wc -l < "$tmp/stops.txt" | tr -d ' ')"
-[[ "$stops_rows" -eq 36 ]] || {
-  echo "Where a Run Stops lists $stops_rows stops, expected 36" >&2
+[[ "$stops_rows" -eq 37 ]] || {
+  echo "Where a Run Stops lists $stops_rows stops, expected 37" >&2
   exit 1
 }
 while IFS= read -r row; do
