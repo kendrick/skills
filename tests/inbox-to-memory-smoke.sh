@@ -291,10 +291,10 @@ sed 's/ | dismissed: [^|]*$//' "$round_trip" >"$stripped"
 dismissal_out="$(run_lint "$dismissal_scope")"
 require_failure "$dismissal_out" "derived-counts: \`unpromoted_candidates\` says 1, body has 2"
 
-# Working-state candidates that landed (#319). The count reads `| landed:` on a
-# working-state line and nothing else: the same suffix on a memory candidate
-# must not hide it, and the colon form scope-decisions.md once prescribed has to
-# keep failing the grammar.
+# Working-state candidates that landed (#319). The count reads `| landed:` only
+# on a working-state line, so a memory candidate carrying the same suffix still
+# counts. The colon form that scope-decisions.md once prescribed has to keep
+# failing the grammar.
 ws_scope="$(mktemp -d "${TMPDIR:-/tmp}/i2m-ws-landed.XXXXXX")"
 trap 'rm -rf "$not_a_scope" "$inline_scope" "$dismissal_scope" "$ws_scope"' EXIT
 mkdir -p "$ws_scope/_inbox" "$ws_scope/entries" "$ws_scope/notes"
@@ -341,9 +341,9 @@ ws_write '- [working-state candidate: this is in motion, leave in working-state]
 require_failure "$(run_lint "$ws_scope")" "token-grammar: \`[working-state candidate:\` is not in the grammar table"
 rm -rf "$ws_scope"
 
-# The prose half of #319: the reference text once taught the colon form the lint
-# rejects, and SKILL.md's taxonomy left the token out. Literal path here because
-# this runs before the suite assigns `$contracts`.
+# These pins guard #319's prose fix. The reference docs once taught the colon
+# form the lint rejects, and SKILL.md's taxonomy left the token out. The pins use
+# literal paths because the suite assigns `$contracts` further down.
 require_text inbox-to-memory/references/machine-contracts.md "- [working-state candidate] <claim> | landed: working-state"
 require_text inbox-to-memory/SKILL.md "[working-state candidate] <claim>"
 require_text inbox-to-memory/SKILL.md "| landed: working-state"
@@ -1427,7 +1427,8 @@ grep -Fq 'derived-counts' <<<"$dismiss_lint" && {
 }
 rm -rf "$mig_dismiss"
 
-# #319: the migrator's copy of the count has to give back a landed working-state line too.
+# #319: migrate-scope.sh carries its own copy of count_landed_working_state, so a
+# landed working-state line has to drop out of its count as well.
 mig_ws="$(mktemp -d "${TMPDIR:-/tmp}/i2m-migrate-ws.XXXXXX")"
 mig_ws_base="$(mktemp -d "${TMPDIR:-/tmp}/i2m-migrate-wsbase.XXXXXX")"
 trap 'rm -rf "$not_a_scope" "$inline_scope" "$dismissal_scope" "$mig" "$mig_ws" "$mig_ws_base"' EXIT
@@ -1450,7 +1451,8 @@ done
 bash "$migrator" "$mig_ws" --apply >/dev/null 2>&1
 bash "$migrator" "$mig_ws_base" --apply >/dev/null 2>&1
 want_ws="$(grep -m1 '^unpromoted_candidates:' "$mig_ws_base/$wnote_rel")"
-# An empty want would match any blank line below and pass on a failed migration.
+# An empty $want_ws turns the grep -Fx below into a match on any blank line,
+# which would pass a failed migration.
 [ -n "$want_ws" ] || { echo "the untouched migrator copy wrote no unpromoted_candidates line" >&2; exit 1; }
 grep -Fxq "$want_ws" "$wnote" || {
   echo "migrator counted a landed working-state line (want: $want_ws)" >&2
