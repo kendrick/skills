@@ -276,6 +276,12 @@ count_dismissed_amends() {
     { grep -Fc -- '| dismissed:' || true; } | tr -d ' '
 }
 
+# A landed working-state line keeps its token as provenance, so the count gives it back or a claim already in working-state.md stays open business forever.
+count_landed_working_state() {
+  { grep -F -- '[working-state candidate]' "$1" || true; } |
+    { grep -Fc -- '| landed:' || true; } | tr -d ' '
+}
+
 frontmatter_number() {
   awk -v key="$2" '
     { sub(/\r$/, "") }
@@ -480,6 +486,7 @@ check_counts() {
         expected="$(count_matches "$body" '\[(memory candidate:|journal candidate:|working-state candidate\])')"
         expected=$((expected + $(count_open_contradictions "$body")))
         expected=$((expected - $(count_dismissed_amends "$body")))
+        expected=$((expected - $(count_landed_working_state "$body")))
         ;;
     esac
     stated="$(frontmatter_number "$file" "$key")"

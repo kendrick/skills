@@ -257,6 +257,12 @@ count_dismissed_amends() {
     { grep -Fc -- '| dismissed:' || true; } | tr -d ' '
 }
 
+# Must match lint-scope.sh: a landed working-state line keeps its token as provenance, so the count gives it back or the lint rejects the note.
+count_landed_working_state() {
+  { grep -F -- '[working-state candidate]' "$1" || true; } |
+    { grep -Fc -- '| landed:' || true; } | tr -d ' '
+}
+
 props_value() {
   awk -v k="$2" '
     { sep = index($0, " = "); if (sep == 0) next }
@@ -722,7 +728,7 @@ for file in "$scope"/notes/*.md "$scope"/_memory/*/*.md "$scope"/entries/*.md; d
     extras="$extras;open_questions=$(count_matches "$work/body" '\[open question:')"
     extras="$extras;resolved_questions=$(count_matches "$work/body" '\[open question resolved:')"
     extras="$extras;deferred_tensions=$(count_matches "$work/body" '\[tension: deferred\]')"
-    extras="$extras;unpromoted_candidates=$((unpromoted + $(count_open_contradictions "$work/body") - $(count_dismissed_amends "$work/body")))"
+    extras="$extras;unpromoted_candidates=$((unpromoted + $(count_open_contradictions "$work/body") - $(count_dismissed_amends "$work/body") - $(count_landed_working_state "$work/body")))"
 
     note_id="$(props_value "$work/props" id)"
 

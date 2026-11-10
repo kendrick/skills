@@ -291,6 +291,56 @@ sed 's/ | dismissed: [^|]*$//' "$round_trip" >"$stripped"
 dismissal_out="$(run_lint "$dismissal_scope")"
 require_failure "$dismissal_out" "derived-counts: \`unpromoted_candidates\` says 1, body has 2"
 
+# Working-state candidates that landed (#319). The count reads `| landed:` on a
+# working-state line and nothing else: the same suffix on a memory candidate
+# must not hide it, and the colon form scope-decisions.md once prescribed has to
+# keep failing the grammar.
+ws_scope="$(mktemp -d "${TMPDIR:-/tmp}/i2m-ws-landed.XXXXXX")"
+trap 'rm -rf "$not_a_scope" "$inline_scope" "$dismissal_scope" "$ws_scope"' EXIT
+mkdir -p "$ws_scope/_inbox" "$ws_scope/entries" "$ws_scope/notes"
+ws_note="$ws_scope/notes/2026-11-09-ws-landed-Ws0LndNt01.md"
+ws_write() {
+  cat >"$ws_note" <<NOTE
+---
+schema: 2
+id: Ws0LndNt01
+date: 2026-11-09
+type: working-session
+summary: 'Freeze exceptions route through delivery while the RACI is redrawn.'
+open_questions: 0
+resolved_questions: 0
+deferred_tensions: 0
+unpromoted_candidates: 2
+related: []
+---
+
+## Candidates
+
+$1
+$2
+
+## Raw Content
+NOTE
+}
+ws_line='- [working-state candidate] Atlas freeze exceptions route through delivery while the RACI is redrawn.'
+mem_line='- [memory candidate: project] Ops signs every freeze exception.'
+
+ws_write "$ws_line" "$mem_line"
+require_line "$(run_lint "$ws_scope")" "failures: 0" ws-baseline
+
+# A: one landed working-state line leaves one open candidate.
+ws_write "$ws_line | landed: working-state" "$mem_line"
+require_failure "$(run_lint "$ws_scope")" "derived-counts: \`unpromoted_candidates\` says 2, body has 1"
+
+# B: the suffix on the memory candidate too still drops the count by one, not two.
+ws_write "$ws_line | landed: working-state" "$mem_line | landed: working-state"
+require_failure "$(run_lint "$ws_scope")" "derived-counts: \`unpromoted_candidates\` says 2, body has 1"
+
+# C: the colon form stays outside the grammar.
+ws_write '- [working-state candidate: this is in motion, leave in working-state] Atlas freeze exceptions route through delivery.' "$mem_line"
+require_failure "$(run_lint "$ws_scope")" "token-grammar: \`[working-state candidate:\` is not in the grammar table"
+rm -rf "$ws_scope"
+
 # Phase 2.5 can only hold to five body reads per input if the scope it runs over
 # has records to spare. This is the fixture-side half of that promise: the budget
 # itself is a property of an agent run and nothing here can assert it.
@@ -1364,6 +1414,44 @@ grep -Fq 'derived-counts' <<<"$dismiss_lint" && {
   exit 1
 }
 rm -rf "$mig_dismiss"
+
+# #319: the migrator's copy of the count has to give back a landed working-state line too.
+mig_ws="$(mktemp -d "${TMPDIR:-/tmp}/i2m-migrate-ws.XXXXXX")"
+mig_ws_base="$(mktemp -d "${TMPDIR:-/tmp}/i2m-migrate-wsbase.XXXXXX")"
+trap 'rm -rf "$not_a_scope" "$inline_scope" "$dismissal_scope" "$mig" "$mig_ws" "$mig_ws_base"' EXIT
+wnote_rel="notes/2025-11-04-atlas-scoping-call-3iMu15QJ_x.md"
+for d in "$mig_ws" "$mig_ws_base"; do
+  cp -R "$fixtures/old-only/." "$d/"
+done
+wnote="$mig_ws/$wnote_rel"
+awk '{ print } /^- \[memory candidate: client\]/ { print "- [working-state candidate] Hold the EMEA cutover until the ledger closes. | landed: working-state" }' "$wnote" >"$wnote.new"
+mv "$wnote.new" "$wnote"
+grep -Fq '| landed: working-state' "$wnote" || {
+  echo "the landed working-state line was not inserted; the fixture changed shape" >&2
+  exit 1
+}
+for d in "$mig_ws" "$mig_ws_base"; do
+  git -C "$d" init -q
+  git -C "$d" add -A
+  git -C "$d" -c user.email=t@t -c user.name=t commit -qm baseline
+done
+bash "$migrator" "$mig_ws" --apply >/dev/null 2>&1
+bash "$migrator" "$mig_ws_base" --apply >/dev/null 2>&1
+want_ws="$(grep -m1 '^unpromoted_candidates:' "$mig_ws_base/$wnote_rel")"
+# An empty want would match any blank line below and pass on a failed migration.
+[ -n "$want_ws" ] || { echo "the untouched migrator copy wrote no unpromoted_candidates line" >&2; exit 1; }
+grep -Fxq "$want_ws" "$wnote" || {
+  echo "migrator counted a landed working-state line (want: $want_ws)" >&2
+  grep -n 'unpromoted_candidates' "$wnote" >&2
+  exit 1
+}
+ws_lint="$(run_lint "$mig_ws")"
+grep -Fq 'derived-counts' <<<"$ws_lint" && {
+  echo "the lint rejected the migrated counts for a note with a landed working-state line" >&2
+  printf '%s\n' "$ws_lint" >&2
+  exit 1
+}
+rm -rf "$mig_ws" "$mig_ws_base"
 
 # The body is the record of what someone knew that day, and it has to come
 # through untouched to the byte. This is the assertion the whole design serves.
