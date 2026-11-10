@@ -27,7 +27,7 @@ source_refs: [<note-or-record-id>]
 ---
 ```
 
-Optional keys keep long-term-memory-kit's order, which `ltm fmt` enforces: `effective_from`, `effective_to` go after `date`; `superseded_by`, `supersedes` after `last_confirmed`; `applies_to`, `owners`, `tags` before `source_refs`; `related`, then `exception_to`, after it.
+Optional keys keep long-term-memory-kit's order, which `ltm fmt` enforces: `effective_from`, `effective_to` go after `date`; `superseded_by`, `supersedes` after `last_confirmed`; `applies_to`, `owners`, `tags` before `source_refs`; `related` after it, then `body_schema`, then `exception_to`.
 
 Values stay on one line, lists are inline arrays, and the block closes inside the first 20 lines so a header read catches all of it. Omit an optional key that has no value rather than writing `null`, and write `supersedes` as a list even when it holds one id. Records with no `schema` key are v1 and `schema: 2` records predate the move to long-term-memory-kit's format; both stay legal until the scope's owner migrates them.
 

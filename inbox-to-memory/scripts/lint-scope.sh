@@ -24,10 +24,10 @@ set -euo pipefail
 # Contract key orders. Duplicated by hand into the templates, the migrator, and
 # (note order only) split-raw.sh; the smoke test pins every copy to the same
 # string so a drift fails there before it reaches a scope.
-# The third order belongs to long-term-memory-kit, not to this skill: every ltm
-# writer re-emits a schema: 1 record in it, so any other order fails the lint
-# the first time ltm touches a record (#318). It's the property order of the
-# kit's schema/record.schema.json (canonical.ts reads SCHEMA_KEY_ORDER from it);
+# The third order is long-term-memory-kit's. Every ltm writer re-emits a
+# schema: 1 record in it, so any other order fails the lint the first time ltm
+# touches a record (#318). It's the property order of the kit's
+# schema/record.schema.json (canonical.ts reads SCHEMA_KEY_ORDER from it);
 # re-read it there when the kit changes. body_schema and exception_to aren't in
 # the kit's schema, and ltm appends unknown keys after its own in their existing
 # order, which puts them after related.
@@ -218,7 +218,7 @@ check_frontmatter() {
   keys="$(printf '%s\n' "$block" | yq 'keys | .[]' 2>/dev/null || true)"
   if printf '%s\n' "$keys" | grep -qx 'memory_type'; then
     # schema: 2 records and journal entries are still legal and ltm never
-    # writes them, so they keep the order they were born in.
+    # writes them, so they keep their original order.
     if [[ "$(printf '%s\n' "$block" | yq '.schema')" == 1 ]]; then
       order="$LTM_RECORD_KEY_ORDER"
     else

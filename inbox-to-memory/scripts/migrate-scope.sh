@@ -585,8 +585,10 @@ if [[ "$to_ltm" -eq 1 ]]; then
     ' "$work/repl" "$work/block" >"$work/new-fm"
 
     # ltm re-emits a record in this order on its first write, so writing any
-    # other order hands the user a lint failure (#318). An unknown key is
-    # refused, not appended, since the lint would fail that record too.
+    # other order hands the user a lint failure (#318). Refuse an unknown key,
+    # since the lint fails any key outside this order. A comment line gets its
+    # own sentinel: it has no colon, so its key reads as empty, and an empty
+    # bad would let END print a block truncated at the comment.
     if ! awk -v order="$LTM_RECORD_KEY_ORDER" '
       BEGIN { n = split(order, o, " "); for (i = 1; i <= n; i++) at[o[i]] = i }
       /^[[:space:]]*$/ { next }

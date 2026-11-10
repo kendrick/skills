@@ -260,11 +260,11 @@ trap 'rm -rf "$work"' EXIT
 
 # Insert `last_confirmed: <date>` in contract position: right after the last
 # of schema/id/memory_type/title/status/date/effective_from/effective_to that
-# the record actually carries, which — because the record already lints clean
-# going in — is also the line right before wherever the next present key
-# already sits. body_schema isn't an anchor: in ltm's schema: 1 order it trails
-# related, so anchoring on it put last_confirmed at the end of the block (#318).
-# A schema: 2 record loses nothing, since its required id follows body_schema.
+# the record carries. The record lints clean going in, so that's also the line
+# right before the next present key. body_schema isn't an anchor because ltm's
+# schema: 1 order puts it after related, and anchoring there would land
+# last_confirmed at the end of the block (#318). A schema: 2 record loses
+# nothing, since its required id follows body_schema.
 insert_last_confirmed() {
   local file="$1" newdate="$2" anchor
   anchor="$(awk '

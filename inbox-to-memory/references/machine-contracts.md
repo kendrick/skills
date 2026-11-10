@@ -49,7 +49,7 @@ schema, body_schema, id, memory_type, title, status, date, effective_from, effec
 
 `themes` belongs to journal entries and `tags` to everything else; `exception_to` only to Exception records in canonical mode.
 
-`schema: 1` records, in the order `ltm fmt` and every `ltm` writer rewrite a file into (the kit owns it, from `src/core/canonical.ts`):
+`schema: 1` records, in the order `ltm fmt` and every `ltm` writer rewrite a file into (the kit owns it: the property order of `schema/record.schema.json`, which `src/core/canonical.ts` writes in):
 
 ```
 schema, id, memory_type, title, status, date, effective_from, effective_to, last_confirmed, review_by, summary, superseded_by, supersedes, promoted_from, promoted_to, subject, applies_to, owners, tags, source_refs, related, body_schema, exception_to
