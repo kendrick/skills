@@ -115,12 +115,14 @@ Inside the extracted sections, flag candidates **inline** using the taxonomy bel
 [memory candidate: client] <claim>
 [memory candidate: update existing [[<filename>|<short-name>]]] <amended claim>
 [journal candidate: <generalized pattern>]
+[working-state candidate] <claim>
 ```
 
 - The scope token (`project` or `client`) is the skill's _proposal_, not a decision. The user confirms or overrides at phase 5.
 - The contradiction flag, in the shape phase 2.5 gives, is the one candidate type that needs memory read first.
 - The "update existing" variant signals an amendment to an already-crystallized record. Its scope is inherited from the target.
 - Journal candidates take no scope token — their destination is always the cross-client journal.
+- A working-state candidate marks a decision still in motion, which belongs in `working-state.md` rather than a record (see [references/scope-decisions.md](references/scope-decisions.md)). If the user confirms at phase 5 that they moved it there, append `| landed: working-state` and keep the token.
 
 Emit only token shapes registered in The Token Grammar in [references/machine-contracts.md](references/machine-contracts.md); `scripts/lint-scope.sh` (`check_tokens`) fails any other shape on a v2 file.
 
@@ -136,7 +138,7 @@ Reuse an existing slug for the same question rather than minting a new one. Then
 
 - Report each recurring open question with the number of notes it has stayed open across. That count is what you bring to the person who can close it.
 - Rewrite this note's own entries to the resolved form for anything this session answered.
-- Flag a slug open across three or more notes as `[tension: unacknowledged]`, unless the transcript shows someone naming it out loud. Chronic non-answers should be escalated by arithmetic rather than by whoever happens to notice.
+- Flag a slug open across three or more notes as `[tension: unacknowledged]`, unless the transcript shows someone naming it out loud.
 
 **Process mode never edits a prior note.** Each note is a faithful record of what was known that day, and rewriting an old one to reflect a later answer destroys the only thing it was good for. A question resolved today gets its resolution in today's note.
 
@@ -186,7 +188,7 @@ For each candidate the user approves:
    - `[memory candidate: <scope>] <claim>` → `[[<record-filename-without-ext>|memory]] <claim>`
    - `[memory candidate: update existing [[<target>|<name>]]] <claim>` → `[[<target>|memory — updated]] <claim>`
    - `[journal candidate: <pattern>]` → `[[<relative-path-to-journal-entry>|journal]] <pattern>`
-4. **For "update existing" promotions** (this is how a record grows over time rather than spawning duplicates):
+4. **For "update existing" promotions**:
    - Append the source note's `id` to the target record's `source_refs`.
    - Amend the target record's body. Mark new content inline with `(added YYYY-MM-DD, <note-id>)` so the next reader can trace which source contributed which passage.
    - Keep the original `date` field. Only bump it if the core claim has materially changed — at which point consider whether the old record should be `status: superseded` and a new record created instead.
@@ -199,9 +201,9 @@ A `[contradicts accepted: ...]` flag has three outcomes, and the user picks one 
 - **Supersede.** The record is now wrong. Create the replacement, set the old record's `status: superseded` and its `superseded_by`, set the new record's `supersedes`, and rewrite the line to `[[<new-record>|memory — supersedes <old-label>]]`.
 - **Dismiss.** They don't actually conflict, or the new statement is the mistaken one. Append `| dismissed: <reason, and who decided>` and leave everything else where it is.
 
-**A dismissed flag stays in the note permanently.** It is the record that someone looked at this and decided it was nothing, which is what stops the next four notes from re-flagging the same non-conflict. Deleting it throws away the only evidence the question was ever asked.
+**A dismissed flag stays in the note permanently.** It is the record that someone looked at this and decided it was nothing, which is what stops the next four notes from re-flagging the same non-conflict.
 
-Never auto-promote. Every record creation requires explicit user approval per candidate. Unpromoted candidates keep their `[memory candidate: ...]` or `[journal candidate: ...]` prefix — the prefix signals "considered, not crystallized," which is itself useful provenance. A declined update-existing line keeps its prefix too and takes Dismiss's suffix above, `| dismissed: <reason, and who decided>`, after any `related:` tail.
+Never auto-promote. Every record creation requires explicit user approval per candidate. Unpromoted candidates keep their `[memory candidate: ...]` or `[journal candidate: ...]` prefix. A declined update-existing line keeps its prefix too and takes Dismiss's suffix above, `| dismissed: <reason, and who decided>`, after any `related:` tail.
 
 ### Phase 6 — Verify
 
