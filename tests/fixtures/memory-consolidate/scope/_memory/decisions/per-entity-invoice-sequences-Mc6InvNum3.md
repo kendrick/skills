@@ -5,9 +5,9 @@ memory_type: Decision
 title: Per-entity invoice sequences
 status: superseded
 date: 2026-01-15
-applies_to: [topic:billing]
-supersedes: [Mc5InvNum2]
 superseded_by: Mc7InvNum4
+supersedes: [Mc5InvNum2]
+applies_to: [topic:billing]
 ---
 
 ## Context

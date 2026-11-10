@@ -6,8 +6,8 @@ title: Prefixed entity invoice numbers
 status: accepted
 date: 2026-08-01
 last_confirmed: 2026-09-10
-applies_to: [topic:billing]
 supersedes: [Mc6InvNum3]
+applies_to: [topic:billing]
 ---
 
 ## Context

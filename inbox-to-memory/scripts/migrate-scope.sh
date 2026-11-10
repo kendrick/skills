@@ -28,6 +28,9 @@ set -euo pipefail
 
 NOTE_KEY_ORDER="schema body_schema id date type summary attendees tags topics entities source_file raw_file transcript_corrections open_questions resolved_questions deferred_tensions unpromoted_candidates related"
 RECORD_KEY_ORDER="schema body_schema id memory_type title status date effective_from effective_to last_confirmed source_refs applies_to owners tags themes related exception_to supersedes superseded_by"
+# long-term-memory-kit's order, copied byte for byte from lint-scope.sh, which
+# says where it comes from. --to-ltm writes it.
+LTM_RECORD_KEY_ORDER="schema id memory_type title status date effective_from effective_to last_confirmed review_by summary superseded_by supersedes promoted_from promoted_to subject applies_to owners tags source_refs related body_schema exception_to"
 
 FRONTMATTER_LINE_BUDGET=20
 
@@ -580,6 +583,32 @@ if [[ "$to_ltm" -eq 1 ]]; then
         print
       }
     ' "$work/repl" "$work/block" >"$work/new-fm"
+
+    # ltm re-emits a record in this order on its first write, so writing any
+    # other order hands the user a lint failure (#318). An unknown key is
+    # refused, not appended, since the lint would fail that record too.
+    if ! awk -v order="$LTM_RECORD_KEY_ORDER" '
+      BEGIN { n = split(order, o, " "); for (i = 1; i <= n; i++) at[o[i]] = i }
+      /^[[:space:]]*$/ { next }
+      /^#/ { bad = "#"; exit }
+      {
+        k = substr($0, 1, index($0, ":") - 1)
+        if (!(k in at)) { bad = k; exit }
+        line[at[k]] = $0
+      }
+      END {
+        if (bad != "") { print bad > "/dev/stderr"; exit 1 }
+        for (i = 1; i <= n; i++) if (i in line) print line[i]
+      }
+    ' "$work/new-fm" >"$work/new-fm.ordered" 2>"$work/bad-key"; then
+      if [[ "$(cat "$work/bad-key")" == "#" ]]; then
+        refuse "$file" "frontmatter holds a comment, which long-term-memory-kit's writers drop"
+      else
+        refuse "$file" "key '$(cat "$work/bad-key")' is not in long-term-memory-kit's key order"
+      fi
+      continue
+    fi
+    mv "$work/new-fm.ordered" "$work/new-fm"
 
     lines="$(wc -l <"$work/new-fm" | tr -d ' ')"
     if [[ $((lines + 2)) -gt "$FRONTMATTER_LINE_BUDGET" ]]; then
