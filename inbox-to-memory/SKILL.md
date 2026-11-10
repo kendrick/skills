@@ -122,7 +122,7 @@ Inside the extracted sections, flag candidates **inline** using the taxonomy bel
 - The contradiction flag, in the shape phase 2.5 gives, is the one candidate type that needs memory read first.
 - The "update existing" variant signals an amendment to an already-crystallized record. Its scope is inherited from the target.
 - Journal candidates take no scope token — their destination is always the cross-client journal.
-- A working-state candidate marks a decision still in motion, which belongs in `working-state.md` rather than a record (see [references/scope-decisions.md](references/scope-decisions.md)). Once the user confirms they moved it there, append `| landed: working-state` and keep the token.
+- A working-state candidate marks a decision still in motion, which belongs in `working-state.md` rather than a record (see [references/scope-decisions.md](references/scope-decisions.md)). If the user confirms at phase 5 that they moved it there, append `| landed: working-state` and keep the token.
 
 Emit only token shapes registered in The Token Grammar in [references/machine-contracts.md](references/machine-contracts.md); `scripts/lint-scope.sh` (`check_tokens`) fails any other shape on a v2 file.
 
