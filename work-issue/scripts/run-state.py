@@ -1265,7 +1265,7 @@ def phase_of(probe):
     # 13 (clean), never here. The repair-report leg still stands alone: a
     # post-PR repair round may have no triage round of its own.
     # An owed deferred-findings comment reaches Step 8 on its own. A worker's
-    # plan_concerns row lands in the queue at Step 4, before any triage round
+    # open plan_concerns row (open: true or no open field) lands in the queue at Step 4, before any triage round
     # or repair report exists, and a resume that required one of those first
     # matched no row at all and stranded the run.
     # A capped round reads as all-queued here: it has in-scope rows and, under

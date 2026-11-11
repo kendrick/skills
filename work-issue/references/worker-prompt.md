@@ -27,6 +27,13 @@ plan said, what you found, and what you did into `plan_concerns`. A
 workaround invented to keep a wrong plan true is the most expensive kind of
 correct, because it looks finished and nobody can see what it cost.
 
+Each `plan_concerns` entry carries `open`, a JSON boolean. Set `true` when
+the plan or the orchestrator must decide, or when the work the concern
+implies lies outside your task. Set `false` only when `did` settled it in the
+branch and nothing is left to decide. Anything but a literal `false` counts
+as open, and an open entry is queued for a human to rule on, so a doubtful
+one stays `true`.
+
 Report what you left and why. A finding you judged out of scope, a refactor
 you decided against, a test you could not write: each goes into `left` with
 its reason. An omission with a reason attached is a decision somebody can
@@ -79,7 +86,7 @@ block further down, so report all nine:
       "question": "",
       "claims": [{"claim": "what is now true", "path": "the repo-relative file the claim rests on", "command": "what proves it", "output": "what that command really printed"}],
       "left": [{"what": "what was not done", "why": "the reason it was not"}],
-      "plan_concerns": [{"plan_said": "the plan's words", "found": "what the code showed", "did": "what was built instead", "open": false}]
+      "plan_concerns": [{"plan_said": "the plan's words", "found": "what the code showed", "did": "what was built instead", "open": true}]
     }
 
 Write the same JSON report to {{REPORT_PATH}}.
@@ -103,13 +110,13 @@ Review findings to repair, each quoted with its source URL:
   "question": "",
   "claims": [{"claim": "what is now true", "path": "the repo-relative file the claim rests on", "command": "what proves it", "output": "what that command really printed"}],
   "left": [{"what": "what was not done", "why": "the reason it was not"}],
-  "plan_concerns": [{"plan_said": "the plan's words", "found": "what the code showed", "did": "what was built instead", "open": false}]
+  "plan_concerns": [{"plan_said": "the plan's words", "found": "what the code showed", "did": "what was built instead", "open": true}]
 }
 ```
 
 - `claims` is the red-team's whole input. `path` is the file the reproducer greps at HEAD before it runs anything, and the file whose name decides whether the reproducer runs on `opus`; a claim with no path fails the change-exists check and comes back `NOT_REPRODUCED`. A claim with no command is unreproducible and comes back `UNVERIFIABLE`, which reaches the pull request as a section saying so. An empty `claims` on the final build report fails Step 3 rather than passing Step 4 by having nothing to check.
 - `left` is checked entry by entry against the code by the same reproducer. A reason that does not hold is a finding.
-- `plan_concerns` reaches the pull-request body, and the deferred queue when `open` is true or absent. `open` is a JSON boolean. Set `true` when the plan or the orchestrator must decide, or when the work the concern implies lies outside your task. Set `false` when `did` settled it in the branch and nothing is left to decide. Omit the field and the entry counts as `true`. It is the only channel a worker has for "the plan asked for something the code cannot support", and a worker that stays silent here hands the next reader a diff that disagrees with its own plan for no visible reason.
+- `plan_concerns` reaches the pull-request body, and the deferred queue when `open` is true or absent; the preamble says when a worker sets each value. It is the only channel a worker has for "the plan asked for something the code cannot support", and a worker that stays silent here hands the next reader a diff that disagrees with its own plan for no visible reason.
 
 ## Placeholders
 
@@ -121,4 +128,4 @@ Review findings to repair, each quoted with its source URL:
 
 ## Why the output is only JSON
 
-The orchestrator reads these fields straight into its next step: `files_changed` into `divvy-up`'s ownership check, `verify_output` against the pass bar, `status` into the go/no-go, `claims` into the reproducer's dispatch, `left` and `plan_concerns` into the pull-request body and the queue. None of that involves reading prose. A summary paragraph beside the JSON reopens the gap the block closes: two accounts of what happened, and no rule for which one wins where they differ. The reproducer is the sharpest case — it is built to receive the claims and nothing else, and a prose summary riding along is exactly the worker's reasoning it was designed never to see.
+The orchestrator reads these fields straight into its next step: `files_changed` into `divvy-up`'s ownership check, `verify_output` against the pass bar, `status` into the go/no-go, `claims` into the reproducer's dispatch, `left` and `plan_concerns` into the pull-request body, and the `open` ones among `plan_concerns` into the queue. None of that involves reading prose. A summary paragraph beside the JSON reopens the gap the block closes: two accounts of what happened, and no rule for which one wins where they differ. The reproducer is the sharpest case — it is built to receive the claims and nothing else, and a prose summary riding along is exactly the worker's reasoning it was designed never to see.

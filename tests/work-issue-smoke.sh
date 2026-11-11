@@ -3523,9 +3523,14 @@ fi
 # #322: the queue rule keys on `open`. Each cut isolates one clause, so a revert
 # of item 6, the Step 6 Source paragraph, or triage's Source bullet fails alone.
 require_text _maintenance/work-issue/RATIONALE.md "kendrick/deep-field PR #31 queued 22 plan concerns"
-[[ "$(grep -cF '"open": false}' work-issue/references/worker-prompt.md)" == 2 ]] || {
-  echo "worker-prompt.md should carry \"open\": false in both plan_concerns shapes" >&2; exit 1; }
-require_text work-issue/references/worker-prompt.md 'Omit the field and the entry counts as `true`.'
+[[ "$(grep -cF '"open": true}' work-issue/references/worker-prompt.md)" == 2 ]] || {
+  echo "worker-prompt.md should carry the safe-default \"open\": true in both plan_concerns shapes" >&2; exit 1; }
+refute_text work-issue/references/worker-prompt.md '"open": false}'
+# A worker sees only the preamble, so the rule for setting `open` must sit
+# inside its fenced block, not in the contract section after it.
+awk '/^## The preamble/ { on = 1; next } on && /^## The report contract/ { exit } on { print }' work-issue/references/worker-prompt.md >"$tmp/preamble.md"
+require_text "$tmp/preamble.md" 'Set `false` only when `did` settled it in the'
+require_text "$tmp/preamble.md" 'Anything but a literal `false` counts'
 item6="$(grep -F '6. Every `plan_concerns` entry' work-issue/SKILL.md || true)"
 [[ -n "$item6" ]] || { echo "SKILL.md Step 4 item 6 lost its every-entry-to-PR-body lead" >&2; exit 1; }
 grep -qF 'Only an entry with `open: true`, or with no `open` field, also becomes a `queue.md` row' <<<"$item6" || {
