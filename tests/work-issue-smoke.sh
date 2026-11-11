@@ -3507,6 +3507,37 @@ expect_field "with a queue row whose Status moved to filed #9" deferred_comment_
 printf '| # | Source | Finding | Outside because | Recommendation | Status |\n|---|---|---|---|---|---|\n%s\n| 2 | https://github.com/o/r/pull/9#discussion_r4 | "Log the retry." | not in the diff | `file-issue` — log | queued |\n' "$deferred_row" >"$d/queue.md"
 expect_field "with round 2's row missing from the comment" deferred_comment_needed true "$d" "$lab_repo" --pr-bundle "$bundles_dir/open-deferred.json"
 
+# #322: a build report whose only plan_concerns entry is `open: false` owes no
+# deferred comment, because no queue row exists for it. run-state.py never reads
+# plan_concerns; the grep-based refute below keeps it that way.
+c="$(new_run open-false-concern)"
+mkdir -p "$c/reports"
+echo '{"task":"t","status":"done","plan_concerns":[{"plan_said":"a","found":"b","did":"c","open":false}]}' >"$c/reports/task-1.json"
+expect_field "with only an open:false plan concern and no queue.md" deferred_comment_needed false "$c" "$lab_repo" --pr-bundle "$bundles_dir/open-deferred.json"
+printf '| # | Source | Finding | Outside because | Recommendation | Status |\n|---|---|---|---|---|---|\n| 1 | worker | "a" | the plan must decide | `file-issue` — a | queued |\n' >"$c/queue.md"
+expect_field "with the open concern queued as a worker row" deferred_comment_needed true "$c" "$lab_repo" --pr-bundle "$bundles_dir/open-deferred.json"
+if grep -vE '^[[:space:]]*#' work-issue/scripts/run-state.py | grep -qF plan_concerns; then
+  echo "run-state.py reads plan_concerns outside a comment; the queue is the only gate" >&2; exit 1
+fi
+
+# #322: the queue rule keys on `open`. Each cut isolates one clause, so a revert
+# of item 6, the Step 6 Source paragraph, or triage's Source bullet fails alone.
+require_text _maintenance/work-issue/RATIONALE.md "kendrick/deep-field PR #31 queued 22 plan concerns"
+[[ "$(grep -cF '"open": true}' work-issue/references/worker-prompt.md)" == 2 ]] || {
+  echo "worker-prompt.md should carry the safe-default \"open\": true in both plan_concerns shapes" >&2; exit 1; }
+refute_text work-issue/references/worker-prompt.md '"open": false}'
+# A worker sees only the preamble, so the rule for setting `open` must sit
+# inside its fenced block, not in the contract section after it.
+awk '/^## The preamble/ { on = 1; next } on && /^## The report contract/ { exit } on { print }' work-issue/references/worker-prompt.md >"$tmp/preamble.md"
+require_text "$tmp/preamble.md" 'Set `false` only when `did` settled it in the'
+require_text "$tmp/preamble.md" 'Anything but a literal `false` counts'
+item6="$(grep -F '6. Every `plan_concerns` entry' work-issue/SKILL.md || true)"
+[[ -n "$item6" ]] || { echo "SKILL.md Step 4 item 6 lost its every-entry-to-PR-body lead" >&2; exit 1; }
+grep -qF 'Only an entry with `open: true`, or with no `open` field, also becomes a `queue.md` row' <<<"$item6" || {
+  echo "SKILL.md Step 4 item 6 should queue only open: true or field-less entries" >&2; exit 1; }
+require_text work-issue/SKILL.md 'or `worker` for a `plan_concerns` entry with `open: true` or no `open` field.'
+require_text work-issue/references/triage.md 'the literal `worker` for a `plan_concerns` entry with `open: true` (or no `open` field)'
+
 # repair_diff_triggers (#162, #137) reads the repair's own diff from
 # repair-base-<k> for the newest round k: the billing/README repo the block
 # above builds, rebuilt here.
