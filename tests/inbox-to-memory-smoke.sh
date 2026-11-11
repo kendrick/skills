@@ -3898,6 +3898,25 @@ require_output "$lo_mig_out" "$lo_dup: key 'tags' appears more than once in the 
 require_output "$lo_mig_out" "$lo_empty_dup: key 'effective_to' appears more than once in the frontmatter"
 require_output "$lo_mig_out" "$lo_schema_dup: key 'schema' appears more than once in the frontmatter"
 
+# The v2 templates ship commented-out optional keys. --to-ltm drops them rather
+# than refusing, since a refusal blocked every scope filled from the template.
+lo_tpl="$lo_dir/template-keys"
+lm_stage "$lo_tpl"
+awk '{ print } /^date:/ { print "# effective_from: '"'"'YYYY-MM-DD'"'"'"; print "# effective_to: null"; print "# supersedes: <id-of-old-decision>"; print "# superseded_by: null" }' "$lo_tpl/$lm_decision" >"$lo_dir/planted.md"
+mv "$lo_dir/planted.md" "$lo_tpl/$lm_decision"
+require_line "$(grep -c '^# \(effective_from\|effective_to\|supersedes\|superseded_by\):' "$lo_tpl/$lm_decision")" "4" "the template-keys plant"
+lm_commit "$lo_tpl" "plant the v2 template's commented-out keys"
+lo_rc=0
+lo_tpl_out="$(bash "$lm_migrator" "$lo_tpl" --to-ltm --facet-map "$lm_map" --apply 2>&1)" || lo_rc=$?
+[[ "$lo_rc" -eq 0 ]] || {
+  echo "--to-ltm --apply exited $lo_rc on a record carrying the v2 template's commented-out keys (want 0)" >&2
+  printf '%s\n' "$lo_tpl_out" >&2
+  exit 1
+}
+require_line "$(head -3 "$lo_tpl/$lm_decision")" "schema: 1" "the template-keys record after --apply"
+refute_text "$lo_tpl/$lm_decision" "# effective_to"
+refute_text "$lo_tpl/$lm_decision" "# supersedes"
+
 # G: ltm fmt refuses a frontmatter comment and ltm confirm drops it silently,
 # so a schema: 1 template can't carry one.
 for record in context decision exception policy-rule rule; do

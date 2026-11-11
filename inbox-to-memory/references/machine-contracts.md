@@ -55,7 +55,7 @@ schema, body_schema, id, memory_type, title, status, date, effective_from, effec
 schema, id, memory_type, title, status, date, effective_from, effective_to, last_confirmed, review_by, summary, superseded_by, supersedes, promoted_from, promoted_to, subject, applies_to, owners, tags, source_refs, related, body_schema, exception_to
 ```
 
-`body_schema` and `exception_to` trail `related` because `ltm` writes the keys its schema defines first, then appends any it lacks in the order the file had them. Keep a `schema: 1` record in this order and `ltm fmt --check` finds nothing to change; any other order draws `frontmatter-key-order` on the next lint. `themes` is not in it, since journal entries stay `schema: 2`. The frontmatter holds no `#` comment, which `ltm` drops.
+`body_schema` and `exception_to` trail `related` because `ltm` writes the keys its schema defines first, then appends any it lacks in the order the file had them. Keep a `schema: 1` record in this order and `ltm fmt --check` finds nothing to change; any other order draws `frontmatter-key-order` on the next lint. A `schema: 1` record written before this order, from the earlier templates or the earlier `--to-ltm`, draws it too; `ltm fmt`, run from the scope root, rewrites it. `themes` is not in it, since journal entries stay `schema: 2`. The frontmatter holds no `#` comment line, since `ltm` drops every one on its next write.
 
 A `schema: 1` record follows the kit's types and shapes on top of the record order:
 

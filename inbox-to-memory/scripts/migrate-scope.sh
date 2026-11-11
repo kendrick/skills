@@ -595,12 +595,15 @@ if [[ "$to_ltm" -eq 1 ]]; then
 
     # ltm re-emits a record in this order on its first write, so writing any
     # other order hands the user a lint failure (#318). Refuse an unknown key,
-    # since the lint fails any key outside this order. A comment line gets its
-    # own sentinel: it has no colon, so its key reads as empty, and an empty
-    # bad would let END print a block truncated at the comment.
+    # since the lint fails any key outside this order. A commented-out key
+    # (the v2 templates ship them) holds no value, so it is dropped, not
+    # refused: refusing blocked every scope filled from the template. Any other
+    # comment gets its own sentinel: it has no colon, so its key reads as empty,
+    # and an empty bad would let END print a block truncated at the comment.
     if ! awk -v order="$LTM_RECORD_KEY_ORDER" '
       BEGIN { n = split(order, o, " "); for (i = 1; i <= n; i++) at[o[i]] = i }
       /^[[:space:]]*$/ { next }
+      /^# *[A-Za-z_][A-Za-z0-9_]*:/ { next }
       /^#/ { bad = "#"; exit }
       {
         k = substr($0, 1, index($0, ":") - 1)

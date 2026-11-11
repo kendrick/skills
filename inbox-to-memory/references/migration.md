@@ -176,9 +176,9 @@ For each `schema: 2` record under `_memory/*/`, the pass:
 - in `applies_to` and `owners`, rewrites `<prefix>::<value>` to `<prefix>:<value>`, keeps a `<prefix>:<value>` entry, and maps a bare value through the facet map;
 - rewrites a scalar `supersedes: <id>` to `supersedes: ['<id>']`;
 - drops `effective_from`, `effective_to`, `supersedes`, and `superseded_by` where the value is `null` or empty;
-- writes the keys in long-term-memory-kit's order, and refuses a record holding a key outside it (`themes`, for one), because the lint would fail the record on its next run, and refuses a record holding the same key twice, because the reorder keeps one line per key and would silently drop a value.
+- writes the keys in long-term-memory-kit's order, and refuses a record holding a key outside it (`themes`, for one), because the lint would fail the record on its next run, refuses a record holding the same key twice, because the reorder keeps one line per key and would silently drop a value, drops commented-out key lines (`# effective_to: null`, the v2 templates' optional keys) since they hold no value, and refuses any other frontmatter comment, because ltm's writers drop it on their next write.
 
-Bodies are copied byte for byte. A `schema: 1` record is skipped and counted under `already ltm:`, so a second `--apply` changes nothing.
+Bodies are copied byte for byte. A `schema: 1` record is skipped and counted under `already ltm:`, so a second `--apply` changes nothing. The pass does not reorder those. A `schema: 1` record written before the key order changed (from the earlier templates or the earlier `--to-ltm`) keeps the old order, which the lint now fails with `frontmatter-key-order`; `ltm fmt`, run from the scope root, rewrites it into the new order.
 
 Where the scope root has no `memory-bank.yaml`, the pass writes one: `schema: 1`, a `name` from the scope directory's basename lowercased to `a-z0-9-`, `facet_prefixes` as the sorted union of every prefix the migrated records use plus the map's `prefixes`, and `folders: {PolicyRule: _memory/rules}` where `_memory/rules/` exists. Where the file already exists, the pass leaves it alone and refuses any prefix it doesn't declare. On a scope with `_memory/rules/`, it also refuses a bank whose `folders` maps no `PolicyRule` to `_memory/rules`, since the kit would then look for rules in `_memory/policy-rules/` and never find the migrated ones. Add `folders: {PolicyRule: _memory/rules}` to `memory-bank.yaml` by hand, commit it, and rerun.
 
@@ -198,6 +198,7 @@ owners:
 - a v1 record, reason `v1 record; run the Tier 1 migration first`;
 - a record with CRLF line endings, reason `CRLF line endings; convert the record to LF and commit it first` (`perl -pi -e 's/\r$//' <record>` converts it);
 - a `related` entry that fails the kit's `^[a-z_]+::[A-Za-z0-9_-]{10}$`;
+- a record whose frontmatter holds a comment other than a commented-out key, reason `frontmatter holds a comment, which long-term-memory-kit's writers drop`;
 - a record whose rewritten block would overrun the 20-line budget;
 - an empty prefix union, which names the map's `prefixes` key;
 - an existing `memory-bank.yaml` with `_memory/rules/` beside it and no `folders` entry mapping `PolicyRule` there.
