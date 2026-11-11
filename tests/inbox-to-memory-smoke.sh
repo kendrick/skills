@@ -460,6 +460,10 @@ done
 # reachable from SKILL.md rather than sitting in the directory unmentioned.
 require_text inbox-to-memory/SKILL.md "references/machine-contracts.md"
 
+# The scope trees moved out of SKILL.md; the link left in Outputs per Scope is
+# the only way scaffold mode finds them.
+require_text inbox-to-memory/SKILL.md "swaps in) is in [references/scaffold-layout.md]"
+
 # The facet shape <facet>::<value> is optional; nothing enforces it in lint or
 # templates, so this doc is the only place the convention lives. Lose it here and
 # the practice silently evaporates.

@@ -244,72 +244,7 @@ The chosen memory mode gets recorded in the scope's `CLAUDE.md` (top frontmatter
 
 ### Outputs per Scope
 
-**Client scope (lightweight default):**
-
-```
-<target>/
-├── CLAUDE.md                       # from assets/claude-md/client.template.md
-├── README.md                       # from assets/readme/client.template.md
-├── _personal.md                    # from assets/personal.template.md
-├── memory-bank.yaml                # from assets/memory-bank.template.yaml
-├── notes/
-│   ├── CLAUDE.md                   # from assets/claude-md/notes.template.md
-│   ├── README.md                   # from assets/readme/notes.template.md
-│   ├── _inbox/.gitkeep
-│   └── attachments/.gitkeep
-├── _memory/
-│   ├── CLAUDE.md                   # from assets/claude-md/_memory.template.md
-│   ├── README.md                   # from assets/readme/_memory.template.md
-│   ├── decisions/.gitkeep
-│   ├── context/.gitkeep
-│   └── rules/.gitkeep              # canonical mode: policy-rules/ + exceptions/ instead
-└── patterns-journal/
-    ├── CLAUDE.md                   # from assets/claude-md/patterns-journal.template.md
-    └── journal.md                  # from assets/patterns-journal/journal.template.md
-```
-
-`projects/` and `pursuits/` subdirectories are not pre-created — they're added by hand or via subsequent scaffold-mode runs when projects/pursuits open.
-
-**Project scope (lightweight default):**
-
-```
-<target>/
-├── CLAUDE.md                       # from assets/claude-md/project.template.md
-├── README.md                       # from assets/readme/project.template.md
-├── working-state.md                # from assets/working-state.template.md
-├── _personal.md                    # from assets/personal.template.md
-├── memory-bank.yaml
-├── notes/
-│   ├── CLAUDE.md
-│   ├── README.md
-│   ├── _inbox/.gitkeep
-│   └── attachments/.gitkeep
-├── _memory/
-│   ├── CLAUDE.md
-│   ├── README.md
-│   ├── decisions/.gitkeep
-│   ├── context/.gitkeep
-│   └── rules/.gitkeep              # canonical mode: policy-rules/ + exceptions/ instead
-└── patterns-journal/
-    ├── CLAUDE.md
-    └── journal.md
-```
-
-The differences from client scope: project scope gains `working-state.md` (the narrative decisions layer) and does not create `projects/` or `pursuits/` subdirectories.
-
-**Canonical mode replaces** the `_memory/rules/` folder with `_memory/policy-rules/` and `_memory/exceptions/`, the generated CLAUDE.md templates substitute `Decision/PolicyRule/Exception/Context` for `Decision/Context/PolicyRule` throughout, and `memory-bank.yaml` loses its `folders` line.
-
-**Journal scope:**
-
-```
-<target>/
-├── CLAUDE.md                       # from assets/claude-md/journal.template.md
-├── _inbox/.gitkeep
-├── entries/.gitkeep
-└── attachments/.gitkeep
-```
-
-Journal scope stays lightweight by design — single-tier substrate, no working-state, no patterns-journal (that's what the journal itself is), no `_personal.md`.
+Each scope's file tree (client, project, journal, and what canonical mode swaps in) is in [references/scaffold-layout.md](references/scaffold-layout.md).
 
 ### Template Substitution
 
@@ -507,6 +442,7 @@ The scope's `CLAUDE.md` declares the mode in its top frontmatter blockquote. Rea
 
 - [references/extraction-heuristics.md](references/extraction-heuristics.md) — quote selection, tension surfacing, assumption mining.
 - [references/scope-decisions.md](references/scope-decisions.md) — full heuristics for proposing project vs client vs journal scope.
+- [references/scaffold-layout.md](references/scaffold-layout.md) — the directory tree scaffold mode writes for each scope, and what canonical mode changes in it.
 - [references/memory-bank-schema.md](references/memory-bank-schema.md) — vendored summary of long-term-memory-kit's record format. The kit is authoritative where the two disagree.
 - [references/retrieval-funnel.md](references/retrieval-funnel.md) — token-efficient four-stage retrieval at scale.
 - [references/machine-contracts.md](references/machine-contracts.md) — the frontmatter contract and the closed token grammar, both enforced by the lint.

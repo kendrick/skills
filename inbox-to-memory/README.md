@@ -65,6 +65,7 @@ inbox-to-memory/
 └── references/       # progressive-disclosure reading
     ├── extraction-heuristics.md
     ├── scope-decisions.md
+    ├── scaffold-layout.md
     ├── memory-bank-schema.md
     ├── machine-contracts.md
     ├── migration.md
