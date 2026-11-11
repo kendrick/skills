@@ -31,7 +31,7 @@ This README is a map of the directory. For grounding context and design principl
 
 ## Cross-client Journal
 
-Patterns that generalize beyond {{ClientName}} live in the [cross-client journal](../11.99%20Journal/). Promotion from this client's `patterns-journal/` to the cross-client journal is a deliberate operation — see [patterns-journal/CLAUDE.md](patterns-journal/CLAUDE.md).
+Patterns that generalize beyond {{ClientName}} live in the [cross-client journal](../11.99%20Journal/). Crystallizing a pattern from this client's `patterns-journal/` into the cross-client journal is a deliberate operation — see [patterns-journal/CLAUDE.md](patterns-journal/CLAUDE.md).
 
 ## How Processing Works
 

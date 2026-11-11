@@ -139,5 +139,5 @@ Nanoids are unique by construction, so collisions are filename-level only.
 - Fabricate dates, attendees, quotes, or cross-references.
 - Rewrite or summarize the raw content. Extract from it; preserve it verbatim in `notes/raw/<id>.md`.
 - Populate `related` based on topical similarity. Explicit reference only.
-- Put journal entries or memory records in this directory. Those are agent-created elsewhere via promotion.
+- Put journal entries or memory records in this directory. Those are agent-created elsewhere via crystallization.
 - Treat extracted sections as canonical. They are best-effort extraction from raw, subject to user correction.

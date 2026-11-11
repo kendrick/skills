@@ -15,7 +15,7 @@ Decide the mode from the user's phrasing. When ambiguous, ask.
 
 | Phrasing                                                                                                                             | Mode     |
 | ------------------------------------------------------------------------------------------------------------------------------------ | -------- |
-| "process the inbox", "groom these notes", "drain the inbox", "crystallize this candidate", "promote to memory", "promote to journal" | process  |
+| "process the inbox", "groom these notes", "drain the inbox", "crystallize this candidate", "sign off on this candidate", "promote to memory", "promote to journal" | process  |
 | "scaffold a new project here", "set up notes substrate", "spin up a client", "set up the journal", "create a memory bank here"       | scaffold |
 | "migrate this scope", "bring these notes onto v2", "upgrade the frontmatter", "migrate to schema 2", "get this scope onto the contract", "migrate records to ltm" | migrate  |
 
@@ -23,7 +23,7 @@ Decide the mode from the user's phrasing. When ambiguous, ask.
 
 ## Process Mode
 
-Six phases, plus a 2.5 that slots in ahead of grooming. The user reviews and approves between phase 4 and phase 5; never auto-promote. The one write into `_memory/` that skips that review lands in the same gap — a `last_confirmed` date stamped onto a record this run's inputs confirmed, under Stamp Confirmations below.
+Six phases, plus a 2.5 that slots in ahead of grooming. The user reviews and approves between phase 4 and phase 5. Nothing crystallizes without the user's sign-off. The one write into `_memory/` that skips that review lands in the same gap — a `last_confirmed` date stamped onto a record this run's inputs confirmed, under Stamp Confirmations below.
 
 ### Phase 1 — Detect Scope
 
@@ -188,7 +188,7 @@ For each candidate the user approves:
    - `[memory candidate: <scope>] <claim>` → `[[<record-filename-without-ext>|memory]] <claim>`
    - `[memory candidate: update existing [[<target>|<name>]]] <claim>` → `[[<target>|memory — updated]] <claim>`
    - `[journal candidate: <pattern>]` → `[[<relative-path-to-journal-entry>|journal]] <pattern>`
-4. **For "update existing" promotions**:
+4. **For "update existing" crystallizations**:
    - Append the source note's `id` to the target record's `source_refs`.
    - Amend the target record's body. Mark new content inline with `(added YYYY-MM-DD, <note-id>)` so the next reader can trace which source contributed which passage.
    - Keep the original `date` field. Only bump it if the core claim has materially changed — at which point consider whether the old record should be `status: superseded` and a new record created instead.
@@ -203,7 +203,7 @@ A `[contradicts accepted: ...]` flag has three outcomes, and the user picks one 
 
 **A dismissed flag stays in the note permanently.** It is the record that someone looked at this and decided it was nothing, which is what stops the next four notes from re-flagging the same non-conflict.
 
-Never auto-promote. Every record creation requires explicit user approval per candidate. Unpromoted candidates keep their `[memory candidate: ...]` or `[journal candidate: ...]` prefix. A declined update-existing line keeps its prefix too and takes Dismiss's suffix above, `| dismissed: <reason, and who decided>`, after any `related:` tail.
+Nothing crystallizes without the user's sign-off. Every record creation requires explicit user approval per candidate. Candidates not crystallized keep their `[memory candidate: ...]` or `[journal candidate: ...]` prefix. A declined update-existing line keeps its prefix too and takes Dismiss's suffix above, `| dismissed: <reason, and who decided>`, after any `related:` tail.
 
 ### Phase 6 — Verify
 
@@ -421,7 +421,7 @@ The scope's `CLAUDE.md` declares the mode in its top frontmatter blockquote. Rea
 - **Stage, never auto-commit.** Outputs are proposals. Never run `git commit` unless the user asks.
 - **Preserve raw content as the source of truth.** Memory records cite notes; they don't replace them.
 - **One groomed note per input.** No four-file fragmentation. Sections, not separate files. The raw sidecar under `notes/raw/` is not a second note: it holds the unreviewed raw text and nothing from the reviewed layer.
-- **Never auto-promote across scopes.** Scope is decided at flagging time, confirmed at sign-off, sticky after crystallization. If a record needs to move, the user moves it by hand. (This trades convenience for audit safety — at high enough volume, v2 may add a guarded `promote` mode.)
+- **Nothing changes scope without the user's sign-off.** Scope is decided at flagging time, confirmed at sign-off, sticky after crystallization. If a record needs to move, the user moves it by hand. (This trades convenience for audit safety — at high enough volume, v2 may add a guarded scope-move mode.)
 - **`last_confirmed` is written without sign-off.** The gate on `_memory/` — no file written until the user approves that item — has one exception, and this is it. When an input confirms a claim an `accepted` record already makes, the run stamps the confirming note's date onto the record and names it in the phase 6 report instead of asking. Everything else stays gated: creating a record, amending one, superseding one, changing a word of what one claims. What the stamp touches is metadata rather than content — a date recording when the claim was last seen to hold, never the claim itself — which is what makes it safe to leave ungated. It stays that narrow on purpose. A prompt whose answer is always yes, in front of every input, teaches the user to approve without reading, and the gate is then worth nothing on the writes it exists for.
 - **Cross-scope references are fine.** A project note can wiki-link to a client-scope record. A client record can list project note ids in its `source_refs`. The record's _home_ (which `_memory/` it lives in) defines its scope, not its references.
 - **Don't open `raw_file` unless verifying a quote.** When reading a note to answer a question, read its extracted sections and leave the sidecar closed. Those sections are the reviewed layer and are what you came for. The raw text is for a human reading back, and for verifying a quote you have specific reason to doubt. Opening it by default pulls a whole transcript into context to answer something the sections already answered. A note with no `raw_file` still holds its raw text inline, so read it down to `## Raw Content` and no further.

@@ -6,7 +6,7 @@ scaffold_digest: "{{sha256:<hex> of the filled body—stamped at scaffold time}}
 
 Running observations from this engagement. Reverse-chronological — newest at the top.
 
-Conventions, tag vocabulary, weekly-review ritual, and promotion flow live in [CLAUDE.md](CLAUDE.md).
+Conventions, tag vocabulary, weekly-review ritual, and crystallization flow live in [CLAUDE.md](CLAUDE.md).
 
 ---
 

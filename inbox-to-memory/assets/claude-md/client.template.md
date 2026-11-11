@@ -63,7 +63,7 @@ Key behaviors:
 
 - **Watch for journal candidates during all work.** When you observe something that might generalize beyond {{ClientName}} (a methodology pattern, an anti-pattern, a coaching insight), flag it inline with `[journal candidate: ...]` before continuing. Catch them as they occur; don't try to re-detect at session end.
 - **Watch for memory-bank-shaped content when processing notes.** Decisions made in meetings, facts established about the engagement, rules crystallized in conversation are all candidates for `_memory/` records. Propose during synthesis; don't wait for explicit request.
-- **Stage, never auto-commit.** Outputs from grooming, synthesis, or promotion are always proposals. The user reviews and commits.
+- **Stage, never auto-commit.** Outputs from grooming, synthesis, or crystallization are always proposals. The user reviews and commits.
 - **Preserve raw notes as source of truth.** Memory records and journal entries cite notes via `source_refs`; they don't replace them.
 - **Query memory via Glob and Grep on filenames and frontmatter before reading bodies.** See [`_memory/CLAUDE.md`](_memory/CLAUDE.md) for the four-stage funnel.
 

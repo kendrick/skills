@@ -353,6 +353,28 @@ if grep -rnF -- '[working-state candidate:' inbox-to-memory >&2; then
   exit 1
 fi
 
+# #321: the skill's own candidate-to-record step is "crystallize" and the user's
+# approval gate is "sign-off". "Promote" is left to ltm (`ltm promote`, an org
+# Bank), the trigger phrases users say, and three frozen names that existing
+# notes already carry. The check runs on words so one line holding a frozen key
+# and a stray "promote" still fails; no line is exempt for any other reason.
+stray_promote="$(
+  grep -rnoiE '[A-Za-z_-]*promot[A-Za-z_-]*' inbox-to-memory/ |
+    while IFS=: read -r file lineno word; do
+      [[ " unpromoted_candidates promoted_from promoted_to unpromoted " == *" $word "* ]] && continue
+      text="$(sed -n "${lineno}p" "$file")"
+      [[ "$file" == inbox-to-memory/SKILL.md && "$text" == description:* ]] && continue
+      [[ "$file" == inbox-to-memory/SKILL.md && "$text" == *'| process  |' ]] && continue
+      [[ "$text" == *'ltm promote'* || "$text" == *'org Bank'* ]] && continue
+      echo "$file:$lineno: $word"
+    done
+)"
+if [[ -n "$stray_promote" ]]; then
+  echo "\"promote\" outside a trigger phrase or ltm's sense; say crystallize, or sign-off for the approval gate:" >&2
+  echo "$stray_promote" >&2
+  exit 1
+fi
+
 # Phase 2.5 can only hold to five body reads per input if the scope it runs over
 # has records to spare. This is the fixture-side half of that promise: the budget
 # itself is a property of an agent run and nothing here can assert it.

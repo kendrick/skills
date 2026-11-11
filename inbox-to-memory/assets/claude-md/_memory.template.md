@@ -72,7 +72,7 @@ Memory records are agent-proposed, never user-dropped. The workflow is two-pass:
 
 1. **Flag candidates in the groomed note.** During inbox processing, surface memory-worthy content inline (`[memory candidate: <scope>] <claim>`). Do **not** create record files at this stage.
 2. **Wait for user sign-off.** Only create record files in `_memory/` after the user reviews the groomed note and explicitly approves which candidates to crystallize.
-3. **Link promoted candidates.** When a record is created, rewrite the candidate line in the groomed note: replace the `[memory candidate]` prefix with a wiki link — `[[<filename>|memory]]`. Unpromoted candidates keep the prefix, signaling "considered, not crystallized."
+3. **Link crystallized candidates.** When a record is created, rewrite the candidate line in the groomed note: replace the `[memory candidate]` prefix with a wiki link — `[[<filename>|memory]]`. Candidates left uncrystallized keep the prefix, signaling "considered, not crystallized."
 
 When creating the record:
 

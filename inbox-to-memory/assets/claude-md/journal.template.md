@@ -12,7 +12,7 @@ Journal entries are personal pattern-capture — methodology insights, consultin
 
 Entries are flat under `entries/`. No subdivision by theme; themes are tracked in frontmatter and queried via grep when needed.
 
-Most entries are _promoted_ from `[journal candidate: ...]` flags in client notes — the skill handles that flow. Direct drops into `_inbox/` are rare but supported (e.g., a standalone reflection that didn't emerge from a client conversation).
+Most entries are crystallized from `[journal candidate: ...]` flags in client notes — the skill handles that flow. Direct drops into `_inbox/` are rare but supported (e.g., a standalone reflection that didn't emerge from a client conversation).
 
 ## Entry Shape
 
@@ -38,7 +38,7 @@ Free-form prose. One section. Optional `## Source moment` quoting the triggering
 ## Conventions Inherited From the Skill
 
 - One entry per pattern; don't combine. If two source moments triggered the same pattern, append both to `source_refs`.
-- Promotion from a client note rewrites the candidate line in the source note to a wiki-link pointing here.
+- Crystallizing from a client note rewrites the candidate line in the source note to a wiki-link pointing here.
 - Journal entries can cite each other via `related`. A pattern that's been refined over multiple entries supersedes earlier entries via `status: superseded` and a `supersedes:` field.
 
 ## Filename Convention
