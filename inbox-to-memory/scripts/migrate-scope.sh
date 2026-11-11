@@ -445,6 +445,15 @@ if [[ "$to_ltm" -eq 1 ]]; then
       refuse "$file" "yq could not parse the frontmatter"
       continue
     fi
+    # Runs ahead of the yq reads below: yq takes the last duplicate, so a repeated
+    # schema or memory_type would decide the skip before this check saw it, and an
+    # empty repeat types as null. Column-0 keys only, since this precedes the
+    # one-key-per-line refusal and list items would read as keys.
+    dup_key="$(awk '/^[A-Za-z_]/ { k = substr($0, 1, index($0, ":") - 1); if (k in s) { print k; exit } s[k] = 1 }' "$work/block")"
+    if [[ -n "$dup_key" ]]; then
+      refuse "$file" "key '$dup_key' appears more than once in the frontmatter"
+      continue
+    fi
     memory_type="$(yq -r '.memory_type // ""' "$work/block")"
     [[ -n "$memory_type" ]] || continue
 
@@ -473,15 +482,6 @@ if [[ "$to_ltm" -eq 1 ]]; then
     # one-key-per-line block. A block list or folded scalar needs a human.
     if grep -qvE '^([A-Za-z_][A-Za-z0-9_]*:( |$)|#|[[:space:]]*$)' "$work/block"; then
       refuse "$file" "frontmatter is not one key per line"
-      continue
-    fi
-
-    # Reads the raw block: yq takes the last duplicate, so an empty one after a
-    # valued one types as null, and the rewrite pass below drops both lines
-    # before any later check could see the repeat.
-    dup_key="$(awk '/^[[:space:]]*$/ || /^#/ { next } { k = substr($0, 1, index($0, ":") - 1); if (k in s) { print k; exit } s[k] = 1 }' "$work/block")"
-    if [[ -n "$dup_key" ]]; then
-      refuse "$file" "key '$dup_key' appears more than once in the frontmatter"
       continue
     fi
 
