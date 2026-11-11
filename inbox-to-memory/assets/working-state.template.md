@@ -37,16 +37,6 @@ scaffold_digest: "{{sha256:<hex> of the filled body—stamped at scaffold time}}
 
 ---
 
-## Decisions Made So Far
-
-Each decision has a one-line rationale. Deeper rationale lives in the working file the decision affects. When a decision crystallizes into something durable, move it to `_memory/decisions/` and reference by id here.
-
-### <!-- topic / area -->
-
-- **<!-- decision -->** _(<!-- one-line rationale; cite source -->)_
-
----
-
 ## Open Questions
 
 Substantive questions the engagement needs to answer. These get re-asked at session-end review. When answered, retire here and (if durable) crystallize in `_memory/`.
@@ -68,3 +58,11 @@ Things we're treating as probably-true pending discovery. Each gets retired (con
 Things that surprised, broke, or required course-correction. Brief, just enough to remember the lesson.
 
 - <!-- date — what happened — what we learned -->
+
+---
+
+## Decisions Made So Far
+
+Each decision is its own `## YYYY-MM-DD: Short title` entry with a one-line rationale, so `ltm promote` can lift one to an org Bank by title. This stays the last section of the file: a promoted entry's body runs to the next `## ` heading. Deeper rationale lives in the working file the decision affects. When a decision crystallizes into something durable, move it to `_memory/decisions/` and reference by id in the entry.
+
+<!-- Example: ## 2026-01-15: Short title of the decision. One-line rationale. Source: <note id or link>. -->

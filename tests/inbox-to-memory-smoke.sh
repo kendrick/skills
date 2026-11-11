@@ -684,6 +684,92 @@ require_text "$bank_light" "name: 'riverton-analytics'"
 require_text "$bank_light" "facet_prefixes: [topic]"
 require_text "$bank_light" "folders: {PolicyRule: _memory/rules}"
 
+# A project scope's decisions live as dated `## YYYY-MM-DD: Title` entries in the
+# file's last section, because `ltm promote --entry` matches that heading shape
+# and takes the body up to the next `## ` heading (#320). The template ships the
+# section last with only a commented example, so a fresh scaffold has no entry
+# for ltm to find. The example's own `## ` line sits inside the comment, so the
+# shape check drops comment lines before it looks at headings.
+ws_filled="$sd_scope/working-state.template.md"
+ws_headings="$(awk '/^<!--/{c=1} !c && /^## /{print} /-->/{c=0}' "$ws_filled")"
+[[ "$(tail -n1 <<<"$ws_headings")" == "## Decisions Made So Far" ]] || {
+  echo "working-state template: Decisions Made So Far is not the last real ## heading" >&2
+  exit 1
+}
+if grep -q '^## [0-9]' <<<"$ws_headings"; then
+  echo "working-state template ships a real dated entry; a fresh scaffold must have none" >&2
+  exit 1
+fi
+# ltm sees a commented `## ` line as a heading and cuts a promoted body there,
+# leaving an unclosed `<!--`, so nothing after the section heading may start
+# with `## `, comments included.
+if sed -n '/^## Decisions Made So Far$/,$p' "$ws_filled" | tail -n +2 | grep -q '^## '; then
+  echo "working-state template: a line after Decisions Made So Far starts with '## ' (comment lines count)" >&2
+  exit 1
+fi
+
+refute_text "$ws_filled" "topic / area"
+
+# These run the real ltm, since the point is what its parser accepts. promote
+# records promoted_from as <org>/<repo>:<path>#<anchor>, so the source file has
+# to sit in a git repo with an origin remote.
+if command -v ltm >/dev/null 2>&1; then
+  wp_dir="$(mktemp -d "${TMPDIR:-/tmp}/i2m-ws-promote.XXXXXX")"
+  trap 'rm -rf "$not_a_scope" "$inline_scope" "$dismissal_scope" "$tpl_scope" "$sd_scope" "$wp_dir"' EXIT
+  wp_title="Freeze exceptions route through delivery"
+  wp_bank="$wp_dir/bank"
+  mkdir -p "$wp_bank"
+  sed 's/{{SCOPE_NAME}}/acme/' inbox-to-memory/assets/memory-bank.template.yaml >"$wp_bank/memory-bank.yaml"
+  wp_repo="$wp_dir/repo"
+  mkdir -p "$wp_repo"
+  git -C "$wp_repo" init -q
+  git -C "$wp_repo" remote add origin https://github.com/acme/atlas.git
+  wp_file="$wp_repo/working-state.md"
+  cp "$ws_filled" "$wp_file"
+  printf '\n## 2026-11-03: %s\n\nSigned off in the 11-03 delivery sync.\n' "$wp_title" >>"$wp_file"
+
+  # id: is random per run and date: is today's, so only the Proposal body, the
+  # text after the closing frontmatter fence, is compared.
+  wp_body() { # file title
+    local out
+    out="$(cd "$wp_repo" && ltm promote "$1" --entry "$2" --bank "$wp_bank" --dry-run 2>/dev/null)" || return 1
+    awk '/^---$/{n++; next} n>=2' <<<"$out" | sed '1{/^$/d;}'
+  }
+  wp_first="$(wp_body working-state.md "$wp_title")" || {
+    echo "ltm promote refused a dated working-state entry" >&2
+    exit 1
+  }
+  [[ "$wp_first" == "Signed off in the 11-03 delivery sync." ]] || {
+    echo "ltm promote's Proposal body is not exactly the entry's own lines: $wp_first" >&2
+    exit 1
+  }
+
+  # A second entry below the first must not change the first's body.
+  cp "$wp_file" "$wp_dir/one-entry.md"
+  printf '\n## 2026-11-04: A second decision\n\nA different rationale.\n' >>"$wp_file"
+  [[ "$(wp_body working-state.md "$wp_title")" == "$wp_first" ]] || {
+    echo "a second entry changed the first entry's Proposal body" >&2
+    exit 1
+  }
+
+  # An em dash for the colon is no longer the dated-title shape.
+  sed "s/^## 2026-11-03: /## 2026-11-03 — /" "$wp_dir/one-entry.md" >"$wp_repo/emdash.md"
+  if (cd "$wp_repo" && ltm promote emdash.md --entry "$wp_title" --bank "$wp_bank" --dry-run >/dev/null 2>&1); then
+    echo "ltm promote accepted a '## DATE — Title' heading" >&2
+    exit 1
+  fi
+
+  # "Real calendar date" is part of the rule, so 2026-02-30 can't be promoted.
+  sed "s/^## 2026-11-03: /## 2026-02-30: /" "$wp_dir/one-entry.md" >"$wp_repo/baddate.md"
+  if (cd "$wp_repo" && ltm promote baddate.md --entry "$wp_title" --bank "$wp_bank" --dry-run >/dev/null 2>&1); then
+    echo "ltm promote accepted the impossible date 2026-02-30" >&2
+    exit 1
+  fi
+  rm -rf "$wp_dir"
+else
+  echo "skip: ltm not on PATH; working-state promote cases (#320) unchecked" >&2
+fi
+
 # The counts are the one exception to omit-if-empty, and the reason has to travel
 # with the rule. Without it someone reads four always-present keys as redundant
 # and starts omitting the zeros, which is exactly what breaks the query.
