@@ -53,7 +53,7 @@ The directory tree scaffold mode writes for each scope, and what canonical memor
     └── journal.md
 ```
 
-The differences from client scope: project scope gains `working-state.md` (the narrative decisions layer) and does not create `projects/` or `pursuits/` subdirectories.
+The differences from client scope: project scope gains `working-state.md` (the narrative decisions layer, whose last section holds `## YYYY-MM-DD: Title` entries that `ltm promote` can lift to an org Bank; see [scope-decisions.md](scope-decisions.md#decisions-in-working-statemd-are-dated-entries)) and does not create `projects/` or `pursuits/` subdirectories.
 
 **Canonical mode replaces** the `_memory/rules/` folder with `_memory/policy-rules/` and `_memory/exceptions/`, the generated CLAUDE.md templates substitute `Decision/PolicyRule/Exception/Context` for `Decision/Context/PolicyRule` throughout, and `memory-bank.yaml` loses its `folders` line.
 

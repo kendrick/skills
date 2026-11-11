@@ -85,6 +85,16 @@ patterns-journal/journal.md → weekly review → deliberate promotion ───
 
 Both end up in the same place. The inline flag is for moments where the generalization is immediately obvious. The journal is for slow-cooked patterns that need accumulation before promotion is honest.
 
+### Decisions in working-state.md are dated entries
+
+Write each decision under `## Decisions Made So Far` as its own `## YYYY-MM-DD: Short title` entry, with a real calendar date and a colon-space between date and title. The section stays last in the file, because a promoted entry's body runs to the next `## ` heading. To lift one to an org Bank:
+
+```
+ltm promote <scope>/working-state.md --entry "<Title>" --bank <bank>
+```
+
+`ltm` needs `memory-bank.yaml` in `<bank>` and the scope inside a git repo with an `origin` remote, since it records `promoted_from` as `<org>/<repo>:<path>#<anchor>`. It refuses a heading with an impossible date (`2026-02-30`) or an em dash in place of the colon, so write those correctly the first time.
+
 ## When to Crystallize vs Leave in working-state
 
 The hardest call. A signal that something is ready to crystallize from `working-state.md` into `_memory/decisions/`:
