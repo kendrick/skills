@@ -3864,6 +3864,11 @@ awk '{ print } /^tags:/ { print "themes: [x]" }' "$lo_mig/$lm_decision" >"$lo_di
 mv "$lo_dir/planted.md" "$lo_mig/$lm_decision"
 require_line "$(cat "$lo_mig/$lm_decision")" "themes: [x]" "case F's planted key"
 lo_commented=_memory/context/regional-ledger-closes-June-Lm3LdgCls3.md
+# A prose comment shaped like a key is refused too: only a key in ltm's order
+# is a commented-out key, and dropping `# todo:` would lose the user's note.
+lo_prose=_memory/context/regional-ledger-todo-Lm6Todo6.md
+sed 's/^id: .*/id: Lm6Todo6/' "$lo_mig/$lo_commented" | awk '{ print } /^tags:/ { print "# todo: ask ops" }' >"$lo_mig/$lo_prose"
+require_line "$(cat "$lo_mig/$lo_prose")" "# todo: ask ops" "case F's planted key-shaped comment"
 awk '{ print } /^tags:/ { print "# note" }' "$lo_mig/$lo_commented" >"$lo_dir/planted.md"
 mv "$lo_dir/planted.md" "$lo_mig/$lo_commented"
 require_line "$(cat "$lo_mig/$lo_commented")" "# note" "case F's planted comment"
@@ -3884,7 +3889,7 @@ require_line "$(grep -c '^effective_to:' "$lo_mig/$lo_empty_dup")" "2" "case F's
 awk '{ print } /^schema:/ { print "schema: 1" }' "$lo_mig/$lo_schema_dup" >"$lo_dir/planted.md"
 mv "$lo_dir/planted.md" "$lo_mig/$lo_schema_dup"
 require_line "$(grep -c '^schema:' "$lo_mig/$lo_schema_dup")" "2" "case F's planted schema repeat"
-lm_commit "$lo_mig" "plant themes, a comment, a duplicate key, an empty duplicate and a schema repeat"
+lm_commit "$lo_mig" "plant themes, two comments, a duplicate key, an empty duplicate and a schema repeat"
 lo_rc=0
 lo_mig_out="$(bash "$lm_migrator" "$lo_mig" --to-ltm --facet-map "$lm_map" 2>&1)" || lo_rc=$?
 [[ "$lo_rc" -eq 1 ]] || {
@@ -3894,6 +3899,7 @@ lo_mig_out="$(bash "$lm_migrator" "$lo_mig" --to-ltm --facet-map "$lm_map" 2>&1)
 }
 require_output "$lo_mig_out" "$lm_decision: key 'themes' is not in long-term-memory-kit's key order"
 require_output "$lo_mig_out" "$lo_commented: frontmatter holds a comment, which long-term-memory-kit's writers drop"
+require_output "$lo_mig_out" "$lo_prose: frontmatter holds a comment, which long-term-memory-kit's writers drop"
 require_output "$lo_mig_out" "$lo_dup: key 'tags' appears more than once in the frontmatter"
 require_output "$lo_mig_out" "$lo_empty_dup: key 'effective_to' appears more than once in the frontmatter"
 require_output "$lo_mig_out" "$lo_schema_dup: key 'schema' appears more than once in the frontmatter"
