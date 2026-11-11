@@ -28,6 +28,9 @@ set -euo pipefail
 
 NOTE_KEY_ORDER="schema body_schema id date type summary attendees tags topics entities source_file raw_file transcript_corrections open_questions resolved_questions deferred_tensions unpromoted_candidates related"
 RECORD_KEY_ORDER="schema body_schema id memory_type title status date effective_from effective_to last_confirmed source_refs applies_to owners tags themes related exception_to supersedes superseded_by"
+# long-term-memory-kit's order, copied byte for byte from lint-scope.sh, which
+# says where it comes from. --to-ltm writes it.
+LTM_RECORD_KEY_ORDER="schema id memory_type title status date effective_from effective_to last_confirmed review_by summary superseded_by supersedes promoted_from promoted_to subject applies_to owners tags source_refs related body_schema exception_to"
 
 FRONTMATTER_LINE_BUDGET=20
 
@@ -442,6 +445,15 @@ if [[ "$to_ltm" -eq 1 ]]; then
       refuse "$file" "yq could not parse the frontmatter"
       continue
     fi
+    # Runs ahead of the yq reads below: yq takes the last duplicate, so a repeated
+    # schema or memory_type would decide the skip before this check saw it, and an
+    # empty repeat types as null. Column-0 keys only, since this precedes the
+    # one-key-per-line refusal and list items would read as keys.
+    dup_key="$(awk '/^[A-Za-z_]/ { k = substr($0, 1, index($0, ":") - 1); if (k in s) { print k; exit } s[k] = 1 }' "$work/block")"
+    if [[ -n "$dup_key" ]]; then
+      refuse "$file" "key '$dup_key' appears more than once in the frontmatter"
+      continue
+    fi
     memory_type="$(yq -r '.memory_type // ""' "$work/block")"
     [[ -n "$memory_type" ]] || continue
 
@@ -580,6 +592,62 @@ if [[ "$to_ltm" -eq 1 ]]; then
         print
       }
     ' "$work/repl" "$work/block" >"$work/new-fm"
+
+    # ltm re-emits a record in this order on its first write, so writing any
+    # other order hands the user a lint failure (#318). Refuse an unknown key,
+    # since the lint fails any key outside this order. A commented-out key line
+    # a record template shipped holds no value, so it is dropped, not refused:
+    # refusing blocked every scope filled from a template. The match is exact,
+    # against every such line the templates have carried, because each looser
+    # match red team rounds 5-7 tried deleted a user's note in silence
+    # (`# todo: ask Ines`, `# status: waiting on Ines`, `# owners: <Ines>`, a
+    # placeholder with a trailing note). Any other comment is refused, and gets
+    # its own sentinel: it may have no colon, so its key reads as empty, and an
+    # empty bad would let END print a block truncated at the comment.
+    cat >"$work/tpl-comments" <<'TPL'
+effective_from: '{{YYYY-MM-DD}}'
+effective_from: YYYY-MM-DD
+effective_to: null
+effective_to: null   # set this when the exception expires
+effective_to: YYYY-MM-DD
+effective_to: YYYY-MM-DD   # set this when the exception expires
+effective_to: YYYY-MM-DD | null
+effective_to: YYYY-MM-DD | null    # set when the exception expires
+superseded_by:
+superseded_by: <id>
+superseded_by: null
+supersedes:
+supersedes: [<id>]
+supersedes: <id-of-old-decision>
+supersedes: <id-of-old-entry>
+supersedes: <id-of-old-exception>
+supersedes: <id-of-old-record>
+supersedes: <id-of-old-rule>
+TPL
+    if ! awk -v order="$LTM_RECORD_KEY_ORDER" '
+      BEGIN { n = split(order, o, " "); for (i = 1; i <= n; i++) at[o[i]] = i }
+      FNR == NR { tpl[$0] = 1; next }
+      /^[[:space:]]*$/ { next }
+      /^#/ { c = $0; sub(/^# */, "", c); if (c in tpl) next }
+      /^#/ { bad = "#"; exit }
+      {
+        k = substr($0, 1, index($0, ":") - 1)
+        if (!(k in at)) { bad = k; exit }
+        line[at[k]] = $0
+      }
+      END {
+        if (bad != "") { print bad > "/dev/stderr"; exit 1 }
+        for (i = 1; i <= n; i++) if (i in line) print line[i]
+      }
+    ' "$work/tpl-comments" "$work/new-fm" >"$work/new-fm.ordered" 2>"$work/bad-key"; then
+      if [[ "$(cat "$work/bad-key")" == "#" ]]; then
+        refuse "$file" "frontmatter holds a comment, which long-term-memory-kit's writers drop"
+      else
+        refuse "$file" "key '$(cat "$work/bad-key")' is not in long-term-memory-kit's key order"
+      fi
+      continue
+    fi
+    mv "$work/new-fm.ordered" "$work/new-fm"
 
     lines="$(wc -l <"$work/new-fm" | tr -d ' ')"
     if [[ $((lines + 2)) -gt "$FRONTMATTER_LINE_BUDGET" ]]; then

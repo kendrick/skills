@@ -443,7 +443,7 @@ It reads git history rather than the working tree, so it also verifies a migrati
 
 ## Frontmatter Quick Reference
 
-Full shapes live in the templates. Write every block to The Frontmatter Contract in [references/machine-contracts.md](references/machine-contracts.md): one line per value, closed inside the first 20 lines, keys in the order below among those you keep.
+Write every block to The Frontmatter Contract in [references/machine-contracts.md](references/machine-contracts.md): one line per value, closed inside the first 20 lines, keys in the order below among those you keep.
 
 **Groomed note**, in order:
 
@@ -451,23 +451,23 @@ Full shapes live in the templates. Write every block to The Frontmatter Contract
 schema, body_schema, id, date, type, summary, attendees, tags, topics, entities, source_file, raw_file, transcript_corrections, open_questions, resolved_questions, deferred_tensions, unpromoted_candidates, related
 ```
 
-**Memory record** (memory-bank-aligned), in order:
+**Memory record** (`schema: 1`), in order:
 
 ```
-schema, body_schema, id, memory_type, title, status, date, effective_from, effective_to, last_confirmed, source_refs, applies_to, owners, tags, themes, related, exception_to, supersedes, superseded_by
+schema, id, memory_type, title, status, date, effective_from, effective_to, last_confirmed, review_by, summary, superseded_by, supersedes, promoted_from, promoted_to, subject, applies_to, owners, tags, source_refs, related, body_schema, exception_to
 ```
 
-`status` is `proposed|accepted|superseded|deprecated|rejected`. Type-specific body fields are in [references/memory-bank-schema.md](references/memory-bank-schema.md).
+`schema: 2` records and journal entries keep the order in machine-contracts.md. `status` is `proposed|accepted|superseded|deprecated|rejected`. Type-specific body fields are in [references/memory-bank-schema.md](references/memory-bank-schema.md).
 
-A record's generation is its `schema` value: `1` is long-term-memory-kit's format and what new records carry, `2` awaits `--to-ltm`. Notes and journal entries stay at `schema: 2`. Files with no `schema` key are v1. They stay legal forever, and a scope holding both generations is a supported state rather than an unfinished migration. The lint checks one thing on them, whether their wiki links resolve, because a link resolving to no file is broken whichever generation wrote it.
+A record's generation is its `schema` value: `1` is long-term-memory-kit's format and what new records carry, `2` awaits `--to-ltm`. Notes and journal entries stay at `schema: 2`. Files with no `schema` key are v1. They stay legal forever, and a scope holding both generations is supported. The lint checks one thing on them, whether their wiki links resolve, because a link resolving to no file is broken whichever generation wrote it.
 
 `memory_type` values depend on the scope's chosen memory mode:
 - **Lightweight** (default): `Decision | Context | PolicyRule`. Exception is folded into Decision.
-- **Canonical**: `Decision | PolicyRule | Exception | Context`. Matches the upstream reference architecture exactly.
+- **Canonical**: `Decision | PolicyRule | Exception | Context`.
 
 The scope's `CLAUDE.md` declares the mode in its top frontmatter blockquote. Read it before flagging candidates so the suggested type uses the right vocabulary.
 
-**Journal entry** follows the record order, using `themes` in place of `tags` and `status` values of `current|superseded|archived`. Its `source_refs` are compound strings of the form `<scope-path>::<note-id>`, so a moved note doesn't break the reference. Body is free prose.
+**Journal entry** follows the `schema: 2` record order, using `themes` in place of `tags` and `status` values of `current|superseded|archived`. Its `source_refs` are compound strings of the form `<scope-path>::<note-id>`, so a moved note doesn't break the reference.
 
 ---
 

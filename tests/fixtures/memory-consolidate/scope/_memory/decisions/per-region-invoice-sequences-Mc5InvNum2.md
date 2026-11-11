@@ -5,9 +5,9 @@ memory_type: Decision
 title: Per-region invoice sequences
 status: superseded
 date: 2025-06-02
-applies_to: [topic:billing]
-supersedes: [Mc4InvNum1]
 superseded_by: Mc6InvNum3
+supersedes: [Mc4InvNum1]
+applies_to: [topic:billing]
 ---
 
 ## Context

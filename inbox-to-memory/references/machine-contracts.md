@@ -31,9 +31,9 @@ Links are the one column that runs the whole way down, because a link resolving 
 
 The reason is grep, not taste. `grep '^tags:'` returns the whole value or it returns nothing, and a diff of a changed tag is one line rather than a moved block.
 
-**The block fits in the first 20 lines of the file.** This is the number that makes a header read a contract: an agent reading 20 lines is guaranteed to have the entire frontmatter, so stage three of the funnel can stop there without ever wondering whether it truncated something. The note order's 18 keys close on exactly line 20. The record order lists 19 names and would close on line 21, but `tags` and `themes` are mutually exclusive, so a record carries at most 18 and also closes on exactly line 20. Neither order has any margin: one commented-out key puts a full note or a full record over, and adding a name to either order means dropping one.
+**The block fits in the first 20 lines of the file.** This is the number that makes a header read a contract: an agent reading 20 lines is guaranteed to have the entire frontmatter, so stage three of the funnel can stop there without ever wondering whether it truncated something. The note order's 18 keys close on exactly line 20, with no margin: one commented-out key puts a full note over. The `schema: 2` record order lists 19 names, and `tags` and `themes` are mutually exclusive, so a record carries at most 18 and also closes on line 20. The `schema: 1` order lists 23 names, and no record can carry them all inside 20 lines, so `frontmatter-budget` is what bounds a `schema: 1` record.
 
-**Fixed key order.** Omit any key you don't need; the order is fixed among the keys that are present. Two orders, one for notes and one for records.
+**Fixed key order.** Omit any key you don't need; the order is fixed among the keys that are present. Three orders, picked by the file's own keys: no `memory_type` is a note; `memory_type` with `schema: 1` is a record in long-term-memory-kit's order; `memory_type` otherwise (`schema: 2` records and journal entries) takes the second order below.
 
 Notes:
 
@@ -41,13 +41,21 @@ Notes:
 schema, body_schema, id, date, type, summary, attendees, tags, topics, entities, source_file, raw_file, transcript_corrections, open_questions, resolved_questions, deferred_tensions, unpromoted_candidates, related
 ```
 
-Records, including journal entries:
+`schema: 2` records, including journal entries:
 
 ```
 schema, body_schema, id, memory_type, title, status, date, effective_from, effective_to, last_confirmed, source_refs, applies_to, owners, tags, themes, related, exception_to, supersedes, superseded_by
 ```
 
-A file is a record when it has `memory_type` and a note otherwise. `themes` belongs to journal entries and `tags` to everything else; `exception_to` only to Exception records in canonical mode.
+`themes` belongs to journal entries and `tags` to everything else; `exception_to` only to Exception records in canonical mode.
+
+`schema: 1` records, in the order `ltm fmt` and every `ltm` writer rewrite a file into (the kit owns it: the property order of `schema/record.schema.json`, which `src/core/canonical.ts` writes in):
+
+```
+schema, id, memory_type, title, status, date, effective_from, effective_to, last_confirmed, review_by, summary, superseded_by, supersedes, promoted_from, promoted_to, subject, applies_to, owners, tags, source_refs, related, body_schema, exception_to
+```
+
+`body_schema` and `exception_to` trail `related` because `ltm` writes the keys its schema defines first, then appends any it lacks in the order the file had them. Keep a `schema: 1` record in this order and `ltm fmt` changes at most its quoting; any other order draws `frontmatter-key-order` on the next lint. A `schema: 1` record written before this order, from the earlier templates or the earlier `--to-ltm`, draws it too; `ltm fmt`, run from the scope root, rewrites it. `themes` is not in it, since journal entries stay `schema: 2`. The frontmatter holds no `#` comment line, since `ltm` drops every one on its next write.
 
 A `schema: 1` record follows the kit's types and shapes on top of the record order:
 

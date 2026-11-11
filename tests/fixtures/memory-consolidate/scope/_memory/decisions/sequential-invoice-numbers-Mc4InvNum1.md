@@ -5,8 +5,8 @@ memory_type: Decision
 title: Sequential invoice numbers
 status: superseded
 date: 2025-01-10
-applies_to: [topic:billing]
 superseded_by: Mc5InvNum2
+applies_to: [topic:billing]
 ---
 
 ## Context

@@ -420,11 +420,21 @@ require_file "$contracts"
 require_text "$contracts" "$note_key_order"
 require_text "$contracts" "$record_key_order"
 
-# SKILL.md carries the same two strings verbatim rather than a paraphrase. A quick
-# reference that drifts from the contract is worse than no quick reference: it is
-# the copy an agent actually reads before writing a file.
+# schema: 1 records follow long-term-memory-kit's order, which ltm fmt and every
+# ltm writer rewrite a file into (#318). body_schema and exception_to trail
+# related because ltm appends keys its schema lacks after its own.
+ltm_record_key_order="schema, id, memory_type, title, status, date, effective_from, effective_to, last_confirmed, review_by, summary, superseded_by, supersedes, promoted_from, promoted_to, subject, applies_to, owners, tags, source_refs, related, body_schema, exception_to"
+require_text "$contracts" "$ltm_record_key_order"
+require_text inbox-to-memory/SKILL.md "$ltm_record_key_order"
+require_text inbox-to-memory/references/memory-bank-schema.md "$ltm_record_key_order"
+require_text inbox-to-memory/references/memory-bank-schema.md "fa45506a64d7d51c5521d038bee8a138980c9605"
+require_text "$lint" "LTM_RECORD_KEY_ORDER=\"schema id memory_type title status date effective_from effective_to last_confirmed review_by summary superseded_by supersedes promoted_from promoted_to subject applies_to owners tags source_refs related body_schema exception_to\""
+require_text inbox-to-memory/scripts/migrate-scope.sh "LTM_RECORD_KEY_ORDER=\"schema id memory_type title status date effective_from effective_to last_confirmed review_by summary superseded_by supersedes promoted_from promoted_to subject applies_to owners tags source_refs related body_schema exception_to\""
+
+# SKILL.md carries the note order and the ltm order verbatim rather than a
+# paraphrase. A quick reference that drifts from the contract is worse than no
+# quick reference: it is the copy an agent actually reads before writing a file.
 require_text inbox-to-memory/SKILL.md "$note_key_order"
-require_text inbox-to-memory/SKILL.md "$record_key_order"
 
 # Twenty lines is what makes a header read a contract instead of a habit. It is
 # the number every retrieval claim in the funnel doc rests on.
@@ -3751,6 +3761,232 @@ require_text _maintenance/inbox-to-memory/RATIONALE.md "| 53 | The Exception tem
 require_text _maintenance/inbox-to-memory/RATIONALE.md "| A lint check that \`constrained_by\` and \`exception_to\` name the same rule. |"
 
 rm -rf "$lm_dir"
+
+# Records in ltm's key order (#318)
+# Every ltm writer (fmt, confirm, accept, supersede, deprecate) re-emits a
+# record in the kit's canonical order, so a lint holding schema: 1 records to
+# any other order fails each record the moment ltm touches it.
+lo_dir="$(mktemp -d "${TMPDIR:-/tmp}/i2m-ltm-order.XXXXXX")"
+lo="$lo_dir/scope"
+mkdir -p "$lo/_inbox" "$lo/_memory/context" "$lo/_memory/exceptions" "$lo/_memory/policy-rules" "$lo/notes"
+sed -e 's/{{SCOPE_NAME}}/ltm-order/' -e '/^folders:/d' inbox-to-memory/assets/memory-bank.template.yaml >"$lo/memory-bank.yaml"
+lo_note="$lo/notes/2026-11-09-emea-billing-review-Lo0SrcNote.md"
+sed -e 's/^id: .*/id: Lo0SrcNote/' -e 's/^date: .*/date: 2026-11-09/' "$lm_fixture/$lm_note" >"$lo_note"
+lo_record() {
+  local out="$1" tpl="$2"
+  shift 2
+  { printf '%s\n' --- "$@" ---; lm_body "inbox-to-memory/assets/records/$tpl.template.md"; } >"$out"
+}
+
+# A: the shape `ltm confirm` leaves a template-born Context record in, which
+# is the issue's failing output plus the review_by an ltm writer may add.
+lo_ctx="$lo/_memory/context/ltm-ordered-context-Lo1CtxOrd1.md"
+lo_record "$lo_ctx" context 'schema: 1' 'id: Lo1CtxOrd1' 'memory_type: Context' "title: 'Billing runs on the shared ledger'" \
+  'status: accepted' 'date: 2026-11-09' 'last_confirmed: 2026-11-09' 'review_by: 2027-05-09' \
+  'applies_to: [topic:billing]' 'owners: []' 'tags: []' 'source_refs: [Lo0SrcNote]' 'related: []'
+
+# D: keys ltm's schema lacks trail `related` in their existing order once ltm
+# writes, so a migrated Exception ends `related body_schema exception_to`.
+lo_rule="$lo/_memory/policy-rules/dunning-rule-Lo3RuleId3.md"
+lo_record "$lo_rule" policy-rule 'schema: 1' 'id: Lo3RuleId3' 'memory_type: PolicyRule' "title: 'Ops signs off every dunning notice'" \
+  'status: accepted' 'date: 2026-11-09' 'last_confirmed: 2026-11-09' 'applies_to: [topic:billing]' 'owners: []' 'tags: []' \
+  'source_refs: [Lo0SrcNote]' 'related: []'
+lo_exc="$lo/_memory/exceptions/ltm-ordered-exception-Lo2ExcOrd2.md"
+lo_record "$lo_exc" exception 'schema: 1' 'id: Lo2ExcOrd2' 'memory_type: Exception' "title: 'EMEA dunning skips ops sign-off in July'" \
+  'status: accepted' 'date: 2026-11-09' 'last_confirmed: 2026-11-09' 'applies_to: [topic:billing]' 'owners: []' 'tags: []' \
+  'source_refs: [Lo0SrcNote]' 'related: [constrained_by::Lo3RuleId3]' 'body_schema: 1' "exception_to: '[[Lo3RuleId3|dunning rule]]'"
+
+# E: the stamper's insertion point in a schema: 1 record carrying body_schema,
+# which sits after `related` in ltm's order and so can't be an anchor.
+lo_stamp="$lo/_memory/context/unconfirmed-context-Lo4CtxStm4.md"
+lo_record "$lo_stamp" context 'schema: 1' 'id: Lo4CtxStm4' 'memory_type: Context' "title: 'Invoices close on the fifth'" \
+  'status: accepted' 'date: 2026-11-01' 'applies_to: [topic:billing]' 'owners: []' 'tags: []' \
+  'source_refs: [Lo0SrcNote]' 'related: []' 'body_schema: 1'
+lo_stamp_out="$(bash "$stamper" "$lo" --note "notes/${lo_note##*/}" "_memory/context/${lo_stamp##*/}")"
+require_line "$lo_stamp_out" "stamped: 1  skipped: 0" "the stamper on a schema: 1 record carrying body_schema"
+[[ "$(awk '/^date:/ { getline; print; exit }' "$lo_stamp")" == "last_confirmed: 2026-11-09" ]] || {
+  echo "the stamper did not put last_confirmed right after date in a schema: 1 record carrying body_schema" >&2
+  cat "$lo_stamp" >&2
+  exit 1
+}
+
+lo_out="$(run_lint "$lo")"
+require_line "$lo_out" "failures: 0" "schema: 1 records in ltm's key order"
+
+# B: the old contract's order is now the wrong one for a schema: 1 record.
+lo_old="$lo/_memory/context/old-ordered-context-Lo5CtxOld5.md"
+awk '/^source_refs:/ { next } /^applies_to:/ { print "source_refs: [Lo0SrcNote]" } { print }' "$lo_ctx" |
+  sed 's/^id: .*/id: Lo5CtxOld5/' >"$lo_old"
+grep -A1 '^source_refs:' "$lo_old" | grep -q '^applies_to:' || {
+  echo "case B's fixture did not move source_refs ahead of applies_to" >&2
+  exit 1
+}
+lo_out="$(run_lint "$lo")"
+require_failure "$lo_out" "FAIL $lo_old: frontmatter-key-order:"
+rm "$lo_old"
+
+# C: notes and schema: 2 records keep their pre-ltm orders. A note with two keys swapped still fails,
+# and a schema: 2 record in the old record order still passes. Its own scope,
+# so the record needs no bank.
+lo2="$lo_dir/schema2"
+mkdir -p "$lo2/_inbox" "$lo2/_memory/context" "$lo2/notes"
+cp "$lm_fixture/$lm_note" "$lo2/$lm_note"
+lo_record "$lo2/_memory/context/schema-two-context-Lo6CtxTwo6.md" context 'schema: 2' 'id: Lo6CtxTwo6' 'memory_type: Context' \
+  "title: 'The ledger stays regional'" 'status: accepted' 'date: 2026-06-03' 'last_confirmed: 2026-06-03' 'source_refs: [Lm0BilRev0]' \
+  'applies_to: [regions::emea]' 'tags: [billing]' 'related: []'
+lo2_out="$(run_lint "$lo2")"
+require_line "$lo2_out" "failures: 0" "a schema: 2 record in the old record order"
+lo2_swapped="$lo2/notes/2026-06-03-swapped-keys-Lo7NoteSw7.md"
+awk '/^attendees:/ { held = $0; next } held && /^tags:/ { print; print held; held = ""; next } { print }' "$lm_fixture/$lm_note" |
+  sed 's/^id: .*/id: Lo7NoteSw7/' >"$lo2_swapped"
+grep -A1 '^tags:' "$lo2_swapped" | grep -q '^attendees:' || {
+  echo "case C's fixture did not swap tags ahead of attendees" >&2
+  exit 1
+}
+lo2_out="$(run_lint "$lo2")"
+require_failure "$lo2_out" "FAIL $lo2_swapped: frontmatter-key-order:"
+# The same schema: 2 record in ltm's order is wrong for its generation.
+awk '/^source_refs:/ { held = $0; next } /^related:/ { print held } { print }' "$lo2/_memory/context/schema-two-context-Lo6CtxTwo6.md" |
+  sed 's/^id: .*/id: Lo8CtxTwo8/' >"$lo2/_memory/context/schema-two-ltm-order-Lo8CtxTwo8.md"
+grep -A1 '^tags:' "$lo2/_memory/context/schema-two-ltm-order-Lo8CtxTwo8.md" | grep -q '^source_refs:' || {
+  echo "case C's ltm-order fixture did not move source_refs after tags" >&2
+  exit 1
+}
+lo2_out="$(run_lint "$lo2")"
+require_failure "$lo2_out" "FAIL $lo2/_memory/context/schema-two-ltm-order-Lo8CtxTwo8.md: frontmatter-key-order:"
+
+# F: --to-ltm refuses a key outside ltm's order rather than write a record
+# the lint then fails. It refuses a frontmatter comment too, since the first
+# ltm write would drop it.
+lo_mig="$lo_dir/migrate"
+lm_stage "$lo_mig"
+awk '{ print } /^tags:/ { print "themes: [x]" }' "$lo_mig/$lm_decision" >"$lo_dir/planted.md"
+mv "$lo_dir/planted.md" "$lo_mig/$lm_decision"
+require_line "$(cat "$lo_mig/$lm_decision")" "themes: [x]" "case F's planted key"
+lo_commented=_memory/context/regional-ledger-closes-June-Lm3LdgCls3.md
+# Comments that only look like a template's commented-out key are refused too,
+# since dropping one deletes the user's note: a prose value, a bracketed word,
+# and a placeholder with a note after it (#318 red team rounds 6-7).
+lo_prose=_memory/context/regional-ledger-todo-Lm6Todo6.md
+sed 's/^id: .*/id: Lm6Todo6/' "$lo_mig/$lo_commented" | awk '{ print } /^tags:/ { print "# status: waiting on ops" }' >"$lo_mig/$lo_prose"
+require_line "$(cat "$lo_mig/$lo_prose")" "# status: waiting on ops" "case F's planted key-shaped comment"
+lo_bracket=_memory/context/regional-ledger-owner-Lm7Owner7.md
+sed 's/^id: .*/id: Lm7Owner7/' "$lo_mig/$lo_commented" | awk '{ print } /^tags:/ { print "# owners: <Ines>" }' >"$lo_mig/$lo_bracket"
+require_line "$(cat "$lo_mig/$lo_bracket")" "# owners: <Ines>" "case F's planted bracketed comment"
+lo_trailing=_memory/context/regional-ledger-keep-Lm8Keep8.md
+sed 's/^id: .*/id: Lm8Keep8/' "$lo_mig/$lo_commented" | awk '{ print } /^tags:/ { print "# effective_to: null # keep until legal signs off on 2026-12-31" }' >"$lo_mig/$lo_trailing"
+require_line "$(cat "$lo_mig/$lo_trailing")" "# effective_to: null # keep until legal signs off on 2026-12-31" "case F's planted placeholder with a note"
+awk '{ print } /^tags:/ { print "# note" }' "$lo_mig/$lo_commented" >"$lo_dir/planted.md"
+mv "$lo_dir/planted.md" "$lo_mig/$lo_commented"
+require_line "$(cat "$lo_mig/$lo_commented")" "# note" "case F's planted comment"
+lo_dup=_memory/rules/dunning-notices-need-ops-signoff-Lm2DunOps2.md
+awk '{ print } /^tags:/ { print }' "$lo_mig/$lo_dup" >"$lo_dir/planted.md"
+mv "$lo_dir/planted.md" "$lo_mig/$lo_dup"
+require_line "$(grep -c '^tags:' "$lo_mig/$lo_dup")" "2" "case F's planted duplicate key"
+# An empty repeat after a valued one: yq types it null, so a check that runs
+# after the rewrite pass sees no key at all.
+lo_empty_dup=_memory/context/regional-ledger-open-through-September-Lm4OldCls4.md
+# Copied before the effective_to plant so this record carries one repeat only.
+lo_schema_dup=_memory/context/regional-ledger-schema-repeat-Lm5SchDup5.md
+sed 's/^id: .*/id: Lm5SchDup5/' "$lo_mig/$lo_empty_dup" >"$lo_mig/$lo_schema_dup"
+awk '{ print } /^date:/ { print "effective_to: 2026-12-31"; print "effective_to:" }' "$lo_mig/$lo_empty_dup" >"$lo_dir/planted.md"
+mv "$lo_dir/planted.md" "$lo_mig/$lo_empty_dup"
+require_line "$(grep -c '^effective_to:' "$lo_mig/$lo_empty_dup")" "2" "case F's planted empty duplicate key"
+# A repeated schema: yq reads the last one, so 2 then 1 looked already-ltm and was skipped with rc 0.
+awk '{ print } /^schema:/ { print "schema: 1" }' "$lo_mig/$lo_schema_dup" >"$lo_dir/planted.md"
+mv "$lo_dir/planted.md" "$lo_mig/$lo_schema_dup"
+require_line "$(grep -c '^schema:' "$lo_mig/$lo_schema_dup")" "2" "case F's planted schema repeat"
+lm_commit "$lo_mig" "plant themes, four comments, a duplicate key, an empty duplicate and a schema repeat"
+lo_rc=0
+lo_mig_out="$(bash "$lm_migrator" "$lo_mig" --to-ltm --facet-map "$lm_map" 2>&1)" || lo_rc=$?
+[[ "$lo_rc" -eq 1 ]] || {
+  echo "--to-ltm exited $lo_rc, not 1, on a record carrying a key outside ltm's order" >&2
+  printf '%s\n' "$lo_mig_out" >&2
+  exit 1
+}
+require_output "$lo_mig_out" "$lm_decision: key 'themes' is not in long-term-memory-kit's key order"
+require_output "$lo_mig_out" "$lo_commented: frontmatter holds a comment, which long-term-memory-kit's writers drop"
+require_output "$lo_mig_out" "$lo_prose: frontmatter holds a comment, which long-term-memory-kit's writers drop"
+require_output "$lo_mig_out" "$lo_bracket: frontmatter holds a comment, which long-term-memory-kit's writers drop"
+require_output "$lo_mig_out" "$lo_trailing: frontmatter holds a comment, which long-term-memory-kit's writers drop"
+require_output "$lo_mig_out" "$lo_dup: key 'tags' appears more than once in the frontmatter"
+require_output "$lo_mig_out" "$lo_empty_dup: key 'effective_to' appears more than once in the frontmatter"
+require_output "$lo_mig_out" "$lo_schema_dup: key 'schema' appears more than once in the frontmatter"
+
+# The v2 templates ship commented-out optional keys. --to-ltm drops them rather
+# than refusing, since a refusal blocked every scope filled from the template.
+lo_tpl="$lo_dir/template-keys"
+lm_stage "$lo_tpl"
+awk '{ print } /^date:/ { print "# effective_from: '"'"'{{YYYY-MM-DD}}'"'"'"; print "# effective_to: YYYY-MM-DD   # set this when the exception expires"; print "# supersedes: [<id>]"; print "# superseded_by: null" }' "$lo_tpl/$lm_decision" >"$lo_dir/planted.md"
+mv "$lo_dir/planted.md" "$lo_tpl/$lm_decision"
+require_line "$(grep -c '^# \(effective_from\|effective_to\|supersedes\|superseded_by\):' "$lo_tpl/$lm_decision")" "4" "the template-keys plant"
+lm_commit "$lo_tpl" "plant the v2 template's commented-out keys"
+lo_rc=0
+lo_tpl_out="$(bash "$lm_migrator" "$lo_tpl" --to-ltm --facet-map "$lm_map" --apply 2>&1)" || lo_rc=$?
+[[ "$lo_rc" -eq 0 ]] || {
+  echo "--to-ltm --apply exited $lo_rc on a record carrying the v2 template's commented-out keys (want 0)" >&2
+  printf '%s\n' "$lo_tpl_out" >&2
+  exit 1
+}
+require_line "$(head -3 "$lo_tpl/$lm_decision")" "schema: 1" "the template-keys record after --apply"
+refute_text "$lo_tpl/$lm_decision" "# effective_to"
+refute_text "$lo_tpl/$lm_decision" "# supersedes"
+
+# G: ltm fmt refuses a frontmatter comment and ltm confirm drops it silently,
+# so a schema: 1 template can't carry one.
+for record in context decision exception policy-rule rule; do
+  lo_comment="$(awk 'NR > 1 && /^---$/ { exit } NR > 1 && /^#/ { print; exit }' "inbox-to-memory/assets/records/$record.template.md")"
+  [[ -z "$lo_comment" ]] || {
+    echo "inbox-to-memory/assets/records/$record.template.md has a comment in its frontmatter: $lo_comment" >&2
+    exit 1
+  }
+done
+
+# H: the real writers. A record filled from each template is already in
+# ltm's canonical form, and stays lint-clean after confirm and fmt rewrite it.
+# The templates quote their placeholders so the raw files parse, and fmt would
+# only strip those quotes, never move a key (RATIONALE row 61).
+if command -v ltm >/dev/null 2>&1; then
+  lo_tpl="$lo_dir/templates"
+  mkdir -p "$lo_tpl/_inbox" "$lo_tpl/notes"
+  sed 's/{{SCOPE_NAME}}/ltm-templates/' inbox-to-memory/assets/memory-bank.template.yaml >"$lo_tpl/memory-bank.yaml"
+  cp "$lo_note" "$lo_tpl/notes/"
+  for record in rule:rules:Lt5Rul0005 context:context:Lt1Ctx0001 decision:decisions:Lt2Dec0002 exception:exceptions:Lt3Exc0003 policy-rule:rules:Lt4Pol0004; do
+    IFS=: read -r name folder id <<<"$record"
+    mkdir -p "$lo_tpl/_memory/$folder"
+    # Fill values in the form ltm's canonicalString writes: plain where it
+    # parses back unchanged, JSON double quotes otherwise.
+    sed -e "s/'{{nanoid}}'/$id/" -e "s/'{{YYYY-MM-DD}}'/2026-11-09/g" -e "s/'{{proposed | accepted}}'/accepted/" \
+      -e "s/^title: .*/title: Fixture title/" -e "s/\['{{note-id}}'\]/[Lo0SrcNote]/" \
+      -e "s/'constrained_by::{{rule-id}}'/constrained_by::Lt5Rul0005/" \
+      -e 's/^exception_to: .*/exception_to: "[[Lt5Rul0005|dunning rule]]"/' \
+      "inbox-to-memory/assets/records/$name.template.md" >"$lo_tpl/_memory/$folder/$name-$id.md"
+    awk 'NR > 1 && /^---$/ { exit } NR > 1' "$lo_tpl/_memory/$folder/$name-$id.md" | grep -q '{{' && {
+      echo "case H left a placeholder in the frontmatter of $name-$id.md" >&2
+      exit 1
+    }
+  done
+  lo_rc=0
+  lo_fmt="$(cd "$lo_tpl" && ltm fmt --check 2>&1)" || lo_rc=$?
+  [[ "$lo_rc" -eq 0 ]] || {
+    echo "ltm fmt --check wants to rewrite a record filled from a template" >&2
+    printf '%s\n' "$lo_fmt" >&2
+    exit 1
+  }
+  lo_out="$(run_lint "$lo_tpl")"
+  require_line "$lo_out" "failures: 0" "records filled from each template"
+  (cd "$lo_tpl" && LTM_TODAY=2026-11-10 ltm confirm Lt1Ctx0001 >/dev/null && ltm fmt >/dev/null) || {
+    echo "ltm confirm or ltm fmt failed on a record filled from the Context template" >&2
+    exit 1
+  }
+  require_line "$(cat "$lo_tpl/_memory/context/context-Lt1Ctx0001.md")" "last_confirmed: 2026-11-10" "the confirmed Context record"
+  lo_out="$(run_lint "$lo_tpl")"
+  require_line "$lo_out" "failures: 0" "a template record after ltm confirm and ltm fmt"
+else
+  echo "skipping ltm-writer key-order cases: ltm not on PATH" >&2
+fi
+
+rm -rf "$lo_dir"
 
 # The checked-in fixtures are never migrated or stamped in place. Every
 # migration or write-through test works on a copy, and a test that forgets
