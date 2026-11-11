@@ -65,8 +65,4 @@ Things that surprised, broke, or required course-correction. Brief, just enough 
 
 Each decision is its own `## YYYY-MM-DD: Short title` entry with a one-line rationale, so `ltm promote` can lift one to an org Bank by title. This stays the last section of the file: a promoted entry's body runs to the next `## ` heading. Deeper rationale lives in the working file the decision affects. When a decision crystallizes into something durable, move it to `_memory/decisions/` and reference by id in the entry.
 
-<!--
-## YYYY-MM-DD: Short title of the decision
-
-One-line rationale. Source: <note id or link>.
--->
+<!-- Example: ## 2026-01-15: Short title of the decision. One-line rationale. Source: <note id or link>. -->

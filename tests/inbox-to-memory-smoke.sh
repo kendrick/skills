@@ -700,12 +700,22 @@ if grep -q '^## [0-9]' <<<"$ws_headings"; then
   echo "working-state template ships a real dated entry; a fresh scaffold must have none" >&2
   exit 1
 fi
+# ltm sees a commented `## ` line as a heading and cuts a promoted body there,
+# leaving an unclosed `<!--`, so nothing after the section heading may start
+# with `## `, comments included.
+if sed -n '/^## Decisions Made So Far$/,$p' "$ws_filled" | tail -n +2 | grep -q '^## '; then
+  echo "working-state template: a line after Decisions Made So Far starts with '## ' (comment lines count)" >&2
+  exit 1
+fi
+
+refute_text "$ws_filled" "topic / area"
 
 # These run the real ltm, since the point is what its parser accepts. promote
 # records promoted_from as <org>/<repo>:<path>#<anchor>, so the source file has
 # to sit in a git repo with an origin remote.
 if command -v ltm >/dev/null 2>&1; then
   wp_dir="$(mktemp -d "${TMPDIR:-/tmp}/i2m-ws-promote.XXXXXX")"
+  trap 'rm -rf "$not_a_scope" "$inline_scope" "$dismissal_scope" "$tpl_scope" "$sd_scope" "$wp_dir"' EXIT
   wp_title="Freeze exceptions route through delivery"
   wp_bank="$wp_dir/bank"
   mkdir -p "$wp_bank"
@@ -718,24 +728,19 @@ if command -v ltm >/dev/null 2>&1; then
   cp "$ws_filled" "$wp_file"
   printf '\n## 2026-11-03: %s\n\nSigned off in the 11-03 delivery sync.\n' "$wp_title" >>"$wp_file"
 
-  # id: is random per run, so only the Proposal body is compared.
+  # id: is random per run and date: is today's, so only the Proposal body, the
+  # text after the closing frontmatter fence, is compared.
   wp_body() { # file title
-    (cd "$wp_repo" && ltm promote "$1" --entry "$2" --bank "$wp_bank" --dry-run 2>/dev/null) | sed '1,/^id:/d'
+    local out
+    out="$(cd "$wp_repo" && ltm promote "$1" --entry "$2" --bank "$wp_bank" --dry-run 2>/dev/null)" || return 1
+    awk '/^---$/{n++; next} n>=2' <<<"$out" | sed '1{/^$/d;}'
   }
-  wp_ok="$(cd "$wp_repo" && ltm promote working-state.md --entry "$wp_title" --bank "$wp_bank" --dry-run 2>/dev/null)" || {
+  wp_first="$(wp_body working-state.md "$wp_title")" || {
     echo "ltm promote refused a dated working-state entry" >&2
     exit 1
   }
-  require_line "$wp_ok" "Signed off in the 11-03 delivery sync." "the promoted entry's body"
-  for stray in "Recent Landmines" "Engagement Summary"; do
-    if grep -qF "$stray" <<<"$wp_ok"; then
-      echo "ltm promote's Proposal body swept in '$stray' from outside the entry" >&2
-      exit 1
-    fi
-  done
-  wp_first="$(wp_body working-state.md "$wp_title")"
-  [[ -n "$wp_first" ]] || {
-    echo "test setup: could not isolate the Proposal body after its id: line" >&2
+  [[ "$wp_first" == "Signed off in the 11-03 delivery sync." ]] || {
+    echo "ltm promote's Proposal body is not exactly the entry's own lines: $wp_first" >&2
     exit 1
   }
 
