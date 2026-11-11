@@ -355,13 +355,15 @@ fi
 
 # #321: the skill's own candidate-to-record step is "crystallize" and the user's
 # approval gate is "sign-off". "Promote" is left to ltm (`ltm promote`, an org
-# Bank), the trigger phrases users say, and three frozen names that existing
+# Bank), the trigger phrases users say, and the frozen key names that existing
 # notes already carry. The check runs on words so one line holding a frozen key
-# and a stray "promote" still fails; no line is exempt for any other reason.
+# and a stray "promote" still fails. Bare "unpromoted" is the shell variable in
+# scripts/ and is frozen only there; in prose it is the skill's own sense.
 stray_promote="$(
-  grep -rnoiE '[A-Za-z_-]*promot[A-Za-z_-]*' inbox-to-memory/ |
+  { grep -rnoiE '[A-Za-z_-]*promot[A-Za-z_-]*' inbox-to-memory/ || true; } |
     while IFS=: read -r file lineno word; do
-      [[ " unpromoted_candidates promoted_from promoted_to unpromoted " == *" $word "* ]] && continue
+      [[ " unpromoted_candidates promoted_from promoted_to " == *" $word "* ]] && continue
+      [[ "$file" == inbox-to-memory/scripts/* && "$word" == unpromoted ]] && continue
       text="$(sed -n "${lineno}p" "$file")"
       [[ "$file" == inbox-to-memory/SKILL.md && "$text" == description:* ]] && continue
       [[ "$file" == inbox-to-memory/SKILL.md && "$text" == *'| process  |' ]] && continue

@@ -2,7 +2,7 @@
 
 How to propose `project`, `client`, or `journal` scope when flagging a memory or journal candidate during phase 3 of the process mode.
 
-The proposed scope token goes into the candidate flag (`[memory candidate: project]`, `[memory candidate: client]`). The user reviews at sign-off and overrides if your proposal is wrong. After crystallization the scope is sticky — nothing moves it without sign-off.
+The proposed scope token goes into the candidate flag (`[memory candidate: project]`, `[memory candidate: client]`). The user reviews at sign-off and overrides if your proposal is wrong. After crystallization the scope is sticky — the skill never moves a record between scopes.
 
 ## Signals and Their Suggested Scope
 
@@ -52,7 +52,7 @@ If a project record later turns out to belong at client scope (or vice versa), m
 mv <source-path>/<record>.md <target-path>/
 ```
 
-Then re-render any inbound wiki-links. The skill explicitly does _not_ offer scope moves without sign-off in v1 — the audit cost of "did this record always live here?" outweighs the convenience. If this becomes painful, v2 can add a guarded scope-move mode that takes `--from project --to client <record-id>`.
+Then re-render any inbound wiki-links. The skill never moves a record between scopes in v1 — the audit cost of "did this record always live here?" outweighs the convenience. If this becomes painful, v2 can add a guarded scope-move mode that takes `--from project --to client <record-id>`.
 
 ## Cross-scope References Are Fine
 
@@ -79,7 +79,7 @@ The two paths to the cross-client journal:
 
 ```
 inbox grooming → [journal candidate: ...] flag → user sign-off → cross-client journal entry
-                                                                      ↑
+                                                                            ↑
 patterns-journal/journal.md → weekly review → deliberate crystallization ───┘
 ```
 
