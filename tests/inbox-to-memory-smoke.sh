@@ -3864,12 +3864,18 @@ awk '{ print } /^tags:/ { print "themes: [x]" }' "$lo_mig/$lm_decision" >"$lo_di
 mv "$lo_dir/planted.md" "$lo_mig/$lm_decision"
 require_line "$(cat "$lo_mig/$lm_decision")" "themes: [x]" "case F's planted key"
 lo_commented=_memory/context/regional-ledger-closes-June-Lm3LdgCls3.md
-# A prose comment led by a key in ltm's order is refused too: only a
-# placeholder value makes it a commented-out key, and dropping it would lose
-# the user's note.
+# Comments that only look like a template's commented-out key are refused too,
+# since dropping one deletes the user's note: a prose value, a bracketed word,
+# and a placeholder with a note after it (#318 red team rounds 6-7).
 lo_prose=_memory/context/regional-ledger-todo-Lm6Todo6.md
 sed 's/^id: .*/id: Lm6Todo6/' "$lo_mig/$lo_commented" | awk '{ print } /^tags:/ { print "# status: waiting on ops" }' >"$lo_mig/$lo_prose"
 require_line "$(cat "$lo_mig/$lo_prose")" "# status: waiting on ops" "case F's planted key-shaped comment"
+lo_bracket=_memory/context/regional-ledger-owner-Lm7Owner7.md
+sed 's/^id: .*/id: Lm7Owner7/' "$lo_mig/$lo_commented" | awk '{ print } /^tags:/ { print "# owners: <Ines>" }' >"$lo_mig/$lo_bracket"
+require_line "$(cat "$lo_mig/$lo_bracket")" "# owners: <Ines>" "case F's planted bracketed comment"
+lo_trailing=_memory/context/regional-ledger-keep-Lm8Keep8.md
+sed 's/^id: .*/id: Lm8Keep8/' "$lo_mig/$lo_commented" | awk '{ print } /^tags:/ { print "# effective_to: null # keep until legal signs off on 2026-12-31" }' >"$lo_mig/$lo_trailing"
+require_line "$(cat "$lo_mig/$lo_trailing")" "# effective_to: null # keep until legal signs off on 2026-12-31" "case F's planted placeholder with a note"
 awk '{ print } /^tags:/ { print "# note" }' "$lo_mig/$lo_commented" >"$lo_dir/planted.md"
 mv "$lo_dir/planted.md" "$lo_mig/$lo_commented"
 require_line "$(cat "$lo_mig/$lo_commented")" "# note" "case F's planted comment"
@@ -3890,7 +3896,7 @@ require_line "$(grep -c '^effective_to:' "$lo_mig/$lo_empty_dup")" "2" "case F's
 awk '{ print } /^schema:/ { print "schema: 1" }' "$lo_mig/$lo_schema_dup" >"$lo_dir/planted.md"
 mv "$lo_dir/planted.md" "$lo_mig/$lo_schema_dup"
 require_line "$(grep -c '^schema:' "$lo_mig/$lo_schema_dup")" "2" "case F's planted schema repeat"
-lm_commit "$lo_mig" "plant themes, two comments, a duplicate key, an empty duplicate and a schema repeat"
+lm_commit "$lo_mig" "plant themes, four comments, a duplicate key, an empty duplicate and a schema repeat"
 lo_rc=0
 lo_mig_out="$(bash "$lm_migrator" "$lo_mig" --to-ltm --facet-map "$lm_map" 2>&1)" || lo_rc=$?
 [[ "$lo_rc" -eq 1 ]] || {
@@ -3901,6 +3907,8 @@ lo_mig_out="$(bash "$lm_migrator" "$lo_mig" --to-ltm --facet-map "$lm_map" 2>&1)
 require_output "$lo_mig_out" "$lm_decision: key 'themes' is not in long-term-memory-kit's key order"
 require_output "$lo_mig_out" "$lo_commented: frontmatter holds a comment, which long-term-memory-kit's writers drop"
 require_output "$lo_mig_out" "$lo_prose: frontmatter holds a comment, which long-term-memory-kit's writers drop"
+require_output "$lo_mig_out" "$lo_bracket: frontmatter holds a comment, which long-term-memory-kit's writers drop"
+require_output "$lo_mig_out" "$lo_trailing: frontmatter holds a comment, which long-term-memory-kit's writers drop"
 require_output "$lo_mig_out" "$lo_dup: key 'tags' appears more than once in the frontmatter"
 require_output "$lo_mig_out" "$lo_empty_dup: key 'effective_to' appears more than once in the frontmatter"
 require_output "$lo_mig_out" "$lo_schema_dup: key 'schema' appears more than once in the frontmatter"
@@ -3909,7 +3917,7 @@ require_output "$lo_mig_out" "$lo_schema_dup: key 'schema' appears more than onc
 # than refusing, since a refusal blocked every scope filled from the template.
 lo_tpl="$lo_dir/template-keys"
 lm_stage "$lo_tpl"
-awk '{ print } /^date:/ { print "# effective_from: '"'"'YYYY-MM-DD'"'"'"; print "# effective_to: YYYY-MM-DD   # set this when the exception expires"; print "# supersedes: [<id>]"; print "# superseded_by: null" }' "$lo_tpl/$lm_decision" >"$lo_dir/planted.md"
+awk '{ print } /^date:/ { print "# effective_from: '"'"'{{YYYY-MM-DD}}'"'"'"; print "# effective_to: YYYY-MM-DD   # set this when the exception expires"; print "# supersedes: [<id>]"; print "# superseded_by: null" }' "$lo_tpl/$lm_decision" >"$lo_dir/planted.md"
 mv "$lo_dir/planted.md" "$lo_tpl/$lm_decision"
 require_line "$(grep -c '^# \(effective_from\|effective_to\|supersedes\|superseded_by\):' "$lo_tpl/$lm_decision")" "4" "the template-keys plant"
 lm_commit "$lo_tpl" "plant the v2 template's commented-out keys"

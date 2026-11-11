@@ -595,27 +595,40 @@ if [[ "$to_ltm" -eq 1 ]]; then
 
     # ltm re-emits a record in this order on its first write, so writing any
     # other order hands the user a lint failure (#318). Refuse an unknown key,
-    # since the lint fails any key outside this order. A commented-out key in
-    # this order whose value is one of the v2 templates' placeholders (null,
-    # <id>, [<id>], YYYY-MM-DD, '{{...}}') holds no value, so it is dropped,
-    # not refused: refusing blocked every scope filled from the template. Any
-    # other comment is refused, `# todo: x` and `# status: waiting on Ines`
-    # included, because dropping one deletes the user's note (#318 red team).
-    # A refused comment gets its own sentinel: it may have no colon, so its key
-    # reads as empty, and an empty bad would let END print a block truncated at
-    # the comment.
-    if ! awk -v order="$LTM_RECORD_KEY_ORDER" -v q="'" '
-      BEGIN {
-        n = split(order, o, " "); for (i = 1; i <= n; i++) at[o[i]] = i
-        ph = "^(null|~|" q "?([{][{])?YYYY-MM-DD([}][}])?" q "?|" q "?[{][{][A-Za-z0-9_-]+[}][}]" q "?|\\[?<[A-Za-z0-9_-]+>\\]?)?$"
-      }
+    # since the lint fails any key outside this order. A commented-out key line
+    # a record template shipped holds no value, so it is dropped, not refused:
+    # refusing blocked every scope filled from a template. The match is exact,
+    # against every such line the templates have carried, because each looser
+    # match red team rounds 5-7 tried deleted a user's note in silence
+    # (`# todo: ask Ines`, `# status: waiting on Ines`, `# owners: <Ines>`, a
+    # placeholder with a trailing note). Any other comment is refused, and gets
+    # its own sentinel: it may have no colon, so its key reads as empty, and an
+    # empty bad would let END print a block truncated at the comment.
+    cat >"$work/tpl-comments" <<'TPL'
+effective_from: '{{YYYY-MM-DD}}'
+effective_from: YYYY-MM-DD
+effective_to: null
+effective_to: null   # set this when the exception expires
+effective_to: YYYY-MM-DD
+effective_to: YYYY-MM-DD   # set this when the exception expires
+effective_to: YYYY-MM-DD | null
+effective_to: YYYY-MM-DD | null    # set when the exception expires
+superseded_by:
+superseded_by: <id>
+superseded_by: null
+supersedes:
+supersedes: [<id>]
+supersedes: <id-of-old-decision>
+supersedes: <id-of-old-entry>
+supersedes: <id-of-old-exception>
+supersedes: <id-of-old-record>
+supersedes: <id-of-old-rule>
+TPL
+    if ! awk -v order="$LTM_RECORD_KEY_ORDER" '
+      BEGIN { n = split(order, o, " "); for (i = 1; i <= n; i++) at[o[i]] = i }
+      FNR == NR { tpl[$0] = 1; next }
       /^[[:space:]]*$/ { next }
-      /^# *[A-Za-z_][A-Za-z0-9_]*:/ {
-        c = $0; sub(/^# */, "", c)
-        v = substr(c, index(c, ":") + 1); sub(/[[:space:]]+#.*$/, "", v)
-        gsub(/^[[:space:]]+|[[:space:]]+$/, "", v)
-        if ((substr(c, 1, index(c, ":") - 1) in at) && v ~ ph) next
-      }
+      /^#/ { c = $0; sub(/^# */, "", c); if (c in tpl) next }
       /^#/ { bad = "#"; exit }
       {
         k = substr($0, 1, index($0, ":") - 1)
@@ -626,7 +639,7 @@ if [[ "$to_ltm" -eq 1 ]]; then
         if (bad != "") { print bad > "/dev/stderr"; exit 1 }
         for (i = 1; i <= n; i++) if (i in line) print line[i]
       }
-    ' "$work/new-fm" >"$work/new-fm.ordered" 2>"$work/bad-key"; then
+    ' "$work/tpl-comments" "$work/new-fm" >"$work/new-fm.ordered" 2>"$work/bad-key"; then
       if [[ "$(cat "$work/bad-key")" == "#" ]]; then
         refuse "$file" "frontmatter holds a comment, which long-term-memory-kit's writers drop"
       else
