@@ -131,7 +131,7 @@ See [retrieval-funnel.md](retrieval-funnel.md) for the four-stage querying patte
 
 ## What This Skill Does NOT Adopt From memory-bank
 
-- The kit's optional record keys `review_by`, `summary`, `promoted_from`, `promoted_to`, and `subject` as keys this skill writes. They sit in the order in [machine-contracts.md](machine-contracts.md) and the lint accepts them on a `schema: 1` record, since `ltm` writes `promoted_*`; the 20-line budget limits how many one record carries.
+- The kit's optional record keys `review_by`, `summary`, `promoted_from`, `promoted_to`, and `subject` as keys this skill writes. They sit in the order in [machine-contracts.md](machine-contracts.md) and the lint accepts them on a `schema: 1` record, since `ltm promote` writes `promoted_from` and `promoted_to`; the 20-line budget limits how many one record carries.
 - The kit's `consumers`, `heading_aliases`, and `doctor` keys in `memory-bank.yaml`. The scaffold writes none of them; a scope that wants one adds it by hand.
 - The hydrator agent's scaffold-via-CLI workflow. This skill's process+scaffold modes serve a different ergonomic.
 

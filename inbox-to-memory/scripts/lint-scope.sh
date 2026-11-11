@@ -737,7 +737,7 @@ done
 # guess and cheap to change; revisit it after a few weeks of real use.
 #
 # This reports rather than fails. A recurring question is a finding about the
-# engagement, not a defect in a file, and process mode is what promotes it to an
+# engagement, not a defect in a file, and process mode is what turns it into an
 # unacknowledged tension.
 RECURRENCE_THRESHOLD=3
 while read -r occurrences slug; do

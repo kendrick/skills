@@ -47,7 +47,7 @@ Same artifact pipeline as the client root, scoped to this {{pursuit|project}}.
 
 - **Watch for journal candidates during all work.** When you observe something that might generalize beyond this client, flag inline with `[journal candidate: ...]` before continuing.
 - **Watch for memory-bank-shaped content when processing notes.** Decisions made in meetings, facts established about the {{pursuit|project}}, rules crystallized in conversation are all candidates for `_memory/`. Propose during synthesis.
-- **Stage, never auto-commit.** Outputs from grooming, synthesis, or promotion are always proposals.
+- **Stage, never auto-commit.** Outputs from grooming, synthesis, or crystallization are always proposals.
 - **Preserve raw notes as source of truth.** Records cite notes via `source_refs`; they don't replace them.
 - **Query memory via Glob and Grep on filenames and frontmatter before reading bodies.** See [`_memory/CLAUDE.md`](_memory/CLAUDE.md) for the four-stage funnel.
 

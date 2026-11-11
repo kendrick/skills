@@ -2,7 +2,7 @@
 
 How to propose `project`, `client`, or `journal` scope when flagging a memory or journal candidate during phase 3 of the process mode.
 
-The proposed scope token goes into the candidate flag (`[memory candidate: project]`, `[memory candidate: client]`). The user reviews at sign-off and overrides if your proposal is wrong. After crystallization the scope is sticky — no auto-promotion.
+The proposed scope token goes into the candidate flag (`[memory candidate: project]`, `[memory candidate: client]`). The user reviews at sign-off and overrides if your proposal is wrong. After crystallization the scope is sticky — the skill never moves a record between scopes.
 
 ## Signals and Their Suggested Scope
 
@@ -42,7 +42,7 @@ The journal is for portable patterns, not client gossip or methodology speculati
 - Anything bound to a specific person, deal, or deliverable.
 - Anything that wouldn't make sense to read 18 months from now without remembering the source.
 
-If the source moment is too specific to generalize, leave the `[journal candidate: ...]` flag in place but mark it as "considered, not crystallized" by not promoting it at sign-off. The flag itself is useful provenance.
+If the source moment is too specific to generalize, leave the `[journal candidate: ...]` flag in place but mark it as "considered, not crystallized" by not crystallizing it at sign-off. The flag itself is useful provenance.
 
 ## Post-crystallization Moves
 
@@ -52,7 +52,7 @@ If a project record later turns out to belong at client scope (or vice versa), m
 mv <source-path>/<record>.md <target-path>/
 ```
 
-Then re-render any inbound wiki-links. The skill explicitly does _not_ offer auto-promotion in v1 — the audit cost of "did this record always live here?" outweighs the convenience. If this becomes painful, v2 can add a guarded `promote --from project --to client <record-id>` mode.
+Then re-render any inbound wiki-links. The skill never moves a record between scopes in v1 — the audit cost of "did this record always live here?" outweighs the convenience. If this becomes painful, v2 can add a guarded scope-move mode that takes `--from project --to client <record-id>`.
 
 ## Cross-scope References Are Fine
 
@@ -66,24 +66,24 @@ A scaffolded project has three places candidate-shaped content can live, and cho
 
 - **`working-state.md`** is the narrative layer. Decisions in motion, open questions, active hypotheses. Updated each session. Content here is fluid — it shifts as discovery unfolds.
 - **`_memory/`** is the structured layer. Crystallized decisions, stable facts, standing rules. Queryable via Glob/Grep. Content here is durable — once a record lands, it stays (with `status` transitions) rather than getting rewritten.
-- **`patterns-journal/journal.md`** is the engagement-internal staging ground for cross-cutting observations that *might* generalize. Reverse-chronological. Loose, tagged. Promoted to the cross-client journal only after a deliberate weekly review.
+- **`patterns-journal/journal.md`** is the engagement-internal staging ground for cross-cutting observations that *might* generalize. Reverse-chronological. Loose, tagged. Crystallized into the cross-client journal only after a deliberate weekly review.
 
 When proposing a memory candidate during inbox grooming:
 
 - If the decision is still in flight (the user is talking it through, not announcing it as done), don't crystallize. Suggest it lands in `working-state.md` instead. Phrase the candidate as `[working-state candidate] <claim>` so the user knows you considered crystallization and decided against. If the user confirms at phase 5 that they moved the claim into `working-state.md`, append `| landed: working-state` to the line and keep the token.
 - If the claim is durable and specific to this client, propose `[memory candidate: project|client]` per the table above.
 - If the observation might generalize beyond this client, propose `[journal candidate: <pattern>]`. This routes to the cross-client journal at sign-off — fast path.
-- If the observation is interesting but not yet pattern-shaped (one data point, not three), there's no candidate flag. The user can hand-log it to `patterns-journal/journal.md` with `#pattern-emerging`. The patterns journal is a slower path: it accumulates observations the user reviews weekly, with promotion to the cross-client journal happening only after deliberate review.
+- If the observation is interesting but not yet pattern-shaped (one data point, not three), there's no candidate flag. The user can hand-log it to `patterns-journal/journal.md` with `#pattern-emerging`. The patterns journal is a slower path: it accumulates observations the user reviews weekly, with crystallization into the cross-client journal happening only after deliberate review.
 
 The two paths to the cross-client journal:
 
 ```
 inbox grooming → [journal candidate: ...] flag → user sign-off → cross-client journal entry
-                                                                      ↑
-patterns-journal/journal.md → weekly review → deliberate promotion ───┘
+                                                                            ↑
+patterns-journal/journal.md → weekly review → deliberate crystallization ───┘
 ```
 
-Both end up in the same place. The inline flag is for moments where the generalization is immediately obvious. The journal is for slow-cooked patterns that need accumulation before promotion is honest.
+Both end up in the same place. The inline flag is for moments where the generalization is immediately obvious. The journal is for slow-cooked patterns that need accumulation before crystallization is honest.
 
 ### Decisions in working-state.md are dated entries
 
