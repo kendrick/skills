@@ -225,7 +225,7 @@ Input is `claims`, `left`, and `plan_concerns` from the final report. The rule, 
 3. Save the verdicts verbatim to `RUN_DIR/redteam/round-<k>.json`.
 4. `NOT_REPRODUCED` sends a repair dispatch carrying the run that failed—`caller.command` and `caller.output` where `reproduced_at` is `caller`, and the top-level `command` and `output` otherwise. A caller-level failure leaves the seam's own run green, and a claim the change-exists grep refuted never reached a seam run at all, so on a null verdict that top-level pair is the grep and its empty result. Re-gate the repair as Step 3's repair is, then run round k+1 over the failed claims only. That repair's report lands at `RUN_DIR/reports/redteam-repair-<k>.json`, k the round it answers, a name apart from Step 7's `repair-<k>.json`: the resume probe matches a triage round to its repair by number, and a build repair called `repair-1.json` read as the repair for triage round 1. Two rounds, then stop with the evidence, the way `divvy-up` stops on a task that failed twice.
 5. `UNVERIFIABLE` becomes a "Not independently verified" section in the pull-request body.
-6. `plan_concerns` becomes a "Plan concerns" section in the pull-request body, and a `queue.md` row whose source is `worker`.
+6. Every `plan_concerns` entry goes into a "Plan concerns" section in the pull-request body. Only an entry with `open: true`, or with no `open` field, also becomes a `queue.md` row whose source is `worker`; `open: false` means `did` settled it in the branch.
 7. **Trigger.** Match the changed lines of the diff against the diff signals of rows 1 (money), 2 (authz), and 4 (schema) of `adversarial-review/references/trigger-table.md`:
 
    ```
@@ -307,7 +307,7 @@ Out-of-scope rows append to `RUN_DIR/queue.md`:
 | # | Source | Finding | Outside because | Recommendation | Status |
 ```
 
-`Source` is the thread or comment URL, or `worker` for a `plan_concerns` entry. `Recommendation` is usually a `file-issue` line for the human to run; the skill leaves the filing to them.
+`Source` is the thread or comment URL, or `worker` for a `plan_concerns` entry with `open: true` or no `open` field. `Recommendation` is usually a `file-issue` line for the human to run; the skill leaves the filing to them.
 
 **Done when:** `review` returned `cleared`; or it returned `findings`, the round's heading records the SINCE it was triaged against, and every finding has a row marked in scope or queued with its reason, and in a capped round every in-scope row but a `P0` or `blocking` one is queued with `review round cap reached (N)`, and an in-scope `P0` or `blocking` row stopped the run; or `pending` reached its cap, 60 checks in the background or ten minutes in the foreground, and `triage/waiting` says so; or a check exited non-zero and the invocation stopped naming its exit code and quoting its stderr.
 

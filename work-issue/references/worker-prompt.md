@@ -79,7 +79,7 @@ block further down, so report all nine:
       "question": "",
       "claims": [{"claim": "what is now true", "path": "the repo-relative file the claim rests on", "command": "what proves it", "output": "what that command really printed"}],
       "left": [{"what": "what was not done", "why": "the reason it was not"}],
-      "plan_concerns": [{"plan_said": "the plan's words", "found": "what the code showed", "did": "what was built instead"}]
+      "plan_concerns": [{"plan_said": "the plan's words", "found": "what the code showed", "did": "what was built instead", "open": false}]
     }
 
 Write the same JSON report to {{REPORT_PATH}}.
@@ -103,13 +103,13 @@ Review findings to repair, each quoted with its source URL:
   "question": "",
   "claims": [{"claim": "what is now true", "path": "the repo-relative file the claim rests on", "command": "what proves it", "output": "what that command really printed"}],
   "left": [{"what": "what was not done", "why": "the reason it was not"}],
-  "plan_concerns": [{"plan_said": "the plan's words", "found": "what the code showed", "did": "what was built instead"}]
+  "plan_concerns": [{"plan_said": "the plan's words", "found": "what the code showed", "did": "what was built instead", "open": false}]
 }
 ```
 
 - `claims` is the red-team's whole input. `path` is the file the reproducer greps at HEAD before it runs anything, and the file whose name decides whether the reproducer runs on `opus`; a claim with no path fails the change-exists check and comes back `NOT_REPRODUCED`. A claim with no command is unreproducible and comes back `UNVERIFIABLE`, which reaches the pull request as a section saying so. An empty `claims` on the final build report fails Step 3 rather than passing Step 4 by having nothing to check.
 - `left` is checked entry by entry against the code by the same reproducer. A reason that does not hold is a finding.
-- `plan_concerns` reaches the pull-request body and the deferred queue. It is the only channel a worker has for "the plan asked for something the code cannot support", and a worker that stays silent here hands the next reader a diff that disagrees with its own plan for no visible reason.
+- `plan_concerns` reaches the pull-request body, and the deferred queue when `open` is true or absent. `open` is a JSON boolean. Set `true` when the plan or the orchestrator must decide, or when the work the concern implies lies outside your task. Set `false` when `did` settled it in the branch and nothing is left to decide. Omit the field and the entry counts as `true`. It is the only channel a worker has for "the plan asked for something the code cannot support", and a worker that stays silent here hands the next reader a diff that disagrees with its own plan for no visible reason.
 
 ## Placeholders
 
