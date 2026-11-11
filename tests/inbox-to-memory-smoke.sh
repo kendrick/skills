@@ -3864,11 +3864,12 @@ awk '{ print } /^tags:/ { print "themes: [x]" }' "$lo_mig/$lm_decision" >"$lo_di
 mv "$lo_dir/planted.md" "$lo_mig/$lm_decision"
 require_line "$(cat "$lo_mig/$lm_decision")" "themes: [x]" "case F's planted key"
 lo_commented=_memory/context/regional-ledger-closes-June-Lm3LdgCls3.md
-# A prose comment shaped like a key is refused too: only a key in ltm's order
-# is a commented-out key, and dropping `# todo:` would lose the user's note.
+# A prose comment led by a key in ltm's order is refused too: only a
+# placeholder value makes it a commented-out key, and dropping it would lose
+# the user's note.
 lo_prose=_memory/context/regional-ledger-todo-Lm6Todo6.md
-sed 's/^id: .*/id: Lm6Todo6/' "$lo_mig/$lo_commented" | awk '{ print } /^tags:/ { print "# todo: ask ops" }' >"$lo_mig/$lo_prose"
-require_line "$(cat "$lo_mig/$lo_prose")" "# todo: ask ops" "case F's planted key-shaped comment"
+sed 's/^id: .*/id: Lm6Todo6/' "$lo_mig/$lo_commented" | awk '{ print } /^tags:/ { print "# status: waiting on ops" }' >"$lo_mig/$lo_prose"
+require_line "$(cat "$lo_mig/$lo_prose")" "# status: waiting on ops" "case F's planted key-shaped comment"
 awk '{ print } /^tags:/ { print "# note" }' "$lo_mig/$lo_commented" >"$lo_dir/planted.md"
 mv "$lo_dir/planted.md" "$lo_mig/$lo_commented"
 require_line "$(cat "$lo_mig/$lo_commented")" "# note" "case F's planted comment"
@@ -3908,7 +3909,7 @@ require_output "$lo_mig_out" "$lo_schema_dup: key 'schema' appears more than onc
 # than refusing, since a refusal blocked every scope filled from the template.
 lo_tpl="$lo_dir/template-keys"
 lm_stage "$lo_tpl"
-awk '{ print } /^date:/ { print "# effective_from: '"'"'YYYY-MM-DD'"'"'"; print "# effective_to: null"; print "# supersedes: <id-of-old-decision>"; print "# superseded_by: null" }' "$lo_tpl/$lm_decision" >"$lo_dir/planted.md"
+awk '{ print } /^date:/ { print "# effective_from: '"'"'YYYY-MM-DD'"'"'"; print "# effective_to: YYYY-MM-DD   # set this when the exception expires"; print "# supersedes: [<id>]"; print "# superseded_by: null" }' "$lo_tpl/$lm_decision" >"$lo_dir/planted.md"
 mv "$lo_dir/planted.md" "$lo_tpl/$lm_decision"
 require_line "$(grep -c '^# \(effective_from\|effective_to\|supersedes\|superseded_by\):' "$lo_tpl/$lm_decision")" "4" "the template-keys plant"
 lm_commit "$lo_tpl" "plant the v2 template's commented-out keys"

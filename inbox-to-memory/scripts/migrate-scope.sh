@@ -596,16 +596,26 @@ if [[ "$to_ltm" -eq 1 ]]; then
     # ltm re-emits a record in this order on its first write, so writing any
     # other order hands the user a lint failure (#318). Refuse an unknown key,
     # since the lint fails any key outside this order. A commented-out key in
-    # this order (the v2 templates ship them) holds no value, so it is dropped,
-    # not refused: refusing blocked every scope filled from the template. Only
-    # a key in the order counts, so a prose comment like `# todo: x` is refused
-    # rather than deleted. Any other comment gets its own sentinel: it may have
-    # no colon, so its key reads as empty, and an empty bad would let END print
-    # a block truncated at the comment.
-    if ! awk -v order="$LTM_RECORD_KEY_ORDER" '
-      BEGIN { n = split(order, o, " "); for (i = 1; i <= n; i++) at[o[i]] = i }
+    # this order whose value is one of the v2 templates' placeholders (null,
+    # <id>, [<id>], YYYY-MM-DD, '{{...}}') holds no value, so it is dropped,
+    # not refused: refusing blocked every scope filled from the template. Any
+    # other comment is refused, `# todo: x` and `# status: waiting on Ines`
+    # included, because dropping one deletes the user's note (#318 red team).
+    # A refused comment gets its own sentinel: it may have no colon, so its key
+    # reads as empty, and an empty bad would let END print a block truncated at
+    # the comment.
+    if ! awk -v order="$LTM_RECORD_KEY_ORDER" -v q="'" '
+      BEGIN {
+        n = split(order, o, " "); for (i = 1; i <= n; i++) at[o[i]] = i
+        ph = "^(null|~|" q "?([{][{])?YYYY-MM-DD([}][}])?" q "?|" q "?[{][{][A-Za-z0-9_-]+[}][}]" q "?|\\[?<[A-Za-z0-9_-]+>\\]?)?$"
+      }
       /^[[:space:]]*$/ { next }
-      /^# *[A-Za-z_][A-Za-z0-9_]*:/ { c = $0; sub(/^# */, "", c); if (substr(c, 1, index(c, ":") - 1) in at) next }
+      /^# *[A-Za-z_][A-Za-z0-9_]*:/ {
+        c = $0; sub(/^# */, "", c)
+        v = substr(c, index(c, ":") + 1); sub(/[[:space:]]+#.*$/, "", v)
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", v)
+        if ((substr(c, 1, index(c, ":") - 1) in at) && v ~ ph) next
+      }
       /^#/ { bad = "#"; exit }
       {
         k = substr($0, 1, index($0, ":") - 1)
