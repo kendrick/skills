@@ -137,8 +137,10 @@ frontmatter_end() {
   ' "$1"
 }
 
-# True when a line of KEYS equals KEY. A here-string has no writer to kill.
-has_key() { grep -qx -- "$2" <<<"$1"; }
+# Line membership reads a here-string, never `printf | grep -q`: grep exits on its
+# first match, printf dies of SIGPIPE, and pipefail reports 141 (the hazard
+# split-raw.sh's raw_zone_has note records). -F because tokens hold `[`.
+has_key() { grep -Fqx -- "$2" <<<"$1"; }
 
 # Every present key must appear in the contract order, and in that order. Omitted
 # keys are fine: the contract fixes sequence, not membership, so a note without a
@@ -219,8 +221,6 @@ check_frontmatter() {
 
   local keys order
   keys="$(printf '%s\n' "$block" | yq 'keys | .[]' 2>/dev/null || true)"
-  # Not `printf | grep -q`: grep exits on its first match, printf then dies of
-  # SIGPIPE, and pipefail reports 141 (see the note by count_matches).
   if has_key "$keys" memory_type; then
     # schema: 2 records and journal entries are still legal and ltm never
     # writes them, so they keep their original order.
@@ -262,7 +262,7 @@ check_tokens() {
   local token
   while IFS= read -r token; do
     [[ -z "$token" ]] && continue
-    if ! printf '%s\n' "$REGISTERED_TOKENS" | grep -Fqx -- "$token"; then
+    if ! has_key "$REGISTERED_TOKENS" "$token"; then
       fail token-grammar "\`$token\` is not in the grammar table"
     fi
   done < <(printf '%s\n' "$scanned" | grep -oE '\[[a-z][a-z0-9 -]*(:|\])' | sort -u)
@@ -563,7 +563,7 @@ check_record_facets() {
         continue
       fi
       prefix="${entry%%:*}"
-      if [[ "$bank_prefixes_ok" -eq 1 ]] && ! printf '%s\n' "$bank_prefixes" | grep -Fqx -- "$prefix"; then
+      if [[ "$bank_prefixes_ok" -eq 1 ]] && ! has_key "$bank_prefixes" "$prefix"; then
         fail record-facet "\`$key\` entry \`$entry\` uses prefix \`$prefix\`, which memory-bank.yaml does not list under facet_prefixes"
       fi
     done < <(printf '%s\n' "$block" | yq -r ".$key[]" 2>/dev/null || true)
@@ -573,7 +573,7 @@ check_record_facets() {
 check_record_type() {
   local file="$1" block="$2" type folder actual
   type="$(printf '%s\n' "$block" | yq -r '.memory_type // ""' 2>/dev/null || true)"
-  if ! printf '%s\n' $KIT_TYPES | grep -Fqx -- "$type"; then
+  if ! has_key "${KIT_TYPES// /$'\n'}" "$type"; then
     fail record-type "\`memory_type: $type\` is not one of: $KIT_TYPES"
     return
   fi

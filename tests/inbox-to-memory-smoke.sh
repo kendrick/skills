@@ -4141,4 +4141,12 @@ if has_key "" memory_type; then
   exit 1
 fi
 
+# Pin the call sites too: has_key can pass alone while a site goes back to the pipe.
+require_text "$lint" 'if has_key "$keys" memory_type; then'
+require_text "$lint" 'if ! has_key "$REGISTERED_TOKENS" "$token"; then'
+require_text "$lint" '! has_key "$bank_prefixes" "$prefix"; then'
+require_text "$lint" 'if ! has_key "${KIT_TYPES// /$'"'"'\n'"'"'}" "$type"; then'
+refute_text "$lint" '| grep -qx'
+refute_text "$lint" '| grep -Fqx'
+
 echo "inbox-to-memory smoke: ok"
