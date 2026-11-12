@@ -137,6 +137,9 @@ frontmatter_end() {
   ' "$1"
 }
 
+# True when a line of KEYS equals KEY. A here-string has no writer to kill.
+has_key() { grep -qx -- "$2" <<<"$1"; }
+
 # Every present key must appear in the contract order, and in that order. Omitted
 # keys are fine: the contract fixes sequence, not membership, so a note without a
 # source file doesn't have to carry an empty one to stay compliant.
@@ -216,7 +219,9 @@ check_frontmatter() {
 
   local keys order
   keys="$(printf '%s\n' "$block" | yq 'keys | .[]' 2>/dev/null || true)"
-  if printf '%s\n' "$keys" | grep -qx 'memory_type'; then
+  # Not `printf | grep -q`: grep exits on its first match, printf then dies of
+  # SIGPIPE, and pipefail reports 141 (see the note by count_matches).
+  if has_key "$keys" memory_type; then
     # schema: 2 records and journal entries are still legal and ltm never
     # writes them, so they keep their original order.
     if [[ "$(printf '%s\n' "$block" | yq '.schema')" == 1 ]]; then

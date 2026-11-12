@@ -4116,4 +4116,29 @@ rm -rf "$lo_dir"
 require_text "$contracts" "body_schema"
 require_text "$contracts" "A body-shape check therefore keys off \`body_schema\`, never off \`schema: 2\`."
 
+# The memory_type probe must not race SIGPIPE (#329). grep -q exits on its first
+# match, and a pipe's writer then dies with 141 under pipefail, so the probe reads
+# a here-string. The script can't be sourced without running, so the one-line
+# function is pulled out by sed.
+eval "$(sed -n '/^has_key()/p' "$lint")"
+long="$(printf 'memory_type\n'; printf 'x\n%.0s' {1..20000})"
+for _ in {1..20}; do
+  has_key "$long" memory_type || {
+    echo "has_key lost memory_type in a 20000-line list" >&2
+    exit 1
+  }
+done
+if has_key "${long#memory_type$'\n'}" memory_type; then
+  echo "has_key matched a list without memory_type" >&2
+  exit 1
+fi
+if has_key $'memory_type_old\nid' memory_type; then
+  echo "has_key matched memory_type_old as memory_type" >&2
+  exit 1
+fi
+if has_key "" memory_type; then
+  echo "has_key matched an empty key list" >&2
+  exit 1
+fi
+
 echo "inbox-to-memory smoke: ok"
