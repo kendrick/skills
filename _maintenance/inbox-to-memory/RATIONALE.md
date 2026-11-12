@@ -129,6 +129,7 @@ The key order came from #318. `ltm` re-emits a record's frontmatter in its own c
 | A lint check that `constrained_by` and `exception_to` name the same rule. | If the kit adopts `exception_to`, that check belongs in `ltm validate`, and a copy in the lint would drift from it (row 53). | `refute_text "$lint" "constrained_by"` |
 | A `### <!-- topic / area -->` grouping inside `## Decisions Made So Far`. | `ltm promote` takes an entry's body up to the next `## ` heading, so a `###` subhead is swept into the promoted body (row 64). | `refute_text inbox-to-memory/assets/working-state.template.md "topic / area"` |
 | Saying "promote" for the skill's own candidate-to-record step or approval gate. | ltm's Promotion moves a working-memory entry to a Bank, and the skill's step is a different act (row 67). | `stray_promote` in `tests/inbox-to-memory-smoke.sh` |
+| A membership probe in `scripts/lint-scope.sh` that pipes a key list into `grep -qx` or `grep -Fqx`. | `grep -q` exits on its first match, the writer feeding the pipe dies of SIGPIPE, and under `pipefail` the probe reports 141, which flips the check (row 68). | `refute_text "$lint" '\| grep -qx'` and `refute_text "$lint" '\| grep -Fqx'` in `tests/inbox-to-memory-smoke.sh` |
 
 ## Known Limitations
 
