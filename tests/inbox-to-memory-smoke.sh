@@ -2585,6 +2585,18 @@ bench_assert "$bench_dir/badsup.json" "A still produced a query with an unresolv
   '"record-BnRecA0001" not in q and "record-BnRecB0002" in q'
 require_output "$(cat "$bench_dir/badsup.err")" "bench-fixture: $bench_rec_a: supersedes BnNoSuchRec does not resolve to a record"
 
+# 3b. A record that supersedes itself must not list itself as forbidden, or its
+# own path would sit in both expected_files and forbidden_files.
+cp -R "$bench_scope" "$bench_dir/selfsup"
+perl -pi -e 's/^supersedes: .*$/supersedes: [BnRecA0001]/' "$bench_dir/selfsup/$bench_rec_a"
+grep -qx 'supersedes: \[BnRecA0001\]' "$bench_dir/selfsup/$bench_rec_a" || {
+  echo "could not rewrite A's supersedes to itself in the bench copy" >&2
+  exit 1
+}
+bash "$bench" "$bench_dir/selfsup" >"$bench_dir/selfsup.json" 2>/dev/null
+bench_assert "$bench_dir/selfsup.json" "a self-superseding A forbids itself" \
+  '"forbidden_files" not in q["record-BnRecA0001"]'
+
 # 5. --questions carries its own forbidden_files and validates it like expected_files.
 cat >"$bench_dir/forbid-questions.json" <<'JSON'
 [
@@ -2606,6 +2618,27 @@ bench_bad_err="$(bash "$bench" "$bench_scope" --questions "$bench_dir/empty-forb
   exit 1
 }
 require_output "$bench_bad_err" "bench-fixture: questions item 1: forbidden_files must be a non-empty list of strings"
+cat >"$bench_dir/overlap-forbid.json" <<'JSON'
+[
+  {"query": "who owns a rollback", "expected_files": ["notes/a.md"], "forbidden_files": ["notes/a.md"]}
+]
+JSON
+bench_rc=0
+bench_bad_err="$(bash "$bench" "$bench_scope" --questions "$bench_dir/overlap-forbid.json" 2>&1 >/dev/null)" || bench_rc=$?
+[[ "$bench_rc" == 2 ]] || {
+  echo "bench-fixture accepted a path in both expected_files and forbidden_files (exit $bench_rc, want 2)" >&2
+  exit 1
+}
+require_output "$bench_bad_err" "bench-fixture: questions item 1: forbidden_files must not share a path with expected_files"
+# Duplicates collapse, like the record path's.
+cat >"$bench_dir/dupe-forbid.json" <<'JSON'
+[
+  {"query": "who owns a rollback", "expected_files": ["notes/a.md"], "forbidden_files": ["notes/b.md", "notes/b.md"]}
+]
+JSON
+bash "$bench" "$bench_scope" --questions "$bench_dir/dupe-forbid.json" >"$bench_dir/dq.json" 2>/dev/null
+bench_assert "$bench_dir/dq.json" "--questions passed a duplicate forbidden_files path through" \
+  'q["question-1"]["forbidden_files"] == ["notes/b.md"]'
 
 # Exit 0 with an empty fixture reads like a scope with no accepted records, so
 # an unreadable scope must fail loudly.

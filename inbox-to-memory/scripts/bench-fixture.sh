@@ -43,8 +43,9 @@ USAGE = """\
 usage: bench-fixture.sh <scope-root> [--collection NAME] [--top-k K] [--questions FILE]
 
 Emit a qmd bench fixture (JSON) on stdout: one query per `accepted` record under
-<scope-root>/_memory/, expecting the notes it cites in source_refs plus the record, and forbidding the
-records it supersedes (forbidden_files, omitted when there are none).
+<scope-root>/_memory/, expecting the notes it cites in source_refs plus the record,
+and forbidding the records it supersedes (forbidden_files, omitted when there
+are none).
 
 Index the scope first so the expected paths match what qmd ls shows:
   qmd collection add <scope-root> --name <collection>
@@ -277,6 +278,13 @@ def main():
                 isinstance(ff, list) and ff and all(isinstance(f, str) and f for f in ff)
             ):
                 die("questions item %d: forbidden_files must be a non-empty list of strings" % idx)
+            if ff is not None:
+                # Same no-overlap rule the record path enforces by dropping a
+                # self-reference; a hand-written item can't be silently fixed,
+                # since either side might be the typo.
+                if set(ff) & set(ef):
+                    die("questions item %d: forbidden_files must not share a path with expected_files" % idx)
+                ff = list(dict.fromkeys(ff))
             questions.append((q, ef, k, t, ff))
 
     rel = lambda p: os.path.relpath(p, scope).replace(os.sep, "/")
@@ -332,6 +340,8 @@ def main():
         # hide an intrusion, and a missing query is visible where a wrong one is not.
         forbidden = []
         for entry in as_list(fm.get("supersedes")):
+            # Strip a `<scope>::` prefix the way source_refs does; the id is what
+            # `records` is keyed on.
             sid = entry.split("::", 1)[1] if "::" in entry else entry
             hits = records.get(sid, [])
             if len(hits) != 1:
@@ -344,6 +354,8 @@ def main():
                 forbidden.append(rel(hits[0]))
         if bad:
             continue
+        # expected_in_top_k is assigned last so the emitted key order stays
+        # id, query, type, expected_files, forbidden_files, expected_in_top_k.
         query = {
             "id": "record-%s" % rid,
             "query": text,
