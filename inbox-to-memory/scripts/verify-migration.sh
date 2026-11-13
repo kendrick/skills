@@ -176,7 +176,7 @@ for target in ${link_targets[@]+"${link_targets[@]}"}; do
   # resolve by name and now only resolves by id is a pass, and worth counting
   # separately from one that resolved by name both times.
   id="${target: -10}"
-  # A target under ten characters has no id: bash 5 yields "" for it, and an
+  # A target under ten characters has no id: bash yields "" for it, and an
   # empty id makes `-name "**.md"`, which matches every note.
   by_id=""
   if [[ "${#target}" -ge 10 ]]; then

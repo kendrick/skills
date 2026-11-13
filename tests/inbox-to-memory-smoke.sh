@@ -2761,6 +2761,12 @@ for glob_stem in '*' '*pier?lighting*'; do
   sc_out="$(run_lint "$sc")"
   require_failure "$sc_out" "link-broken: \`$glob_stem\` resolves neither by path nor by name"
 done
+# `?` alone, with no `*` to carry the case and no 10-char id for the id try to
+# fall back on: unescaped, `pier?lighting` matches a real `pier-lighting.md`.
+sc="$(glob_link_case question-only 'pier?lighting')"
+printf '%s\n' '# pier' >"$sc/_memory/pier-lighting.md"
+sc_out="$(run_lint "$sc")"
+require_failure "$sc_out" "link-broken: \`pier?lighting\` resolves neither by path nor by name"
 # Regression guard, not a red case: an unclosed `[` already matched nothing on
 # BSD find at main. It pins the post-fix behavior on any find.
 sc="$(glob_link_case dead-bracket 'nosuch[x')"
