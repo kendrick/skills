@@ -339,7 +339,12 @@ def main():
         # Same skip-whole rule as source_refs: a partly right forbidden set would
         # hide an intrusion, and a missing query is visible where a wrong one is not.
         forbidden = []
+        # Unmigrated schema: 2 records carry `supersedes: null` (or `~`); the
+        # frontmatter reader hands that back as the string, which would be looked
+        # up as an id and drop the query. migration.md treats it as nothing.
         for entry in as_list(fm.get("supersedes")):
+            if entry.lower() in ("null", "~"):
+                continue
             # Strip a `<scope>::` prefix the way source_refs does; the id is what
             # `records` is keyed on.
             sid = entry.split("::", 1)[1] if "::" in entry else entry

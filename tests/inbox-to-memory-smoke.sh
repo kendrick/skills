@@ -2597,6 +2597,26 @@ bash "$bench" "$bench_dir/selfsup" >"$bench_dir/selfsup.json" 2>/dev/null
 bench_assert "$bench_dir/selfsup.json" "a self-superseding A forbids itself" \
   '"forbidden_files" not in q["record-BnRecA0001"]'
 
+# 3c. A legacy `supersedes: null` supersedes nothing: the query stays, with no
+# key and no stderr line, instead of "null" being looked up as a record id.
+for nullval in null '~'; do
+  cp -R "$bench_scope" "$bench_dir/nullsup"
+  perl -pi -e "s/^supersedes: .*\$/supersedes: $nullval/" "$bench_dir/nullsup/$bench_rec_a"
+  grep -qx "supersedes: $nullval" "$bench_dir/nullsup/$bench_rec_a" || {
+    echo "could not rewrite A's supersedes to $nullval in the bench copy" >&2
+    exit 1
+  }
+  bash "$bench" "$bench_dir/nullsup" >"$bench_dir/nullsup.json" 2>"$bench_dir/nullsup.err"
+  bench_assert "$bench_dir/nullsup.json" "A with supersedes: $nullval lost its query or kept forbidden_files" \
+    '"record-BnRecA0001" in q and "forbidden_files" not in q["record-BnRecA0001"]'
+  ! grep -q 'supersedes' "$bench_dir/nullsup.err" || {
+    echo "bench-fixture complained about supersedes: $nullval:" >&2
+    cat "$bench_dir/nullsup.err" >&2
+    exit 1
+  }
+  rm -rf "$bench_dir/nullsup"
+done
+
 # 5. --questions carries its own forbidden_files and validates it like expected_files.
 cat >"$bench_dir/forbid-questions.json" <<'JSON'
 [
