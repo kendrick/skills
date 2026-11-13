@@ -2533,6 +2533,80 @@ bench_bad_err="$(bash "$bench" "$bench_scope" --questions "$bench_dir/bad-questi
 }
 require_output "$bench_bad_err" "bench-fixture: questions item 2: query must be a non-empty string"
 
+# forbidden_files (#263): a query's intruders are exactly what its record
+# supersedes. Each case runs the script on a copy and reads the emitted JSON.
+bench_forbid="_memory/decisions/old-rollback-rotation-BnRecC0003.md"
+# 1. Stock fixture: A supersedes C.
+bench_assert "$bench_dir/out.json" "A's forbidden_files is not exactly C's path" \
+  'q["record-BnRecA0001"]["forbidden_files"] == ["'"$bench_forbid"'"]'
+bench_assert "$bench_dir/out.json" "a query lists a path as both expected and forbidden" \
+  'all(not set(x["expected_files"]) & set(x.get("forbidden_files", [])) for x in d["queries"])'
+bench_assert "$bench_dir/out.json" "a query with nothing superseded carries forbidden_files" \
+  '"forbidden_files" not in q["record-BnRecB0002"]'
+
+# 2. Guard, not a falsifier: the key is already absent at main, so this passes
+# before the fix. It pins that deleting A's supersedes empties the field
+# instead of falling back on C's superseded_by.
+cp -R "$bench_scope" "$bench_dir/nosup"
+perl -ni -e 'print unless /^supersedes:/' "$bench_dir/nosup/$bench_rec_a"
+if grep -q '^supersedes:' "$bench_dir/nosup/$bench_rec_a"; then
+  echo "could not delete A's supersedes in the bench copy" >&2
+  exit 1
+fi
+bash "$bench" "$bench_dir/nosup" >"$bench_dir/nosup.json" 2>/dev/null
+bench_assert "$bench_dir/nosup.json" "A kept forbidden_files after its supersedes was deleted" \
+  '"forbidden_files" not in q["record-BnRecA0001"]'
+
+# 3. Marking an unrelated record superseded must not change A's field.
+cp -R "$bench_scope" "$bench_dir/unrel"
+perl -pi -e 's/^status: accepted$/status: superseded/' "$bench_dir/unrel/$bench_rec_b"
+grep -qx 'status: superseded' "$bench_dir/unrel/$bench_rec_b" || {
+  echo "could not flip B's status in the bench copy" >&2
+  exit 1
+}
+bash "$bench" "$bench_dir/unrel" >"$bench_dir/unrel.json" 2>/dev/null
+bench_assert "$bench_dir/unrel.json" "marking B superseded changed A's forbidden_files" \
+  'q["record-BnRecA0001"]["forbidden_files"] == ["'"$bench_forbid"'"]'
+
+# 4. A supersedes id that names no record skips the query, like a dangling source_ref.
+cp -R "$bench_scope" "$bench_dir/badsup"
+perl -pi -e 's/^supersedes: .*$/supersedes: [BnNoSuchRec]/' "$bench_dir/badsup/$bench_rec_a"
+grep -qx 'supersedes: \[BnNoSuchRec\]' "$bench_dir/badsup/$bench_rec_a" || {
+  echo "could not rewrite A's supersedes in the bench copy" >&2
+  exit 1
+}
+bench_rc=0
+bash "$bench" "$bench_dir/badsup" >"$bench_dir/badsup.json" 2>"$bench_dir/badsup.err" || bench_rc=$?
+[[ "$bench_rc" == 0 ]] || {
+  echo "bench-fixture exited $bench_rc on an unresolvable supersedes (want 0)" >&2
+  exit 1
+}
+bench_assert "$bench_dir/badsup.json" "A still produced a query with an unresolvable supersedes" \
+  '"record-BnRecA0001" not in q and "record-BnRecB0002" in q'
+require_output "$(cat "$bench_dir/badsup.err")" "bench-fixture: $bench_rec_a: supersedes BnNoSuchRec does not resolve to a record"
+
+# 5. --questions carries its own forbidden_files and validates it like expected_files.
+cat >"$bench_dir/forbid-questions.json" <<'JSON'
+[
+  {"query": "who owns a rollback", "expected_files": ["notes/2026-02-03-bench-rollback-owner-Bn1RbkOwn1.md"], "forbidden_files": ["_memory/decisions/old-rollback-rotation-BnRecC0003.md"]}
+]
+JSON
+bash "$bench" "$bench_scope" --questions "$bench_dir/forbid-questions.json" >"$bench_dir/fq.json" 2>/dev/null
+bench_assert "$bench_dir/fq.json" "--questions dropped a question's own forbidden_files" \
+  'q["question-1"]["forbidden_files"] == ["'"$bench_forbid"'"]'
+cat >"$bench_dir/empty-forbid.json" <<'JSON'
+[
+  {"query": "who owns a rollback", "expected_files": ["notes/2026-02-03-bench-rollback-owner-Bn1RbkOwn1.md"], "forbidden_files": []}
+]
+JSON
+bench_rc=0
+bench_bad_err="$(bash "$bench" "$bench_scope" --questions "$bench_dir/empty-forbid.json" 2>&1 >/dev/null)" || bench_rc=$?
+[[ "$bench_rc" == 2 ]] || {
+  echo "bench-fixture accepted an empty forbidden_files (exit $bench_rc, want 2)" >&2
+  exit 1
+}
+require_output "$bench_bad_err" "bench-fixture: questions item 1: forbidden_files must be a non-empty list of strings"
+
 # Exit 0 with an empty fixture reads like a scope with no accepted records, so
 # an unreadable scope must fail loudly.
 bench_rc=0

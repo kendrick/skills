@@ -13,7 +13,9 @@
 # record intrudes on results for a question its replacement answers; deleting it
 # from the index would make that number zero by construction. For the same reason
 # this script only reads the scope. It never writes, deletes, or moves anything in
-# it, so a fixture run cannot change the thing being measured.
+# it, so a fixture run cannot change the thing being measured. Each query names
+# those intruders in `forbidden_files`: exactly the records its source record
+# `supersedes`, so a run can count them without a second labeling pass (#263).
 #
 # A record whose `source_refs` entry does not resolve to exactly one note is
 # skipped whole, with a line on stderr. A partly right label set would make the
@@ -41,7 +43,8 @@ USAGE = """\
 usage: bench-fixture.sh <scope-root> [--collection NAME] [--top-k K] [--questions FILE]
 
 Emit a qmd bench fixture (JSON) on stdout: one query per `accepted` record under
-<scope-root>/_memory/, expecting the notes it cites in source_refs plus the record.
+<scope-root>/_memory/, expecting the notes it cites in source_refs plus the record, and forbidding the
+records it supersedes (forbidden_files, omitted when there are none).
 
 Index the scope first so the expected paths match what qmd ls shows:
   qmd collection add <scope-root> --name <collection>
@@ -53,7 +56,8 @@ Index the scope first so the expected paths match what qmd ls shows:
   --collection NAME  collection name (default: basename of <scope-root>)
   --top-k K          expected_in_top_k floor (default 5); raised to the number
                      of expected files when that is larger
-  --questions FILE   JSON array of {query, expected_files[, expected_in_top_k, type]}
+  --questions FILE   JSON array of {query, expected_files[, forbidden_files,
+                     expected_in_top_k, type]}
                      appended as question-1, question-2, ...
 """
 
@@ -268,7 +272,12 @@ def main():
             t = it.get("type", "semantic")
             if not isinstance(t, str) or not t:
                 die("questions item %d: type must be a non-empty string" % idx)
-            questions.append((q, ef, k, t))
+            ff = it.get("forbidden_files")
+            if "forbidden_files" in it and not (
+                isinstance(ff, list) and ff and all(isinstance(f, str) and f for f in ff)
+            ):
+                die("questions item %d: forbidden_files must be a non-empty list of strings" % idx)
+            questions.append((q, ef, k, t, ff))
 
     rel = lambda p: os.path.relpath(p, scope).replace(os.sep, "/")
 
@@ -280,11 +289,20 @@ def main():
         if fm and fm.get("id"):
             notes.setdefault(fm["id"], []).append((p, fm))
 
-    queries = []
+    # Keyed by id and kept regardless of status: `supersedes` names a record that
+    # is usually no longer accepted. A record with no id is unreachable by id.
+    records = {}
+    parsed = []
     for p in md_files(os.path.join(scope, "_memory")):
         fm = frontmatter(p)
         if not fm or "memory_type" not in fm:
             continue
+        parsed.append((p, fm))
+        if fm.get("id"):
+            records.setdefault(fm["id"], []).append(p)
+
+    queries = []
+    for p, fm in parsed:
         # Exact match on purpose: proposed, rejected, and superseded records are
         # all things a user would not want retrieval to be graded against.
         if fm.get("status") != "accepted":
@@ -310,22 +328,39 @@ def main():
             continue
         if rel(p) not in files:
             files.append(rel(p))
-        queries.append({
+        # Same skip-whole rule as source_refs: a partly right forbidden set would
+        # hide an intrusion, and a missing query is visible where a wrong one is not.
+        forbidden = []
+        for entry in as_list(fm.get("supersedes")):
+            sid = entry.split("::", 1)[1] if "::" in entry else entry
+            hits = records.get(sid, [])
+            if len(hits) != 1:
+                what = "does not resolve to a record" if not hits else "resolves to %d records" % len(hits)
+                sys.stderr.write("bench-fixture: %s: supersedes %s %s\n" % (rel(p), entry, what))
+                bad = True
+                break
+            # A record that lists itself would be both expected and forbidden.
+            if rel(hits[0]) not in forbidden and rel(hits[0]) not in files:
+                forbidden.append(rel(hits[0]))
+        if bad:
+            continue
+        query = {
             "id": "record-%s" % rid,
             "query": text,
             "type": "semantic",
             "expected_files": files,
-            "expected_in_top_k": top_k_for(top_k, len(files)),
-        })
+        }
+        if forbidden:
+            query["forbidden_files"] = forbidden
+        query["expected_in_top_k"] = top_k_for(top_k, len(files))
+        queries.append(query)
 
-    for n, (q, ef, k, t) in enumerate(questions, 1):
-        queries.append({
-            "id": "question-%d" % n,
-            "query": q,
-            "type": t,
-            "expected_files": ef,
-            "expected_in_top_k": k if k is not None else top_k_for(top_k, len(ef)),
-        })
+    for n, (q, ef, k, t, ff) in enumerate(questions, 1):
+        query = {"id": "question-%d" % n, "query": q, "type": t, "expected_files": ef}
+        if ff is not None:
+            query["forbidden_files"] = ff
+        query["expected_in_top_k"] = k if k is not None else top_k_for(top_k, len(ef))
+        queries.append(query)
 
     json.dump({
         "description": "Generated from source_refs by bench-fixture.sh (#191)",
