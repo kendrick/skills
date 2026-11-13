@@ -2744,6 +2744,48 @@ rm "$sc/$split_note"
 sc_out="$(bash inbox-to-memory/scripts/verify-migration.sh "$sc" --since HEAD 2>&1 || true)"
 require_output "$sc_out" "verify-link: \`$split_link\` resolves neither by name nor by id \`Kp3vR8sNq2\`"
 
+# `find -name` reads a link's stem as a glob (#260), so `[[*]]` once matched any
+# note and passed. The stem is matched literally now. Each case plants a link
+# above `## Raw Content` in the followup note, since the lint reads none below it.
+glob_followup=notes/2026-07-14-pier-lighting-followup-Wd7hT2xLm9.md
+glob_link_case() {
+  local c
+  c="$(split_case "glob-link-$1")"
+  awk -v l="See also [[$2]]." '{ print } /^Picks up from/ { print l }' \
+    "$split_fx/$glob_followup" >"$c/$glob_followup"
+  require_text "$c/$glob_followup" "See also [[$2]]."
+  printf '%s' "$c"
+}
+for glob_stem in '*' '*pier?lighting*'; do
+  sc="$(glob_link_case "${glob_stem//[^a-z]/_}" "$glob_stem")"
+  sc_out="$(run_lint "$sc")"
+  require_failure "$sc_out" "link-broken: \`$glob_stem\` resolves neither by path nor by name"
+done
+# `?` alone, with no `*` to carry the case and no 10-char id for the id try to
+# fall back on: unescaped, `pier?lighting` matches a real `pier-lighting.md`.
+sc="$(glob_link_case question-only 'pier?lighting')"
+printf '%s\n' '# pier' >"$sc/_memory/pier-lighting.md"
+sc_out="$(run_lint "$sc")"
+require_failure "$sc_out" "link-broken: \`pier?lighting\` resolves neither by path nor by name"
+# Regression guard, not a red case: an unclosed `[` already matched nothing on
+# BSD find at main. It pins the post-fix behavior on any find.
+sc="$(glob_link_case dead-bracket 'nosuch[x')"
+sc_out="$(run_lint "$sc")"
+require_failure "$sc_out" "link-broken: \`nosuch[x\` resolves neither by path nor by name"
+# A real note with a literal `[` in its filename still resolves, from another
+# directory so the path try misses and the by-name find decides.
+sc="$(glob_link_case live-bracket 'odd[1')"
+printf '%s\n' '# odd' >"$sc/_memory/odd[1.md"
+sc_out="$(run_lint "$sc")"
+refute_failure "$sc_out" "link-broken: \`odd[1\`"
+# verify-migration.sh resolves by name the same literal way.
+sc="$(glob_link_case verify-star '*')"
+git -C "$sc" init -q
+git -C "$sc" add -A
+git -C "$sc" -c user.email=t@t -c user.name=t commit -qm baseline
+sc_out="$(bash inbox-to-memory/scripts/verify-migration.sh "$sc" --since HEAD 2>&1 || true)"
+require_output "$sc_out" "verify-link: \`*\` resolves neither by name nor by id"
+
 # The prune covers notes/raw/ at any depth and reads no scope path as a glob
 # (#255 review). A client root holds project scopes with sidecars of their own,
 # and a scope under `g[1]*/` once made `-path "$scope/notes/raw"` match nothing,

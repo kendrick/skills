@@ -444,13 +444,18 @@ check_links() {
     # Authors write `[[note]]` and `[[note.md]]` for the same file.
     local stem="${target%.md}"
     [[ -f "$dir/$stem.md" ]] && continue
+    # `find -name` reads its argument as a glob, so `[[*]]` would match any note.
+    # Escape the stem (and the id below) so it matches literally.
+    local esc
+    esc="$(printf '%s' "$stem" | sed 's/[][*?\\]/\\&/g')"
     if [[ "$target" != */* ]]; then
-      find "$scope" -path '*/notes/raw' -prune -o -name "$stem.md" -print -quit | grep -q . && continue
+      find "$scope" -path '*/notes/raw' -prune -o -name "$esc.md" -print -quit | grep -q . && continue
     fi
     local base="${stem##*/}" id=""
     if [[ "$base" =~ $id_pattern ]]; then
       id="${BASH_REMATCH[1]}"
-      find "$scope" -path '*/notes/raw' -prune -o -name "*$id*.md" -print -quit | grep -q . && continue
+      esc="$(printf '%s' "$id" | sed 's/[][*?\\]/\\&/g')"
+      find "$scope" -path '*/notes/raw' -prune -o -name "*$esc*.md" -print -quit | grep -q . && continue
       # Each message names only the tries that ran. Naming a skipped try sends
       # the reader looking for a match the lint never searched for.
       if [[ "$target" == */* ]]; then
