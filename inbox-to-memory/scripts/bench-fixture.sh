@@ -321,7 +321,10 @@ def main():
             sys.stderr.write("bench-fixture: %s: no summary or title to use as query text\n" % rel(p))
             continue
         files, bad = [], False
+        # `source_refs: null` reads back as the string "null"; see the supersedes loop (#336).
         for entry in as_list(fm.get("source_refs")):
+            if entry.lower() in ("null", "~"):
+                continue
             nid = entry.split("::", 1)[1] if "::" in entry else entry
             hits = notes.get(nid, [])
             if len(hits) != 1:

@@ -2617,6 +2617,34 @@ for nullval in null '~'; do
   rm -rf "$bench_dir/nullsup"
 done
 
+# 3d. A legacy `source_refs: null` cites no notes, like `[]`: the query stays
+# with only the record as expected. D's dangling ref must still be skipped and
+# named, or the fix has stopped skipping every unresolvable ref.
+for nullval in null '~'; do
+  cp -R "$bench_scope" "$bench_dir/nullsrc"
+  perl -pi -e "s/^source_refs: .*\$/source_refs: $nullval/" "$bench_dir/nullsrc/$bench_rec_a"
+  grep -qx "source_refs: $nullval" "$bench_dir/nullsrc/$bench_rec_a" || {
+    echo "could not rewrite A's source_refs to $nullval in the bench copy" >&2
+    exit 1
+  }
+  bash "$bench" "$bench_dir/nullsrc" >"$bench_dir/nullsrc.json" 2>"$bench_dir/nullsrc.err"
+  bench_assert "$bench_dir/nullsrc.json" "A with source_refs: $nullval lost its query or expects more than itself" \
+    '"record-BnRecA0001" in q and q["record-BnRecA0001"]["expected_files"] == ["_memory/decisions/rollback-has-one-named-owner-BnRecA0001.md"]'
+  ! grep -q 'rollback-has-one-named-owner-BnRecA0001' "$bench_dir/nullsrc.err" || {
+    echo "bench-fixture complained about source_refs: $nullval:" >&2
+    cat "$bench_dir/nullsrc.err" >&2
+    exit 1
+  }
+  grep -qx "bench-fixture: $bench_rec_d: source_ref BnNoSuchNote does not resolve to a note" "$bench_dir/nullsrc.err" || {
+    echo "D's dangling source_ref went unreported with A at source_refs: $nullval:" >&2
+    cat "$bench_dir/nullsrc.err" >&2
+    exit 1
+  }
+  bench_assert "$bench_dir/nullsrc.json" "D's dangling source_ref was no longer skipped" \
+    '"record-BnRecD0004" not in q'
+  rm -rf "$bench_dir/nullsrc"
+done
+
 # 5. --questions carries its own forbidden_files and validates it like expected_files.
 cat >"$bench_dir/forbid-questions.json" <<'JSON'
 [
