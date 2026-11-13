@@ -321,7 +321,8 @@ def main():
             sys.stderr.write("bench-fixture: %s: no summary or title to use as query text\n" % rel(p))
             continue
         files, bad = [], False
-        # `source_refs: null` reads back as the string "null"; see the supersedes loop (#336).
+        # Unmigrated `schema: 2` records carry `source_refs: null`, read back as the string
+        # "null"; looked up as a note id it would drop the query. Same skip as supersedes below.
         for entry in as_list(fm.get("source_refs")):
             if entry.lower() in ("null", "~"):
                 continue
