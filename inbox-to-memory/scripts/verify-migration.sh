@@ -165,7 +165,10 @@ for target in ${link_targets[@]+"${link_targets[@]}"}; do
   # is named `<id>.md`, so a link to a note the migration deleted would otherwise
   # pass on the sidecar it left. The pattern names no scope path because `-path`
   # reads it as a glob, and a scope path holding `[` or `*` would match nothing.
-  by_name="$(find "$scope" -path '*/notes/raw' -prune -o -name "$target.md" -print -quit)"
+  # `find -name` reads its argument as a glob, so the target is escaped: `[[*]]`
+  # would otherwise match any note.
+  esc="$(printf '%s' "$target" | sed 's/[][*?\\]/\\&/g')"
+  by_name="$(find "$scope" -path '*/notes/raw' -prune -o -name "$esc.md" -print -quit)"
   if [[ -n "$by_name" ]]; then
     continue
   fi
@@ -173,7 +176,13 @@ for target in ${link_targets[@]+"${link_targets[@]}"}; do
   # resolve by name and now only resolves by id is a pass, and worth counting
   # separately from one that resolved by name both times.
   id="${target: -10}"
-  by_id="$(find "$scope" -path '*/notes/raw' -prune -o -name "*$id*.md" -print -quit)"
+  # A target under ten characters has no id: bash 5 yields "" for it, and an
+  # empty id makes `-name "**.md"`, which matches every note.
+  by_id=""
+  if [[ "${#target}" -ge 10 ]]; then
+    esc="$(printf '%s' "$id" | sed 's/[][*?\\]/\\&/g')"
+    by_id="$(find "$scope" -path '*/notes/raw' -prune -o -name "*$esc*.md" -print -quit)"
+  fi
   if [[ -n "$by_id" ]]; then
     links_fallback=$((links_fallback + 1))
     continue
