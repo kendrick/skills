@@ -6,6 +6,7 @@ title: 'Rollback has one named owner'
 status: accepted
 date: 2026-02-03
 source_refs: [Bn1RbkOwn1, Bn2FrzSrc2]
+supersedes: [BnRecC0003]
 applies_to: [cutover]
 owners: [Marcus Dell]
 tags: [governance]
