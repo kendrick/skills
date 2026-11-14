@@ -3876,6 +3876,31 @@ require_text work-issue/SKILL.md "With a template or without one, the body carri
 # listed advisories.
 require_text work-issue/SKILL.md "an existing pull request keeps its number, receives the push, and has any \`LISTED\` finding its \"Left out\" section lacks added to it"
 refute_text work-issue/SKILL.md "an existing pull request keeps its number and simply receives the push"
+# #138: a review's outcomes reach the body from disk. PR #134's carry held them
+# in the conversation, and a resume after ar-state.txt lost them.
+require_text work-issue/SKILL.md "write the report it printed, verbatim, to \`RUN_DIR/redteam/ar-report.md\`, replacing any copy an earlier attempt left"
+# Without the delete, an earlier attempt's escalation.md outlives a clean review
+# and lands in the body as stale (PR #134's third hole).
+require_text work-issue/SKILL.md "copy its run directory's \`escalation.md\` to \`RUN_DIR/redteam/escalation.md\` where this review wrote one, and delete \`RUN_DIR/redteam/escalation.md\` where this review wrote none"
+require_text work-issue/references/redteam.md "RUN_DIR/redteam/ar-report.md"
+require_text work-issue/references/redteam.md "delete \`RUN_DIR/redteam/escalation.md\` where this review wrote none"
+# Row 11 reads ar-state.txt as "finished", so a crash after it but before the
+# persist resumes past a review whose outcomes never reached disk.
+require_text work-issue/SKILL.md "Both writes land before \`RUN_DIR/redteam/ar-state.txt\`, because the resume probe reads that file as the review finished"
+require_text work-issue/SKILL.md "\`redteam/ar-report.md\` holds that review's report, and \`redteam/escalation.md\` exists exactly where that review wrote one, both written before \`ar-state.txt\`"
+# ar-state.txt counts only UNVERIFIED, so the carry reads the persisted report
+# for UNVERIFIABLE findings and UNREVIEWED territories (PR #134's second hole).
+# Template repos dropped PR #134's carry, so it sits outside "Without a
+# template:" (the fourth hole).
+require_text work-issue/SKILL.md "With a template or without one, \"Left out\" also names every finding \`RUN_DIR/redteam/escalation.md\` holds, each with its repro command"
+require_text work-issue/SKILL.md "\"Not independently verified\" names every finding \`RUN_DIR/redteam/ar-report.md\` records as \`UNVERIFIABLE\` and every territory it gives the verdict \`UNREVIEWED\`"
+require_text work-issue/SKILL.md "Read both from disk, never from the conversation"
+require_text work-issue/SKILL.md "where the template lacks either section, append it"
+# The prefix is what lets an existing PR's body drop an entry a later review no
+# longer holds, without touching what the worker wrote.
+require_text work-issue/SKILL.md "each carried entry opens with \`adversarial-review:\`"
+require_text work-issue/SKILL.md "carries every finding in \`redteam/escalation.md\` under \"Left out\" and every \`UNVERIFIABLE\` finding and \`UNREVIEWED\` territory in \`redteam/ar-report.md\` under \"Not independently verified\", whatever template the repo uses, and none an earlier review left"
+require_text _maintenance/work-issue/RATIONALE.md "persists the review's printed report to \`redteam/ar-report.md\`"
 require_text work-issue/references/resume.md "redteam/ar-state.txt"
 require_text work-issue/SKILL.md "no \`redteam/ar-state.txt\` showing \`UNVERIFIED: 0\`"
 refute_text work-issue/references/resume.md "ar_run_dir"
