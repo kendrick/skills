@@ -3886,6 +3886,11 @@ require_text work-issue/references/redteam.md "RUN_DIR/redteam/ar-report.md"
 require_text work-issue/references/redteam.md "delete \`RUN_DIR/redteam/escalation.md\` where this review wrote none"
 # Row 11 reads ar-state.txt as "finished", so a crash after it but before the
 # persist resumes past a review whose outcomes never reached disk.
+# Step 5 item 2's fix-diff review runs with the build review's ar-state.txt
+# still on disk, so a stop mid-persist would resume past the fix review with a mixed pair.
+require_text work-issue/SKILL.md "delete \`RUN_DIR/redteam/ar-state.txt\` where an earlier review left one, as the build review's sits on disk when Step 5 item 2 red-teams a fix"
+require_text work-issue/references/redteam.md "Delete \`RUN_DIR/redteam/ar-state.txt\` where an earlier review left one"
+require_text work-issue/SKILL.md "after any earlier review's \`ar-state.txt\` was deleted"
 require_text work-issue/SKILL.md "Both writes land before \`RUN_DIR/redteam/ar-state.txt\`, because the resume probe reads that file as the review finished"
 require_text work-issue/SKILL.md "\`redteam/ar-report.md\` holds that review's report, and \`redteam/escalation.md\` exists exactly where that review wrote one, both written before \`ar-state.txt\`"
 # ar-state.txt counts only UNVERIFIED, so the carry reads the persisted report
@@ -3895,7 +3900,9 @@ require_text work-issue/SKILL.md "\`redteam/ar-report.md\` holds that review's r
 require_text work-issue/SKILL.md "With a template or without one, \"Left out\" also names every finding \`RUN_DIR/redteam/escalation.md\` holds, each with its repro command"
 require_text work-issue/SKILL.md "\"Not independently verified\" names every finding \`RUN_DIR/redteam/ar-report.md\` records as \`UNVERIFIABLE\` and every territory it gives the verdict \`UNREVIEWED\`"
 require_text work-issue/SKILL.md "Read both from disk, never from the conversation"
-require_text work-issue/SKILL.md "where the template lacks either section, append it"
+require_text work-issue/SKILL.md "every territory it gives the verdict \`UNREVIEWED\`; where the template lacks either section, append it"
+# The human merging rules on an escalation, so only LISTED advisories queue.
+require_text work-issue/SKILL.md "An escalated finding gets no \`queue.md\` row, since the human merging rules on it"
 # The prefix is what lets an existing PR's body drop an entry a later review no
 # longer holds, without touching what the worker wrote.
 require_text work-issue/SKILL.md "each carried entry opens with \`adversarial-review:\`"
