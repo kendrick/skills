@@ -1,5 +1,18 @@
 {
   "about": "The order work-issue writes its artifacts, and where a crash just before each write must resume. crash-points reads bundles and sequences, and invariants and liveness read invariants, assumptions, and effects, all through resume_checks.py. Every resume value comes from references/resume.md's phase table and SKILL.md's steps, never from phase's output.",
+  "checker": {
+    "state_script": "run-state.py",
+    "run_root": "work-issue",
+    "probe_args": ["--run-dir", "{run_dir}", "--root", "{root}", "{probe}", "--herdr-state", "{herdr}"],
+    "probe_keys": ["issue", "pr"],
+    "rows": 19,
+    "steps": 9,
+    "end_phases": ["done", "wait", "stop"],
+    "herdr_states": ["working", "blocked", "idle", "done", "absent"],
+    "nullable": ["pr_state", "review_state"],
+    "null_sweep_free": ["queue_unfiled_rows"],
+    "path_cap": 40
+  },
   "bundles": {
     "open-quiet": {
       "state": "OPEN", "author": "kendrick", "reactions": [], "reviews": [], "threads": [], "comments": []

@@ -1,27 +1,49 @@
 #!/usr/bin/env python3
-"""End-to-end checks of work-issue's resume table against the writes the skill makes.
+"""End-to-end checks of a skill's resume table against the writes the skill makes.
 
     work-issue/scripts/resume_checks.py crash-points --model work-issue/scripts/write-order.json
 
 `crash-points` replays each sequence in the model, one write at a time, in a
 scratch repository with a bare origin under `mktemp -d`. Before every write,
-and once after the last, it runs the real `run-state.py probe` and `phase` and
-compares the answer with the entry's `resume`. A wrong answer prints one line:
+and once after the last, it runs the skill's real state script (`run-state.py`
+for work-issue) with `probe` and `phase` and compares the answer with the
+entry's `resume`. A wrong answer prints one line:
 
     <sequence>#<i> before <subpath>: expected <phase> row <n>, got <phase> row <n>
 
-The last line is `rows covered:` and the rows 1 through 19 that some expected
+The last line is `rows covered:` and the resume-table rows that some expected
 answer names. Exit 0 when every prefix resumes where the model says and every
 row is covered, 1 when a prefix resumes wrong or a row is missing, 3 on a usage
 error, a missing or malformed model, or a model whose writes can't be replayed.
 
-The model is a JSON object. `bundles` maps a name to a pull-request bundle in
+The model is a JSON object. Every constant that names the skill lives in its
+`checker` block, which all three subcommands read before anything else. A
+missing or malformed block exits 3 with one `resume_checks: checker: ...` line
+per problem. The keys:
+
+- `state_script`, a bare filename resolved beside this script, so a scratch
+  copy checks its own mutated script.
+- `run_root`, the directory under the git common dir that holds RUN_DIRs.
+- `probe_args`, the probe's argv after `probe`. `{run_dir}`, `{root}`,
+  `{herdr}` and `{default}` expand to the scratch's values, and `{probe}`
+  expands to `--<key> <value>` from a sequence's `probe`.
+- `probe_keys`, the keys a sequence's `probe` may take. Empty means a
+  sequence carries no `probe`.
+- `rows`, the top row number, so the rows are `1..rows`.
+- `steps`, a count, so the steps are `0..steps-1`.
+- `end_phases`, the phases after the steps. A `phase` is a step number or one
+  of these.
+- `herdr_states`, `nullable`, `null_sweep_free`, and `path_cap`, which
+  `invariants` and `liveness` read.
+
+`bundles` maps a name to a pull-request bundle in
 the shape `run-state.py review --save` writes. `sequences` is a list, and each
 sequence carries:
 
 - `name`, unique.
-- `run_dir`, the RUN_DIR's name under the scratch repo's `.git/work-issue/`.
-- `probe`, `{"issue": N}` or `{"pr": M}`, which picks the probe's flag.
+- `run_dir`, the RUN_DIR's name under the scratch repo's `.git/<run_root>/`.
+- `probe`, one of the checker's `probe_keys` with a positive integer, such as
+  `{"issue": N}` or `{"pr": M}`, which picks the probe's flag.
 - `branch`, optional, `issue-<N>` by default.
 - `bundle`, optional, the bundle in place before the first write.
 - `setup`, optional entries run first and never checked, for world state the
@@ -32,7 +54,7 @@ sequence carries:
 - `entries`, the writes in the order the skill makes them.
 - `end`, the answer once every entry has run.
 
-An entry carries `step` (0-8), `subpath`, `op` with that op's arguments, and
+An entry carries `step` (0 to `steps` less one), `subpath`, `op` with that op's arguments, and
 exactly one of `resume` or `blind`. `subpath` is the RUN_DIR subpath as
 SKILL.md spells it, `<wave>` and `<k>` included, or a world-side name:
 `branch`, `push`, `pr`, `tree` for a worker's edit, `herdr`, and `origin` for
@@ -40,7 +62,7 @@ the default branch moving under the run. A directory subpath in SKILL.md, such
 as `reports/`, is covered by any entry under it. The concrete file goes in the
 op's `path`.
 
-`resume` is `{"phase": <0-8|done|wait|stop>, "row": <1-19 or null>}`, null for
+`resume` is `{"phase": <a step or an end phase>, "row": <1..rows or null>}`, null for
 a stop whose reason names no row, or `{"exit": 3}` where probe must refuse.
 `blind` is the reason a write is safe to lose. Such a write changes nothing
 probe reads, so the prefix before it must answer what the next non-blind entry
@@ -59,7 +81,7 @@ named bundle, or none; `herdr` sets the state passed as `--herdr-state`. A
     work-issue/scripts/resume_checks.py liveness --model work-issue/scripts/write-order.json
 
 These two read the model's `invariants`, `assumptions`, and `effects`, import
-`run-state.py` from beside this script, and run `phase_of` in-process over
+the state script from beside this script, and run `phase_of` in-process over
 every non-null probe, with no git and no subprocess.
 
 They don't list probes one at a time. A field `phase_of` hasn't tested yet is
@@ -77,7 +99,7 @@ in field order that breaks it:
 
     <invariant name>: <phase> row <n> on {<the fields phase_of and the invariant read>}
 
-A null sweep then sets each field but `pr_state` and `review_state` to null in
+A null sweep then sets each field but the checker's `nullable` ones to null in
 turn, and prints `null: ...` where a null answers a step number. The last line
 is `probes: <n> leaves, <m> pruned`: the distinct answers reached, and how many
 of them only probes the assumptions rule out can reach.
@@ -86,7 +108,7 @@ of them only probes the assumptions rule out can reach.
 step's effect, `phase_of` again, until a stop, a wait, or done. A path that
 comes back to a state it already held prints
 `cycle: <phase> row <n> -> ... -> <phase> row <n> on {...}`, and one still
-going after 40 transitions prints `unbounded: ...`. The last line is
+going after `path_cap` transitions prints `unbounded: ...`. The last line is
 `paths: <n>`, the distinct moves from one answer to the next. It takes
 minutes, where `invariants` takes seconds.
 
@@ -121,11 +143,12 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-RUN_STATE = Path(__file__).resolve().parent / "run-state.py"
 DEFAULT = "main"
-ROWS = tuple(range(1, 20))
-PHASES = tuple(str(n) for n in range(9)) + ("done", "wait", "stop")
-HERDR_STATES = ("working", "blocked", "idle", "done", "absent")
+# These are set only by configure(), from the model's `checker` block, so no
+# skill's constants sit in this file.
+RUN_STATE = RUN_ROOT = PROBE_ARGS = PROBE_KEYS = None
+ROWS = STEPS = PHASES = HERDR_STATES = NULLABLE = NULL_SWEEP_FREE = ()
+PATH_CAP = 0
 OPS = {
     "write": ("path", "content"),
     "append": ("path", "content"),
@@ -155,6 +178,61 @@ class ModelError(Exception):
         super().__init__("; ".join(self.problems))
 
 
+CHECKER_KEYS = (
+    "state_script", "run_root", "probe_args", "probe_keys", "rows", "steps",
+    "end_phases", "herdr_states", "nullable", "null_sweep_free", "path_cap",
+)
+
+
+def configure(checker):
+    """Set the module's skill-specific globals from a model's `checker` block.
+    Raises ModelError naming every problem, so one run shows them all."""
+    global RUN_STATE, RUN_ROOT, PROBE_ARGS, PROBE_KEYS, ROWS, STEPS, PHASES
+    global HERDR_STATES, NULLABLE, NULL_SWEEP_FREE, PATH_CAP
+    if checker is None:
+        raise ModelError(["checker: the model has no checker block"])
+    if not isinstance(checker, dict):
+        raise ModelError(["checker: expected an object"])
+    problems = [f"checker: missing {key}" for key in CHECKER_KEYS if key not in checker]
+    problems += [f"checker: unknown key {key!r}" for key in checker if key not in CHECKER_KEYS]
+
+    def strings(key, nonempty=False):
+        value = checker.get(key)
+        if key in checker and not (
+            isinstance(value, list) and all(isinstance(v, str) and v for v in value) and (value or not nonempty)
+        ):
+            problems.append(f"checker: {key} must be a {'non-empty ' if nonempty else ''}list of non-empty strings")
+
+    for key in ("state_script", "run_root"):
+        value = checker.get(key)
+        # One path part: a RUN_DIR root or script that escaped the scratch repo or this directory would be a write or an import from elsewhere.
+        if key in checker and not (
+            isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9._-]+", value) and value not in (".", "..")
+        ):
+            problems.append(f"checker: {key} must be a bare name")
+    for key in ("probe_args", "end_phases"):
+        strings(key, nonempty=True)
+    for key in ("probe_keys", "herdr_states", "nullable", "null_sweep_free"):
+        strings(key)
+    for key in ("rows", "steps", "path_cap"):
+        value = checker.get(key)
+        if key in checker and (isinstance(value, bool) or not isinstance(value, int) or value < 1):
+            problems.append(f"checker: {key} must be a positive integer")
+    if problems:
+        raise ModelError(problems)
+    RUN_STATE = Path(__file__).resolve().parent / checker["state_script"]
+    RUN_ROOT = checker["run_root"]
+    PROBE_ARGS = tuple(checker["probe_args"])
+    PROBE_KEYS = tuple(checker["probe_keys"])
+    ROWS = tuple(range(1, checker["rows"] + 1))
+    STEPS = tuple(str(n) for n in range(checker["steps"]))
+    PHASES = STEPS + tuple(checker["end_phases"])
+    HERDR_STATES = tuple(checker["herdr_states"])
+    NULLABLE = tuple(checker["nullable"])
+    NULL_SWEEP_FREE = NULLABLE + tuple(checker["null_sweep_free"])
+    PATH_CAP = checker["path_cap"]
+
+
 def check_resume(value, where, problems):
     if not isinstance(value, dict):
         problems.append(f"{where}: expected an object")
@@ -168,7 +246,7 @@ def check_resume(value, where, problems):
             problems.append(f"{where}: phase {value['phase']!r} is not one of {', '.join(PHASES)}")
         row = value["row"]
         if row is not None and (isinstance(row, bool) or row not in ROWS):
-            problems.append(f"{where}: row {row!r} is not 1-19 or null")
+            problems.append(f"{where}: row {row!r} is not 1-{ROWS[-1]} or null")
 
 
 def check_entry(entry, where, bundles, problems, checked):
@@ -200,8 +278,8 @@ def check_entry(entry, where, bundles, problems, checked):
     if not checked:
         return
     step = entry.get("step")
-    if isinstance(step, bool) or step not in range(9):
-        problems.append(f"{where}: step {step!r} is not 0-8")
+    if isinstance(step, bool) or step not in range(len(STEPS)):
+        problems.append(f"{where}: step {step!r} is not 0-{len(STEPS) - 1}")
     if not isinstance(entry.get("subpath"), str) or not entry["subpath"].strip():
         problems.append(f"{where}: subpath must be a non-empty string")
     if ("resume" in entry) == ("blind" in entry):
@@ -240,13 +318,17 @@ def check_model(model):
         if not isinstance(seq.get("run_dir"), str) or not re.fullmatch(r"[A-Za-z0-9._-]+", seq["run_dir"]):
             problems.append(f"{where}: run_dir must be a plain directory name")
         probe = seq.get("probe")
-        if not (
+        if not PROBE_KEYS:
+            if probe is not None:
+                problems.append(f"{where}: probe must be absent, the checker names no probe_keys")
+        elif not (
             isinstance(probe, dict) and len(probe) == 1
-            and next(iter(probe)) in ("issue", "pr")
+            and next(iter(probe)) in PROBE_KEYS
             and isinstance(next(iter(probe.values())), int)
             and next(iter(probe.values())) > 0
         ):
-            problems.append(f"{where}: probe must be {{\"issue\": N}} or {{\"pr\": M}}")
+            shapes = " or ".join(f"{{\"{key}\": {letter}}}" for key, letter in zip(PROBE_KEYS, "NMKJ"))
+            problems.append(f"{where}: probe must be {shapes}")
         if "branch" in seq and (not isinstance(seq["branch"], str) or not seq["branch"]):
             problems.append(f"{where}: branch must be a non-empty string")
         if seq.get("bundle") is not None and (not isinstance(seq["bundle"], str) or seq["bundle"] not in bundles):
@@ -285,7 +367,10 @@ def check_model(model):
         raise ModelError(problems)
 
 
-def load_model(path):
+def read_model(path):
+    """The parsed model, with the module configured from its `checker` block.
+    Every subcommand reads the model through here first, because even
+    importing the state script needs the block."""
     try:
         with open(path, encoding="utf-8") as handle:
             model = json.load(handle)
@@ -293,6 +378,14 @@ def load_model(path):
         raise ModelError([f"--model {path}: no such file"])
     except (OSError, UnicodeDecodeError, ValueError) as e:
         raise ModelError([f"--model {path}: {e}"])
+    if not isinstance(model, dict):
+        raise ModelError([f"model: expected a JSON object, got {type(model).__name__}"])
+    configure(model.get("checker"))
+    return model
+
+
+def load_model(path):
+    model = read_model(path)
     check_model(model)
     return model
 
@@ -322,12 +415,12 @@ class Scratch:
     def __init__(self, base, seq, bundles):
         self.base = base
         self.bundles = bundles
-        self.branch = seq.get("branch") or f"issue-{seq['probe'].get('issue')}"
-        self.probe_flag = ["--issue", str(seq["probe"]["issue"])] if "issue" in seq["probe"] else ["--pr", str(seq["probe"]["pr"])]
+        self.probe = seq.get("probe") or {}
+        self.branch = seq.get("branch") or f"issue-{self.probe.get('issue')}"
         self.root = base / "repo"
         self.origin = base / "repo.origin"
         self.tree = self.root
-        self.run_dir = self.root / ".git" / "work-issue" / seq["run_dir"]
+        self.run_dir = self.root / ".git" / RUN_ROOT / seq["run_dir"]
         self.bundle = seq.get("bundle")
         self.herdr = "absent"
         # File times start well in the past and step one second per write, so
@@ -447,10 +540,16 @@ class Scratch:
 
     def answer(self):
         """What probe and phase say now: `{"phase", "row"}` or `{"exit", "why"}`."""
-        args = [
-            sys.executable, str(RUN_STATE), "probe", "--run-dir", str(self.run_dir),
-            "--root", str(self.root), *self.probe_flag, "--herdr-state", self.herdr,
-        ]
+        values = {
+            "{run_dir}": str(self.run_dir), "{root}": str(self.root),
+            "{herdr}": self.herdr, "{default}": DEFAULT,
+        }
+        args = [sys.executable, str(RUN_STATE), "probe"]
+        for token in PROBE_ARGS:
+            if token == "{probe}":
+                args += [part for key, value in self.probe.items() for part in (f"--{key}", str(value))]
+            else:
+                args.append(values.get(token, token))
         if self.bundle is not None:
             bundle_file = self.base / "bundle.json"
             bundle_file.write_text(json.dumps(self.bundles[self.bundle]))
@@ -580,23 +679,17 @@ def cmd_crash_points(args):
 # on probes they enumerate, so they need no git and no subprocess.
 
 ATOM_OPS = ("==", "!=", "in", "<", "<=", ">", ">=")
-STEPS = tuple(str(n) for n in range(9))
-# A full run is under 20 transitions, and two review rounds add about 6, so a
-# path still going at 40 has no end the model can see.
-PATH_CAP = 40
-# Null is an answer for these two (no pull request yet), so they keep it in
-# their domains, and the null sweep never nulls them.
-NULLABLE = ("pr_state", "review_state")
-# The fields the null sweep enumerates: the two above, and the one row 1
-# reads ahead of the generic null check.
-NULL_SWEEP_FREE = NULLABLE + ("queue_unfiled_rows",)
+# The checker block's path_cap, NULLABLE and NULL_SWEEP_FREE: null is an answer
+# for the nullable fields, so they keep it in their domains and the null sweep
+# never nulls them, and the sweep's free fields also include any a row reads
+# ahead of the generic null check.
 # Enough only while `phase_of` compares counts with 0 and with each other,
 # which `bound_check` enforces.
 COUNT_DOMAIN = (0, 1, 2)
 
 
 def load_run_state():
-    """Import `run-state.py` from beside this script, so a scratch copy's
+    """Import the state script from beside this script, so a scratch copy's
     mutated script is the one checked."""
     import importlib.util
     spec = importlib.util.spec_from_file_location("run_state_under_check", RUN_STATE)
@@ -704,8 +797,8 @@ def check_effects(effects, domains, problems):
             problems.append(f"{where}: expected an object")
             continue
         step = effect.get("step")
-        if isinstance(step, bool) or step not in range(9) or step in seen:
-            problems.append(f"{where}: step {step!r} is not a unique 0-8")
+        if isinstance(step, bool) or step not in range(len(STEPS)) or step in seen:
+            problems.append(f"{where}: step {step!r} is not a unique 0-{len(STEPS) - 1}")
         else:
             # Only a valid step goes in: a list one is unhashable.
             seen.add(step)
@@ -751,22 +844,13 @@ def check_effects(effects, domains, problems):
             # One outcome that writes a field two ways has no single meaning.
             for field in sorted(set(outcome.get("set") or {}) & set(outcome.get("add") or {})):
                 problems.append(f"{at}: {field} is in both set and add")
-    missing = [n for n in range(9) if n not in seen]
+    missing = [n for n in range(len(STEPS)) if n not in seen]
     if missing:
         problems.append("effects: no effect for step " + ", ".join(str(n) for n in missing))
 
 
-def load_logic_model(path, domains):
+def load_logic_model(model, domains):
     """The model's `invariants`, `assumptions`, and `effects`, or ModelError."""
-    try:
-        with open(path, encoding="utf-8") as handle:
-            model = json.load(handle)
-    except FileNotFoundError:
-        raise ModelError([f"--model {path}: no such file"])
-    except (OSError, UnicodeDecodeError, ValueError) as e:
-        raise ModelError([f"--model {path}: {e}"])
-    if not isinstance(model, dict):
-        raise ModelError([f"model: expected a JSON object, got {type(model).__name__}"])
     problems = []
     if not model.get("invariants"):
         problems.append("invariants: expected a non-empty list")
@@ -1221,7 +1305,7 @@ INLINE_NODES = (
 
 def lazy_phase_of(run_state):
     """`phase_of` with each single-assignment local whose value is a pure
-    probe read inlined at its uses, compiled into a copy of run-state's
+    probe read inlined at its uses, compiled into a copy of the state script's
     globals with `count` and `null_fields` swapped for the search.
 
     `phase_of` computes `branch_anywhere`, `redteam_clean`, and the rest up
@@ -1451,8 +1535,14 @@ def read_set(run_state, probe):
 
 
 def logic_setup(args):
-    """The imported run-state module, its field domains, the model, and the
+    """The imported state-script module, its field domains, the model, and the
     inlined `phase_of` namespace, or None after reporting an exit 3."""
+    try:
+        model = read_model(args.model)
+    except ModelError as e:
+        for problem in e.problems:
+            sys.stderr.write(f"resume_checks: {problem}\n")
+        return None
     try:
         run_state = load_run_state()
     except Exception as e:
@@ -1460,7 +1550,7 @@ def logic_setup(args):
         return None
     domains = domains_of(run_state)
     try:
-        model = load_logic_model(args.model, domains)
+        model = load_logic_model(model, domains)
     except ModelError as e:
         for problem in e.problems:
             sys.stderr.write(f"resume_checks: {problem}\n")
@@ -1722,7 +1812,7 @@ def cmd_liveness(args):
 
 
 def parse_args(argv):
-    ap = argparse.ArgumentParser(description="End-to-end checks of work-issue's resume table.")
+    ap = argparse.ArgumentParser(description="End-to-end checks of a skill's resume table.")
     sub = ap.add_subparsers(dest="command", required=True)
     c = sub.add_parser("crash-points", help="replay every write-sequence prefix through probe and phase")
     c.add_argument("--model", metavar="MODEL", required=True, help="write-order.json")
