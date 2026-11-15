@@ -1,0 +1,382 @@
+{
+  "about": "The order work-wave writes its artifacts, and where a crash just before each write must resume. crash-points reads sequences through resume_checks.py, vendored from work-issue. Every resume value comes from SKILL.md's Resume table and its steps, never from phase's output.",
+  "checker": {
+    "state_script": "wave-state.py",
+    "run_root": "work-wave",
+    "probe_args": [
+      "--wave-dir",
+      "{run_dir}",
+      "--root",
+      "{root}",
+      "--default",
+      "{default}"
+    ],
+    "probe_keys": [],
+    "rows": 11,
+    "steps": 9,
+    "end_phases": [
+      "done",
+      "stop"
+    ],
+    "herdr_states": [],
+    "nullable": [],
+    "null_sweep_free": [],
+    "path_cap": 40
+  },
+  "sequences": [
+    {
+      "name": "main",
+      "run_dir": "wave-7-8",
+      "entries": [
+        {
+          "step": 0,
+          "subpath": "lanes.md",
+          "op": "write",
+          "path": "lanes.md",
+          "content": "| Lane | Title | Plan | Worktree | Run dir |\n|---|---|---|---|---|\n| 7 | seven | /p/7.md | /w/7 | /r/7 |\n| 8 | eight | /p/8.md | /w/8 | /r/8 |\n",
+          "resume": {
+            "phase": "0",
+            "row": 2
+          },
+          "cite": "Resume row 2: no WAVE_DIR, or WAVE_DIR with lanes.md or harvest.md missing; Step 0"
+        },
+        {
+          "step": 0,
+          "subpath": "harvest.md",
+          "op": "write",
+          "path": "harvest.md",
+          "content": "started: none\nsiblings: none\nVERIFY_CMD: absent\nINSTALL_CMD: absent\nCONTRACT_PATHS: none\n",
+          "resume": {
+            "phase": "0",
+            "row": 2
+          },
+          "cite": "Resume row 2: no WAVE_DIR, or WAVE_DIR with lanes.md or harvest.md missing; Step 0; Step 0 item 6 writes harvest.md last"
+        },
+        {
+          "step": 1,
+          "subpath": "footprint/issue-<N>.md",
+          "op": "write",
+          "path": "footprint/issue-7.md",
+          "content": "src/seven.py\n",
+          "resume": {
+            "phase": "1",
+            "row": 3
+          },
+          "cite": "Resume row 3: lanes.md and harvest.md, and no footprint/check.txt; Step 1"
+        },
+        {
+          "step": 1,
+          "subpath": "footprint/issue-<N>.md",
+          "op": "write",
+          "path": "footprint/issue-8.md",
+          "content": "src/eight.py\n",
+          "resume": {
+            "phase": "1",
+            "row": 3
+          },
+          "cite": "Resume row 3: lanes.md and harvest.md, and no footprint/check.txt; Step 1"
+        },
+        {
+          "step": 1,
+          "subpath": "footprint/check.txt",
+          "op": "write",
+          "path": "footprint/check.txt",
+          "content": "pair: issue-7 issue-8\nOK: 2 lanes disjoint (checked 0 in-flight runs)\n",
+          "resume": {
+            "phase": "1",
+            "row": 3
+          },
+          "cite": "Resume row 3: lanes.md and harvest.md, and no footprint/check.txt; Step 1; Step 1 saves check.txt on exit 0 only"
+        },
+        {
+          "step": 2,
+          "subpath": "coupling.md",
+          "op": "write",
+          "path": "coupling.md",
+          "content": "| Pair | Answer | Evidence | Resolution |\n|---|---|---|---|\n| issue-7 issue-8 | independent | read both plans, found no shared module | none |\n",
+          "resume": {
+            "phase": "2",
+            "row": 4
+          },
+          "cite": "Resume row 4: check.txt, and coupling.md or order.md missing; Step 2"
+        },
+        {
+          "step": 2,
+          "subpath": "order.md",
+          "op": "write",
+          "path": "order.md",
+          "content": "| Order | Lane | After | Why |\n|---|---|---|---|\n| 1 | issue-7 | — | no coupling; number order |\n| 2 | issue-8 | — | no coupling; number order |\n",
+          "resume": {
+            "phase": "2",
+            "row": 4
+          },
+          "cite": "Resume row 4: check.txt, and coupling.md or order.md missing; Step 2"
+        },
+        {
+          "step": 4,
+          "subpath": "baseline.txt",
+          "op": "write",
+          "path": "baseline.txt",
+          "content": "baseline tail\n",
+          "blind": "no row reads baseline.txt, and Step 4 writes it before merge-test/0.md, so losing it leaves row 5 re-running the whole baseline",
+          "cite": "Step 4: VERIFY_CMD's tail to baseline.txt, then the run recorded as merge-test/0.md"
+        },
+        {
+          "id": "baseline",
+          "step": 4,
+          "subpath": "merge-test/<k>.md",
+          "op": "write",
+          "path": "merge-test/0.md",
+          "content": "base: origin/main {rev:origin/main}\nresult: green\nbaseline tail\n",
+          "resume": {
+            "phase": "3",
+            "row": 5
+          },
+          "cite": "Resume row 5: order.md, and no merge-test/0.md; Step 3's confirmation again, then Step 4"
+        },
+        {
+          "id": "build",
+          "interleave": [
+            [
+              {
+                "step": 4,
+                "subpath": "lane-run-dir",
+                "op": "write",
+                "common": true,
+                "path": "work-issue/issue-7/plan.md",
+                "content": "# plan for issue 7\n",
+                "blind": "the probe reads a lane RUN_DIR only for row 1, which needs the wave under closed/; the lane's own work-issue resumes from it",
+                "cite": "Step 4: work-issue's Step 1 makes the lane's worktree, branch, and RUN_DIR"
+              },
+              {
+                "step": 4,
+                "subpath": "branch",
+                "op": "branch",
+                "name": "issue-7",
+                "blind": "no row reads a lane's branch until a merge test records the merge set, and none exists yet",
+                "cite": "Step 4: every git write on a lane's branch belongs to that lane's work-issue"
+              },
+              {
+                "step": 4,
+                "subpath": "commit",
+                "op": "edit",
+                "file": "lane-7.txt",
+                "content": "lane 7\n",
+                "blind": "a worker's edit is the work tree half of the lane's commit, and no row reads the work tree",
+                "cite": "Step 4: every git write on a lane's branch belongs to that lane's work-issue"
+              },
+              {
+                "step": 4,
+                "subpath": "commit",
+                "op": "commit",
+                "branch": "issue-7",
+                "paths": [
+                  "lane-7.txt"
+                ],
+                "message": "lane 7",
+                "blind": "no row reads a lane's HEAD until a merge test records the merge set, and none exists yet",
+                "cite": "Step 4: every git write on a lane's branch belongs to that lane's work-issue"
+              },
+              {
+                "step": 4,
+                "subpath": "facts/issue-<N>.md",
+                "op": "write",
+                "path": "facts/issue-7.md",
+                "content": "- [issue-7] a fact the lane learned\n",
+                "blind": "no row reads facts/; Step 5 item 1 reads it beside the build report",
+                "cite": "Step 5 item 1: the facts file is the one the lane wrote as it went"
+              },
+              {
+                "step": 4,
+                "subpath": "reports/issue-<N>-build.json",
+                "op": "write",
+                "path": "reports/issue-7-build.json",
+                "content": "{\"issue\": 7, \"status\": \"done\", \"pr\": null}\n",
+                "resume": {
+                  "phase": "4",
+                  "row": 7
+                },
+                "cite": "Resume row 7: some unheld lane has no reports/issue-N-build.json; Step 4 for those lanes only"
+              },
+              {
+                "step": 5,
+                "subpath": "gate/issue-<N>.md",
+                "op": "write",
+                "path": "gate/issue-7.md",
+                "content": "route: done\nfootprint re-check: exit 0\nmerge test: none\n",
+                "resume": {
+                  "phase": "5",
+                  "row": 6
+                },
+                "cite": "Resume row 6: some saved build report has no gate/issue-<N>.md; Step 5 for the ungated reports only"
+              }
+            ],
+            [
+              {
+                "step": 4,
+                "subpath": "lane-run-dir",
+                "op": "write",
+                "common": true,
+                "path": "work-issue/issue-8/plan.md",
+                "content": "# plan for issue 8\n",
+                "blind": "the probe reads a lane RUN_DIR only for row 1, which needs the wave under closed/; the lane's own work-issue resumes from it",
+                "cite": "Step 4: work-issue's Step 1 makes the lane's worktree, branch, and RUN_DIR"
+              },
+              {
+                "step": 4,
+                "subpath": "branch",
+                "op": "branch",
+                "name": "issue-8",
+                "blind": "no row reads a lane's branch until a merge test records the merge set, and none exists yet",
+                "cite": "Step 4: every git write on a lane's branch belongs to that lane's work-issue"
+              },
+              {
+                "step": 4,
+                "subpath": "commit",
+                "op": "edit",
+                "file": "lane-8.txt",
+                "content": "lane 8\n",
+                "blind": "a worker's edit is the work tree half of the lane's commit, and no row reads the work tree",
+                "cite": "Step 4: every git write on a lane's branch belongs to that lane's work-issue"
+              },
+              {
+                "step": 4,
+                "subpath": "commit",
+                "op": "commit",
+                "branch": "issue-8",
+                "paths": [
+                  "lane-8.txt"
+                ],
+                "message": "lane 8",
+                "blind": "no row reads a lane's HEAD until a merge test records the merge set, and none exists yet",
+                "cite": "Step 4: every git write on a lane's branch belongs to that lane's work-issue"
+              },
+              {
+                "step": 4,
+                "subpath": "facts/issue-<N>.md",
+                "op": "write",
+                "path": "facts/issue-8.md",
+                "content": "- [issue-8] a fact the lane learned\n",
+                "blind": "no row reads facts/; Step 5 item 1 reads it beside the build report",
+                "cite": "Step 5 item 1: the facts file is the one the lane wrote as it went"
+              },
+              {
+                "step": 4,
+                "subpath": "reports/issue-<N>-build.json",
+                "op": "write",
+                "path": "reports/issue-8-build.json",
+                "content": "{\"issue\": 8, \"status\": \"done\", \"pr\": null}\n",
+                "resume": {
+                  "phase": "4",
+                  "row": 7
+                },
+                "cite": "Resume row 7: some unheld lane has no reports/issue-N-build.json; Step 4 for those lanes only"
+              },
+              {
+                "step": 5,
+                "subpath": "gate/issue-<N>.md",
+                "op": "write",
+                "path": "gate/issue-8.md",
+                "content": "route: done\nfootprint re-check: exit 0\nmerge test: none\n",
+                "resume": {
+                  "phase": "5",
+                  "row": 6
+                },
+                "cite": "Resume row 6: some saved build report has no gate/issue-<N>.md; Step 5 for the ungated reports only"
+              }
+            ]
+          ]
+        },
+        {
+          "id": "merge-test",
+          "step": 6,
+          "subpath": "merge-test/<k>.md",
+          "op": "write",
+          "path": "merge-test/1.md",
+          "content": "base: origin/main {rev:origin/main}\nissue-7 {rev:issue-7}\nissue-8 {rev:issue-8}\nresult: green\nverify tail\n",
+          "resume": {
+            "phase": "6",
+            "row": 8
+          },
+          "cite": "Resume row 8: every gate record, and no merge-test/<k>.md with k > 0 recording exactly the merge set at its current HEADs; Step 6; merge-test.md step 6 gives the record's line order"
+        },
+        {
+          "id": "publish",
+          "interleave": [
+            [
+              {
+                "step": 7,
+                "subpath": "reports/issue-<N>-publish.json",
+                "op": "write",
+                "path": "reports/issue-7-publish.json",
+                "content": "{\"issue\": 7, \"status\": \"done\", \"pr\": \"https://github.com/o/r/pull/7\"}\n",
+                "resume": {
+                  "phase": "7",
+                  "row": 9
+                },
+                "cite": "Resume row 9: a green merge test over exactly the merge set at its current HEADs, origin/DEFAULT equal to its base:, and this lane has no publish report; Step 7 for those lanes only"
+              }
+            ],
+            [
+              {
+                "step": 7,
+                "subpath": "reports/issue-<N>-publish.json",
+                "op": "write",
+                "path": "reports/issue-8-publish.json",
+                "content": "{\"issue\": 8, \"status\": \"done\", \"pr\": \"https://github.com/o/r/pull/8\"}\n",
+                "resume": {
+                  "phase": "7",
+                  "row": 9
+                },
+                "cite": "Resume row 9: a green merge test over exactly the merge set at its current HEADs, origin/DEFAULT equal to its base:, and this lane has no publish report; Step 7 for those lanes only"
+              }
+            ]
+          ]
+        },
+        {
+          "step": 8,
+          "subpath": "lane-run-dir",
+          "op": "rename",
+          "common": true,
+          "path": "work-issue/issue-7",
+          "to": "work-issue/closed/issue-7",
+          "resume": {
+            "phase": "8",
+            "row": 11
+          },
+          "cite": "Resume row 11: every publish report, and a merge test green over exactly the merge set at its current HEADs; Step 8's report; work-issue moves a finished run to <COMMON>/work-issue/closed/issue-<N>/"
+        },
+        {
+          "step": 8,
+          "subpath": "lane-run-dir",
+          "op": "rename",
+          "common": true,
+          "path": "work-issue/issue-8",
+          "to": "work-issue/closed/issue-8",
+          "resume": {
+            "phase": "8",
+            "row": 11
+          },
+          "cite": "Resume row 11: every publish report, and a merge test green over exactly the merge set at its current HEADs; Step 8's report"
+        },
+        {
+          "step": 8,
+          "subpath": "closed",
+          "op": "rename",
+          "common": true,
+          "path": "work-wave/wave-7-8",
+          "to": "work-wave/closed/wave-7-8",
+          "resume": {
+            "phase": "8",
+            "row": 11
+          },
+          "cite": "Resume row 11: every publish report, and a merge test green over exactly the merge set at its current HEADs; Step 8's report; Step 8 moves WAVE_DIR to closed/ only once every lane's RUN_DIR has moved to its closed/"
+        }
+      ],
+      "end": {
+        "phase": "done",
+        "row": 1
+      }
+    }
+  ]
+}

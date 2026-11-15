@@ -55,7 +55,18 @@ sequence carries:
 - `end`, the answer once every entry has run.
 
 An entry carries `step` (0 to `steps` less one), `subpath`, `op` with that op's arguments, and
-exactly one of `resume` or `blind`. `subpath` is the RUN_DIR subpath as
+exactly one of `resume` or `blind`. An entry may instead be
+`{"interleave": [[lane entries], [lane entries]]}`, two or three lists of
+ordinary entries that run concurrently, such as a wave's lanes. Its crash
+points are progress vectors, how many entries each lane has written, and
+every vector is replayed in a fresh scratch: the entries before the block,
+then each lane's first entries in lane order. That's sound only while the
+probe is blind to write order. A lane's demand is the `resume` of its next
+non-blind entry, or the checkpoint after the block once the lane is done,
+and the expected answer is the demand with the lowest row, since a resume
+table is first-match-wins. Two demands that differ on one row, or differ
+where one names no row, exit 3. A wrong answer prints
+`<sequence>#<i>@<p1>.<p2>[.<p3>]: expected ..., got ...`. `subpath` is the RUN_DIR subpath as
 SKILL.md spells it, `<wave>` and `<k>` included, or a world-side name:
 `branch`, `push`, `pr`, `tree` for a worker's edit, `herdr`, and `origin` for
 the default branch moving under the run. A directory subpath in SKILL.md, such
@@ -69,13 +80,19 @@ probe reads, so the prefix before it must answer what the next non-blind entry
 expects.
 `cite`, optional, names the prose the answer was read from.
 
-Ops: `write`, `append`, `remove`, and `rename` act on RUN_DIR paths; `edit`
-writes a file in the work tree; `commit`, `branch`, `push`, `rebase` (with
+Ops: `write`, `append`, `remove`, and `rename` act on RUN_DIR paths, or with
+`common: true` on paths under the scratch repo's `.git/`, such as another
+skill's RUN_DIR or a `closed/` move; `edit` writes a file in the work tree;
+`commit` (switching first to its optional `branch`), `branch` (creating its
+optional `name`, the sequence's branch by default), `push`, `rebase` (with
 `conflict: true` where it must stop), and `resolve` drive git; `worktree`
 checks the branch out in its own tree from origin; `upstream` commits to
 origin's `branch`, `main` by default, from a throwaway clone; `pr` swaps in a
 named bundle, or none; `herdr` sets the state passed as `--herdr-state`. A
-`content` of `{head}` or `{merge_base}` is replaced with that SHA.
+`content` of `{head}` or `{merge_base}` is replaced with that SHA, and
+`{rev:<ref>}` with `git rev-parse <ref>`. Inside an interleave block a
+`{rev:...}` may name only a branch its own lane makes, because another
+lane's branch may not exist yet at a given vector.
 
     work-issue/scripts/resume_checks.py invariants --model work-issue/scripts/write-order.json
     work-issue/scripts/resume_checks.py liveness --model work-issue/scripts/write-order.json
@@ -129,6 +146,11 @@ step needs one outcome with no `if`.
 
 Standard library only, so the skill stays copy-in portable.
 """
+# Vendored byte for byte into work-wave/scripts/resume_checks.py, 2026-11-14.
+# work-issue/scripts/resume_checks.py is authoritative:
+# fix a bug there first, then re-copy. This header sits in both copies so
+# `cmp` holds between them.
+# Every skill constant lives in each model's `checker` block.
 import argparse
 import ast
 import itertools
@@ -167,6 +189,9 @@ OPS = {
 }
 PHASE_LINE = re.compile(r"phase: (\S+) reason: (.*)")
 ROW_REASON = re.compile(r"row ([0-9]+):")
+REV = re.compile(r"\{rev:([^{}]*)\}")
+REF_NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9._/-]*")
+COMMON_OPS = ("write", "append", "remove", "rename")
 
 
 class ModelError(Exception):
@@ -275,6 +300,16 @@ def check_entry(entry, where, bundles, problems, checked):
         problems.append(f"{where}: no bundle named {entry.get('bundle')!r}")
     if op == "herdr" and entry.get("state") not in HERDR_STATES:
         problems.append(f"{where}: herdr state {entry.get('state')!r} is not one of {', '.join(HERDR_STATES)}")
+    if "common" in entry and (op not in COMMON_OPS or not isinstance(entry["common"], bool)):
+        problems.append(f"{where}: common must be true or false, on {', '.join(COMMON_OPS)} only")
+    # A ref starting with "-" would reach git as an option.
+    for key, ops in (("name", ("branch",)), ("branch", ("commit", "upstream"))):
+        if key in entry and (op not in ops or not isinstance(entry[key], str) or not REF_NAME.fullmatch(entry[key])):
+            problems.append(f"{where}: {key} must be a branch name, on {' or '.join(ops)} only")
+    if isinstance(entry.get("content"), str):
+        for ref in REV.findall(entry["content"]):
+            if not REF_NAME.fullmatch(ref):
+                problems.append(f"{where}: {{rev:{ref}}} must name a ref")
     if not checked:
         return
     step = entry.get("step")
@@ -291,6 +326,36 @@ def check_entry(entry, where, bundles, problems, checked):
             problems.append(f"{where}: blind needs a reason")
     else:
         check_resume(entry["resume"], f"{where}.resume", problems)
+
+
+def check_block(entry, where, bundles, problems):
+    """Problems with one interleave block. Two or three lanes is the bound:
+    vectors grow as the product of the lanes' lengths, each one a fresh
+    scratch replay."""
+    extra = sorted(set(entry) - {"interleave", "id"})
+    if extra:
+        problems.append(f"{where}: an interleave block takes interleave and id only, got {', '.join(extra)}")
+    lanes = entry["interleave"]
+    if not isinstance(lanes, list) or len(lanes) not in (2, 3):
+        got = len(lanes) if isinstance(lanes, list) else type(lanes).__name__
+        problems.append(f"{where}: interleave needs 2 or 3 lane lists, got {got}")
+        return
+    for j, lane in enumerate(lanes):
+        at = f"{where}@lane{j + 1}"
+        if not isinstance(lane, list) or not lane:
+            problems.append(f"{at}: a lane must be a non-empty list of entries")
+            continue
+        own = {e.get("name") for e in lane if isinstance(e, dict) and e.get("op") == "branch"}
+        own |= {e.get("branch") for e in lane if isinstance(e, dict) and e.get("op") == "commit"}
+        for k, e in enumerate(lane):
+            if isinstance(e, dict) and "interleave" in e:
+                problems.append(f"{at}[{k}]: interleave blocks don't nest")
+                continue
+            check_entry(e, f"{at}[{k}]", bundles, problems, checked=True)
+            content = e.get("content") if isinstance(e, dict) else None
+            for ref in REV.findall(content) if isinstance(content, str) else ():
+                if ref not in own:
+                    problems.append(f"{at}[{k}]: {{rev:{ref}}} names a branch this lane doesn't make")
 
 
 def check_model(model):
@@ -356,7 +421,10 @@ def check_model(model):
             problems.append(f"{where}: entries must be a non-empty list")
             entries = []
         for i, entry in enumerate(entries):
-            check_entry(entry, f"{where}#{i}", bundles, problems, checked=True)
+            if isinstance(entry, dict) and "interleave" in entry:
+                check_block(entry, f"{where}#{i}", bundles, problems)
+            else:
+                check_entry(entry, f"{where}#{i}", bundles, problems, checked=True)
         if "end" not in seq:
             problems.append(f"{where}: needs end")
         else:
@@ -398,8 +466,37 @@ def expectations(seq):
     entries = seq["entries"]
     expected = [None] * len(entries) + [seq["end"]]
     for i in range(len(entries) - 1, -1, -1):
-        expected[i] = expected[i + 1] if "blind" in entries[i] else entries[i]["resume"]
+        if "interleave" in entries[i]:
+            lanes = entries[i]["interleave"]
+            expected[i] = combined(lanes, [0] * len(lanes), expected[i + 1], f"sequence {seq['name']}#{i}")
+        else:
+            expected[i] = expected[i + 1] if "blind" in entries[i] else entries[i]["resume"]
     return expected
+
+
+def vector_name(vector):
+    return ".".join(str(p) for p in vector)
+
+
+def combined(lanes, vector, after, where):
+    """The answer expected once each lane has written `vector[j]` of its
+    entries: each lane's demand, then the one with the lowest row."""
+    demands = []
+    for lane, done in zip(lanes, vector):
+        nxt = next((e["resume"] for e in lane[done:] if "blind" not in e), after)
+        if nxt not in demands:
+            demands.append(nxt)
+    if len(demands) == 1:
+        return demands[0]
+    at = f"{where}@{vector_name(vector)}"
+    if any("exit" in d or d["row"] is None for d in demands):
+        raise ModelError([f"{at}: lanes demand {', '.join(show(d) for d in demands)}, and one names no row to rank by"])
+    rows = sorted({d["row"] for d in demands})
+    for row in rows:
+        phases = [d["phase"] for d in demands if d["row"] == row]
+        if len(phases) > 1:
+            raise ModelError([f"{at}: lanes demand row {row} as phases {', '.join(phases)}"])
+    return next(d for d in demands if d["row"] == rows[0])
 
 
 def show(answer):
@@ -482,11 +579,12 @@ class Scratch:
         if "{merge_base}" in content:
             sha = self.git(self.root, "merge-base", f"origin/{DEFAULT}", self.branch).stdout.strip()
             content = content.replace("{merge_base}", sha)
-        return content
+        return REV.sub(lambda m: self.git(self.root, "rev-parse", "--verify", m.group(1)).stdout.strip(), content)
 
     def apply(self, entry):
         op = entry["op"]
-        run_path = self.run_dir / entry["path"] if "path" in entry else None
+        home = self.root / ".git" if entry.get("common") else self.run_dir
+        run_path = home / entry["path"] if "path" in entry else None
         if op in ("write", "append"):
             run_path.parent.mkdir(parents=True, exist_ok=True)
             with open(run_path, "a" if op == "append" else "w", encoding="utf-8") as handle:
@@ -495,15 +593,21 @@ class Scratch:
         elif op == "remove":
             run_path.unlink()
         elif op == "rename":
-            target = self.run_dir / entry["to"]
+            target = home / entry["to"]
+            # A skill's closing move can target a `closed/` that doesn't exist yet.
+            target.parent.mkdir(parents=True, exist_ok=True)
             run_path.rename(target)
             self.tick(target)
         elif op == "edit":
             (self.tree / entry["file"]).write_text(entry["content"])
         elif op == "commit":
+            if "branch" in entry:
+                self.branch = entry["branch"]
+                self.git(self.tree, "switch", "-q", self.branch)
             self.git(self.tree, "add", "--", *entry["paths"])
             self.git(self.tree, "commit", "-q", "-m", entry["message"])
         elif op == "branch":
+            self.branch = entry.get("name", self.branch)
             self.git(self.root, "fetch", "-q", "origin", DEFAULT)
             self.git(self.root, "switch", "-q", "-c", self.branch, f"origin/{DEFAULT}")
         elif op == "push":
@@ -564,7 +668,8 @@ class Scratch:
             capture_output=True, text=True, env=self.env, cwd=self.base,
         )
         match = PHASE_LINE.fullmatch(phase.stdout.strip())
-        if phase.returncode != 0 or not match:
+        # A state script may exit 1 on a stop, as wave-state.py does, and still answer.
+        if phase.returncode not in (0, 1) or not match:
             return {"exit": phase.returncode, "why": first_line(phase.stderr or phase.stdout)}
         row = ROW_REASON.match(match.group(2))
         return {"phase": match.group(1), "row": int(row.group(1)) if row else None}
@@ -584,7 +689,13 @@ def agrees(expected, got):
 
 
 def apply_entry(scratch, entry, where):
-    """Apply one entry, turning a write the model can't make into a ModelError."""
+    """Apply one entry, turning a write the model can't make into a ModelError.
+    An interleave block applies whole, each lane in turn."""
+    if "interleave" in entry:
+        for j, lane in enumerate(entry["interleave"]):
+            for k, lane_entry in enumerate(lane):
+                apply_entry(scratch, lane_entry, f"{where}@lane{j + 1}[{k}]")
+        return
     try:
         scratch.apply(entry)
     except ModelError as e:
@@ -596,10 +707,9 @@ def apply_entry(scratch, entry, where):
         raise ModelError([f"{where}: {type(e).__name__}: {e}"])
 
 
-def run_sequence(model, seq, base):
-    """Replay one sequence and return its wrong prefixes as printable lines."""
+def unchecked_entries(model, seq):
+    """(label, entry) for the setup and prefix a sequence replays unchecked."""
     by_name = {s["name"]: s for s in model["sequences"]}
-    scratch = Scratch(base, seq, model.get("bundles", {}))
     unchecked = [(f"setup[{j}]", entry) for j, entry in enumerate(seq.get("setup", []))]
     prefix = seq.get("prefix")
     if prefix:
@@ -609,16 +719,63 @@ def run_sequence(model, seq, base):
             unchecked.append((f"prefix {source['name']}#{k}", entry))
             if entry.get("id") == prefix["through"]:
                 break
-    for label, entry in unchecked:
+    return unchecked
+
+
+def shown_answer(got):
+    return show(got) + (f" ({got['why']})" if got.get("why") else "")
+
+
+def run_block(model, seq, i, after, base):
+    """Wrong answers at every progress vector of the interleave block at
+    entries[i] but the last, which is the checkpoint after the block and is
+    checked there. Each vector gets a fresh scratch, so no vector's answer
+    depends on the order the vectors ran in."""
+    lanes = seq["entries"][i]["interleave"]
+    vectors = list(itertools.product(*(range(len(lane) + 1) for lane in lanes)))[:-1]
+
+    def one(vector):
+        name = vector_name(vector)
+        where = f"sequence {seq['name']}#{i}@{name}"
+        expected = combined(lanes, list(vector), after, f"sequence {seq['name']}#{i}")
+        vector_base = base / f"block-{i}@{name}"
+        vector_base.mkdir()
+        scratch = Scratch(vector_base, seq, model.get("bundles", {}))
+        for label, entry in unchecked_entries(model, seq):
+            apply_entry(scratch, entry, f"sequence {seq['name']} {label}")
+        for k, entry in enumerate(seq["entries"][:i]):
+            apply_entry(scratch, entry, f"sequence {seq['name']}#{k}")
+        for j, (lane, done) in enumerate(zip(lanes, vector)):
+            for k, entry in enumerate(lane[:done]):
+                apply_entry(scratch, entry, f"{where} lane{j + 1}[{k}]")
+        got = scratch.answer()
+        wrong = []
+        if not agrees(expected, got):
+            wrong.append(f"{seq['name']}#{i}@{name}: expected {show(expected)}, got {shown_answer(got)}")
+        wrong += [f"{seq['name']}#{i}@{name}: probe called {tool}, which it must never do" for tool in scratch.called()]
+        shutil.rmtree(vector_base, ignore_errors=True)
+        return wrong
+
+    with ThreadPoolExecutor() as pool:
+        return [line for lines in pool.map(one, vectors) for line in lines]
+
+
+def run_sequence(model, seq, base):
+    """Replay one sequence and return its wrong prefixes as printable lines."""
+    scratch = Scratch(base, seq, model.get("bundles", {}))
+    for label, entry in unchecked_entries(model, seq):
         apply_entry(scratch, entry, f"sequence {seq['name']} {label}")
     wrong = []
     entries = seq["entries"]
-    for i, expected in enumerate(expectations(seq)):
-        got = scratch.answer()
-        if not agrees(expected, got):
-            where = f"before {entries[i]['subpath']}" if i < len(entries) else "end"
-            shown = show(got) + (f" ({got['why']})" if got.get("why") else "")
-            wrong.append(f"{seq['name']}#{i} {where}: expected {show(expected)}, got {shown}")
+    expected_at = expectations(seq)
+    for i, expected in enumerate(expected_at):
+        if i < len(entries) and "interleave" in entries[i]:
+            wrong += run_block(model, seq, i, expected_at[i + 1], base)
+        else:
+            got = scratch.answer()
+            if not agrees(expected, got):
+                where = f"before {entries[i]['subpath']}" if i < len(entries) else "end"
+                wrong.append(f"{seq['name']}#{i} {where}: expected {show(expected)}, got {shown_answer(got)}")
         if i < len(entries):
             apply_entry(scratch, entries[i], f"sequence {seq['name']}#{i}")
     for tool in scratch.called():
@@ -629,7 +786,8 @@ def run_sequence(model, seq, base):
 def covered_rows(model):
     rows = set()
     for seq in model["sequences"]:
-        for answer in [e["resume"] for e in seq["entries"] if "resume" in e] + [seq["end"]]:
+        flat = [x for e in seq["entries"] for x in (sum(e["interleave"], []) if "interleave" in e else [e])]
+        for answer in [e["resume"] for e in flat if "resume" in e] + [seq["end"]]:
             if answer.get("row") is not None:
                 rows.add(answer["row"])
     return sorted(rows)

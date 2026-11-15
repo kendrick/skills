@@ -860,4 +860,56 @@ expect_status 3 "probe with a malformed --pr-bundle"
 wave_state probe --wave-dir "$wd" --root "$repo"
 expect_status 3 "probe without --default"
 
+# --- resume_checks.py, vendored. The checker replays the wave's write order
+# against wave-state.py, and it's a byte-for-byte copy of work-issue's, so a fix
+# made here alone would be lost at the next re-copy. ---
+
+checks=work-wave/scripts/resume_checks.py
+wave_model=work-wave/scripts/wave-order.json
+require_file "$checks"
+require_file "$wave_model"
+require_text "$checks" "fix a bug there first, then re-copy"
+cmp work-issue/scripts/resume_checks.py "$checks" || {
+  echo "$checks has drifted from work-issue/scripts/resume_checks.py; fix the upstream, then cp it across" >&2
+  exit 1
+}
+
+# Runs the vendored checker, capturing stdout, stderr, and the exit code apart.
+resume_checks() {
+  set +e
+  python3 "$checks" "$@" >"$tmp/out" 2>"$tmp/err"
+  status=$?
+  set -e
+  out="$(cat "$tmp/out")"
+  err="$(cat "$tmp/err")"
+}
+
+# Vectors multiply per lane, and the 2-3 lane bound keeps a run near a minute.
+# A one-lane block is a model typo, so it exits 3 before any replay.
+python3 - "$wave_model" "$tmp/one-lane.json" <<'PY'
+import json, sys
+model = json.load(open(sys.argv[1]))
+seq = model["sequences"][0]
+block = next(e for e in seq["entries"] if "interleave" in e)
+block["interleave"] = block["interleave"][:1]
+json.dump(model, open(sys.argv[2], "w"))
+PY
+resume_checks crash-points --model "$tmp/one-lane.json"
+expect_status 3 "crash-points over a one-lane interleave block"
+grep -Eq "^resume_checks: sequence main#[0-9]+: interleave needs 2 or 3 lane lists, got 1$" <<<"$err" || {
+  echo "a one-lane block should be named on stderr, got: $err" >&2
+  exit 1
+}
+
+# Task 4 of #149 tightens this to exit 0 and `rows covered: 1 2 3 4 5 6 7 8 9 10 11` once row 10 is reachable.
+resume_checks crash-points --model "$wave_model"
+! grep -Fq ": expected " <<<"$out" || {
+  echo "crash-points over wave-order.json found a prefix that resumes wrong: $out" >&2
+  exit 1
+}
+grep -q "^rows covered: " <<<"$out" || {
+  echo "crash-points over wave-order.json should print a rows covered: line, got: $out stderr: $err" >&2
+  exit 1
+}
+
 echo "work-wave smoke: OK"
