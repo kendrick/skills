@@ -322,7 +322,7 @@ require_text "$merge_test" "- **Before publish**, Step 6, over the full merge se
 require_text "$merge_test" "- **HEAD moved**, Step 8, re-run once more before the final report"
 require_text "$merge_test" "git -C ROOT worktree add --detach MERGE_TREE origin/DEFAULT"
 require_text "$merge_test" "Record \`base: origin/<DEFAULT> <sha>\` from \`git -C MERGE_TREE rev-parse HEAD\`."
-require_text "$merge_test" "6. **Record the run.** Write \`WAVE_DIR/merge-test/<k>.md\`: the \`base:\` line"
+require_text "$merge_test" "6. **Record the run.** Write \`WAVE_DIR/merge-test/<k>.md\`, in this order: the \`base:\` line"
 require_text "$merge_test" "Sequential, never octopus, so a conflict names the one branch that failed to merge and the branches it hit"
 require_text "$merge_test" "for each branch issue-M already merged into MERGE_TREE in this run, its own paths from \`git -C ROOT diff --name-only <base>...issue-M\`"
 require_text "$merge_test" "Record \`conflict: issue-N with <issue-M, ...> — <paths>\`, listing every issue-M whose paths include a conflicted one, or \`conflict: issue-N with DEFAULT — <paths>\` where none does."
@@ -630,5 +630,234 @@ expect_status 3 "a lane plan whose ## Waves table will not parse"
 
 footprints --lanes issue-1="$fixtures/lane-a.md"
 expect_status 2 "a mistyped flag"
+
+# --- wave-state.py. The Resume table is executable through probe and phase,
+# and RESUME_ROWS is the table's copy, so the prose and the script can't drift
+# apart without this section failing. ---
+
+wave_state=work-wave/scripts/wave-state.py
+require_file "$wave_state"
+
+# The two record lines the probe parses. Lose either from the prose and the
+# orchestrator writes records the probe reads as unreadable, so every resume
+# stops.
+require_text "$skill" "Its first line is \`route: <done|stopped|failed|refused|early-publish|recheck-failed>\`"
+require_text "$merge_test" "a \`result: <green|red|conflict>\` line, and VERIFY_CMD's saved tail"
+require_text "$skill" "Then \`work-wave/scripts/wave-state.py probe --wave-dir WAVE_DIR --root ROOT --default DEFAULT [--pr-bundle FILE]\`"
+require_text "$skill" "Exit 1 is a stop: report its reason and every null field the probe's stderr names, and stop the wave."
+
+# The table pin. RESUME_ROWS is copied from SKILL.md, never edited to match
+# phase_of, and phase_of answers every row it copies.
+python3 - "$skill" "$wave_state" <<'PY' || exit 1
+import ast, importlib.util, re, sys
+skill, script = sys.argv[1:]
+lines = open(skill, encoding="utf-8").read().split("\n")
+heads = [i for i, line in enumerate(lines) if line == "| # | Probe | Resume at |"]
+if len(heads) != 1:
+    sys.exit(f"{skill}: expected one | # | Probe | Resume at | table, found {len(heads)}")
+rows = []
+for line in lines[heads[0] + 2:]:
+    if not line.startswith("|"):
+        break
+    cells = [c.strip() for c in line.strip()[1:-1].split("|")]
+    rows.append((int(cells[0]), cells[1], cells[2]))
+spec = importlib.util.spec_from_file_location("wave_state", script)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+if tuple(module.RESUME_ROWS) != tuple(rows):
+    for want, got in zip(rows, module.RESUME_ROWS):
+        if want != got:
+            print(f"RESUME_ROWS differs from {skill} at row {want[0]}:\n  table: {want}\n  copy:  {got}", file=sys.stderr)
+            break
+    sys.exit(f"RESUME_ROWS must equal {skill}'s Resume table cell for cell ({len(rows)} rows in the table, {len(module.RESUME_ROWS)} in the copy)")
+func = next(n for n in ast.parse(open(script, encoding="utf-8").read()).body if isinstance(n, ast.FunctionDef) and n.name == "phase_of")
+answered = set()
+for node in ast.walk(func):
+    if isinstance(node, ast.Return) and isinstance(node.value, ast.Tuple) and len(node.value.elts) == 2:
+        reason = node.value.elts[1]
+        if isinstance(reason, ast.Constant) and isinstance(reason.value, str):
+            match = re.match(r"row ([0-9]+):", reason.value)
+            if match:
+                answered.add(int(match.group(1)))
+missing = [n for n, _, _ in rows if n not in answered]
+if missing:
+    sys.exit(f"phase_of has no return whose reason starts row <n>: for rows {missing}")
+PY
+
+# Runs wave-state.py, capturing stdout, stderr, and the exit code apart.
+wave_state() {
+  set +e
+  python3 "$wave_state" "$@" >"$tmp/out" 2>"$tmp/err"
+  status=$?
+  set -e
+  out="$(cat "$tmp/out")"
+  err="$(cat "$tmp/err")"
+}
+
+# A full probe: every bool false and every count 0, then the overrides, as
+# name=json pairs. `-name` drops a field.
+make_probe() {
+  local file="$1"
+  shift
+  python3 - "$wave_state" "$file" "$@" <<'PY'
+import importlib.util, json, sys
+script, file, *pairs = sys.argv[1:]
+spec = importlib.util.spec_from_file_location("wave_state", script)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+probe = {name: False if kind == "bool" else 0 for name, kind, _ in module.PROBE_FIELDS}
+for pair in pairs:
+    if pair.startswith("-"):
+        del probe[pair[1:]]
+    else:
+        name, value = pair.split("=", 1)
+        probe[name] = json.loads(value)
+json.dump(probe, open(file, "w"))
+PY
+}
+
+expect_null() {
+  python3 - "$tmp/probe.json" "$1" <<'PY' || exit 1
+import json, sys
+probe = json.load(open(sys.argv[1]))
+if probe[sys.argv[2]] is not None:
+    sys.exit(f"{sys.argv[2]} should be null, got {probe[sys.argv[2]]!r}")
+PY
+}
+
+expect_prefix() {
+  local line="$1"
+  local what="$2"
+  [[ "$out" == "$line"* ]] || {
+    echo "$what should print a line starting '$line', got: $out stderr: $err" >&2
+    exit 1
+  }
+}
+
+make_probe "$tmp/probe.json"
+wave_state phase --probe "$tmp/probe.json"
+expect_status 0 "a probe with no WAVE_DIR"
+expect_prefix "phase: 0 reason: row 2:" "a probe with no WAVE_DIR"
+
+through_baseline=(wave_dir=true lanes_md=true harvest_md=true footprint_check=true coupling_md=true order_md=true baseline_test=true)
+make_probe "$tmp/probe.json" "${through_baseline[@]}" gate_stops=1
+wave_state phase --probe "$tmp/probe.json"
+expect_status 1 "a recorded stop"
+expect_prefix "phase: stop reason: row 6:" "a recorded stop"
+
+make_probe "$tmp/probe.json" -heads_moved
+wave_state phase --probe "$tmp/probe.json"
+expect_status 3 "a probe missing heads_moved"
+grep -Fq "heads_moved" <<<"$err" || {
+  echo "a probe missing heads_moved should name it on stderr, got: $err" >&2
+  exit 1
+}
+
+# A null must stop. Row 1's lane count read as 0 would answer done over a
+# closed wave whose lanes nobody could count.
+make_probe "$tmp/probe.json" wave_closed=true lane_run_dirs_open=null
+wave_state phase --probe "$tmp/probe.json"
+expect_status 1 "a closed wave with an unreadable lane count"
+expect_prefix "phase: stop reason: unknown probe fields: lane_run_dirs_open" "a closed wave with an unreadable lane count"
+
+wave_state phase
+expect_status 3 "phase without --probe"
+
+mkdir "$tmp/not-a-repo"
+wave_state probe --wave-dir "$tmp/not-a-repo/wave-7-8" --root "$tmp/not-a-repo" --default main
+expect_status 3 "probe on a ROOT that isn't a repo"
+
+# A scratch repo with a bare origin, the shape the orchestrator probes.
+repo="$tmp/repo"
+git init -q -b main "$repo"
+git -C "$repo" -c user.name=t -c user.email=t@t -c commit.gpgsign=false commit -q --allow-empty -m init
+git clone -q --bare "$repo" "$tmp/origin.git"
+git -C "$repo" remote add origin "$tmp/origin.git"
+git -C "$repo" fetch -q origin main
+wd="$repo/.git/work-wave/wave-7"
+
+wave_state probe --wave-dir "$wd" --root "$repo" --default main
+expect_status 0 "probe with no WAVE_DIR"
+python3 - "$wave_state" "$tmp/out" <<'PY' || exit 1
+import importlib.util, json, sys
+spec = importlib.util.spec_from_file_location("wave_state", sys.argv[1])
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+probe = json.load(open(sys.argv[2]))
+missing = [name for name, _, _ in module.PROBE_FIELDS if name not in probe]
+if missing:
+    sys.exit(f"probe printed no {', '.join(missing)}")
+if probe["wave_dir"] is not False:
+    sys.exit(f"probe with no WAVE_DIR should say wave_dir false, got {probe['wave_dir']!r}")
+PY
+
+# Ledger row 43: a gate record without its route: line is unreadable. Read as
+# done, it would carry an early publish or a failed re-check on to Step 6.
+mkdir -p "$wd/footprint" "$wd/merge-test" "$wd/reports" "$wd/gate"
+touch "$wd/lanes.md" "$wd/harvest.md" "$wd/footprint/check.txt" "$wd/merge-test/0.md" "$wd/reports/issue-7-build.json"
+printf '| Pair | Answer | Evidence | Resolution |\n|---|---|---|---|\n' >"$wd/coupling.md"
+printf '| Order | Lane | After | Why |\n|---|---|---|---|\n| 1 | issue-7 | — | no coupling; number order |\n' >"$wd/order.md"
+printf 'footprint re-check: exit 0\n' >"$wd/gate/issue-7.md"
+wave_state probe --wave-dir "$wd" --root "$repo" --default main
+expect_status 0 "probe over a gate record with no route: line"
+cp "$tmp/out" "$tmp/probe.json"
+expect_null gate_stops
+grep -Fq "gate/issue-7.md" <<<"$err" || {
+  echo "a gate record with no route: line should be named on stderr, got: $err" >&2
+  exit 1
+}
+wave_state phase --probe "$tmp/probe.json"
+expect_status 1 "phase over a gate record with no route: line"
+expect_prefix "phase: stop" "phase over a gate record with no route: line"
+
+# Ledger row 43: a merge-set lane whose branch is missing. Its HEAD can't be
+# compared, so whether the merge test matches is unknown rather than no.
+printf 'route: done\nfootprint re-check: exit 0\n' >"$wd/gate/issue-7.md"
+base_sha="$(git -C "$repo" rev-parse origin/main)"
+printf 'base: origin/main %s\nissue-7 %s\nresult: green\n' "$base_sha" "$base_sha" >"$wd/merge-test/1.md"
+wave_state probe --wave-dir "$wd" --root "$repo" --default main
+expect_status 0 "probe over a merge-set lane with no branch"
+cp "$tmp/out" "$tmp/probe.json"
+expect_null merge_test_matches
+wave_state phase --probe "$tmp/probe.json"
+expect_status 1 "phase over a merge-set lane with no branch"
+expect_prefix "phase: stop" "phase over a merge-set lane with no branch"
+
+# Ledger row 43's other half: a merge test without its result: line is never
+# green. With the branch in place, only the missing line can null the field.
+git -C "$repo" branch issue-7
+printf 'base: origin/main %s\nissue-7 %s\n' "$base_sha" "$base_sha" >"$wd/merge-test/1.md"
+wave_state probe --wave-dir "$wd" --root "$repo" --default main
+expect_status 0 "probe over a merge test with no result: line"
+cp "$tmp/out" "$tmp/probe.json"
+expect_null merge_test_green
+grep -Fq "merge-test/1.md" <<<"$err" || {
+  echo "a merge test with no result: line should be named on stderr, got: $err" >&2
+  exit 1
+}
+wave_state phase --probe "$tmp/probe.json"
+expect_status 1 "phase over a merge test with no result: line"
+
+# And with the line back, the same wave reads as ready to publish, so the
+# nulls above came from the missing pieces and nothing else.
+printf 'base: origin/main %s\nissue-7 %s\nresult: green\n' "$base_sha" "$base_sha" >"$wd/merge-test/1.md"
+printf '{"issue-7": []}\n' >"$tmp/bundle.json"
+wave_state probe --wave-dir "$wd" --root "$repo" --default main --pr-bundle "$tmp/bundle.json"
+expect_status 0 "probe over a green merge test at the current HEAD"
+[[ -z "$err" ]] || {
+  echo "probe over a readable wave should print nothing on stderr, got: $err" >&2
+  exit 1
+}
+cp "$tmp/out" "$tmp/probe.json"
+wave_state phase --probe "$tmp/probe.json"
+expect_status 0 "phase over a green merge test at the current HEAD"
+expect_prefix "phase: 7 reason: row 9:" "phase over a green merge test at the current HEAD"
+
+printf '{"issue-7": "not a list"}\n' >"$tmp/bundle.json"
+wave_state probe --wave-dir "$wd" --root "$repo" --default main --pr-bundle "$tmp/bundle.json"
+expect_status 3 "probe with a malformed --pr-bundle"
+
+wave_state probe --wave-dir "$wd" --root "$repo"
+expect_status 3 "probe without --default"
 
 echo "work-wave smoke: OK"
