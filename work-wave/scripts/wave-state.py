@@ -84,8 +84,10 @@ LANE_CELL = re.compile(r"(?:issue-|#)?([1-9][0-9]*)")
 SHA = r"[0-9a-f]{40,64}"
 BASE_LINE = re.compile(rf"base: \S+ ({SHA})")
 LANE_LINE = re.compile(rf"issue-([1-9][0-9]*) ({SHA})")
-RESULT_LINE = re.compile(r"result: (\S+)")
-ROUTE_LINE = re.compile(r"route: (\S+)")
+# First token only: a note after it ("result: green (baseline red only)") is
+# the orchestrator's, and the token still has to be in RESULTS/ROUTES.
+RESULT_LINE = re.compile(r"result: (\S+)(?:\s.*)?")
+ROUTE_LINE = re.compile(r"route: (\S+)(?:\s.*)?")
 GIT_TIMEOUT = 60
 
 
@@ -337,6 +339,8 @@ class Wave:
                     lanes[int(lane)] = sha
                 elif result is None and RESULT_LINE.fullmatch(line):
                     result = RESULT_LINE.fullmatch(line).group(1)
+                    # What follows is VERIFY_CMD's tail, which may print `issue-<N> <sha>`.
+                    break
             if base is None:
                 raise Unknown(f"merge-test/{name} has no base: <ref> <sha> line")
             if result is None:

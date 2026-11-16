@@ -854,6 +854,26 @@ wave_state phase --probe "$tmp/probe.json"
 expect_status 0 "phase over a green merge test at the current HEAD"
 expect_prefix "phase: 7 reason: row 9:" "phase over a green merge test at the current HEAD"
 
+# A note after the result token, and a VERIFY tail that prints `issue-<N> <sha>`,
+# must neither null the record nor add a lane to its set. The wave that wrote
+# this suite annotated its own record "result: green (only baseline's ... failure)".
+printf 'base: origin/main %s\nissue-7 %s\nresult: green (only baseline'"'"'s failure)\nissue-9 %s\n' "$base_sha" "$base_sha" "$base_sha" >"$wd/merge-test/1.md"
+wave_state probe --wave-dir "$wd" --root "$repo" --default main --pr-bundle "$tmp/bundle.json"
+expect_status 0 "probe over a result line with a trailing note"
+[[ -z "$err" ]] || {
+  echo "a result line with a trailing note should read cleanly, got: $err" >&2
+  exit 1
+}
+cp "$tmp/out" "$tmp/probe.json"
+wave_state phase --probe "$tmp/probe.json"
+expect_prefix "phase: 7 reason: row 9:" "phase over a result line with a trailing note"
+# The note never rescues an unknown token.
+printf 'base: origin/main %s\nissue-7 %s\nresult: greenish (looks fine)\n' "$base_sha" "$base_sha" >"$wd/merge-test/1.md"
+wave_state probe --wave-dir "$wd" --root "$repo" --default main --pr-bundle "$tmp/bundle.json"
+cp "$tmp/out" "$tmp/probe.json"
+expect_null merge_test_green
+printf 'base: origin/main %s\nissue-7 %s\nresult: green\n' "$base_sha" "$base_sha" >"$wd/merge-test/1.md"
+
 printf '{"issue-7": "not a list"}\n' >"$tmp/bundle.json"
 wave_state probe --wave-dir "$wd" --root "$repo" --default main --pr-bundle "$tmp/bundle.json"
 expect_status 3 "probe with a malformed --pr-bundle"
@@ -885,7 +905,7 @@ resume_checks() {
   err="$(cat "$tmp/err")"
 }
 
-# Vectors multiply per lane, and the 2-3 lane bound keeps a run near a minute.
+# Vectors multiply per lane, and the 2-3 lane bound keeps `crash-points` to tens of seconds.
 # A one-lane block is a model typo, so it exits 3 before any replay.
 python3 - "$wave_model" "$tmp/one-lane.json" <<'PY'
 import json, sys
