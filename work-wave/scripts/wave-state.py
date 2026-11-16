@@ -61,14 +61,14 @@ PROBE_FIELDS = (
 # tests/work-wave-smoke.sh. When the two disagree, the table is right. Re-copy
 # the row and fix phase_of to match it; never edit the copy to match phase_of.
 RESUME_ROWS = (
-    (1, '`<COMMON>/work-wave/closed/wave-<WAVE_ID>/` exists and no lane RUN_DIR is open', 'done; say so'),
+    (1, '`<COMMON>/work-wave/closed/wave-<WAVE_ID>/` exists', 'done; say so. Where a lane RUN_DIR is open again, stop instead, naming each such lane: its own `work-issue N` resumes it, and a closed wave never restarts'),
     (2, 'no WAVE_DIR, or WAVE_DIR with `lanes.md` or `harvest.md` missing', 'Step 0'),
     (3, '`lanes.md` and `harvest.md`; no `footprint/check.txt`', 'Step 1'),
-    (4, '`check.txt`; `coupling.md` or `order.md` missing, or a coupling row still `ask`', 'Step 2'),
-    (5, '`order.md`; no `merge-test/0.md`', 'Step 3, the confirmation again, then Step 4'),
+    (4, '`check.txt`; `coupling.md` or `order.md` missing', 'Step 2'),
+    (5, '`order.md`; no `merge-test/0.md`', 'Step 3, every `ask` row and the confirmation again, then Step 4'),
     (6, '`merge-test/0.md`; some saved build report has no `gate/issue-<N>.md`, or some gate record recorded a stop', "Step 5 for the ungated reports only, then probe again; a recorded stop stops the wave again, naming the lane and its pull-request URL or the re-check's stderr lines, until the user rules on it"),
     (7, '`merge-test/0.md`; some unheld lane has no `reports/issue-N-build.json`', 'Step 4 for those lanes only, in one message; a lane whose RUN_DIR exists is resumed by its own `work-issue`, and its build report is whatever it returns'),
-    (8, 'every gate record; no `merge-test/<k>.md` with k > 0 whose recorded branches are exactly the merge set, each at its current HEAD', 'Step 6'),
+    (8, 'every gate record; some lane in the merge set has no `reports/issue-N-publish.json`, and no green `merge-test/<k>.md` with k > 0 whose recorded branches are exactly the merge set, each at its current HEAD', 'Step 6, which stops again on a red or conflicted record'),
     (9, 'a green merge test over exactly the merge set at its current HEADs; some lane in the merge set has no `reports/issue-N-publish.json`', "Step 7 for those lanes only, when the fetched `origin/DEFAULT` equals that merge test's `base:`; where it differs, Step 6, then Step 7"),
     (10, 'every publish report; the HEAD of some lane in the merge set moved since the newest merge test', "Step 8's re-test, then the report"),
     (11, 'every publish report; a merge test green over exactly the merge set at its current HEADs', "Step 8's report"),
@@ -149,16 +149,27 @@ def phase_of(probe):
             "unknown probe fields: " + ", ".join(unknown)
             + "; a null here would read as no, so fix what probe's stderr names and probe again",
         )
-    if flag(probe, "wave_closed") and count(probe, "lane_run_dirs_open") == 0:
-        return "done", "row 1: the wave is under closed/ and no lane RUN_DIR is open; say so"
+    # A closed wave never falls through to row 2: with WAVE_DIR moved away,
+    # Step 0 would rebuild a finished wave whose Step 8 move then collides
+    # with closed/wave-<WAVE_ID>/ (ledger row 50).
+    if flag(probe, "wave_closed"):
+        if count(probe, "lane_run_dirs_open") == 0:
+            return "done", "row 1: the wave is under closed/ and no lane RUN_DIR is open; say so"
+        return (
+            "stop",
+            "row 1: the wave is under closed/ and a lane RUN_DIR is open again; stop, naming each such lane, "
+            "whose own work-issue N resumes it, and never restart the closed wave",
+        )
     if not flag(probe, "wave_dir") or not flag(probe, "lanes_md") or not flag(probe, "harvest_md"):
         return "0", "row 2: no WAVE_DIR, or lanes.md or harvest.md is missing; run Step 0"
     if not flag(probe, "footprint_check"):
         return "1", "row 3: lanes.md and harvest.md, and no footprint/check.txt; run Step 1"
-    if not flag(probe, "coupling_md") or not flag(probe, "order_md") or count(probe, "coupling_asks") > 0:
-        return "2", "row 4: coupling.md or order.md is missing, or a coupling row is still ask; run Step 2"
+    # An ask is Step 2's finished output and Step 3's input, so it goes on to
+    # row 5. Sent back to Step 2, it gets written again and loops (ledger row 49).
+    if not flag(probe, "coupling_md") or not flag(probe, "order_md"):
+        return "2", "row 4: coupling.md or order.md is missing; run Step 2"
     if not flag(probe, "baseline_test"):
-        return "3", "row 5: order.md, and no merge-test/0.md; run Step 3's confirmation again, then Step 4"
+        return "3", "row 5: order.md, and no merge-test/0.md; run Step 3, every ask row and the confirmation again, then Step 4"
     if count(probe, "gate_stops") > 0:
         return (
             "stop",
@@ -169,8 +180,13 @@ def phase_of(probe):
         return "5", "row 6: a saved build report has no gate record; run Step 5 for the ungated reports only, then probe again"
     if count(probe, "unheld_unreported") > 0:
         return "4", "row 7: an unheld lane has no build report; run Step 4 for those lanes only, in one message"
-    if not flag(probe, "merge_test_matches"):
-        return "6", "row 8: every report is gated, and no merge test since the baseline records exactly the merge set at its current HEADs; run Step 6"
+    # Row 8 is pre-publish only, or it shadows row 10 once a repair moves a
+    # published HEAD. It asks for green too, or a red record at the current
+    # HEADs matches no row at all (ledger row 48).
+    if count(probe, "publish_unreported") > 0 and not (
+        flag(probe, "merge_test_matches") and flag(probe, "merge_test_green")
+    ):
+        return "6", "row 8: every report is gated, a lane has no publish report, and no green merge test since the baseline records exactly the merge set at its current HEADs; run Step 6, which stops again on red"
     if flag(probe, "merge_test_green") and count(probe, "publish_unreported") > 0:
         if not flag(probe, "base_current"):
             return "6", "row 9: origin/DEFAULT differs from the green merge test's base:; run Step 6, then Step 7"

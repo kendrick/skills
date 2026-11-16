@@ -191,14 +191,14 @@ The world outranks WAVE_DIR, and WAVE_DIR outranks memory. Each lane's state is 
 
 | # | Probe | Resume at |
 |---|---|---|
-| 1 | `<COMMON>/work-wave/closed/wave-<WAVE_ID>/` exists and no lane RUN_DIR is open | done; say so |
+| 1 | `<COMMON>/work-wave/closed/wave-<WAVE_ID>/` exists | done; say so. Where a lane RUN_DIR is open again, stop instead, naming each such lane: its own `work-issue N` resumes it, and a closed wave never restarts |
 | 2 | no WAVE_DIR, or WAVE_DIR with `lanes.md` or `harvest.md` missing | Step 0 |
 | 3 | `lanes.md` and `harvest.md`; no `footprint/check.txt` | Step 1 |
-| 4 | `check.txt`; `coupling.md` or `order.md` missing, or a coupling row still `ask` | Step 2 |
-| 5 | `order.md`; no `merge-test/0.md` | Step 3, the confirmation again, then Step 4 |
+| 4 | `check.txt`; `coupling.md` or `order.md` missing | Step 2 |
+| 5 | `order.md`; no `merge-test/0.md` | Step 3, every `ask` row and the confirmation again, then Step 4 |
 | 6 | `merge-test/0.md`; some saved build report has no `gate/issue-<N>.md`, or some gate record recorded a stop | Step 5 for the ungated reports only, then probe again; a recorded stop stops the wave again, naming the lane and its pull-request URL or the re-check's stderr lines, until the user rules on it |
 | 7 | `merge-test/0.md`; some unheld lane has no `reports/issue-N-build.json` | Step 4 for those lanes only, in one message; a lane whose RUN_DIR exists is resumed by its own `work-issue`, and its build report is whatever it returns |
-| 8 | every gate record; no `merge-test/<k>.md` with k > 0 whose recorded branches are exactly the merge set, each at its current HEAD | Step 6 |
+| 8 | every gate record; some lane in the merge set has no `reports/issue-N-publish.json`, and no green `merge-test/<k>.md` with k > 0 whose recorded branches are exactly the merge set, each at its current HEAD | Step 6, which stops again on a red or conflicted record |
 | 9 | a green merge test over exactly the merge set at its current HEADs; some lane in the merge set has no `reports/issue-N-publish.json` | Step 7 for those lanes only, when the fetched `origin/DEFAULT` equals that merge test's `base:`; where it differs, Step 6, then Step 7 |
 | 10 | every publish report; the HEAD of some lane in the merge set moved since the newest merge test | Step 8's re-test, then the report |
 | 11 | every publish report; a merge test green over exactly the merge set at its current HEADs | Step 8's report |

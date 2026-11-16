@@ -237,7 +237,7 @@ require_text "$skill" "| 3 | \`lanes.md\` and \`harvest.md\`; no \`footprint/che
 # Codex finding 3 of the third review on PR #141: Step 6 records SHAs for the
 # merge set alone, so a probe comparing every lane's HEAD looped back to Step 6
 # forever once a lane was held or failed.
-require_text "$skill" "| 8 | every gate record; no \`merge-test/<k>.md\` with k > 0 whose recorded branches are exactly the merge set, each at its current HEAD | Step 6 |"
+require_text "$skill" "| 8 | every gate record; some lane in the merge set has no \`reports/issue-N-publish.json\`, and no green \`merge-test/<k>.md\` with k > 0 whose recorded branches are exactly the merge set, each at its current HEAD | Step 6, which stops again on a red or conflicted record |"
 require_text "$skill" "Where the HEAD of any lane in the merge set differs from its SHA in the newest \`merge-test/<k>.md\`"
 refute_text "$skill" "every lane's current HEAD"
 require_text "$ledger" "**The Resume table is prose the orchestrator walks by hand.**"
@@ -901,14 +901,42 @@ grep -Eq "^resume_checks: sequence main#[0-9]+: interleave needs 2 or 3 lane lis
   exit 1
 }
 
-# Task 4 of #149 tightens this to exit 0 and `rows covered: 1 2 3 4 5 6 7 8 9 10 11` once row 10 is reachable.
-resume_checks crash-points --model "$wave_model"
-! grep -Fq ": expected " <<<"$out" || {
-  echo "crash-points over wave-order.json found a prefix that resumes wrong: $out" >&2
+# --- The three checks over the whole wave model. Each hole they found in the
+# Resume table (ledger rows 48-50) is a sequence or an invariant here, so a
+# table edit that reopens one fails this section. ---
+
+# CHECKS SUBCOMMAND MODEL OUT, the shape tests/work-issue-smoke.sh uses. No
+# subshell body, so the trap's `pkill -P` reaches python itself.
+logic_run() {
+  local status=0
+  python3 "$1" "$2" --model "$3" >"$4.out" 2>"$4.err" || status=$?
+  echo "$status" >"$4.status"
+}
+logic_run "$checks" liveness "$wave_model" "$tmp/live" &
+# A check failing before the `wait` would leave liveness running past the
+# suite's exit. Each kill carries `|| true` because `set -e` holds in a trap.
+trap 'for job in $(jobs -p); do pkill -P "$job" || true; kill "$job" 2>/dev/null || true; done; rm -rf "$tmp"' EXIT
+
+logic_run "$checks" invariants "$wave_model" "$tmp/inv"
+[[ "$(cat "$tmp/inv.status")" == "0" ]] && [[ ! -s "$tmp/inv.err" ]] \
+  && [[ "$(tail -n 1 "$tmp/inv.out")" =~ ^probes:\ [0-9]+\ leaves,\ [0-9]+\ pruned$ ]] || {
+  echo "invariants over wave-order.json should exit 0 with only a probes: line, got $(cat "$tmp/inv.status"):" >&2
+  cat "$tmp/inv.out" "$tmp/inv.err" >&2
   exit 1
 }
-grep -q "^rows covered: " <<<"$out" || {
-  echo "crash-points over wave-order.json should print a rows covered: line, got: $out stderr: $err" >&2
+
+resume_checks crash-points --model "$wave_model"
+expect_status 0 "crash-points over wave-order.json"
+[[ "$(tail -n 1 "$tmp/out")" == "rows covered: 1 2 3 4 5 6 7 8 9 10 11" ]] || {
+  echo "crash-points over wave-order.json should cover rows 1-11, got: $out stderr: $err" >&2
+  exit 1
+}
+
+wait
+[[ "$(cat "$tmp/live.status")" == "0" ]] && [[ ! -s "$tmp/live.err" ]] \
+  && [[ "$(tail -n 1 "$tmp/live.out")" =~ ^paths:\ [0-9]+$ ]] || {
+  echo "liveness over wave-order.json should exit 0 with only a paths: line, got $(cat "$tmp/live.status"):" >&2
+  cat "$tmp/live.out" "$tmp/live.err" >&2
   exit 1
 }
 
