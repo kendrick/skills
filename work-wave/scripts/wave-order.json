@@ -78,6 +78,15 @@
         },
         {
           "step": 1,
+          "subpath": "footprint/check-failed.txt",
+          "op": "write",
+          "path": "footprint/check-failed.txt",
+          "content": "overlap: issue-7 issue-8 src/seven.py\n",
+          "blind": "no row reads check-failed.txt, and Step 1 writes it only on a non-zero exit, so row 3 reads the check.txt a passing re-run writes after it",
+          "cite": "Step 1: a non-zero exit's output goes to footprint/check-failed.txt, because row 4 reads any check.txt as a passed proof"
+        },
+        {
+          "step": 1,
           "subpath": "footprint/check.txt",
           "op": "write",
           "path": "footprint/check.txt",
@@ -287,6 +296,15 @@
               }
             ]
           ]
+        },
+        {
+          "step": 5,
+          "subpath": "facts/wave.md",
+          "op": "write",
+          "path": "facts/wave.md",
+          "content": "contract change: none broke another lane\n",
+          "blind": "no row reads facts/, and Step 5 item 3 writes wave.md only when a contract path changed, so losing it changes no phase",
+          "cite": "Step 5 item 3: a contract change's merge test result is a line in facts/wave.md"
         },
         {
           "id": "merge-test",

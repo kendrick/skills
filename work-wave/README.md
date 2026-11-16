@@ -65,7 +65,10 @@ work-wave/
 │   ├── lane-brief.md           # the prompt each lane receives, and the report contract it returns
 │   └── merge-test.md           # the scratch-tree merge test, its four trigger points, and why a linked worktree
 └── scripts/
-    └── check-footprints.py     # proves every lane's footprint disjoint and lists the pairs to answer for coupling
+    ├── check-footprints.py     # proves every lane's footprint disjoint and lists the pairs to answer for coupling
+    ├── wave-state.py           # probe reads WAVE_DIR and git into JSON, phase answers which step to resume at
+    ├── resume_checks.py        # vendored from work-issue: replays the write order against wave-state.py
+    └── wave-order.json         # the order the wave writes its artifacts, and where each crash must resume
 ```
 
 ## Gotchas
@@ -82,7 +85,7 @@ work-wave/
 
 ## Maintainers
 
-The decision ledger and eval suite live in [`_maintenance/work-wave/`](../_maintenance/work-wave/). Every contested choice has a row in [RATIONALE.md](../_maintenance/work-wave/RATIONALE.md), including everything deliberately left out. Smoke test: `bash tests/work-wave-smoke.sh` from the repo root. [EVALS.md](../_maintenance/work-wave/EVALS.md) carries the live end-to-end scenarios.
+The decision ledger and eval suite live in [`_maintenance/work-wave/`](../_maintenance/work-wave/). Every contested choice has a row in [RATIONALE.md](../_maintenance/work-wave/RATIONALE.md), including everything deliberately left out. Smoke test: `bash tests/work-wave-smoke.sh` from the repo root. It runs `resume_checks.py`'s `crash-points`, `invariants` and `liveness` over `wave-order.json`, then reintroduces each of the four resume holes from PR #141 in a scratch copy and requires a check to catch it. Expect a couple of minutes, since `liveness` walks every path. [EVALS.md](../_maintenance/work-wave/EVALS.md) carries the live end-to-end scenarios.
 
 ## License
 

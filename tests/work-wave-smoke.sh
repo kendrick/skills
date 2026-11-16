@@ -240,7 +240,8 @@ require_text "$skill" "| 3 | \`lanes.md\` and \`harvest.md\`; no \`footprint/che
 require_text "$skill" "| 8 | every gate record; some lane in the merge set has no \`reports/issue-N-publish.json\`, and no green \`merge-test/<k>.md\` with k > 0 whose recorded branches are exactly the merge set, each at its current HEAD | Step 6, which stops again on a red or conflicted record |"
 require_text "$skill" "Where the HEAD of any lane in the merge set differs from its SHA in the newest \`merge-test/<k>.md\`"
 refute_text "$skill" "every lane's current HEAD"
-require_text "$ledger" "**The Resume table is prose the orchestrator walks by hand.**"
+refute_text "$ledger" "**The Resume table is prose the orchestrator walks by hand.**"
+require_text "$ledger" "| 51 | The Resume table is executable"
 
 # Codex finding 3 on PR #141: each lane rebases before it publishes, so a
 # merge test over a stale base tested a tree nobody will merge.
@@ -932,7 +933,220 @@ expect_status 0 "crash-points over wave-order.json"
   exit 1
 }
 
+# --- The four PR #141 holes as falsifiers (ledger row 51). Each copies work-wave/
+# outside any repo, rewrites the copy's wave-state.py with ast to reintroduce
+# one hole, and expects the matching check to fail with the stated line. A
+# rewrite that matched nothing exits 2 here, because a falsifier that changed
+# nothing would leave the check passing for the wrong reason. ---
+
+cat >"$tmp/rewrite.py" <<'PY'
+import ast, sys
+
+kind, path = sys.argv[1], sys.argv[2]
+src = open(path).read()
+tree = ast.parse(src)
+hits = 0
+
+
+def is_call(node, fn, field):
+    return (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == fn
+        and len(node.args) == 2
+        and isinstance(node.args[1], ast.Constant)
+        and node.args[1].value == field
+    )
+
+
+class Swap(ast.NodeTransformer):
+    def __init__(self, fn, field, value):
+        self.fn, self.field, self.value = fn, field, value
+
+    def visit_FunctionDef(self, node):
+        if node.name != "phase_of":
+            return node
+        return self.generic_visit(node)
+
+    def visit_Call(self, node):
+        global hits
+        if is_call(node, self.fn, self.field):
+            hits += 1
+            return ast.copy_location(ast.Constant(self.value), node)
+        return self.generic_visit(node)
+
+
+# Module level only: the Wave class has a merge_set method that delegates to it.
+def all_lanes(module):
+    global hits
+    for node in module.body:
+        if isinstance(node, ast.FunctionDef) and node.name == "merge_set":
+            for stmt in ast.walk(node):
+                if isinstance(stmt, ast.Return):
+                    stmt.value = ast.parse("[lane for order, lane in order_rows]", mode="eval").body
+                    hits += 1
+    return module
+
+
+if kind == "ignore-ungated":
+    tree = Swap("count", "build_ungated", 0).visit(tree)
+elif kind == "ignore-stop":
+    tree = Swap("count", "gate_stops", 0).visit(tree)
+elif kind == "ignore-harvest":
+    tree = Swap("flag", "harvest_md", True).visit(tree)
+elif kind == "merge-set-all-lanes":
+    tree = all_lanes(tree)
+else:
+    sys.exit(f"unknown falsifier {kind}")
+if hits == 0:
+    print(f"falsifier {kind}: the ast rewrite matched nothing", file=sys.stderr)
+    sys.exit(2)
+open(path, "w").write(ast.unparse(ast.fix_missing_locations(tree)) + "\n")
+PY
+
+# The merge-set falsifier needs a model holding main and out-of-set only, so
+# crash-points names the one sequence a held-and-failed lane breaks.
+python3 - "$wave_model" "$tmp/two-seq.json" <<'PY'
+import json, sys
+model = json.load(open(sys.argv[1]))
+model["sequences"] = [q for q in model["sequences"] if q["name"] in ("main", "out-of-set")]
+assert len(model["sequences"]) == 2
+json.dump(model, open(sys.argv[2], "w"))
+PY
+
+# NAME CHECK MODEL. Leaves NAME.{out,err,status,cmp} in $tmp.
+falsifier() {
+  local name="$1" check="$2" model="$3" copy="$tmp/fals-$1" status=0
+  mkdir -p "$copy"
+  cp -R work-wave "$copy/work-wave"
+  cp "$model" "$copy/work-wave/scripts/model.json"
+  cp "$copy/work-wave/scripts/wave-state.py" "$copy/before.py"
+  python3 "$tmp/rewrite.py" "$name" "$copy/work-wave/scripts/wave-state.py" >"$copy.rewrite" 2>&1 || status=$?
+  if [[ "$status" != 0 ]]; then
+    echo "$status" >"$copy.status"
+    cp "$copy.rewrite" "$copy.err"
+    : >"$copy.out"
+    return 0
+  fi
+  if cmp -s "$copy/before.py" "$copy/work-wave/scripts/wave-state.py"; then
+    echo 98 >"$copy.status"
+    echo "falsifier $name left wave-state.py byte-identical" >"$copy.err"
+    : >"$copy.out"
+    return 0
+  fi
+  python3 "$copy/work-wave/scripts/resume_checks.py" "$check" --model "$copy/work-wave/scripts/model.json" >"$copy.out" 2>"$copy.err" || status=$?
+  echo "$status" >"$copy.status"
+}
+
+falsifier ignore-ungated invariants "$wave_model" &
+falsifier ignore-stop invariants "$wave_model" &
+falsifier ignore-harvest invariants "$wave_model" &
+falsifier merge-set-all-lanes crash-points "$tmp/two-seq.json" &
+
+# Subpaths pin: the WAVE_DIR bullet and the model's subpath labels name the same
+# artifacts, so a write the skill documents can't go unmodeled and a modeled
+# write can't go undocumented. Placeholders match anything; the world-side
+# names label edits the probe can see but WAVE_DIR doesn't hold.
+cat >"$tmp/subpaths.py" <<'PY'
+import json, re, sys
+
+skill, model_path = sys.argv[1], sys.argv[2]
+WORLD = {"branch", "commit", "origin", "lane-run-dir", "closed"}
+bullet = next(l for l in open(skill).read().split("\n") if l.startswith("- **WAVE_DIR**"))
+listed = re.findall(r"`([^`]+)`", bullet.split("Subpaths:")[1].split("A finished wave")[0])
+problems = []
+if len(listed) < 11:
+    problems.append(f"the WAVE_DIR bullet lists {len(listed)} subpaths, expected at least 11")
+
+
+def pattern(sub):
+    return re.compile("".join(".+" if part.startswith("<") else re.escape(part) for part in re.split(r"(<[^>]+>)", sub)))
+
+
+model = json.load(open(model_path))
+entries = []
+
+
+def walk(es):
+    for e in es:
+        if "interleave" in e:
+            for lane in e["interleave"]:
+                walk(lane)
+        else:
+            entries.append(e)
+
+
+for seq in model["sequences"]:
+    walk(seq.get("setup", []))
+    walk(seq["entries"])
+labels = {e["subpath"] for e in entries}
+for sub in listed:
+    if not any(pattern(sub).fullmatch(l) for l in labels):
+        problems.append(f"WAVE_DIR lists {sub} but no model entry writes it")
+for l in sorted(labels - WORLD):
+    if not any(pattern(sub).fullmatch(l) for sub in listed):
+        problems.append(f"the model writes {l} but the WAVE_DIR bullet does not list it")
+for e in entries:
+    if "blind" in e and not str(e["blind"]).strip():
+        problems.append(f"entry {e['subpath']} is blind with no reason")
+for p in problems:
+    print(p, file=sys.stderr)
+sys.exit(1 if problems else 0)
+PY
+python3 "$tmp/subpaths.py" "$skill" "$wave_model" || {
+  echo "the WAVE_DIR subpaths and wave-order.json disagree" >&2
+  exit 1
+}
+# The pin must bite: with every harvest.md entry gone, it fails naming harvest.md.
+python3 - "$wave_model" "$tmp/no-harvest.json" <<'PY'
+import json, sys
+model = json.load(open(sys.argv[1]))
+def strip(es):
+    out = []
+    for e in es:
+        if "interleave" in e:
+            e["interleave"] = [strip(l) for l in e["interleave"]]
+        elif e.get("subpath") == "harvest.md":
+            continue
+        out.append(e)
+    return out
+for seq in model["sequences"]:
+    seq["entries"] = strip(seq["entries"])
+    if "setup" in seq:
+        seq["setup"] = strip(seq["setup"])
+json.dump(model, open(sys.argv[2], "w"))
+PY
+if python3 "$tmp/subpaths.py" "$skill" "$tmp/no-harvest.json" 2>"$tmp/pin.err"; then
+  echo "the subpaths pin passed over a model with no harvest.md entry" >&2
+  exit 1
+fi
+grep -Fq "WAVE_DIR lists harvest.md but no model entry writes it" "$tmp/pin.err" || {
+  echo "the subpaths pin should name harvest.md, got: $(cat "$tmp/pin.err")" >&2
+  exit 1
+}
+
 wait
+
+# Each falsifier must fail its check with the stated line, never exit 2 or 98,
+# which mean the rewrite matched nothing or changed nothing.
+expect_falsified() {
+  local name="$1" stream="$2" pattern="$3"
+  [[ "$(cat "$tmp/fals-$name.status")" == "1" ]] || {
+    echo "falsifier $name should make its check exit 1, got $(cat "$tmp/fals-$name.status"):" >&2
+    cat "$tmp/fals-$name.out" "$tmp/fals-$name.err" >&2
+    exit 1
+  }
+  grep -Eq -- "$pattern" "$tmp/fals-$name.$stream" || {
+    echo "falsifier $name should print a line matching $pattern on $stream, got:" >&2
+    cat "$tmp/fals-$name.out" "$tmp/fals-$name.err" >&2
+    exit 1
+  }
+}
+expect_falsified ignore-ungated err '^step-6-needs-every-report-gated: 6 row 8 on'
+expect_falsified ignore-stop err '^step-6-never-past-a-recorded-stop: 6 row 8 on'
+expect_falsified ignore-harvest err '^step-1-needs-harvest: 1 row 3 on'
+expect_falsified merge-set-all-lanes out '^out-of-set#[0-9@.]+[^:]*: expected 7 row 9, got 6 row 8'
+
 [[ "$(cat "$tmp/live.status")" == "0" ]] && [[ ! -s "$tmp/live.err" ]] \
   && [[ "$(tail -n 1 "$tmp/live.out")" =~ ^paths:\ [0-9]+$ ]] || {
   echo "liveness over wave-order.json should exit 0 with only a paths: line, got $(cat "$tmp/live.status"):" >&2
