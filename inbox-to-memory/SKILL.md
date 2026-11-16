@@ -213,7 +213,13 @@ Run the lint over the scope first:
 bash <skill-path>/scripts/lint-scope.sh <scope-root>
 ```
 
-Among its checks, every wiki-link path resolves (`check_links`). Then check by hand what the lint can't:
+Then list accepted records nobody has confirmed lately:
+
+```bash
+bash <skill-path>/scripts/stale-records.sh <scope-root>
+```
+
+Among the lint's checks, every wiki-link path resolves (`check_links`). Then check by hand what the lint can't:
 
 - Every candidate flag in every groomed note has either been resolved to a wiki link OR retains its original prefix. No half-rewrites, no orphans.
 - Every record file has a valid `id`, a `memory_type` matching its folder, and at least one entry in `source_refs`.
@@ -226,6 +232,7 @@ Then report what phase 2.5 and the stamper did:
 - Every record the stamper declined, with its reason, off its `skipped:` lines and nothing else.
 - Every `proposed` record an input restated, one line per record and note, as `restated proposed: <record-path> by <note-path>`, both paths relative to the scope root.
 - Every input's candidate sources, one line per note, as `candidates: <note-path> grep=<g> vec=<v> both=<b>`, copied from that input's `counts:` line, with its `vec off:` line beneath it when the fallback fired. When the fallback fired, name the `memory-index` skill in the report as what registers the scope.
+- Every line `stale-records.sh` printed, stdout and stderr, verbatim. It only reports; confirming or deprecating a record is the user's call.
 
 Report failures. Don't silently retry or auto-fix — those bugs hide.
 
