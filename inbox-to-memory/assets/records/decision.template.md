@@ -21,7 +21,7 @@ related: []
 
 ## Decision Question
 
-<!-- The question being decided. Phrased neutrally. The four sections from here through Approved By are MADR and governance extensions to Nygard's Context/Decision/Consequences. Don't add more of them. -->
+<!-- The question being decided. Phrased neutrally. Decision Question, Alternatives Considered, and Approved By are MADR and governance extensions to Nygard's Context/Decision/Consequences, and Decision Outcome is Nygard's Decision. Add no more extension sections. -->
 
 ## Decision Outcome
 
@@ -37,9 +37,11 @@ related: []
 
 ## Consequences
 
+<!-- List every consequence, not just the flattering ones. This record's consequences are the next record's context. -->
+
 ### Accepted Costs
 
-<!-- List every consequence, not just the flattering ones. This record's consequences are the next record's context. What we knowingly give up or take on. -->
+<!-- What we knowingly give up or take on. -->
 
 ### What This Makes Easier
 

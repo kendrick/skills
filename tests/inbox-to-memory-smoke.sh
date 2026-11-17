@@ -4507,7 +4507,7 @@ if command -v ltm >/dev/null 2>&1; then
   # Guard, not a red-to-green case: it passes on main too. A heading renamed to
   # `## Consequences and Trade-offs` would make `ltm validate` warn body-sections.
   lo_val="$(cd "$lo_tpl" && ltm validate 2>&1)" || true
-  if grep -F 'decision-Lt2Dec0002' <<<"$lo_val" | grep -Fq 'body-sections'; then
+  if grep -Eq 'decision-Lt2Dec0002.*body-sections|body-sections.*decision-Lt2Dec0002' <<<"$lo_val"; then
     echo "ltm validate draws body-sections on a record filled from the Decision template" >&2
     printf '%s\n' "$lo_val" >&2
     exit 1

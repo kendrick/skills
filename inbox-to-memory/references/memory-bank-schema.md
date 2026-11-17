@@ -92,7 +92,7 @@ These appear as `## Section` headings in the record body, not as frontmatter key
 
 ### Decision Body Lineage
 
-The body follows Nygard's Title/Status/Context/Decision/Consequences. Title and Status live in frontmatter, and Decision is Decision Outcome. Decision Question, Alternatives Considered, and Approved By are MADR and governance extensions, so don't add more sections to them.
+The body follows Nygard's Title/Status/Context/Decision/Consequences. Title and Status live in frontmatter, and Decision is Decision Outcome. Decision Question, Alternatives Considered, and Approved By are MADR and governance extensions, so add no more extension sections.
 
 "Revisit if" is the closing line of Consequences. What would make a decision wrong is a consequence of the costs it accepted, and `last_confirmed` with the status lifecycle already tracks whether the decision still holds.
 
