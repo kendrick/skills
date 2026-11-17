@@ -45,6 +45,20 @@ Add reviewer guidance where it earns its place, and leave it out where it doesn'
 - Call out breaking changes and what migrating past them costs.
 - Name the follow-ups you left out on purpose, so the reviewer doesn't spend the review proposing them back to you.
 
+Add a change outline when the change alters a structure the reviewer has to hold in mind: a call path, a file layout, a data structure, a contract, or a component tree. The size of the change doesn't decide it: a one-call move gets an outline, and a rename across forty files gets none. A change outline is not the diff restatement the Content section rules out: it shows a structure the diff spreads across files, which prose can't.
+
+Pick the smallest view that shows the structure. Use a fenced `diff` block when the structure already exists and the point is what changed, and show the whole block when most of it is new. Put each view beside the sentence it supports, and keep only the calls, files, and fields the reviewer needs.
+
+```diff
+ submitForm
+   createSession
+     persistPrompt
++    expandSkillMention
+     launchAgent
+```
+
+Prefer fenced text (trees, pseudocode, `diff`): it reads the same on the PR page, in `gh pr view`, in email notifications, and in a squash commit body. Use Mermaid only for flow a tree can't show, such as back-and-forth between components. Mermaid renders only on GitHub's web page and shows as raw source everywhere else. `git log` shows that source wherever the repo's squash setting copies the PR body.
+
 Length follows the change, same as a commit body. One paragraph is a complete description for a small mechanical PR, and padding it out to fill a template's headings helps nobody.
 
 ## Example
