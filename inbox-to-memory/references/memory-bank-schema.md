@@ -38,7 +38,7 @@ Lightweight mode uses three of these; canonical mode uses all four.
 
 | Type                  | Purpose                                                                                                                | Lightweight | Canonical |
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------- | ----------- | --------- |
-| Decision              | Captures _why_ something was decided this way. Has a decision question, an outcome, alternatives considered, approver. | ✓           | ✓         |
+| Decision              | Captures _why_ something was decided this way. Has context, a decision question, an outcome, alternatives considered, approver, consequences. | ✓           | ✓         |
 | Context               | Environmental fact. Stakeholder, system, constraint. Has a context scope and a fact statement.                         | ✓           | ✓         |
 | PolicyRule            | Standing guidance ("never X", "always Y"). Has a rule statement and an enforcement level.                              | ✓ (in `_memory/rules/`) | ✓ (in `_memory/policy-rules/`) |
 | Exception             | Sanctioned deviation from a PolicyRule. Has the rule it's an exception to, a justification, an approver.               | — fold into Decision | ✓ |
@@ -83,11 +83,20 @@ These appear as `## Section` headings in the record body, not as frontmatter key
 
 **Decision:**
 
+- Context
 - Decision question
 - Decision outcome
 - Alternatives considered
 - Approved by
-- (optional) Context
+- Consequences (accepted costs, what this makes easier, what this makes harder, then a "Revisit if" line)
+
+### Decision Body Lineage
+
+The body follows Nygard's Title/Status/Context/Decision/Consequences. Title and Status live in frontmatter, and Decision is Decision Outcome. Decision Question, Alternatives Considered, and Approved By are MADR and governance extensions, so don't add more sections to them.
+
+"Revisit if" is the closing line of Consequences. What would make a decision wrong is a consequence of the costs it accepted, and `last_confirmed` with the status lifecycle already tracks whether the decision still holds.
+
+This is a sanctioned divergence from the vendored memory-bank schema, whose closing rule says to raise a change with the user before adopting it; that happened on 2026-08-23. Records written before the change keep their shape.
 
 **PolicyRule:**
 
