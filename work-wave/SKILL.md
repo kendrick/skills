@@ -99,7 +99,7 @@ Then `WAVE_DIR/order.md`, the merge order:
 | Order | Lane | After | Why |
 ```
 
-Topological over every `order:` row, ties broken by issue number ascending, so two runs on one set of plans produce one order. `After` names the lanes this one merges behind, or `—`. `Why` quotes the coupling row or says `no coupling; number order`. A held lane appears with `Order` `held` and its `After` naming the lane it waits on. The order is also the sequence the merge test merges in, and the sequence the final report hands the human.
+Topological over every `order:` row, ties broken by issue number ascending, so two runs on one set of plans produce one order. `After` names the lanes this one merges behind, or `—`. `Why` quotes the coupling row or says `no coupling; number order`. A held lane appears with `Order` `held` and its `After` naming the lane it waits on. Every lane in WAVE_ID gets exactly one row, placed or held: the resume probe reads an `order.md` that omits, repeats, or adds a lane as unreadable and stops. The order is also the sequence the merge test merges in, and the sequence the final report hands the human.
 
 **Done when:** `coupling.md` has one row per `pair:` line, each with an answer, evidence, and a resolution from the table; `order.md` places every lane that stays, names every held lane and what it waits on; and every `unclear` pair is a written question—or the run stopped at a `refuse`.
 

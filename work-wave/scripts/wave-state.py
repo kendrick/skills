@@ -305,6 +305,18 @@ class Wave:
             if not match:
                 raise Unknown(f"order.md: lane cell {cells[1]!r} names no issue")
             rows.append((bare(cells[0]), int(match.group(1))))
+        # Step 2 places or holds every lane, so a lane the table omits is a torn
+        # write, not finished work; read as done, it vanished from every count.
+        named = [lane for _, lane in rows]
+        for lane in sorted(set(named)):
+            if named.count(lane) > 1:
+                raise Unknown(f"order.md names issue-{lane} {named.count(lane)} times")
+        missing = sorted(set(self.lanes) - set(named))
+        if missing:
+            raise Unknown(f"order.md has no row for {', '.join(f'issue-{n}' for n in missing)}")
+        extra = sorted(set(named) - set(self.lanes))
+        if extra:
+            raise Unknown(f"order.md names {', '.join(f'issue-{n}' for n in extra)}, not a lane of {self.dir.name}")
         return rows
 
     def gates(self):

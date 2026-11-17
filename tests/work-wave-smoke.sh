@@ -905,6 +905,39 @@ wave_state phase --probe "$tmp/probe.json"
 expect_status 0 "phase over an empty merge set"
 expect_prefix "phase: 8 reason: row 11:" "phase over an empty merge set"
 
+# PR #347 review: an order.md torn after issue-7's row. Read as complete, issue-8
+# had no build or hold and still answered row 11, so it must null and stop.
+printf '| Order | Lane | After | Why |\n|---|---|---|---|\n| 1 | issue-7 | — | no coupling |\n' >"$wd2/order.md"
+wave_state probe --wave-dir "$wd2" --root "$repo" --default main
+cp "$tmp/out" "$tmp/probe.json"
+expect_null merge_set_size
+expect_null unheld_unreported
+grep -Fq "order.md has no row for issue-8" <<<"$err" || {
+  echo "an order.md missing issue-8 should say so on stderr, got: $err" >&2
+  exit 1
+}
+wave_state phase --probe "$tmp/probe.json"
+expect_status 1 "phase over an order.md missing a lane"
+expect_prefix "phase: stop" "phase over an order.md missing a lane"
+printf '| Order | Lane | After | Why |\n|---|---|---|---|\n| 1 | issue-7 | — | no coupling |\n| held | issue-8 | issue-7 | hold |\n| 2 | issue-8 | — | again |\n' >"$wd2/order.md"
+wave_state probe --wave-dir "$wd2" --root "$repo" --default main
+cp "$tmp/out" "$tmp/probe.json"
+expect_null merge_set_size
+grep -Fq "order.md names issue-8 2 times" <<<"$err" || {
+  echo "an order.md naming issue-8 twice should say so on stderr, got: $err" >&2
+  exit 1
+}
+wave_state phase --probe "$tmp/probe.json"
+expect_prefix "phase: stop" "phase over an order.md naming a lane twice"
+printf '| Order | Lane | After | Why |\n|---|---|---|---|\n| 1 | issue-7 | — | no coupling |\n| held | issue-8 | issue-7 | hold |\n| 2 | issue-9 | — | not this wave |\n' >"$wd2/order.md"
+wave_state probe --wave-dir "$wd2" --root "$repo" --default main
+cp "$tmp/out" "$tmp/probe.json"
+expect_null merge_set_size
+grep -Fq "order.md names issue-9, not a lane of wave-7-8" <<<"$err" || {
+  echo "an order.md naming a lane outside the wave should say so on stderr, got: $err" >&2
+  exit 1
+}
+
 # PR #347 review: Step 7 routes a publish report by Step 5's table, so a lane
 # that failed publishing leaves the merge set even though its gate said done.
 wd3="$repo/.git/work-wave/wave-17-18"
