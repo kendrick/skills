@@ -1131,6 +1131,282 @@
         "phase": "stop",
         "row": 1
       }
+    },
+    {
+      "name": "empty-merge-set",
+      "run_dir": "wave-7-8",
+      "setup": [
+        {
+          "step": 0,
+          "subpath": "lanes.md",
+          "op": "write",
+          "path": "lanes.md",
+          "content": "| Lane | Title | Plan | Worktree | Run dir |\n|---|---|---|---|---|\n| 7 | lane 7 | /p/7.md | /w/7 | /r/7 |\n| 8 | lane 8 | /p/8.md | /w/8 | /r/8 |\n"
+        },
+        {
+          "step": 0,
+          "subpath": "harvest.md",
+          "op": "write",
+          "path": "harvest.md",
+          "content": "started: none\nsiblings: none\nVERIFY_CMD: absent\nINSTALL_CMD: absent\nCONTRACT_PATHS: none\n"
+        },
+        {
+          "step": 1,
+          "subpath": "footprint/issue-<N>.md",
+          "op": "write",
+          "path": "footprint/issue-7.md",
+          "content": "src/7.py\n"
+        },
+        {
+          "step": 1,
+          "subpath": "footprint/issue-<N>.md",
+          "op": "write",
+          "path": "footprint/issue-8.md",
+          "content": "src/8.py\n"
+        },
+        {
+          "step": 1,
+          "subpath": "footprint/check.txt",
+          "op": "write",
+          "path": "footprint/check.txt",
+          "content": "OK: lanes disjoint\n"
+        },
+        {
+          "step": 2,
+          "subpath": "coupling.md",
+          "op": "write",
+          "path": "coupling.md",
+          "content": "| Pair | Answer | Evidence | Resolution |\n|---|---|---|---|\n| issue-7 issue-8 | directional issue-7→issue-8 | issue-8's tasks write against the schema issue-7 relaxes | hold: issue-8 until issue-7 merges |\n"
+        },
+        {
+          "step": 2,
+          "subpath": "order.md",
+          "op": "write",
+          "path": "order.md",
+          "content": "| Order | Lane | After | Why |\n|---|---|---|---|\n| 1 | issue-7 | — | no coupling; number order |\n| held | issue-8 | issue-7 | hold: issue-8 until issue-7 merges |\n"
+        },
+        {
+          "step": 4,
+          "subpath": "baseline.txt",
+          "op": "write",
+          "path": "baseline.txt",
+          "content": "baseline tail\n"
+        },
+        {
+          "step": 4,
+          "subpath": "merge-test/<k>.md",
+          "op": "write",
+          "path": "merge-test/0.md",
+          "content": "base: origin/main {rev:origin/main}\nresult: green\nbaseline tail\n"
+        }
+      ],
+      "entries": [
+        {
+          "step": 4,
+          "subpath": "branch",
+          "op": "branch",
+          "name": "issue-7",
+          "blind": "the probe reads a lane's branch only for a merge-set lane, and a failed lane leaves the set",
+          "cite": "Step 4: work-issue's Step 1 makes the lane's branch"
+        },
+        {
+          "step": 4,
+          "subpath": "commit",
+          "op": "edit",
+          "file": "lane-7.txt",
+          "blind": "an uncommitted edit is the lane's own, and no row reads it",
+          "cite": "Step 4: every git write on a lane's branch belongs to that lane's work-issue",
+          "content": "lane 7\n"
+        },
+        {
+          "step": 4,
+          "subpath": "commit",
+          "op": "commit",
+          "branch": "issue-7",
+          "paths": [
+            "lane-7.txt"
+          ],
+          "message": "lane 7",
+          "blind": "no row reads a failed lane's HEAD",
+          "cite": "Step 4: every git write on a lane's branch belongs to that lane's work-issue"
+        },
+        {
+          "step": 4,
+          "subpath": "reports/issue-<N>-build.json",
+          "op": "write",
+          "path": "reports/issue-7-build.json",
+          "content": "{\"issue\": 7, \"status\": \"failed\", \"pr\": null}\n",
+          "resume": {
+            "phase": "4",
+            "row": 7
+          },
+          "cite": "Resume row 7: some unheld lane has no reports/issue-N-build.json; Step 4 for those lanes only"
+        },
+        {
+          "step": 5,
+          "subpath": "gate/issue-<N>.md",
+          "op": "write",
+          "path": "gate/issue-7.md",
+          "content": "route: failed\nfootprint re-check: exit 0\nmerge test: none\n",
+          "resume": {
+            "phase": "5",
+            "row": 6
+          },
+          "cite": "Resume row 6: some saved build report has no gate/issue-<N>.md; Step 5 for the ungated reports only; Step 5's route table: failed is out of the merge set"
+        }
+      ],
+      "end": {
+        "phase": "8",
+        "row": 11
+      }
+    },
+    {
+      "name": "publish-failed",
+      "run_dir": "wave-7-8",
+      "prefix": {
+        "sequence": "main",
+        "through": "merge-test"
+      },
+      "entries": [
+        {
+          "step": 7,
+          "subpath": "reports/issue-<N>-publish.json",
+          "op": "write",
+          "path": "reports/issue-7-publish.json",
+          "content": "{\"issue\": 7, \"status\": \"done\", \"pr\": \"https://github.com/o/r/pull/7\"}\n",
+          "resume": {
+            "phase": "7",
+            "row": 9
+          },
+          "cite": "Resume row 9: a green merge test over exactly the merge set at its current HEADs, origin/DEFAULT equal to its base:, and this lane has no publish report; Step 7 for those lanes only"
+        },
+        {
+          "step": 7,
+          "subpath": "reports/issue-<N>-publish.json",
+          "op": "write",
+          "path": "reports/issue-8-publish.json",
+          "content": "{\"issue\": 8, \"status\": \"failed\", \"pr\": null}\n",
+          "resume": {
+            "phase": "7",
+            "row": 9
+          },
+          "cite": "Resume row 9: a green merge test over exactly the merge set at its current HEADs, origin/DEFAULT equal to its base:, and this lane has no publish report; Step 7 for those lanes only"
+        },
+        {
+          "step": 8,
+          "subpath": "merge-test/<k>.md",
+          "op": "write",
+          "path": "merge-test/2.md",
+          "content": "base: origin/main {rev:origin/main}\nissue-7 {rev:issue-7}\nresult: green\nverify tail\n",
+          "resume": {
+            "phase": "8",
+            "row": 10
+          },
+          "cite": "Resume row 10: every publish report, and the newest merge test merged a lane a publish report took out of the merge set; Step 7 routes a publish report by Step 5's table, so failed leaves the set; Step 8's re-test, then the report"
+        }
+      ],
+      "end": {
+        "phase": "8",
+        "row": 11
+      }
+    },
+    {
+      "name": "publish-failed-holds",
+      "run_dir": "wave-7-8",
+      "prefix": {
+        "sequence": "main",
+        "through": "merge-test"
+      },
+      "entries": [
+        {
+          "step": 7,
+          "subpath": "reports/issue-<N>-publish.json",
+          "op": "write",
+          "path": "reports/issue-8-publish.json",
+          "content": "{\"issue\": 8, \"status\": \"done\", \"pr\": \"https://github.com/o/r/pull/8\"}\n",
+          "resume": {
+            "phase": "7",
+            "row": 9
+          },
+          "cite": "Resume row 9: a green merge test over exactly the merge set at its current HEADs, origin/DEFAULT equal to its base:, and this lane has no publish report; Step 7 for those lanes only"
+        },
+        {
+          "step": 7,
+          "subpath": "order.md",
+          "op": "write",
+          "path": "order.md",
+          "content": "| Order | Lane | After | Why |\n|---|---|---|---|\n| 1 | issue-7 | — | no coupling; number order |\n| held | issue-8 | issue-7 | issue-7 failed publishing |\n",
+          "resume": {
+            "phase": "7",
+            "row": 9
+          },
+          "cite": "Resume row 9: a green merge test over exactly the merge set at its current HEADs, origin/DEFAULT equal to its base:, and this lane has no publish report; Step 7 for those lanes only; Step 7 moves the lanes ordered after a failed lane to held before saving its publish report"
+        },
+        {
+          "step": 7,
+          "subpath": "reports/issue-<N>-publish.json",
+          "op": "write",
+          "path": "reports/issue-7-publish.json",
+          "content": "{\"issue\": 7, \"status\": \"failed\", \"pr\": null}\n",
+          "resume": {
+            "phase": "6",
+            "row": 8
+          },
+          "cite": "Resume row 8: every gate record, issue-7 in the merge set has no publish report, and no green merge test records exactly the merge set, issue-7 alone since issue-8 is held; Step 6, then Step 7 runs issue-7 again"
+        }
+      ],
+      "end": {
+        "phase": "8",
+        "row": 11
+      }
+    },
+    {
+      "name": "publish-waiting",
+      "run_dir": "wave-7-8",
+      "prefix": {
+        "sequence": "main",
+        "through": "merge-test"
+      },
+      "entries": [
+        {
+          "step": 7,
+          "subpath": "reports/issue-<N>-publish.json",
+          "op": "write",
+          "path": "reports/issue-7-publish.json",
+          "content": "{\"issue\": 7, \"status\": \"done\", \"pr\": \"https://github.com/o/r/pull/7\"}\n",
+          "resume": {
+            "phase": "7",
+            "row": 9
+          },
+          "cite": "Resume row 9: a green merge test over exactly the merge set at its current HEADs, origin/DEFAULT equal to its base:, and this lane has no publish report; Step 7 for those lanes only"
+        },
+        {
+          "step": 7,
+          "subpath": "lane-run-dir",
+          "op": "write",
+          "common": true,
+          "path": "work-issue/issue-8/triage/waiting",
+          "content": "no review yet on https://github.com/o/r/pull/8\n",
+          "blind": "the probe reads triage/waiting only beside a stopped publish report, and the lane's own work-issue writes it before reporting",
+          "cite": "work-issue Step 6: pending at the cap writes RUN_DIR/triage/waiting and stops"
+        },
+        {
+          "step": 7,
+          "subpath": "reports/issue-<N>-publish.json",
+          "op": "write",
+          "path": "reports/issue-8-publish.json",
+          "content": "{\"issue\": 8, \"status\": \"stopped\", \"pr\": \"https://github.com/o/r/pull/8\"}\n",
+          "resume": {
+            "phase": "7",
+            "row": 9
+          },
+          "cite": "Resume row 9: a green merge test over exactly the merge set at its current HEADs, origin/DEFAULT equal to its base:, and this lane has no publish report; Step 7 for those lanes only"
+        }
+      ],
+      "end": {
+        "phase": "8",
+        "row": 11
+      }
     }
   ],
   "invariants": [

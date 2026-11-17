@@ -874,6 +874,94 @@ cp "$tmp/out" "$tmp/probe.json"
 expect_null merge_test_green
 printf 'base: origin/main %s\nissue-7 %s\nresult: green\n' "$base_sha" "$base_sha" >"$wd/merge-test/1.md"
 
+# PR #347 review: a failed lane and its held successor leave an empty merge set,
+# which no publish report or green record can ever satisfy. Step 8's report,
+# not the unmatched stop.
+wd2="$repo/.git/work-wave/wave-7-8"
+mkdir -p "$wd2/footprint" "$wd2/merge-test" "$wd2/reports" "$wd2/gate"
+touch "$wd2/lanes.md" "$wd2/harvest.md" "$wd2/footprint/check.txt"
+printf '| Pair | Answer | Evidence | Resolution |\n|---|---|---|---|\n' >"$wd2/coupling.md"
+printf '| Order | Lane | After | Why |\n|---|---|---|---|\n| 1 | issue-7 | — | no coupling |\n| held | issue-8 | issue-7 | hold: issue-8 until issue-7 merges |\n' >"$wd2/order.md"
+printf 'base: origin/main %s\nresult: green\n' "$base_sha" >"$wd2/merge-test/0.md"
+printf '{"lane": "issue-7", "status": "failed"}\n' >"$wd2/reports/issue-7-build.json"
+printf 'route: failed\nfootprint re-check: exit 0\n' >"$wd2/gate/issue-7.md"
+wave_state probe --wave-dir "$wd2" --root "$repo" --default main
+cp "$tmp/out" "$tmp/probe.json"
+wave_state phase --probe "$tmp/probe.json"
+expect_status 0 "phase over an empty merge set"
+expect_prefix "phase: 8 reason: row 11:" "phase over an empty merge set"
+
+# PR #347 review: Step 7 routes a publish report by Step 5's table, so a lane
+# that failed publishing leaves the merge set even though its gate said done.
+wd3="$repo/.git/work-wave/wave-17-18"
+mkdir -p "$wd3/footprint" "$wd3/merge-test" "$wd3/reports" "$wd3/gate"
+touch "$wd3/lanes.md" "$wd3/harvest.md" "$wd3/footprint/check.txt"
+printf '| Pair | Answer | Evidence | Resolution |\n|---|---|---|---|\n' >"$wd3/coupling.md"
+printf '| Order | Lane | After | Why |\n|---|---|---|---|\n| 1 | issue-17 | — | no coupling |\n| 2 | issue-18 | — | no coupling |\n' >"$wd3/order.md"
+printf 'base: origin/main %s\nresult: green\n' "$base_sha" >"$wd3/merge-test/0.md"
+git -C "$repo" branch issue-17
+git -C "$repo" branch issue-18
+for n in 17 18; do
+  printf '{"lane": "issue-%s", "status": "done"}\n' "$n" >"$wd3/reports/issue-$n-build.json"
+  printf 'route: done\nfootprint re-check: exit 0\n' >"$wd3/gate/issue-$n.md"
+done
+printf 'base: origin/main %s\nissue-17 %s\nissue-18 %s\nresult: green\n' "$base_sha" "$base_sha" "$base_sha" >"$wd3/merge-test/1.md"
+printf '{"lane": "issue-17", "status": "done"}\n' >"$wd3/reports/issue-17-publish.json"
+printf '{"lane": "issue-18", "status": "failed"}\n' >"$wd3/reports/issue-18-publish.json"
+# The newest record still merged issue-18, so Step 8 re-tests over issue-17.
+wave_state probe --wave-dir "$wd3" --root "$repo" --default main
+cp "$tmp/out" "$tmp/probe.json"
+wave_state phase --probe "$tmp/probe.json"
+expect_prefix "phase: 8 reason: row 10:" "phase after a lane failed publishing"
+printf 'base: origin/main %s\nissue-17 %s\nresult: green\n' "$base_sha" "$base_sha" >"$wd3/merge-test/2.md"
+wave_state probe --wave-dir "$wd3" --root "$repo" --default main
+cp "$tmp/out" "$tmp/probe.json"
+wave_state phase --probe "$tmp/probe.json"
+expect_status 0 "phase over a green re-test of the publish survivors"
+expect_prefix "phase: 8 reason: row 11:" "phase over a green re-test of the publish survivors"
+# A publish report with no status is unknown, never in the set or out of it.
+printf '{"lane": "issue-18"}\n' >"$wd3/reports/issue-18-publish.json"
+wave_state probe --wave-dir "$wd3" --root "$repo" --default main
+cp "$tmp/out" "$tmp/probe.json"
+expect_null merge_set_size
+wave_state phase --probe "$tmp/probe.json"
+expect_status 1 "phase over a publish report with no status"
+
+# PR #347 review: a lane that fails publishing holds the lanes ordered after
+# it, as at Step 5. Without the order.md rewrite issue-18 stays in the set and
+# Step 8 re-tests it alone, without the lane it waits on.
+wd4="$repo/.git/work-wave/wave-18-17"
+mkdir -p "$wd4/footprint" "$wd4/merge-test" "$wd4/reports" "$wd4/gate"
+touch "$wd4/lanes.md" "$wd4/harvest.md" "$wd4/footprint/check.txt"
+printf '| Pair | Answer | Evidence | Resolution |\n|---|---|---|---|\n' >"$wd4/coupling.md"
+printf '| Order | Lane | After | Why |\n|---|---|---|---|\n| 1 | issue-17 | — | no coupling |\n| 2 | issue-18 | issue-17 | reads what issue-17 adds |\n' >"$wd4/order.md"
+printf 'base: origin/main %s\nresult: green\n' "$base_sha" >"$wd4/merge-test/0.md"
+for n in 17 18; do
+  printf '{"lane": "issue-%s", "status": "done"}\n' "$n" >"$wd4/reports/issue-$n-build.json"
+  printf 'route: done\nfootprint re-check: exit 0\n' >"$wd4/gate/issue-$n.md"
+done
+printf 'base: origin/main %s\nissue-17 %s\nissue-18 %s\nresult: green\n' "$base_sha" "$base_sha" "$base_sha" >"$wd4/merge-test/1.md"
+printf '{"lane": "issue-18", "status": "done"}\n' >"$wd4/reports/issue-18-publish.json"
+# Step 7 writes order.md before issue-17's report, so a crash between the two
+# merge-tests issue-17 alone and runs Step 7 for it again.
+printf '| Order | Lane | After | Why |\n|---|---|---|---|\n| 1 | issue-17 | — | no coupling |\n| held | issue-18 | issue-17 | issue-17 failed publishing |\n' >"$wd4/order.md"
+wave_state probe --wave-dir "$wd4" --root "$repo" --default main
+cp "$tmp/out" "$tmp/probe.json"
+wave_state phase --probe "$tmp/probe.json"
+expect_prefix "phase: 6 reason: row 8:" "phase with a successor held and the failed lane unreported"
+printf '{"lane": "issue-17", "status": "failed"}\n' >"$wd4/reports/issue-17-publish.json"
+wave_state probe --wave-dir "$wd4" --root "$repo" --default main
+cp "$tmp/out" "$tmp/probe.json"
+python3 - "$tmp/probe.json" <<'PY' || exit 1
+import json, sys
+probe = json.load(open(sys.argv[1]))
+if probe["merge_set_size"] != 0 or probe["heads_moved"] is not False:
+    sys.exit(f"a failed lane and its held successor should leave an empty set, got merge_set_size={probe['merge_set_size']!r} heads_moved={probe['heads_moved']!r}")
+PY
+wave_state phase --probe "$tmp/probe.json"
+expect_status 0 "phase after a lane failed publishing and its successor was held"
+expect_prefix "phase: 8 reason: row 11:" "phase after a lane failed publishing and its successor was held"
+
 printf '{"issue-7": "not a list"}\n' >"$tmp/bundle.json"
 wave_state probe --wave-dir "$wd" --root "$repo" --default main --pr-bundle "$tmp/bundle.json"
 expect_status 3 "probe with a malformed --pr-bundle"

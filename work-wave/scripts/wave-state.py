@@ -55,6 +55,7 @@ PROBE_FIELDS = (
     ("base_current", "bool", ()),
     ("publish_unreported", "int", ()),
     ("heads_moved", "bool", ()),
+    ("merge_set_size", "int", ()),
 )
 
 # Copied cell for cell from SKILL.md's Resume table, and pinned against it by
@@ -70,8 +71,8 @@ RESUME_ROWS = (
     (7, '`merge-test/0.md`; some unheld lane has no `reports/issue-N-build.json`', 'Step 4 for those lanes only, in one message; a lane whose RUN_DIR exists is resumed by its own `work-issue`, and its build report is whatever it returns'),
     (8, 'every gate record; some lane in the merge set has no `reports/issue-N-publish.json`, and no green `merge-test/<k>.md` with k > 0 whose recorded branches are exactly the merge set, each at its current HEAD', 'Step 6, which stops again on a red or conflicted record'),
     (9, 'a green merge test over exactly the merge set at its current HEADs; some lane in the merge set has no `reports/issue-N-publish.json`', "Step 7 for those lanes only, when the fetched `origin/DEFAULT` equals that merge test's `base:`; where it differs, Step 6, then Step 7"),
-    (10, 'every publish report; the HEAD of some lane in the merge set moved since the newest merge test', "Step 8's re-test, then the report"),
-    (11, 'every publish report; a merge test green over exactly the merge set at its current HEADs', "Step 8's report"),
+    (10, 'every publish report; a non-empty merge set; the HEAD of some lane in it moved since the newest merge test, or that test merged a lane that has since left the merge set', "Step 8's re-test, then the report"),
+    (11, 'every publish report; a merge test green over exactly the merge set at its current HEADs, or an empty merge set', "Step 8's report"),
 )
 
 ROUTES = ("done", "stopped", "failed", "refused", "early-publish", "recheck-failed")
@@ -194,9 +195,13 @@ def phase_of(probe):
             return "6", "row 9: origin/DEFAULT differs from the green merge test's base:; run Step 6, then Step 7"
         return "7", "row 9: a green merge test over the merge set at its current HEADs, and a lane has no publish report; run Step 7 for those lanes only"
     if count(probe, "publish_unreported") == 0 and flag(probe, "heads_moved"):
-        return "8", "row 10: every publish report, and a merge-set lane's HEAD moved since the newest merge test; run Step 8's re-test, then the report"
-    if count(probe, "publish_unreported") == 0 and flag(probe, "merge_test_green"):
-        return "8", "row 11: every publish report, and a green merge test over the merge set at its current HEADs; run Step 8's report"
+        return "8", "row 10: every publish report, and a merge-set lane's HEAD moved or a lane left the merge set since the newest merge test; run Step 8's re-test, then the report"
+    # Every lane failed, stopped, or held leaves nothing to merge-test or
+    # publish, and no green record can ever match an empty set.
+    if count(probe, "publish_unreported") == 0 and (
+        flag(probe, "merge_test_green") or count(probe, "merge_set_size") == 0
+    ):
+        return "8", "row 11: every publish report, and a green merge test over the merge set at its current HEADs or an empty merge set; run Step 8's report"
     return (
         "stop",
         "no resume row matches: a merge test records the merge set at its current HEADs and is not green; "
@@ -204,10 +209,15 @@ def phase_of(probe):
     )
 
 
-def merge_set(order_rows, routes):
+def merge_set(order_rows, routes, published):
     """The lanes Step 6 merges, in `order.md`'s order: every lane not `held`,
-    less any whose gate record routed it out."""
-    return [lane for order, lane in order_rows if order != "held" and routes.get(lane) not in OUT_OF_SET]
+    less any whose gate record or publish report routed it out. Step 7 routes
+    a publish report by Step 5's table without rewriting the gate record, so
+    reading routes alone kept a lane that failed publishing in the set."""
+    return [
+        lane for order, lane in order_rows
+        if order != "held" and routes.get(lane) not in OUT_OF_SET and published.get(lane) not in OUT_OF_SET
+    ]
 
 
 def bare(cell):
@@ -318,8 +328,28 @@ class Wave:
     def build_reports(self):
         return self.numbered("reports", r"issue-([1-9][0-9]*)-build\.json")
 
+    def published(self):
+        """{lane: status} from each publish report. A `stopped` lane whose
+        RUN_DIR holds `triage/waiting` is `done` (Step 7): it stopped on the
+        review poll's cap, after its pull request opened. A report that isn't
+        a JSON object with a known `status` is unreadable, never in or out."""
+        statuses = {}
+        for lane, name in self.numbered("reports", r"issue-([1-9][0-9]*)-publish\.json").items():
+            try:
+                report = json.loads(self.read(f"reports/{name}"))
+            except ValueError as e:
+                raise Unknown(f"reports/{name}: {e}")
+            status = report.get("status") if isinstance(report, dict) else None
+            if status not in ("done",) + OUT_OF_SET:
+                raise Unknown(f"reports/{name}: status {status!r} is not one of done, {', '.join(OUT_OF_SET)}")
+            run_dirs = (self.common / "work-issue" / f"issue-{lane}", self.common / "work-issue" / "closed" / f"issue-{lane}")
+            if status == "stopped" and any((d / "triage" / "waiting").is_file() for d in run_dirs):
+                status = "done"
+            statuses[lane] = status
+        return statuses
+
     def merge_set(self):
-        return merge_set(self.order_rows(), self.routes())
+        return merge_set(self.order_rows(), self.routes(), self.published())
 
     def records(self):
         """{k: (base sha, {lane: sha}, result)} for every merge-test/<k>.md
@@ -379,13 +409,18 @@ class Wave:
         return records[max(green)][0] == self.rev(f"refs/remotes/origin/{self.default}")
 
     def heads_moved(self):
+        """True where Step 8 must re-test: a merge-set lane's HEAD differs from
+        the newest record, or the record's lanes aren't the merge set because a
+        lane left it at Step 7. An empty set has nothing to re-test."""
         records = self.records()
-        if not records:
+        lanes = self.merge_set()
+        if not records or not lanes:
             return False
         recorded = records[max(records)][1]
-        lanes = self.merge_set()
-        heads = self.heads([lane for lane in lanes if lane in recorded])
-        return any(lane not in recorded or recorded[lane] != heads[lane] for lane in lanes)
+        if set(recorded) != set(lanes):
+            return True
+        heads = self.heads(lanes)
+        return any(recorded[lane] != heads[lane] for lane in lanes)
 
 
 def gather(wave):
@@ -415,6 +450,7 @@ def gather(wave):
         "base_current": wave.base_current,
         "publish_unreported": lambda: sum(1 for lane in wave.merge_set() if lane not in reports("publish")),
         "heads_moved": wave.heads_moved,
+        "merge_set_size": lambda: len(wave.merge_set()),
     }
     probe, why = {}, []
     for name, _, _ in PROBE_FIELDS:
