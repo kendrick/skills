@@ -2958,6 +2958,16 @@ if [[ "$(id -u)" != 0 ]]; then
 else
   echo "skipping unreadable stale-records assertions: running as root" >&2
 fi
+# Frontmatter that opens and never closes is a malformed record, not a
+# non-record: skipping it would report a clean scope with a stale record inside.
+sr_reset
+awk '/^---$/ { n++; if (n == 2) next } { print }' "$sr_dir/scope/$sr_rec" >"$sr_dir/unclosed.md"
+mv "$sr_dir/unclosed.md" "$sr_dir/scope/$sr_rec"
+[[ "$(grep -c '^---$' "$sr_dir/scope/$sr_rec")" == 1 ]] || {
+  echo "the unclosed-frontmatter copy still has its closing fence" >&2
+  exit 1
+}
+sr_fail "frontmatter opens with --- but never closes" env LTM_TODAY=2026-05-12 bash "$sr" "$sr_dir/scope"
 # A journal has entries/ and no records: nothing to age, and not an error.
 sr_rc=0
 sr_out="$(LTM_TODAY=2026-05-12 bash "$sr" "$sr_dir/journal" 2>/dev/null)" || sr_rc=$?
