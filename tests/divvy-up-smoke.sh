@@ -938,4 +938,136 @@ if command -v jq >/dev/null 2>&1; then
   jq_case squash-null false '{"allow_squash_merge": true, "allow_merge_commit": null, "allow_rebase_merge": null}'
 fi
 
+# --- render-prompt.py: fills worker-prompt.md's Template block from the Waves
+# table, so the orchestrator dispatches a pointer instead of typing ~15k chars.
+render=divvy-up/scripts/render-prompt.py
+rt="$tmp/render"
+mkdir -p "$rt"
+rplan="$fixtures/render-plan.md"
+
+# exit_of runs a command and prints its status, so each case can assert the
+# exit code without tripping `set -e`.
+exit_of() {
+  local s=0
+  "$@" >/dev/null 2>"$rt/stderr" || s=$?
+  echo "$s"
+}
+
+python3 "$render" "$rplan" --wave 1 --task api --out "$rt/api.md" >"$rt/stdout"
+[[ "$(cat "$rt/stdout")" == "$rt/api.md" ]] || {
+  echo "render-prompt should print the written path, got: $(cat "$rt/stdout")" >&2
+  exit 1
+}
+require_text "$rt/api.md" "Your task: api"
+require_text "$rt/api.md" "pytest -q | tail -1"
+require_text "$rt/api.md" '"task": "api",'
+refute_text "$rt/api.md" "{{"
+
+# An empty Constraints cell, no contract, no verify command, and no baseline
+# all take their documented defaults.
+python3 "$render" "$rplan" --wave 1 --task ui --out "$rt/ui.md" >/dev/null
+# Multi-line anchors go through python: grep -F treats a newline in its pattern
+# as a list of alternatives, so a grep here would pass on any one line.
+python3 - "$rt/ui.md" <<'PY' || {
+import sys
+text = open(sys.argv[1], encoding="utf-8").read()
+for want in (
+    "verbatim from the wave table:\n\nnone recorded\n",
+    "migration a prior wave already landed:\n\nnone recorded\n",
+    "actually prints:\n\n    absent\n",
+    "its exit status on the first line:\n\nabsent\n",
+):
+    if want not in text:
+        sys.exit(f"ui render lacks {want!r}")
+PY
+  echo "the ui render must carry the documented defaults" >&2
+  exit 1
+}
+
+# Data crosses verbatim. A PRIOR report that quotes a placeholder is not an
+# unfilled placeholder and is never substituted again.
+printf 'earlier report mentions {{NOT_A_PLACEHOLDER}} and {{TASK}}\n' >"$rt/prior.md"
+[[ "$(exit_of python3 "$render" "$rplan" --wave 1 --task api --prior "$rt/prior.md" --out "$rt/prior-out.md")" == 0 ]] || {
+  echo "a {{...}} inside --prior must render, not fail: $(cat "$rt/stderr")" >&2
+  exit 1
+}
+require_text "$rt/prior-out.md" "earlier report mentions {{NOT_A_PLACEHOLDER}} and {{TASK}}"
+
+# Caller notes are template material: divvy-up's own placeholders fill, anyone
+# else's fail the render.
+python3 "$render" "$rplan" --wave 1 --task api --caller-notes "$fixtures/render-caller-ok.md" --out "$rt/caller.md" >/dev/null
+require_text "$rt/caller.md" "Caller preamble for api: stay inside the issue branch."
+[[ "$(exit_of python3 "$render" "$rplan" --wave 1 --task api --caller-notes "$fixtures/render-caller-unfilled.md" --out "$rt/unfilled.md")" == 1 ]] || {
+  echo "caller notes with an unfilled {{ISSUE}} must exit 1" >&2
+  exit 1
+}
+grep -Fq '{{ISSUE}}' "$rt/stderr" || {
+  echo "the unfilled caller placeholder must be named on stderr: $(cat "$rt/stderr")" >&2
+  exit 1
+}
+
+# A placeholder the script does not know, as a template edit would add one.
+awk '/^Your task: \{\{TASK\}\}$/ && !done { print "{{NEW_THING}}"; done=1 } { print }' \
+  divvy-up/references/worker-prompt.md >"$rt/template.md"
+[[ "$(exit_of python3 "$render" "$rplan" --wave 1 --task api --template "$rt/template.md" --out "$rt/new.md")" == 1 ]] || {
+  echo "a template placeholder the script cannot fill must exit 1" >&2
+  exit 1
+}
+grep -Fq '{{NEW_THING}}' "$rt/stderr" || {
+  echo "the unknown placeholder must be named on stderr: $(cat "$rt/stderr")" >&2
+  exit 1
+}
+
+# A label outside the wave, and one repeated inside it, must not render a row.
+[[ "$(exit_of python3 "$render" "$rplan" --wave 1 --task nope --out "$rt/nope.md")" == 1 ]] || {
+  echo "a task absent from the wave must exit 1" >&2
+  exit 1
+}
+[[ "$(exit_of python3 "$render" "$rplan" --wave 0 --task api --out "$rt/nope.md")" == 1 ]] || {
+  echo "a task in a different wave must exit 1" >&2
+  exit 1
+}
+sed 's/^| 1 | ui |/| 1 | api |/; s#src/ui/#src/ui2/#' "$rplan" >"$rt/dup-plan.md"
+[[ "$(exit_of python3 "$render" "$rt/dup-plan.md" --wave 1 --task api --out "$rt/dup.md")" == 1 ]] || {
+  echo "a task repeated in its wave must exit 1" >&2
+  exit 1
+}
+
+# --out inside the work tree would read as an unowned write at Step 6. The
+# repo's .git is where a run directory lives, so it stays allowed.
+[[ "$(exit_of python3 "$render" "$rplan" --wave 1 --task api --out "$PWD/tmp-render.md")" == 1 ]] || {
+  rm -f "$PWD/tmp-render.md"
+  echo "--out inside the work tree must exit 1" >&2
+  exit 1
+}
+[[ ! -e "$PWD/tmp-render.md" ]] || {
+  rm -f "$PWD/tmp-render.md"
+  echo "a refused --out must not leave a file behind" >&2
+  exit 1
+}
+git_common="$(cd "$(git rev-parse --git-common-dir)" && pwd)"
+[[ "$(exit_of python3 "$render" "$rplan" --wave 1 --task api --out "$git_common/render-test.md")" == 0 ]] || {
+  rm -f "$git_common/render-test.md"
+  echo "--out under the repo's .git must render: $(cat "$rt/stderr")" >&2
+  exit 1
+}
+rm -f "$git_common/render-test.md"
+
+[[ "$(exit_of python3 "$render" "$rt/no-such-plan.md" --wave 1 --task api --out "$rt/x.md")" == 3 ]] || {
+  echo "a missing plan file must exit 3" >&2
+  exit 1
+}
+
+# The fixture was filled by hand from the Template block under the Placeholders
+# rules, so this compares the script against the rules rather than against
+# itself.
+python3 "$render" "$rplan" --wave 1 --task api --verify-cmd 'bash t.sh' \
+  --contract "$fixtures/render-contract.md" --baseline "$fixtures/render-baseline.txt" \
+  --out "$rt/api-full.md" >/dev/null
+cmp -s "$rt/api-full.md" "$fixtures/render-api-expected.md" || {
+  echo "the api render differs from the hand-filled fixture:" >&2
+  diff "$rt/api-full.md" "$fixtures/render-api-expected.md" >&2 || true
+  exit 1
+}
+
 echo "divvy-up smoke: OK"
