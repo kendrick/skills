@@ -4010,7 +4010,7 @@ for i in "${!lm_path_dirs[@]}"; do
     mkdir -p "$lm_dir/bare-path-$i"
     for f in "$d"/* "$d"/.[!.]*; do
       [[ -e "$f" || -L "$f" ]] || continue
-      [[ "$(basename "$f")" == ltm ]] && continue
+      [[ "${f##*/}" == ltm ]] && continue
       ln -s "$f" "$lm_dir/bare-path-$i/"
     done
     d="$lm_dir/bare-path-$i"
