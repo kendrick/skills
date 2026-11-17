@@ -472,6 +472,9 @@ require_text work-issue/SKILL.md "flag rather than route around"
 require_text work-issue/SKILL.md "what you left and why"
 require_text work-issue/references/worker-prompt.md "Flag rather than route around"
 require_text work-issue/references/worker-prompt.md "what you left and why"
+# Inline dispatches never reach render-prompt.py, so leaving {{TASK}} there
+# ships a literal "task": "{{TASK}}" in the report contract (PR #356 review).
+require_text work-issue/references/worker-prompt.md "A herdr dispatch and a Step 7 repair go inline and never pass through the script, so fill \`{{TASK}}\` yourself there"
 
 # kendrick/skills#116: workers leave formatting to the orchestrator, and a
 # repair re-gate never passes through divvy-up's Step 6, so it names the pass.

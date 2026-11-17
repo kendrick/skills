@@ -4,7 +4,7 @@ Read this at Step 2, and again at Step 7. It holds two things: the **preamble** 
 
 The preamble reaches a wave worker through `divvy-up`'s `{{CALLER_NOTES}}` placeholder, which is the seam a wrapping skill is given for exactly this — it goes across ahead of everything else, so a worker meets the issue before it meets its task. Under herdr there is no template to fold into, and the preamble heads the whole prompt instead.
 
-Substitute only the five below. Leave `{{TASK}}` in place: `render-prompt.py` fills it inside the preamble. It fills nothing else there, so any other `{{...}}` in the preamble, a criterion that quotes a placeholder included, reaches the worker verbatim.
+Substitute only the five below. On a rendered dispatch, leave `{{TASK}}` in place: `render-prompt.py` fills it inside the preamble. It fills nothing else there, so any other `{{...}}` in the preamble, a criterion that quotes a placeholder included, reaches the worker verbatim. A herdr dispatch and a Step 7 repair go inline and never pass through the script, so fill `{{TASK}}` yourself there: the task's name under herdr, `repair-<k>` at Step 7. Left in place, the report contract asks the worker for a literal `"task": "{{TASK}}"`.
 
 ## The preamble
 
