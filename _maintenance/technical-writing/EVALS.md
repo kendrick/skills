@@ -9,6 +9,7 @@ This repo has no eval harness and no CI, so these scenarios run manually and del
 - **`adversarial-review/scripts/check-territories.py`** — near-pure WHY comments. The precision control: a passing run touches nothing in this file.
 - **This repo's own pr-descriptions change** — scenario 5's fixture is the working tree that adds `references/pr-descriptions.md`, described as its own PR. Self-hosted like scenario 1, so there is no synthetic branch to keep in sync.
 - **The review correspondence on #115, #119 and #121** — scenario 6's fixture. Sixteen replies and one standalone comment, already read once for `references/review-correspondence.md`'s own `## Example`, reused here as the reply arm's baseline (what the PR-description fallback produced) and as the source of the SHAs the citation row grades. Those three PRs are merged and their branches are gone, so scenario 6 itself runs against a live open pull request in this repo; the historical set supplies the reply-arm material but not a thread-free case, so the standalone arm needs a run that actually produces a comment with no thread to reply into.
+- **Two scratch branches for scenario 5's outline arms**: one moves a single call between two files, the other renames or reformats across many files. The maintainer builds them on this repo when the arms run; neither is kept.
 
 ## Scenarios
 
@@ -118,6 +119,7 @@ Fails if the run treats the missing auditor as a blocker, invents an audit it di
 | Issue link | The repo's own convention where an issue exists; nothing invented where none does |
 | Hard rules | No `Co-Authored-By`, no AI-attribution footer, no hard wraps |
 | Squash survival | The body still reads correctly as a future commit body, with the PR page closed |
+| Outline (when the arms run) | Small structural arm carries a fenced outline; large mechanical arm carries none |
 
 Fails if the description narrates the branch commit by commit, says nothing about testing, or carries any attribution footer.
 
@@ -134,6 +136,15 @@ The delta showed up in two places, and both are structural rather than sentence-
 Worth recording against the fallback's reputation: the control arm's draft is a competent PR description, not a failure. Its own process note identifies the limitation correctly, saying the Summary/Changes/Testing shape came from general PR convention rather than anything the fallback prescribed. That is the fallback working as documented — sentence-level mechanics hold up fine without a profile, and what the profile adds is a decision about what the body is *for*.
 
 The run also found a real gap. The Title section said to read the repo's recently merged PRs, and `gh pr list --state merged` returns nothing on this remote, so the treatment arm had to improvise a fallback to the commit log. The profile now covers the no-merged-PRs case directly. The pair is harvested into `references/pr-descriptions.md`'s `## Example`, which was written after both drafts, so the shipped profile reads a little differently from what either arm worked from.
+
+**Change-outline arms.** Two arms on this repo, each a scratch branch the maintainer builds:
+
+- **Small structural:** a PR that moves one call from one function to another, two files and a few lines. Pass: the description carries a fenced outline, preferably a `diff` of the call tree, beside the sentence it supports.
+- **Large mechanical:** a PR that only renames or reformats across many files. Pass: no outline.
+
+A writer keying on size or file count fails both. Both arms grade with and without the skill, like the rest of scenario 5.
+
+**Not yet run.** The outline guidance ships first, the run follows, and this section records both arms when it does.
 
 ### 6. Review correspondence — two shapes, one profile
 
