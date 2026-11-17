@@ -5147,6 +5147,8 @@ wait
 # never counts one as an unowned write), and herdr keeps sending the prompt inline.
 require_text work-issue/SKILL.md "\`RUN_DIR/prompts/<wave>-<task>.caller.md\`"
 require_text work-issue/SKILL.md "Herdr keeps sending the full prompt inline"
+# Step 7 stays inline (Deliberately Not Built); the cut design named its prior file this.
+refute_text work-issue/SKILL.md "repair-<k>.prior.md"
 require_text work-issue/SKILL.md "\`--prior RUN_DIR/prompts/fix-<n>.prior.md\`"
 require_text work-issue/SKILL.md "\`--out RUN_DIR/prompts/fix-<n>.md\`"
 require_text work-issue/SKILL.md "its prompt inline too: the repair spans tasks"
