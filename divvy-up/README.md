@@ -67,9 +67,10 @@ Without a path it takes the plan file this session wrote, and failing that the a
 divvy-up/
 ├── SKILL.md                  # the skill — derive, route, wave, confirm, dispatch, gate, review
 ├── references/
-│   └── worker-prompt.md        # the dispatch template and the JSON contract every worker returns
+│   └── worker-prompt.md        # the worker template and the JSON contract every worker returns
 └── scripts/
-    └── check-waves.py          # proves the waves disjoint; attributes what a wave wrote
+    ├── check-waves.py          # proves the waves disjoint; attributes what a wave wrote
+    └── render-prompt.py        # fills a task's worker prompt into a file the dispatch points at
 ```
 
 ## Gotchas
@@ -79,7 +80,7 @@ divvy-up/
 - **It defers to `agent-guild`.** In a repo that already has `.agent-guild/`, it emits its table, names `/agent-guild:job`, and dispatches nothing. The guild re-derives its own tasks from a spec, so the ownership and model columns become prose for the guild to read rather than instructions anything will execute.
 - **Ownership is per file, never per region.** Two tasks that need different parts of one file have to split the file or land in different waves. `paths_overlap` proves disjointness at the file level, and two agents racing inside one file is a merge problem no path-level check can see coming.
 - **Owned paths are literal, never globs, and never decorated.** The predicate is vendored from `agent-guild`, where a glob entry is rejected outright because it can claim territory no file yet occupies, which is exactly the overlap the check exists to catch. The same gate refuses a backtick or a markdown link around a path for the same reason: a decorated entry matches no file on disk, and it compares as a different string from the bare path a peer task owns, so two spellings of one file read as no overlap and two tasks land on it in the same wave.
-- **There's no run directory and no ledger.** The `## Waves` table in your plan file is the only artifact. Ownership is already the recovery story: a failed task rolls back by reverting the paths it owns, and a second record would restate the table until the two drifted apart.
+- **There's no run directory and no ledger.** The `## Waves` table in your plan file is the only artifact. Each worker's rendered prompt sits in a temp directory outside the tree as a record of what it was sent, and nothing reads it back. Ownership is already the recovery story: a failed task rolls back by reverting the paths it owns, and a second record would restate the table until the two drifted apart.
 - **Writers are attributed by their own report.** Git records that a file changed, never which of two concurrent agents changed it. The gate cross-checks each worker's reported `files_changed` against its `owns`, so an honest stray is caught, but a worker that clobbers a peer and omits it from its report is not. Per-wave commits keep it recoverable. Closing the gap properly would mean one worktree per worker, which is a different skill.
 - **A tree-wide write is forbidden, not detected.** A worker that runs a formatter over the whole tree anyway leaves no diff where the rewrite changed no bytes, and a peer's owned path it did reformat is credited to that peer. The dispatch is the guard, and the gate's own format pass means obeying it costs nothing.
 - **A constraint is read from the same report as everything else.** The gate checks the constraints cell against a worker's own report, the channel that also attributes writes. A shortcut a worker takes and doesn't mention gets through exactly like an unreported stray write.

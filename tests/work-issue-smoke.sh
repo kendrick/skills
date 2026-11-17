@@ -472,6 +472,9 @@ require_text work-issue/SKILL.md "flag rather than route around"
 require_text work-issue/SKILL.md "what you left and why"
 require_text work-issue/references/worker-prompt.md "Flag rather than route around"
 require_text work-issue/references/worker-prompt.md "what you left and why"
+# Inline dispatches never reach render-prompt.py, so leaving {{TASK}} there
+# ships a literal "task": "{{TASK}}" in the report contract (PR #356 review).
+require_text work-issue/references/worker-prompt.md "A herdr dispatch and a Step 7 repair go inline and never pass through the script, so fill \`{{TASK}}\` yourself there"
 
 # kendrick/skills#116: workers leave formatting to the orchestrator, and a
 # repair re-gate never passes through divvy-up's Step 6, so it names the pass.
@@ -5142,5 +5145,17 @@ wait
   cat "$tmp/live-step1.out" "$tmp/live-step1.err" >&2
   exit 1
 }
+
+# Rendered prompts live in RUN_DIR/prompts/ (outside the work tree, so Step 6
+# never counts one as an unowned write), and herdr keeps sending the prompt inline.
+require_text work-issue/SKILL.md "\`RUN_DIR/prompts/<wave>-<task>.caller.md\`"
+require_text work-issue/SKILL.md "Herdr keeps sending the full prompt inline"
+# Step 7 stays inline (Deliberately Not Built); the cut design named its prior file this.
+refute_text work-issue/SKILL.md "repair-<k>.prior.md"
+require_text work-issue/SKILL.md "\`--prior RUN_DIR/prompts/fix-<n>.prior.md\`"
+require_text work-issue/SKILL.md "\`--out RUN_DIR/prompts/fix-<n>.md\`"
+require_text work-issue/SKILL.md "its prompt inline too: the repair spans tasks"
+require_text work-issue/SKILL.md "\`reports/\`, \`prompts/\`, \`gated/\`"
+require_text _maintenance/work-issue/RATIONALE.md "Worker and repair prompts render into \`RUN_DIR/prompts/\`"
 
 echo "work-issue smoke: OK"

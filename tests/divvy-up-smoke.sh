@@ -77,6 +77,22 @@ require_text divvy-up/SKILL.md "A non-zero exit is a hard stop, not a warning."
 # it looks identical in the transcript to the real thing.
 require_text divvy-up/SKILL.md "in a SINGLE message so they run concurrently"
 
+# Rendering: the orchestrator used to type ~15k characters per worker prompt
+# (~37 s each). Step 5 renders to a file outside the tree and dispatches a
+# pointer, so these strings are what keep the dispatch short and the file out
+# of Step 6's ownership diff.
+dispatch_sentence="Read <path> in full before doing anything else. It is your complete task instructions; follow it exactly as if it were this message."
+require_text divvy-up/SKILL.md "- **PROMPT_DIR** — where rendered worker prompts go"
+require_text divvy-up/SKILL.md "then render every task in the wave with \`scripts/render-prompt.py\`"
+require_text divvy-up/SKILL.md "$dispatch_sentence"
+require_text divvy-up/SKILL.md "every prompt was rendered by \`render-prompt.py\` exiting 0"
+require_text divvy-up/references/worker-prompt.md "$dispatch_sentence"
+require_text divvy-up/references/worker-prompt.md "On a direct run PROMPT_DIR is a \`mktemp -d\` made once per invocation. Under a wrapping skill it is the directory that skill names"
+require_text divvy-up/references/worker-prompt.md "\`none recorded\` goes in when no earlier wave landed one."
+require_text divvy-up/README.md "render-prompt.py        # fills a task's worker prompt into a file the dispatch points at"
+require_text _maintenance/divvy-up/RATIONALE.md "| 44 | Step 5 renders each task's worker prompt to a file"
+require_text _maintenance/divvy-up/EVALS.md "| 31 | A worker dispatched with only the sentence"
+
 # Ownership proved before dispatch is what makes the wave safe to fan out at
 # all; proving it after (or not at all) is the "watch out for conflicts" note
 # this design replaces.
@@ -937,5 +953,178 @@ if command -v jq >/dev/null 2>&1; then
   jq_case no-admin false '{"allow_squash_merge": null, "allow_merge_commit": null, "allow_rebase_merge": null}'
   jq_case squash-null false '{"allow_squash_merge": true, "allow_merge_commit": null, "allow_rebase_merge": null}'
 fi
+
+# --- render-prompt.py: fills worker-prompt.md's Template block from the Waves
+# table, so the orchestrator dispatches a pointer instead of typing ~15k chars.
+render=divvy-up/scripts/render-prompt.py
+rt="$tmp/render"
+mkdir -p "$rt"
+rplan="$fixtures/render-plan.md"
+
+# exit_of runs a command and prints its status, so each case can assert the
+# exit code without tripping `set -e`.
+exit_of() {
+  local s=0
+  "$@" >/dev/null 2>"$rt/stderr" || s=$?
+  echo "$s"
+}
+
+python3 "$render" "$rplan" --wave 1 --task api --out "$rt/api.md" >"$rt/stdout"
+[[ "$(cat "$rt/stdout")" == "$rt/api.md" ]] || {
+  echo "render-prompt should print the written path, got: $(cat "$rt/stdout")" >&2
+  exit 1
+}
+require_text "$rt/api.md" "Your task: api"
+require_text "$rt/api.md" "pytest -q | tail -1"
+require_text "$rt/api.md" '"task": "api",'
+refute_text "$rt/api.md" "{{"
+
+# An empty Constraints cell, no contract, no verify command, and no baseline
+# all take their documented defaults.
+python3 "$render" "$rplan" --wave 1 --task ui --out "$rt/ui.md" >/dev/null
+# Multi-line anchors go through python: grep -F treats a newline in its pattern
+# as a list of alternatives, so a grep here would pass on any one line.
+python3 - "$rt/ui.md" <<'PY' || {
+import sys
+text = open(sys.argv[1], encoding="utf-8").read()
+for want in (
+    "verbatim from the wave table:\n\nnone recorded\n",
+    "migration a prior wave already landed:\n\nnone recorded\n",
+    "actually prints:\n\n    absent\n",
+    "its exit status on the first line:\n\nabsent\n",
+):
+    if want not in text:
+        sys.exit(f"ui render lacks {want!r}")
+PY
+  echo "the ui render must carry the documented defaults" >&2
+  exit 1
+}
+
+# Data crosses verbatim. A PRIOR report that quotes a placeholder is not an
+# unfilled placeholder and is never substituted again.
+printf 'earlier report mentions {{NOT_A_PLACEHOLDER}} and {{TASK}}\n' >"$rt/prior.md"
+[[ "$(exit_of python3 "$render" "$rplan" --wave 1 --task api --prior "$rt/prior.md" --out "$rt/prior-out.md")" == 0 ]] || {
+  echo "a {{...}} inside --prior must render, not fail: $(cat "$rt/stderr")" >&2
+  exit 1
+}
+require_text "$rt/prior-out.md" "earlier report mentions {{NOT_A_PLACEHOLDER}} and {{TASK}}"
+
+# Caller notes carry issue text, so a placeholder in them is data: only {{TASK}}
+# fills, and everything else crosses verbatim, never rescanned (F-r1-authz-01).
+python3 "$render" "$rplan" --wave 1 --task api --caller-notes "$fixtures/render-caller-ok.md" --out "$rt/caller.md" >/dev/null
+require_text "$rt/caller.md" "Caller preamble for api: stay inside the issue branch."
+[[ "$(exit_of python3 "$render" "$rplan" --wave 1 --task api --caller-notes "$fixtures/render-caller-unfilled.md" --out "$rt/unfilled.md")" == 0 ]] || {
+  echo "caller notes holding {{ISSUE}} must render, not fail: $(cat "$rt/stderr")" >&2
+  exit 1
+}
+require_text "$rt/unfilled.md" "Work issue {{ISSUE}} only."
+
+# The finding's repro: a criterion quoting {{BASELINE}} and {{CALLER_NOTES}}
+# stays byte-for-byte, and the baseline text lands only where the template's
+# own {{BASELINE}} sits.
+crit='- [ ] the script fills {{BASELINE}} from a file and {{CALLER_NOTES}} from another'
+printf '%s\n' "$crit" >"$rt/crit-notes.md"
+printf 'exit: 1\nFAILED test_x\n' >"$rt/crit-baseline.md"
+[[ "$(exit_of python3 "$render" "$rplan" --wave 1 --task api --caller-notes "$rt/crit-notes.md" --baseline "$rt/crit-baseline.md" --out "$rt/crit.md")" == 0 ]] || {
+  echo "quoted placeholders in caller notes must render: $(cat "$rt/stderr")" >&2
+  exit 1
+}
+grep -Fxq -- "$crit" "$rt/crit.md" || {
+  echo "the criterion line must cross byte-for-byte" >&2
+  exit 1
+}
+[[ "$(grep -c 'FAILED test_x' "$rt/crit.md")" == 1 ]] || {
+  echo "the baseline must appear once, at the template's own {{BASELINE}}" >&2
+  exit 1
+}
+# {{BASELINE}} alone is the case the old rescan spliced silently; the line above
+# also trips the old unfilled-{{CALLER_NOTES}} exit, so it can't catch a splice.
+crit_b='- [ ] the script fills {{BASELINE}} from a file'
+printf '%s\n' "$crit_b" >"$rt/critb-notes.md"
+python3 "$render" "$rplan" --wave 1 --task api --caller-notes "$rt/critb-notes.md" --baseline "$rt/crit-baseline.md" --out "$rt/critb.md" >/dev/null
+grep -Fxq -- "$crit_b" "$rt/critb.md" || {
+  echo "a criterion quoting only {{BASELINE}} must cross byte-for-byte, not take the baseline" >&2
+  exit 1
+}
+
+# A placeholder the script does not know, as a template edit would add one.
+awk '/^Your task: \{\{TASK\}\}$/ && !done { print "{{NEW_THING}}"; done=1 } { print }' \
+  divvy-up/references/worker-prompt.md >"$rt/template.md"
+[[ "$(exit_of python3 "$render" "$rplan" --wave 1 --task api --template "$rt/template.md" --out "$rt/new.md")" == 1 ]] || {
+  echo "a template placeholder the script cannot fill must exit 1" >&2
+  exit 1
+}
+grep -Fq '{{NEW_THING}}' "$rt/stderr" || {
+  echo "the unknown placeholder must be named on stderr: $(cat "$rt/stderr")" >&2
+  exit 1
+}
+
+# A label outside the wave, and one repeated inside it, must not render a row.
+[[ "$(exit_of python3 "$render" "$rplan" --wave 1 --task nope --out "$rt/nope.md")" == 1 ]] || {
+  echo "a task absent from the wave must exit 1" >&2
+  exit 1
+}
+[[ "$(exit_of python3 "$render" "$rplan" --wave 0 --task api --out "$rt/nope.md")" == 1 ]] || {
+  echo "a task in a different wave must exit 1" >&2
+  exit 1
+}
+sed 's/^| 1 | ui |/| 1 | api |/; s#src/ui/#src/ui2/#' "$rplan" >"$rt/dup-plan.md"
+[[ "$(exit_of python3 "$render" "$rt/dup-plan.md" --wave 1 --task api --out "$rt/dup.md")" == 1 ]] || {
+  echo "a task repeated in its wave must exit 1" >&2
+  exit 1
+}
+
+# --out inside the work tree would read as an unowned write at Step 6. The
+# repo's .git is where a run directory lives, so it stays allowed.
+[[ "$(exit_of python3 "$render" "$rplan" --wave 1 --task api --out "$PWD/tmp-render.md")" == 1 ]] || {
+  rm -f "$PWD/tmp-render.md"
+  echo "--out inside the work tree must exit 1" >&2
+  exit 1
+}
+[[ ! -e "$PWD/tmp-render.md" ]] || {
+  rm -f "$PWD/tmp-render.md"
+  echo "a refused --out must not leave a file behind" >&2
+  exit 1
+}
+# The check follows --out, not the cwd: an orchestrator often runs from outside
+# the tree it renders into.
+outside_cwd="$(mktemp -d)"
+tree_here="$PWD"
+[[ "$(cd "$outside_cwd" && exit_of python3 "$tree_here/$render" "$tree_here/$rplan" --wave 1 --task api --out "$tree_here/tmp-render-cwd.md")" == 1 ]] || {
+  rm -f "$tree_here/tmp-render-cwd.md"
+  rm -rf "$outside_cwd"
+  echo "--out inside the work tree must exit 1 even when the cwd is outside it" >&2
+  exit 1
+}
+rm -rf "$outside_cwd"
+[[ ! -e "$tree_here/tmp-render-cwd.md" ]] || {
+  rm -f "$tree_here/tmp-render-cwd.md"
+  echo "a refused --out must not leave a file behind when the cwd is outside the tree" >&2
+  exit 1
+}
+git_common="$(cd "$(git rev-parse --git-common-dir)" && pwd)"
+[[ "$(exit_of python3 "$render" "$rplan" --wave 1 --task api --out "$git_common/render-test.md")" == 0 ]] || {
+  rm -f "$git_common/render-test.md"
+  echo "--out under the repo's .git must render: $(cat "$rt/stderr")" >&2
+  exit 1
+}
+rm -f "$git_common/render-test.md"
+
+[[ "$(exit_of python3 "$render" "$rt/no-such-plan.md" --wave 1 --task api --out "$rt/x.md")" == 3 ]] || {
+  echo "a missing plan file must exit 3" >&2
+  exit 1
+}
+
+# The fixture was filled by hand from the Template block under the Placeholders
+# rules, so this compares the script against the rules rather than against
+# itself.
+python3 "$render" "$rplan" --wave 1 --task api --verify-cmd 'bash t.sh' \
+  --contract "$fixtures/render-contract.md" --baseline "$fixtures/render-baseline.txt" \
+  --out "$rt/api-full.md" >/dev/null
+cmp -s "$rt/api-full.md" "$fixtures/render-api-expected.md" || {
+  echo "the api render differs from the hand-filled fixture:" >&2
+  diff "$rt/api-full.md" "$fixtures/render-api-expected.md" >&2 || true
+  exit 1
+}
 
 echo "divvy-up smoke: OK"
