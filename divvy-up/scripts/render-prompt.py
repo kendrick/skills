@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Fill one task's worker prompt from the Waves table and write it to a file.
 
-    divvy-up/scripts/render-prompt.py PLAN.md --wave 1 --task api --out DIR/1-api.md \\
+    divvy-up/scripts/render-prompt.py PLAN.md --wave 1 --task api \\
+        --out DIR/1-api.md \\
         [--contract FILE] [--verify-cmd CMD] [--baseline FILE] \\
         [--caller-notes FILE] [--prior FILE]
 
@@ -15,10 +16,10 @@ On success it writes --out, prints that path on stdout, and exits 0.
 
 Why --out may not land inside the work tree: Step 6 derives ownership from the
 diff, and a rendered prompt sitting in the tree would show up as a write no task
-owns. The check asks git about the directory --out lands in, never the cwd, so it
-holds whichever directory the orchestrator runs from. A `.git/` directory is the
-exception, because that is where a wrapping skill's run directory lives, and git
-reports no work tree there.
+owns. The check asks git about the directory --out lands in, never the cwd, so
+it holds whichever directory the orchestrator runs from. A `.git/` directory is
+the exception, because that is where a wrapping skill's run directory lives,
+and git reports no work tree there.
 
 Why a placeholder left unfilled is a failure rather than a warning: a template
 edit that adds a placeholder this script does not know would otherwise ship the
@@ -26,21 +27,21 @@ literal `{{NEW_THING}}` to a worker, which reads it as an instruction it cannot
 follow. The check scans the template only.
 
 Substitution is one `re.sub` over the template, and nothing it inserts is ever
-rescanned. Caller notes carry issue text (work-issue passes an issue's acceptance
-criteria verbatim), so a placeholder in them can be data, and the script cannot
-tell a quoted one from one the caller forgot to fill. Rescanning them once
-spliced a BASELINE into a criterion that merely named `{{BASELINE}}`
+rescanned. Caller notes carry issue text (work-issue passes an issue's
+acceptance criteria verbatim), so a placeholder in them can be data, and the
+script cannot tell a quoted one from one the caller forgot to fill. Rescanning
+them once spliced a BASELINE into a criterion that merely named `{{BASELINE}}`
 (F-r1-authz-01). The one fill inside the notes is `{{TASK}}`, which a wrapping
-skill writes on purpose; it is replaced before the pass, and every other `{{...}}`
-in the notes, a BASELINE, or a PRIOR crosses verbatim.
+skill writes on purpose; it is replaced before the pass, and every other
+`{{...}}` in the notes, a BASELINE, or a PRIOR crosses verbatim.
 
 File inputs lose their trailing newline, so a file's last line break doesn't
 become a blank line in the prompt.
 
 Exit codes: 0 rendered; 1 semantic failure (malformed Waves table, task absent
-from or repeated in the wave, no Template block between '## Template' and '## Placeholders', unfilled
-placeholder, --out inside the work tree)
-with one line per problem on stderr; 3 usage, missing or unreadable input.
+from or repeated in the wave, no Template block between '## Template' and
+'## Placeholders', unfilled placeholder, --out inside the work tree) with one
+line per problem on stderr; 3 usage, missing or unreadable input.
 Argparse supplies 2 for a mistyped flag.
 
 Stdlib only, so the skill stays copy-in portable. check-waves.py is loaded by
