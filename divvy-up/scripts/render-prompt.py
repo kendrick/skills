@@ -15,8 +15,10 @@ On success it writes --out, prints that path on stdout, and exits 0.
 
 Why --out may not land inside the work tree: Step 6 derives ownership from the
 diff, and a rendered prompt sitting in the tree would show up as a write no task
-owns. The repo's own `.git/` is the exception, because that is where a wrapping
-skill's run directory lives and git never reports anything under it.
+owns. The check asks git about the directory --out lands in, never the cwd, so it
+holds whichever directory the orchestrator runs from. A `.git/` directory is the
+exception, because that is where a wrapping skill's run directory lives, and git
+reports no work tree there.
 
 Why a placeholder left unfilled is a failure rather than a warning: a template
 edit that adds a placeholder this script does not know would otherwise ship the
@@ -33,7 +35,8 @@ what it inserted. File inputs lose trailing newlines so a file's final newline
 does not become a blank line in the prompt.
 
 Exit codes: 0 rendered; 1 semantic failure (malformed Waves table, task absent
-from or repeated in the wave, unfilled placeholder, --out inside the work tree)
+from or repeated in the wave, no Template block between '## Template' and '## Placeholders', unfilled
+placeholder, --out inside the work tree)
 with one line per problem on stderr; 3 usage, missing or unreadable input.
 Argparse supplies 2 for a mistyped flag.
 
@@ -96,23 +99,15 @@ def extract_template(md):
     return "\n".join(lines[fences[0] + 1 : fences[-1]]) + "\n"
 
 
-def refuse_in_tree_out(cw, out):
-    """Exit 1 when `out` is inside the work tree and outside its .git."""
-    root = cw.repo_root_for()
-    if root is None:
-        return
-    root = os.path.realpath(root)
-    target = os.path.realpath(out)
-    if not target.startswith(root + os.sep):
-        return
-    git = subprocess.run(
-        ["git", "-C", root, "rev-parse", "--git-common-dir"], capture_output=True, text=True
-    )
+def refuse_in_tree_out(out):
+    """Exit 1 when `out` would sit in a work tree. Decided from the directory
+    --out lands in, not from the cwd: an orchestrator often runs from ROOT while
+    --out points into WORKTREE. Inside a `.git/` directory `--show-toplevel`
+    fails, so a run directory under the common dir passes without a special case."""
+    where = os.path.dirname(os.path.realpath(out))
+    git = subprocess.run(["git", "-C", where, "rev-parse", "--show-toplevel"], capture_output=True, text=True)
     if git.returncode == 0:
-        common = os.path.realpath(os.path.join(root, git.stdout.strip()))
-        if target.startswith(common + os.sep):
-            return
-    fail(1, f"--out {out} is inside the work tree; Step 6 would count it as an unowned write")
+        fail(1, f"--out {out} is inside the work tree; Step 6 would count it as an unowned write")
 
 
 def main(argv=None):
@@ -171,7 +166,7 @@ def main(argv=None):
         return 1
     text = PLACEHOLDER.sub(lambda m: values[m.group(1)], text)
 
-    refuse_in_tree_out(cw, args.out)
+    refuse_in_tree_out(args.out)
     try:
         with open(args.out, "w", encoding="utf-8") as f:
             f.write(text)

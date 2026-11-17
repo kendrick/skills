@@ -1061,6 +1061,22 @@ sed 's/^| 1 | ui |/| 1 | api |/; s#src/ui/#src/ui2/#' "$rplan" >"$rt/dup-plan.md
   echo "a refused --out must not leave a file behind" >&2
   exit 1
 }
+# The check follows --out, not the cwd: an orchestrator often runs from outside
+# the tree it renders into.
+outside_cwd="$(mktemp -d)"
+tree_here="$PWD"
+[[ "$(cd "$outside_cwd" && exit_of python3 "$tree_here/$render" "$tree_here/$rplan" --wave 1 --task api --out "$tree_here/tmp-render-cwd.md")" == 1 ]] || {
+  rm -f "$tree_here/tmp-render-cwd.md"
+  rm -rf "$outside_cwd"
+  echo "--out inside the work tree must exit 1 even when the cwd is outside it" >&2
+  exit 1
+}
+rm -rf "$outside_cwd"
+[[ ! -e "$tree_here/tmp-render-cwd.md" ]] || {
+  rm -f "$tree_here/tmp-render-cwd.md"
+  echo "a refused --out must not leave a file behind when the cwd is outside the tree" >&2
+  exit 1
+}
 git_common="$(cd "$(git rev-parse --git-common-dir)" && pwd)"
 [[ "$(exit_of python3 "$render" "$rplan" --wave 1 --task api --out "$git_common/render-test.md")" == 0 ]] || {
   rm -f "$git_common/render-test.md"

@@ -113,6 +113,8 @@
          "resume": {"phase": "1", "row": 7}, "cite": "resume.md row 7: no baseline.txt, so Step 1 at the missing artifact"},
         {"step": 2, "subpath": "timing.log", "op": "append", "path": "timing.log", "content": "1 end 2026-01-01T07:10:00Z\n2 start 2026-01-01T07:10:00Z\n",
          "blind": "a build stamp only lowers the review-to-build ratio, which review_over_budget reads, and this run stays under 2.0"},
+        {"step": 2, "subpath": "prompts/<wave>-<task>.md", "op": "write", "path": "prompts/0-alpha.md", "content": "rendered prompt\n",
+         "blind": "probe never reads prompts/; a dispatch whose render was lost resumes from the report it never wrote, so row 7 re-renders it at Step 2"},
         {"step": 2, "subpath": "tree", "op": "edit", "file": "a.py", "content": "alpha = 1\n",
          "resume": {"phase": "2", "row": 7}, "cite": "resume.md row 7: task alpha has no report, so Step 2 at wave 0"},
         {"step": 2, "subpath": "reports/<wave>-<task>.json", "op": "write", "path": "reports/0-alpha.json", "content": "{\"task\": \"alpha\", \"status\": \"done\"}\n",

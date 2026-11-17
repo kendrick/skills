@@ -5147,7 +5147,10 @@ wait
 # never counts one as an unowned write), and herdr keeps sending the prompt inline.
 require_text work-issue/SKILL.md "\`RUN_DIR/prompts/<wave>-<task>.caller.md\`"
 require_text work-issue/SKILL.md "Herdr keeps sending the full prompt inline"
-require_text work-issue/SKILL.md "\`--prior RUN_DIR/prompts/<repair-id>.prior.md\`"
+require_text work-issue/SKILL.md "\`--prior RUN_DIR/prompts/fix-<n>.prior.md\`"
+require_text work-issue/SKILL.md "\`--out RUN_DIR/prompts/fix-<n>.md\`"
+require_text work-issue/SKILL.md "its prompt inline too: the repair spans tasks"
+require_text work-issue/SKILL.md "\`reports/\`, \`prompts/\`, \`gated/\`"
 require_text _maintenance/work-issue/RATIONALE.md "Worker and repair prompts render into \`RUN_DIR/prompts/\`"
 
 echo "work-issue smoke: OK"
