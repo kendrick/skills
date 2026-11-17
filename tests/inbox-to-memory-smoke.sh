@@ -2802,6 +2802,202 @@ else
   echo "skipping unreadable-record assertion: running as root" >&2
 fi
 
+# --- stale-records.sh (#262) ---
+#
+# Nothing read last_confirmed back, so a record nobody had restated in a year
+# looked like one confirmed last week. Every case runs the real script against
+# a copy of the mixed fixture with today pinned by LTM_TODAY, and moves one
+# input at a time: last_confirmed across the threshold, date across it while
+# last_confirmed is set, status off accepted. A tool that aged the wrong field
+# or used >= instead of > passes a check that only counts lines, so each case
+# asserts the exact line.
+
+sr=inbox-to-memory/scripts/stale-records.sh
+require_file "$sr"
+bash -n "$sr"
+sr_rec=_memory/context/atlas-region-topology-mPmy8XBe5H.md
+sr_v1=_memory/decisions/freeze-window-owned-by-ops-ocPwdpeY0a.md
+sr_dir="$(mktemp -d "${TMPDIR:-/tmp}/i2m-stale.XXXXXX")"
+trap 'rm -rf "$not_a_scope" "$inline_scope" "$dismissal_scope" "$mig" "$jrn" "$t2_extract_scope" "$t2x_dir" "$subset_scope" "$batched_scope" "$lifecycle_scope" "$idem_dir" "$v_pass" "$scripts_copy" "$v_combo" "$v_linkdrop" "$v_lintdefect" "$v1_broken_scope" "$v1_pass_scope" "$wt_headline" "$wt_backward" "$wt_dedupe" "$wt_status" "$wt_keyins" "$v_subdir" "$bench_dir" "$sr_dir"' EXIT
+
+# Reset the copy from the fixture, then sed one line of the record. BSD sed
+# needs the backup suffix, and the grep proves the edit landed before a run
+# reads a result that depends on it.
+sr_reset() {
+  rm -rf "$sr_dir/scope"
+  mkdir "$sr_dir/scope"
+  cp -R "$fixtures/mixed/." "$sr_dir/scope/"
+}
+sr_edit() {
+  sed -i.bak "$1" "$sr_dir/scope/$sr_rec"
+  rm -f "$sr_dir/scope/$sr_rec.bak"
+  grep -Fqx -- "$2" "$sr_dir/scope/$sr_rec" || {
+    echo "could not apply '$1' to the stale-records copy" >&2
+    exit 1
+  }
+}
+sr_run() {
+  sr_rc=0
+  sr_out="$(LTM_TODAY=2026-05-12 bash "$sr" "$sr_dir/scope" "$@" 2>"$sr_dir/err.txt")" || sr_rc=$?
+  sr_err="$(cat "$sr_dir/err.txt")"
+  # Case 7: the v1 record is accepted and 161 days old, so a missed skip shows
+  # up here as a freeze-window line, and its skip line shows on stderr.
+  [[ "$sr_rc" == 0 ]] || {
+    echo "stale-records exited $sr_rc (want 0): $*" >&2
+    printf '%s\n' "$sr_err" >&2
+    exit 1
+  }
+  require_line "$sr_err" "skipped: $sr_v1 (v1)" stale-records
+  ! grep -Fq freeze-window <<<"$sr_out" || {
+    echo "stale-records reported the v1 record:" >&2
+    printf '%s\n' "$sr_out" >&2
+    exit 1
+  }
+}
+sr_expect() {
+  [[ "$sr_out" == "$1" ]] || {
+    echo "stale-records stdout is not the expected $2:" >&2
+    printf 'want: %s\ngot:  %s\n' "$1" "$sr_out" >&2
+    exit 1
+  }
+}
+sr_line="$sr_rec: stale-confirmed: last_confirmed 2026-02-10 is 91 days old (threshold 90)"
+
+# 1. Stock copy: last_confirmed is 91 days back, so it is the one line.
+sr_reset
+sr_run
+sr_expect "$sr_line" "case 1 line"
+
+# 2. last_confirmed one day younger is exactly 90 days old: no line. Strictly
+# greater, and date (119 days old) is ignored while last_confirmed is set.
+sr_reset
+sr_edit 's/^last_confirmed: .*/last_confirmed: 2026-02-11/' "last_confirmed: 2026-02-11"
+sr_run
+sr_expect "" "empty output at 90 days"
+
+# 3. A younger date must not hide a stale last_confirmed.
+sr_reset
+sr_edit 's/^date: .*/date: 2026-05-01/' "date: 2026-05-01"
+sr_run
+sr_expect "$sr_line" "case 1 line with a young date"
+
+# 4. No last_confirmed: aged by date, and the line says so.
+sr_reset
+sr_edit '/^last_confirmed: /d' "date: 2026-01-13"
+! grep -q '^last_confirmed:' "$sr_dir/scope/$sr_rec" || {
+  echo "could not delete last_confirmed in the stale-records copy" >&2
+  exit 1
+}
+sr_run
+sr_date_line="$sr_rec: stale-confirmed: date 2026-01-13 is 119 days old and there's no last_confirmed (threshold 90)"
+sr_expect "$sr_date_line" "date-fallback line"
+
+# An empty `last_confirmed:` falls back the same way instead of reporting a blank date.
+sr_reset
+sr_edit 's/^last_confirmed: .*/last_confirmed:/' "last_confirmed:"
+sr_run
+sr_expect "$sr_date_line" "date-fallback line for an empty last_confirmed"
+
+# 5. --days moves the threshold on that same copy.
+sr_reset
+sr_edit '/^last_confirmed: /d' "date: 2026-01-13"
+sr_run --days 120
+sr_expect "" "empty output at --days 120"
+sr_run --days 119
+sr_expect "" "empty output at --days 119, where the record is exactly 119 days old"
+sr_run --days 118
+sr_expect "${sr_date_line/threshold 90/threshold 118}" "line at --days 118"
+
+# 6. Only accepted records are checked.
+for sr_status in superseded proposed rejected deprecated; do
+  sr_reset
+  sr_edit "s/^status: .*/status: $sr_status/" "status: $sr_status"
+  sr_run
+  sr_expect "" "empty output for status $sr_status"
+done
+
+# 8. The template writes last_confirmed quoted; it must age the same.
+sr_reset
+sr_edit "s/^last_confirmed: .*/last_confirmed: '2026-02-10'/" "last_confirmed: '2026-02-10'"
+sr_run
+sr_expect "$sr_line" "case 1 line for a quoted last_confirmed"
+
+# 9. Exit 2 on every usage or scope error, with a stderr line to say why.
+sr_reset
+mkdir "$sr_dir/neither" "$sr_dir/journal" "$sr_dir/journal/entries"
+sr_fail() {
+  local want="$1"
+  shift
+  sr_rc=0
+  sr_err="$("$@" 2>&1 >/dev/null)" || sr_rc=$?
+  [[ "$sr_rc" == 2 ]] || {
+    echo "stale-records exited $sr_rc (want 2): ${*:3}" >&2
+    exit 1
+  }
+  require_output "$sr_err" "$want"
+}
+sr_fail "usage: stale-records.sh" env LTM_TODAY=2026-05-12 bash "$sr"
+sr_fail "stale-records: not a scope: $sr_dir/missing" env LTM_TODAY=2026-05-12 bash "$sr" "$sr_dir/missing"
+sr_fail "stale-records: not a scope: $sr_dir/neither" env LTM_TODAY=2026-05-12 bash "$sr" "$sr_dir/neither"
+sr_fail "usage: stale-records.sh" env LTM_TODAY=2026-05-12 bash "$sr" "$sr_dir/scope" --days 0
+sr_fail "usage: stale-records.sh" env LTM_TODAY=2026-05-12 bash "$sr" "$sr_dir/scope" --days abc
+sr_fail "usage: stale-records.sh" env LTM_TODAY=2026-05-12 bash "$sr" "$sr_dir/scope" --days
+sr_fail "usage: stale-records.sh" env LTM_TODAY=2026-05-12 bash "$sr" "$sr_dir/scope" --bogus
+sr_fail "usage: stale-records.sh" env LTM_TODAY=2026-05-12 bash "$sr" "$sr_dir/scope" "$sr_dir/neither"
+sr_fail "stale-records: LTM_TODAY is not a YYYY-MM-DD date: 2026-13-40" env LTM_TODAY=2026-13-40 bash "$sr" "$sr_dir/scope"
+# An unreadable scope or record exits 2 rather than reporting an empty scope.
+# chmod 000 doesn't block root, so skip there.
+if [[ "$(id -u)" != 0 ]]; then
+  sr_reset
+  chmod 000 "$sr_dir/scope/_memory"
+  sr_fail "stale-records: unreadable directory" env LTM_TODAY=2026-05-12 bash "$sr" "$sr_dir/scope"
+  chmod 755 "$sr_dir/scope/_memory"
+  chmod 000 "$sr_dir/scope/$sr_rec"
+  sr_fail "$sr_rec: unreadable (" env LTM_TODAY=2026-05-12 bash "$sr" "$sr_dir/scope"
+  chmod 644 "$sr_dir/scope/$sr_rec"
+else
+  echo "skipping unreadable stale-records assertions: running as root" >&2
+fi
+# Frontmatter that opens and never closes is a malformed record, not a
+# non-record: skipping it would report a clean scope with a stale record inside.
+sr_reset
+awk '/^---$/ { n++; if (n == 2) next } { print }' "$sr_dir/scope/$sr_rec" >"$sr_dir/unclosed.md"
+mv "$sr_dir/unclosed.md" "$sr_dir/scope/$sr_rec"
+[[ "$(grep -c '^---$' "$sr_dir/scope/$sr_rec")" == 1 ]] || {
+  echo "the unclosed-frontmatter copy still has its closing fence" >&2
+  exit 1
+}
+sr_fail "frontmatter opens with --- but never closes" env LTM_TODAY=2026-05-12 bash "$sr" "$sr_dir/scope"
+# A journal has entries/ and no records: nothing to age, and not an error.
+sr_rc=0
+sr_out="$(LTM_TODAY=2026-05-12 bash "$sr" "$sr_dir/journal" 2>/dev/null)" || sr_rc=$?
+[[ "$sr_rc" == 0 && -z "$sr_out" ]] || {
+  echo "stale-records did not accept an entries/-only scope silently (exit $sr_rc): $sr_out" >&2
+  exit 1
+}
+
+# 10. Read-only: hash every file before and after a run that finds a stale record.
+sr_reset
+sr_before="$(cd "$sr_dir/scope" && find . -type f -exec shasum {} + | sort)"
+sr_run
+sr_expect "$sr_line" "case 1 line before the read-only comparison"
+sr_after="$(cd "$sr_dir/scope" && find . -type f -exec shasum {} + | sort)"
+[[ "$sr_before" == "$sr_after" ]] || {
+  echo "stale-records changed a file in the scope" >&2
+  exit 1
+}
+
+# 11. The skill has to name the script, or nothing runs it in the field. The
+# refutes pin the two cuts: no memory-bank.yaml read, and no write to a record.
+require_text inbox-to-memory/SKILL.md "scripts/stale-records.sh <scope-root>"
+refute_text "$sr" "memory-bank.yaml"
+# A text pin only catches the spellings listed here. Case 10's hash comparison is
+# the real guard, and these keep the obvious ones from coming back.
+for sr_cut in ', "w"' ", 'w'" ', "a"' ", 'a'" "mode=" "os.remove" "os.unlink" "os.rename" "os.replace" "shutil"; do
+  refute_text "$sr" "$sr_cut"
+done
+rm -rf "$sr_dir"
+
 # A raw sidecar (#193) moves a note's raw text out of the file an index reads,
 # so the lint is what catches a pointer left dangling. Every case below plants
 # one defect in a copy of the split fixture. This section removes $split_tmp
