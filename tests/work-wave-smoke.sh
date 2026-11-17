@@ -237,7 +237,7 @@ require_text "$skill" "| 3 | \`lanes.md\` and \`harvest.md\`; no \`footprint/che
 # Codex finding 3 of the third review on PR #141: Step 6 records SHAs for the
 # merge set alone, so a probe comparing every lane's HEAD looped back to Step 6
 # forever once a lane was held or failed.
-require_text "$skill" "| 8 | every gate record; some lane in the merge set has no \`reports/issue-N-publish.json\`, and no green \`merge-test/<k>.md\` with k > 0 whose recorded branches are exactly the merge set, each at its current HEAD | Step 6, which stops again on a red or conflicted record |"
+require_text "$skill" "| 8 | every gate record; some lane in the merge set has no \`reports/issue-N-publish.json\`, and the newest \`merge-test/<k>.md\` with k > 0 whose recorded branches are exactly the merge set, each at its current HEAD, is missing or not green | Step 6, which stops again on a red or conflicted record |"
 require_text "$skill" "Where the HEAD of any lane in the merge set differs from its SHA in the newest \`merge-test/<k>.md\`"
 refute_text "$skill" "every lane's current HEAD"
 refute_text "$ledger" "**The Resume table is prose the orchestrator walks by hand.**"
@@ -245,7 +245,7 @@ require_text "$ledger" "| 51 | The Resume table is executable"
 
 # Codex finding 3 on PR #141: each lane rebases before it publishes, so a
 # merge test over a stale base tested a tree nobody will merge.
-require_text "$skill" "Check the base before any dispatch: \`git -C ROOT fetch origin DEFAULT\`, then compare \`git -C ROOT rev-parse origin/DEFAULT\` with the \`base:\` line of the newest green \`merge-test/<k>.md\`."
+require_text "$skill" "Check the base before any dispatch: \`git -C ROOT fetch origin DEFAULT\`, then compare \`git -C ROOT rev-parse origin/DEFAULT\` with the \`base:\` line of the newest \`merge-test/<k>.md\` over exactly the merge set at its current HEADs, which must be green."
 require_text "$skill" "Step 7 for those lanes only, when the fetched \`origin/DEFAULT\` equals that merge test's \`base:\`; where it differs, Step 6, then Step 7"
 # The re-run proves the combined tree, and the published SHAs are rebased
 # ones no merge test recorded. Claiming more would hide the gap the ledger's
@@ -873,6 +873,20 @@ wave_state probe --wave-dir "$wd" --root "$repo" --default main --pr-bundle "$tm
 cp "$tmp/out" "$tmp/probe.json"
 expect_null merge_test_green
 printf 'base: origin/main %s\nissue-7 %s\nresult: green\n' "$base_sha" "$base_sha" >"$wd/merge-test/1.md"
+
+# PR #347 review: a red re-test at the SHAs and base a green one passed is Step
+# 6's stop. A crash before Step 6 stops must not let the older green publish.
+printf 'base: origin/main %s\nissue-7 %s\nresult: red\n' "$base_sha" "$base_sha" >"$wd/merge-test/2.md"
+wave_state probe --wave-dir "$wd" --root "$repo" --default main --pr-bundle "$tmp/bundle.json"
+expect_status 0 "probe over a red record newer than a green one"
+cp "$tmp/out" "$tmp/probe.json"
+python3 -c 'import json,sys; p=json.load(open(sys.argv[1])); sys.exit(0 if (p["merge_test_matches"], p["merge_test_green"], p["base_current"]) == (True, False, False) else 1)' "$tmp/probe.json" || {
+  echo "a red record newer than a green one at the same SHAs should probe matches true, green false, base_current false, got: $(cat "$tmp/probe.json")" >&2
+  exit 1
+}
+wave_state phase --probe "$tmp/probe.json"
+expect_prefix "phase: 6 reason: row 8:" "phase over a red record newer than a green one"
+rm "$wd/merge-test/2.md"
 
 # PR #347 review: a failed lane and its held successor leave an empty merge set,
 # which no publish report or green record can ever satisfy. Step 8's report,

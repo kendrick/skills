@@ -333,7 +333,7 @@
                   "phase": "7",
                   "row": 9
                 },
-                "cite": "Resume row 9: a green merge test over exactly the merge set at its current HEADs, origin/DEFAULT equal to its base:, and this lane has no publish report; Step 7 for those lanes only"
+                "cite": "Resume row 9: the newest merge test over exactly the merge set at its current HEADs green, origin/DEFAULT equal to its base:, and this lane has no publish report; Step 7 for those lanes only"
               }
             ],
             [
@@ -347,7 +347,7 @@
                   "phase": "7",
                   "row": 9
                 },
-                "cite": "Resume row 9: a green merge test over exactly the merge set at its current HEADs, origin/DEFAULT equal to its base:, and this lane has no publish report; Step 7 for those lanes only"
+                "cite": "Resume row 9: the newest merge test over exactly the merge set at its current HEADs green, origin/DEFAULT equal to its base:, and this lane has no publish report; Step 7 for those lanes only"
               }
             ]
           ]
@@ -866,7 +866,7 @@
             "phase": "7",
             "row": 9
           },
-          "cite": "Resume row 9: a green merge test over exactly the merge set at its current HEADs, origin/DEFAULT equal to its base:, and this lane has no publish report; Step 7 for those lanes only"
+          "cite": "Resume row 9: the newest merge test over exactly the merge set at its current HEADs green, origin/DEFAULT equal to its base:, and this lane has no publish report; Step 7 for those lanes only"
         },
         {
           "step": 7,
@@ -878,7 +878,7 @@
             "phase": "7",
             "row": 9
           },
-          "cite": "Resume row 9: a green merge test over exactly the merge set at its current HEADs, origin/DEFAULT equal to its base:, and this lane has no publish report; Step 7 for those lanes only"
+          "cite": "Resume row 9: the newest merge test over exactly the merge set at its current HEADs green, origin/DEFAULT equal to its base:, and this lane has no publish report; Step 7 for those lanes only"
         }
       ],
       "end": {
@@ -950,7 +950,7 @@
             "phase": "7",
             "row": 9
           },
-          "cite": "Resume row 9: a green merge test over exactly the merge set at its current HEADs, origin/DEFAULT equal to its base:, and a lane in the merge set has no publish report; Step 7 for those lanes only; this branch op is the scratch's fetch of origin/DEFAULT, and the branch it makes is no lane's, so the probe never reads it"
+          "cite": "Resume row 9: the newest merge test over exactly the merge set at its current HEADs green, origin/DEFAULT equal to its base:, and a lane in the merge set has no publish report; Step 7 for those lanes only; this branch op is the scratch's fetch of origin/DEFAULT, and the branch it makes is no lane's, so the probe never reads it"
         }
       ],
       "end": {
@@ -977,6 +977,32 @@
             "row": 8
           },
           "cite": "Resume row 8: every gate record, a lane in the merge set with no publish report, and no green merge-test/<k>.md with k > 0 recording exactly the merge set at its current HEADs; Step 6, which stops again on a red or conflicted record"
+        }
+      ],
+      "end": {
+        "phase": "6",
+        "row": 8
+      }
+    },
+    {
+      "name": "red-after-green",
+      "run_dir": "wave-7-8",
+      "prefix": {
+        "sequence": "main",
+        "through": "merge-test"
+      },
+      "entries": [
+        {
+          "step": 6,
+          "subpath": "merge-test/<k>.md",
+          "op": "write",
+          "path": "merge-test/2.md",
+          "content": "base: origin/main {rev:origin/main}\nissue-7 {rev:issue-7}\nissue-8 {rev:issue-8}\nresult: red\nverify tail\n",
+          "resume": {
+            "phase": "7",
+            "row": 9
+          },
+          "cite": "Resume row 9: the newest merge test over exactly the merge set at its current HEADs green, origin/DEFAULT equal to its base:, and a lane in the merge set has no publish report; Step 7 for those lanes only; Step 6 run again at the same base and SHAs, which goes red"
         }
       ],
       "end": {
@@ -1278,7 +1304,7 @@
             "phase": "7",
             "row": 9
           },
-          "cite": "Resume row 9: a green merge test over exactly the merge set at its current HEADs, origin/DEFAULT equal to its base:, and this lane has no publish report; Step 7 for those lanes only"
+          "cite": "Resume row 9: the newest merge test over exactly the merge set at its current HEADs green, origin/DEFAULT equal to its base:, and this lane has no publish report; Step 7 for those lanes only"
         },
         {
           "step": 7,
@@ -1290,7 +1316,7 @@
             "phase": "7",
             "row": 9
           },
-          "cite": "Resume row 9: a green merge test over exactly the merge set at its current HEADs, origin/DEFAULT equal to its base:, and this lane has no publish report; Step 7 for those lanes only"
+          "cite": "Resume row 9: the newest merge test over exactly the merge set at its current HEADs green, origin/DEFAULT equal to its base:, and this lane has no publish report; Step 7 for those lanes only"
         },
         {
           "step": 8,
@@ -1328,7 +1354,7 @@
             "phase": "7",
             "row": 9
           },
-          "cite": "Resume row 9: a green merge test over exactly the merge set at its current HEADs, origin/DEFAULT equal to its base:, and this lane has no publish report; Step 7 for those lanes only"
+          "cite": "Resume row 9: the newest merge test over exactly the merge set at its current HEADs green, origin/DEFAULT equal to its base:, and this lane has no publish report; Step 7 for those lanes only"
         },
         {
           "step": 7,
@@ -1340,7 +1366,7 @@
             "phase": "7",
             "row": 9
           },
-          "cite": "Resume row 9: a green merge test over exactly the merge set at its current HEADs, origin/DEFAULT equal to its base:, and this lane has no publish report; Step 7 for those lanes only; Step 7 moves the lanes ordered after a failed lane to held before saving its publish report"
+          "cite": "Resume row 9: the newest merge test over exactly the merge set at its current HEADs green, origin/DEFAULT equal to its base:, and this lane has no publish report; Step 7 for those lanes only; Step 7 moves the lanes ordered after a failed lane to held before saving its publish report"
         },
         {
           "step": 7,
@@ -1378,7 +1404,7 @@
             "phase": "7",
             "row": 9
           },
-          "cite": "Resume row 9: a green merge test over exactly the merge set at its current HEADs, origin/DEFAULT equal to its base:, and this lane has no publish report; Step 7 for those lanes only"
+          "cite": "Resume row 9: the newest merge test over exactly the merge set at its current HEADs green, origin/DEFAULT equal to its base:, and this lane has no publish report; Step 7 for those lanes only"
         },
         {
           "step": 7,
@@ -1400,7 +1426,7 @@
             "phase": "7",
             "row": 9
           },
-          "cite": "Resume row 9: a green merge test over exactly the merge set at its current HEADs, origin/DEFAULT equal to its base:, and this lane has no publish report; Step 7 for those lanes only"
+          "cite": "Resume row 9: the newest merge test over exactly the merge set at its current HEADs green, origin/DEFAULT equal to its base:, and this lane has no publish report; Step 7 for those lanes only"
         }
       ],
       "end": {
@@ -1412,7 +1438,7 @@
   "invariants": [
     {
       "name": "step-7-needs-green-exact-current",
-      "cite": "SKILL.md Step 7 Done when: the fetched origin/DEFAULT equalled the base: of the newest green merge test at the moment of dispatch; Step 6 Done when: the result is green; Resume row 9: a green merge test over exactly the merge set at its current HEADs",
+      "cite": "SKILL.md Step 7 Done when: the fetched origin/DEFAULT equalled the base: of the newest merge test over the merge set at its current HEADs, and that test was green, at the moment of dispatch; Step 6 Done when: the result is green; Resume row 9: the newest merge test over exactly the merge set at its current HEADs green",
       "if": [
         [
           "phase",

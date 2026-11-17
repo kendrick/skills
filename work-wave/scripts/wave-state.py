@@ -69,10 +69,10 @@ RESUME_ROWS = (
     (5, '`order.md`; no `merge-test/0.md`', 'Step 3, every `ask` row and the confirmation again, then Step 4'),
     (6, '`merge-test/0.md`; some saved build report has no `gate/issue-<N>.md`, or some gate record recorded a stop', "Step 5 for the ungated reports only, then probe again; a recorded stop stops the wave again, naming the lane and its pull-request URL or the re-check's stderr lines, until the user rules on it"),
     (7, '`merge-test/0.md`; some unheld lane has no `reports/issue-N-build.json`', 'Step 4 for those lanes only, in one message; a lane whose RUN_DIR exists is resumed by its own `work-issue`, and its build report is whatever it returns'),
-    (8, 'every gate record; some lane in the merge set has no `reports/issue-N-publish.json`, and no green `merge-test/<k>.md` with k > 0 whose recorded branches are exactly the merge set, each at its current HEAD', 'Step 6, which stops again on a red or conflicted record'),
-    (9, 'a green merge test over exactly the merge set at its current HEADs; some lane in the merge set has no `reports/issue-N-publish.json`', "Step 7 for those lanes only, when the fetched `origin/DEFAULT` equals that merge test's `base:`; where it differs, Step 6, then Step 7"),
+    (8, 'every gate record; some lane in the merge set has no `reports/issue-N-publish.json`, and the newest `merge-test/<k>.md` with k > 0 whose recorded branches are exactly the merge set, each at its current HEAD, is missing or not green', 'Step 6, which stops again on a red or conflicted record'),
+    (9, 'the newest merge test over exactly the merge set at its current HEADs is green; some lane in the merge set has no `reports/issue-N-publish.json`', "Step 7 for those lanes only, when the fetched `origin/DEFAULT` equals that merge test's `base:`; where it differs, Step 6, then Step 7"),
     (10, 'every publish report; a non-empty merge set; the HEAD of some lane in it moved since the newest merge test, or that test merged a lane that has since left the merge set', "Step 8's re-test, then the report"),
-    (11, 'every publish report; a merge test green over exactly the merge set at its current HEADs, or an empty merge set', "Step 8's report"),
+    (11, 'every publish report; the newest merge test over exactly the merge set at its current HEADs is green, or an empty merge set', "Step 8's report"),
 )
 
 ROUTES = ("done", "stopped", "failed", "refused", "early-publish", "recheck-failed")
@@ -397,16 +397,22 @@ class Wave:
         heads = self.heads(lanes)
         return [k for k in same if records[k][1] == heads], records
 
-    def merge_test_green(self):
+    def newest_matching(self):
+        """The highest-k matching record, or None. Only it decides: a red
+        re-test at SHAs an older record passed has to block publishing, or a
+        crash between the red record and Step 6's stop publishes anyway."""
         matching, records = self.matching()
-        return any(records[k][2] == "green" for k in matching)
+        return records[max(matching)] if matching else None
+
+    def merge_test_green(self):
+        newest = self.newest_matching()
+        return newest is not None and newest[2] == "green"
 
     def base_current(self):
-        matching, records = self.matching()
-        green = [k for k in matching if records[k][2] == "green"]
-        if not green:
+        newest = self.newest_matching()
+        if newest is None or newest[2] != "green":
             return False
-        return records[max(green)][0] == self.rev(f"refs/remotes/origin/{self.default}")
+        return newest[0] == self.rev(f"refs/remotes/origin/{self.default}")
 
     def heads_moved(self):
         """True where Step 8 must re-test: a merge-set lane's HEAD differs from
