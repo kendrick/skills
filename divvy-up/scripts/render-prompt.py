@@ -32,8 +32,10 @@ tell a quoted one from one the caller forgot to fill. Rescanning them once
 spliced a BASELINE into a criterion that merely named `{{BASELINE}}`
 (F-r1-authz-01). The one fill inside the notes is `{{TASK}}`, which a wrapping
 skill writes on purpose; it is replaced before the pass, and every other `{{...}}`
-in the notes, a BASELINE, or a PRIOR crosses verbatim. File inputs lose trailing newlines so a file's final newline
-does not become a blank line in the prompt.
+in the notes, a BASELINE, or a PRIOR crosses verbatim.
+
+File inputs lose their trailing newline, so a file's last line break doesn't
+become a blank line in the prompt.
 
 Exit codes: 0 rendered; 1 semantic failure (malformed Waves table, task absent
 from or repeated in the wave, no Template block between '## Template' and '## Placeholders', unfilled
