@@ -23,15 +23,16 @@ reports no work tree there.
 Why a placeholder left unfilled is a failure rather than a warning: a template
 edit that adds a placeholder this script does not know would otherwise ship the
 literal `{{NEW_THING}}` to a worker, which reads it as an instruction it cannot
-follow. The same check fires on caller notes still holding a placeholder the
-caller should have filled.
+follow. The check scans the template only.
 
-Substitution runs in two passes so that data is never rescanned. Caller notes are
-template material (a wrapping skill writes `{{TASK}}` into them), so they go in
-first and are scanned with the rest. The remaining values are data: a BASELINE
-holding test output, or a PRIOR holding a report, may contain `{{...}}` and must
-cross verbatim, so one `re.sub` over the template fills them and never looks at
-what it inserted. File inputs lose trailing newlines so a file's final newline
+Substitution is one `re.sub` over the template, and nothing it inserts is ever
+rescanned. Caller notes carry issue text (work-issue passes an issue's acceptance
+criteria verbatim), so a placeholder in them can be data, and the script cannot
+tell a quoted one from one the caller forgot to fill. Rescanning them once
+spliced a BASELINE into a criterion that merely named `{{BASELINE}}`
+(F-r1-authz-01). The one fill inside the notes is `{{TASK}}`, which a wrapping
+skill writes on purpose; it is replaced before the pass, and every other `{{...}}`
+in the notes, a BASELINE, or a PRIOR crosses verbatim. File inputs lose trailing newlines so a file's final newline
 does not become a blank line in the prompt.
 
 Exit codes: 0 rendered; 1 semantic failure (malformed Waves table, task absent
@@ -53,8 +54,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_TEMPLATE = os.path.join(HERE, "..", "references", "worker-prompt.md")
-# CALLER_NOTES is filled in the first pass, so it is absent from this list.
-DATA_NAMES = {"TASK", "OWNS", "CONTRACT", "DONE_WHEN", "CONSTRAINTS", "PRIOR", "VERIFY_CMD", "BASELINE"}
+DATA_NAMES = {"CALLER_NOTES", "TASK", "OWNS", "CONTRACT", "DONE_WHEN", "CONSTRAINTS", "PRIOR", "VERIFY_CMD", "BASELINE"}
 PLACEHOLDER = re.compile(r"\{\{([A-Z_]+)\}\}")
 
 
@@ -155,16 +155,15 @@ def main(argv=None):
         "VERIFY_CMD": args.verify_cmd,
         "BASELINE": optional(args.baseline, "absent", "baseline"),
     }
-    caller_notes = optional(args.caller_notes, "", "caller notes")
-
-    # replace(), not re.sub: the notes may hold backslashes that sub would eat.
-    text = template.replace("{{CALLER_NOTES}}", caller_notes)
-    unknown = sorted({n for n in PLACEHOLDER.findall(text) if n not in DATA_NAMES})
+    # str.replace, not a regex: the notes may hold backslashes. Done before the
+    # single pass below, so the pass never sees the notes.
+    values["CALLER_NOTES"] = optional(args.caller_notes, "", "caller notes").replace("{{TASK}}", row.task)
+    unknown = sorted({n for n in PLACEHOLDER.findall(template) if n not in DATA_NAMES})
     if unknown:
         for name in unknown:
             sys.stderr.write(f"render-prompt: unfilled placeholder {{{{{name}}}}}\n")
         return 1
-    text = PLACEHOLDER.sub(lambda m: values[m.group(1)], text)
+    text = PLACEHOLDER.sub(lambda m: values[m.group(1)], template)
 
     refuse_in_tree_out(args.out)
     try:

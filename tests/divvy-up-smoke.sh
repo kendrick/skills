@@ -1009,16 +1009,41 @@ printf 'earlier report mentions {{NOT_A_PLACEHOLDER}} and {{TASK}}\n' >"$rt/prio
 }
 require_text "$rt/prior-out.md" "earlier report mentions {{NOT_A_PLACEHOLDER}} and {{TASK}}"
 
-# Caller notes are template material: divvy-up's own placeholders fill, anyone
-# else's fail the render.
+# Caller notes carry issue text, so a placeholder in them is data: only {{TASK}}
+# fills, and everything else crosses verbatim, never rescanned (F-r1-authz-01).
 python3 "$render" "$rplan" --wave 1 --task api --caller-notes "$fixtures/render-caller-ok.md" --out "$rt/caller.md" >/dev/null
 require_text "$rt/caller.md" "Caller preamble for api: stay inside the issue branch."
-[[ "$(exit_of python3 "$render" "$rplan" --wave 1 --task api --caller-notes "$fixtures/render-caller-unfilled.md" --out "$rt/unfilled.md")" == 1 ]] || {
-  echo "caller notes with an unfilled {{ISSUE}} must exit 1" >&2
+[[ "$(exit_of python3 "$render" "$rplan" --wave 1 --task api --caller-notes "$fixtures/render-caller-unfilled.md" --out "$rt/unfilled.md")" == 0 ]] || {
+  echo "caller notes holding {{ISSUE}} must render, not fail: $(cat "$rt/stderr")" >&2
   exit 1
 }
-grep -Fq '{{ISSUE}}' "$rt/stderr" || {
-  echo "the unfilled caller placeholder must be named on stderr: $(cat "$rt/stderr")" >&2
+require_text "$rt/unfilled.md" "Work issue {{ISSUE}} only."
+
+# The finding's repro: a criterion quoting {{BASELINE}} and {{CALLER_NOTES}}
+# stays byte-for-byte, and the baseline text lands only where the template's
+# own {{BASELINE}} sits.
+crit='- [ ] the script fills {{BASELINE}} from a file and {{CALLER_NOTES}} from another'
+printf '%s\n' "$crit" >"$rt/crit-notes.md"
+printf 'exit: 1\nFAILED test_x\n' >"$rt/crit-baseline.md"
+[[ "$(exit_of python3 "$render" "$rplan" --wave 1 --task api --caller-notes "$rt/crit-notes.md" --baseline "$rt/crit-baseline.md" --out "$rt/crit.md")" == 0 ]] || {
+  echo "quoted placeholders in caller notes must render: $(cat "$rt/stderr")" >&2
+  exit 1
+}
+grep -Fxq -- "$crit" "$rt/crit.md" || {
+  echo "the criterion line must cross byte-for-byte" >&2
+  exit 1
+}
+[[ "$(grep -c 'FAILED test_x' "$rt/crit.md")" == 1 ]] || {
+  echo "the baseline must appear once, at the template's own {{BASELINE}}" >&2
+  exit 1
+}
+# {{BASELINE}} alone is the case the old rescan spliced silently; the line above
+# also trips the old unfilled-{{CALLER_NOTES}} exit, so it can't catch a splice.
+crit_b='- [ ] the script fills {{BASELINE}} from a file'
+printf '%s\n' "$crit_b" >"$rt/critb-notes.md"
+python3 "$render" "$rplan" --wave 1 --task api --caller-notes "$rt/critb-notes.md" --baseline "$rt/crit-baseline.md" --out "$rt/critb.md" >/dev/null
+grep -Fxq -- "$crit_b" "$rt/critb.md" || {
+  echo "a criterion quoting only {{BASELINE}} must cross byte-for-byte, not take the baseline" >&2
   exit 1
 }
 

@@ -109,7 +109,7 @@ python3 <skill-dir>/scripts/render-prompt.py PLAN --wave N --task LABEL --out PR
     [--contract FILE] [--verify-cmd CMD] [--baseline FILE] [--caller-notes FILE] [--prior FILE]
 ```
 
-The script fills the template from the Waves table and the flags, and fails on any placeholder left unfilled. Write CONTRACT and BASELINE to files first. A wrapping skill's preamble goes in through `--caller-notes`, since `{{CALLER_NOTES}}` is the seam through which it reaches every dispatch, and a re-dispatch's report goes in through `--prior`. Typing the filled template into the dispatch costs about 2.4 s per 1k characters of output, ~37 s a worker, and the file costs none.
+The script fills the template from the Waves table and the flags, and fails on any template placeholder left unfilled. Write CONTRACT and BASELINE to files first. A wrapping skill's preamble goes in through `--caller-notes`, since `{{CALLER_NOTES}}` is the seam through which it reaches every dispatch, and a re-dispatch's report goes in through `--prior`. Typing the filled template into the dispatch costs about 2.4 s per 1k characters of output, ~37 s a worker, and the file costs none.
 
 Dispatch every task in a SINGLE message so they run concurrently—one dispatch per message is exactly the serialization the wave exists to remove, and it looks identical in the transcript. Each `prompt` is one sentence with that task's path: `Read <path> in full before doing anything else. It is your complete task instructions; follow it exactly as if it were this message.` The rendered file stays in PROMPT_DIR as the verbatim record of what the worker received, beside the saved report.
 
