@@ -61,8 +61,8 @@ def usage():
     sys.exit(2)
 
 
-# unquote through md_files are copied from bench-fixture.sh. Upstream is
-# authoritative: fix the bug there, then re-copy.
+# Vendored verbatim from bench-fixture.sh (unquote through md_files),
+# 2026-11-16. Upstream is authoritative: fix a bug there first, then re-copy.
 def unquote(v):
     v = v.strip()
     if len(v) >= 2 and v[0] == v[-1] and v[0] in "'\"":

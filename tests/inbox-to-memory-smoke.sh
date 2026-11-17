@@ -2945,6 +2945,19 @@ sr_fail "usage: stale-records.sh" env LTM_TODAY=2026-05-12 bash "$sr" "$sr_dir/s
 sr_fail "usage: stale-records.sh" env LTM_TODAY=2026-05-12 bash "$sr" "$sr_dir/scope" --bogus
 sr_fail "usage: stale-records.sh" env LTM_TODAY=2026-05-12 bash "$sr" "$sr_dir/scope" "$sr_dir/neither"
 sr_fail "stale-records: LTM_TODAY is not a YYYY-MM-DD date: 2026-13-40" env LTM_TODAY=2026-13-40 bash "$sr" "$sr_dir/scope"
+# An unreadable scope or record exits 2 rather than reporting an empty scope.
+# chmod 000 doesn't block root, so skip there.
+if [[ "$(id -u)" != 0 ]]; then
+  sr_reset
+  chmod 000 "$sr_dir/scope/_memory"
+  sr_fail "stale-records: unreadable directory" env LTM_TODAY=2026-05-12 bash "$sr" "$sr_dir/scope"
+  chmod 755 "$sr_dir/scope/_memory"
+  chmod 000 "$sr_dir/scope/$sr_rec"
+  sr_fail "$sr_rec: unreadable (" env LTM_TODAY=2026-05-12 bash "$sr" "$sr_dir/scope"
+  chmod 644 "$sr_dir/scope/$sr_rec"
+else
+  echo "skipping unreadable stale-records assertions: running as root" >&2
+fi
 # A journal has entries/ and no records: nothing to age, and not an error.
 sr_rc=0
 sr_out="$(LTM_TODAY=2026-05-12 bash "$sr" "$sr_dir/journal" 2>/dev/null)" || sr_rc=$?
@@ -2968,8 +2981,11 @@ sr_after="$(cd "$sr_dir/scope" && find . -type f -exec shasum {} + | sort)"
 # refutes pin the two cuts: no memory-bank.yaml read, and no write to a record.
 require_text inbox-to-memory/SKILL.md "scripts/stale-records.sh <scope-root>"
 refute_text "$sr" "memory-bank.yaml"
-refute_text "$sr" ', "w"'
-refute_text "$sr" "os.remove"
+# A text pin only catches the spellings listed here. Case 10's hash comparison is
+# the real guard, and these keep the obvious ones from coming back.
+for sr_cut in ', "w"' ", 'w'" ', "a"' ", 'a'" "mode=" "os.remove" "os.unlink" "os.rename" "os.replace" "shutil"; do
+  refute_text "$sr" "$sr_cut"
+done
 rm -rf "$sr_dir"
 
 # A raw sidecar (#193) moves a note's raw text out of the file an index reads,
