@@ -685,6 +685,12 @@ if missing:
     sys.exit(f"phase_of has no return whose reason starts row <n>: for rows {missing}")
 PY
 
+# The cases below call wave-state.py through python3, which hides a missing executable bit the Resume section's direct invocation needs (PR #347 review).
+[[ -x work-wave/scripts/wave-state.py ]] || {
+  echo "wave-state.py is not executable: work-wave/scripts/wave-state.py" >&2
+  exit 1
+}
+
 # Runs wave-state.py, capturing stdout, stderr, and the exit code apart.
 wave_state() {
   set +e
