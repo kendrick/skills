@@ -5143,4 +5143,11 @@ wait
   exit 1
 }
 
+# Rendered prompts live in RUN_DIR/prompts/ (outside the work tree, so Step 6
+# never counts one as an unowned write), and herdr keeps sending the prompt inline.
+require_text work-issue/SKILL.md "\`RUN_DIR/prompts/<wave>-<task>.caller.md\`"
+require_text work-issue/SKILL.md "Herdr keeps sending the full prompt inline"
+require_text work-issue/SKILL.md "\`--prior RUN_DIR/prompts/<repair-id>.prior.md\`"
+require_text _maintenance/work-issue/RATIONALE.md "Worker and repair prompts render into \`RUN_DIR/prompts/\`"
+
 echo "work-issue smoke: OK"

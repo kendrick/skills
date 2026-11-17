@@ -25,6 +25,7 @@ Resolve once per invocation:
 - **COMMIT** — set by `--commit`, else asked at Step 4.
 - **START_SHA** — `git rev-parse HEAD`, taken before any task runs. Step 7 reads the whole run against it.
 - **GUILD** — whether `.agent-guild/` exists.
+- **PROMPT_DIR** — where rendered worker prompts go: the directory a wrapping skill names, else `mktemp -d`, made once. It stays outside the work tree, because Step 6 derives ownership from the diff and a prompt inside the tree would read as a write no task owns.
 
 ## Step 1 — Derive tasks
 
@@ -101,7 +102,16 @@ When BASELINE is red, the same question names each failure BASELINE shows and of
 
 ## Step 5 — Dispatch a wave
 
-Read `references/worker-prompt.md` and instantiate it once per task in the wave. Dispatch every one of them in a SINGLE message so they run concurrently—one dispatch per message is exactly the serialization the wave exists to remove, and it looks identical in the transcript. `{{CALLER_NOTES}}` is the seam through which a wrapping skill's own preamble reaches every dispatch; empty on a direct run.
+Read `references/worker-prompt.md` for its Dispatching rules, then render every task in the wave with `scripts/render-prompt.py`, exiting 0 each time:
+
+```
+python3 <skill-dir>/scripts/render-prompt.py PLAN --wave N --task LABEL --out PROMPT_DIR/N-LABEL.md \
+    [--contract FILE] [--verify-cmd CMD] [--baseline FILE] [--caller-notes FILE] [--prior FILE]
+```
+
+The script fills the template from the Waves table and the flags, and fails on any placeholder left unfilled. Write CONTRACT and BASELINE to files first. A wrapping skill's preamble goes in through `--caller-notes`, since `{{CALLER_NOTES}}` is the seam through which it reaches every dispatch, and a re-dispatch's report goes in through `--prior`. Typing the filled template into the dispatch costs about 2.4 s per 1k characters of output, ~37 s a worker, and the file costs none.
+
+Dispatch every task in a SINGLE message so they run concurrently—one dispatch per message is exactly the serialization the wave exists to remove, and it looks identical in the transcript. Each `prompt` is one sentence with that task's path: `Read <path> in full before doing anything else. It is your complete task instructions; follow it exactly as if it were this message.` The rendered file stays in PROMPT_DIR as the verbatim record of what the worker received, beside the saved report.
 
 Every git write belongs to you, not to a worker. Workers write files; you stage, commit, and branch. A worker that commits stages its peers' half-written changes along with its own and moves HEAD out from under Step 6's revert, so a failed task survives its own rollback. Say so in the dispatch: a repo's own agent docs are usually written for an agent working alone, and this one is not. The same goes for a formatter or a linter's `--fix`: a worker runs one only scoped to its own paths, and you run the tree-wide pass at Step 6. Every commit you make takes one commit style. When a wrapping skill hands over `bare` or `full`, use that. Run alone, read it once from the repo's settings, before Step 4's question: `gh api repos/{owner}/{repo} --jq '.allow_squash_merge == true and .allow_merge_commit == false and .allow_rebase_merge == false'`. `true` is `bare`: a squash-only repo folds every in-branch commit into the pull request's squash, so each message is one Conventional Commits subject in the repo's log style, with no body and no prose pass, even where the repo's or host's own rules ask for one. `false`, an error, or no output is `full`: write each message as you would without this rule, to whatever prose rules the repo or host sets. A token that can't administer the repo reads each setting as `null`, and the expression turns that into `false`, so the fallback is always `full`. Either style carries no trailer or footer.
 
@@ -117,7 +127,7 @@ Record the wave's untracked files beside it as content, not as names: each path 
 
 A commit object rather than a status snapshot, because status text cannot see a second write. When wave 1 leaves a file at ` M path` and a wave-2 worker rewrites that same file, both snapshots hold the identical line, the difference between them is empty, and the clobber the gate exists to catch passes it silently.
 
-**Done when:** WAVE_BASE is recorded, every task in the wave was dispatched in one message at its routed model, and every report is saved verbatim.
+**Done when:** WAVE_BASE is recorded, every prompt was rendered by `render-prompt.py` exiting 0, every task in the wave was dispatched in one message at its routed model, and every report is saved verbatim.
 
 ## Step 6 — Gate
 
@@ -170,5 +180,6 @@ Report waves run, tasks per model, escalations, questions asked, and what is lef
 
 ## Further Reading
 
-- [references/worker-prompt.md](references/worker-prompt.md) — read at Step 5 to instantiate each dispatch
+- [references/worker-prompt.md](references/worker-prompt.md) — read at Step 5 for the dispatch rules; `render-prompt.py` fills its Template
+- [scripts/render-prompt.py](scripts/render-prompt.py) — run at Step 5 to fill each task's worker prompt into a file
 - [scripts/check-waves.py](scripts/check-waves.py) — run at Step 3 to prove the waves, and at Step 6 to attribute what a wave wrote

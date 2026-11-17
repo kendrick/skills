@@ -77,6 +77,22 @@ require_text divvy-up/SKILL.md "A non-zero exit is a hard stop, not a warning."
 # it looks identical in the transcript to the real thing.
 require_text divvy-up/SKILL.md "in a SINGLE message so they run concurrently"
 
+# Rendering: the orchestrator used to type ~15k characters per worker prompt
+# (~37 s each). Step 5 renders to a file outside the tree and dispatches a
+# pointer, so these strings are what keep the dispatch short and the file out
+# of Step 6's ownership diff.
+dispatch_sentence="Read <path> in full before doing anything else. It is your complete task instructions; follow it exactly as if it were this message."
+require_text divvy-up/SKILL.md "- **PROMPT_DIR** — where rendered worker prompts go"
+require_text divvy-up/SKILL.md "then render every task in the wave with \`scripts/render-prompt.py\`"
+require_text divvy-up/SKILL.md "$dispatch_sentence"
+require_text divvy-up/SKILL.md "every prompt was rendered by \`render-prompt.py\` exiting 0"
+require_text divvy-up/references/worker-prompt.md "$dispatch_sentence"
+require_text divvy-up/references/worker-prompt.md "On a direct run PROMPT_DIR is a \`mktemp -d\` made once per invocation. Under a wrapping skill it is the directory that skill names"
+require_text divvy-up/references/worker-prompt.md "\`none recorded\` goes in when no earlier wave landed one."
+require_text divvy-up/README.md "render-prompt.py        # fills a task's worker prompt into a file the dispatch points at"
+require_text _maintenance/divvy-up/RATIONALE.md "| 44 | Step 5 renders each task's worker prompt to a file"
+require_text _maintenance/divvy-up/EVALS.md "| 31 | A worker dispatched with only the sentence"
+
 # Ownership proved before dispatch is what makes the wave safe to fan out at
 # all; proving it after (or not at all) is the "watch out for conflicts" note
 # this design replaces.

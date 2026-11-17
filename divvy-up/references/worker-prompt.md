@@ -1,6 +1,6 @@
 # Worker prompt
 
-Read this once per wave, then instantiate one prompt per task in that wave.
+Read this once per wave. `scripts/render-prompt.py` instantiates one prompt per task in that wave.
 
 ## Dispatching
 
@@ -10,9 +10,11 @@ Name the model explicitly on every dispatch, from the wave table's Model column.
 
 If a worker returns something that does not parse as the JSON contract below, re-prompt it once with the contract restated. Still unparseable, mark the task failed rather than hand-editing its output into shape—a report you repaired is a report you partly authored, and the gate that reads it next has no way to tell the difference.
 
+Render each task's prompt to a file under PROMPT_DIR with `render-prompt.py`, then dispatch a one-sentence `prompt` per task: `Read <path> in full before doing anything else. It is your complete task instructions; follow it exactly as if it were this message.` On a direct run PROMPT_DIR is a `mktemp -d` made once per invocation. Under a wrapping skill it is the directory that skill names, and the file lives there beside the saved report. Either way it stays outside the work tree, so Step 6's ownership check never sees it. Typing the filled template into the dispatch is the slow path, about 2.4 s per 1k characters.
+
 ## Template
 
-Substitute the nine placeholders. Everything else goes across verbatim.
+`render-prompt.py` substitutes the nine placeholders. Everything else goes across verbatim.
 
 ```
 You are one worker in a wave of parallel subagents building one implementation
@@ -159,7 +161,7 @@ Leave `question` empty except for `stopped` or `failed`.
 
 - `{{TASK}}` — the task's label from the wave table's Task column, verbatim. It appears twice: once in the instructions and once inside the JSON contract, so the returned report identifies itself without the orchestrator having to track which prompt went to which subagent.
 - `{{OWNS}}` — the task's Files owned entries from the wave table, one path per line. This is the exact list the orchestrator's script checks the diff against, so it needs to match verbatim rather than as a paraphrase.
-- `{{CONTRACT}}` — the shared types, interface, schema, or migration a wave-0 task already landed, quoted inline or named by path. A worker left to infer the contract will guess at something plausible and wrong; quoting or naming the real thing is what lets every task in the wave agree on the same shape without talking to each other.
+- `{{CONTRACT}}` — the shared types, interface, schema, or migration a wave-0 task already landed, quoted inline or named by path. `none recorded` goes in when no earlier wave landed one. A worker left to infer the contract will guess at something plausible and wrong; quoting or naming the real thing is what lets every task in the wave agree on the same shape without talking to each other.
 - `{{DONE_WHEN}}` — the wave table's Done when cell for this task, verbatim. It is the only acceptance bar the worker gets, so copying it exactly matters more than making it read smoothly.
 - `{{CONSTRAINTS}}` — the task's Constraints cell from the wave table, verbatim. An empty cell substitutes the literal `none recorded`, so the template goes across unchanged rather than growing a conditional paragraph the dispatcher has to decide about.
 - `{{VERIFY_CMD}}` — the repo's verification command (test suite, linter, build—whatever this repo runs). The literal `absent` goes in when Step 3 found no command, and the paragraph after the command block tells the worker to run nothing then, the way `{{CONSTRAINTS}}` gets `none recorded` rather than a dropped block. The worker runs the command before reporting and records what it printed, so a report with no `verify_output` is a worker that skipped this line, not a gap in the contract. A failure in a file the worker does not own goes in `verify_output` without deciding its `status`, because a peer may still be writing that file mid-wave, and Step 6's gate runs the same command once every task has landed. Substitute a form that writes nothing where the repo has one (`prettier --check`, `cargo fmt --check`, `ruff format --check`, a lint script without `--fix`). Every worker in the wave runs this at once, so a command that writes is a tree-wide write six times over; a worker handed one falls back to its checks, and Step 6's format pass does what the fix step would have.
