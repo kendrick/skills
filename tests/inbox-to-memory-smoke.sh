@@ -3998,11 +3998,24 @@ lm_got="$(sed -n '2,/^---$/p' "$lm_apos/$lm_decision" | sed '$d' | yq '.owners[0
 }
 
 # With no ltm on PATH the sweep skips and says so, and the run still passes:
-# the skill's scripts stay runnable without the kit.
+# the skill's scripts stay runnable without the kit. A dir holding ltm is
+# mirrored minus ltm rather than dropped: Homebrew puts yq beside ltm, and
+# dropping the dir took yq with it (#349).
 lm_bare=""
 IFS=: read -ra lm_path_dirs <<<"$PATH"
-for d in "${lm_path_dirs[@]}"; do
-  [[ -n "$d" && ! -e "$d/ltm" ]] && lm_bare="${lm_bare:+$lm_bare:}$d"
+for i in "${!lm_path_dirs[@]}"; do
+  d="${lm_path_dirs[$i]}"
+  [[ -n "$d" ]] || continue
+  if [[ -e "$d/ltm" || -L "$d/ltm" ]]; then
+    mkdir -p "$lm_dir/bare-path-$i"
+    for f in "$d"/* "$d"/.[!.]*; do
+      [[ -e "$f" || -L "$f" ]] || continue
+      [[ "$(basename "$f")" == ltm ]] && continue
+      ln -s "$f" "$lm_dir/bare-path-$i/"
+    done
+    d="$lm_dir/bare-path-$i"
+  fi
+  lm_bare="${lm_bare:+$lm_bare:}$d"
 done
 PATH="$lm_bare" command -v ltm >/dev/null 2>&1 && {
   echo "test setup: ltm reachable on the bare PATH, the no-ltm case would prove nothing" >&2
