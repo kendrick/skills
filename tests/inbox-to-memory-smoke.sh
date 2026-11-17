@@ -614,7 +614,7 @@ scaffold_subs_common=(
   's/{{Pursuit|Project}}/Project/g'
   's/{{pursuit|project}}/project/g'
   's/{{pursuits|projects}}/projects/g'
-  's/{{NOTE_TYPE_ENUM}}/scoping-call | working-session | stakeholder-call | internal | reading | braindump | transcript | status/g'
+  's/{{NOTE_TYPE_ENUM}}/scoping-call | working-session | stakeholder-call | internal | reading | braindump | transcript | status | meeting | decision | source | person | debrief | overview/g'
   's/{{stakeholder-list}}/<!-- Fill in: stakeholder-list -->/g'
   's/{{tag-list}}/<!-- Fill in: tag-list -->/g'
   's/{{engagement-list}}/<!-- Fill in: engagement-list -->/g'
@@ -4449,6 +4449,30 @@ for record in context decision exception policy-rule rule; do
   }
 done
 
+# --- Decision body follows Nygard (#42) ---
+# Context leads and is required, the MADR/governance extensions follow, and
+# Consequences closes the body. `ltm validate` matches context, decision outcome,
+# and consequences by heading text, so the headings stay literal (RATIONALE row 76).
+dec=inbox-to-memory/assets/records/decision.template.md
+dec_seq="$(grep '^## ' "$dec" | paste -sd'|' -)"
+[[ "$dec_seq" == "## Context|## Decision Question|## Decision Outcome|## Alternatives Considered|## Approved By|## Consequences" ]] || {
+  echo "$dec headings are out of order: $dec_seq" >&2
+  exit 1
+}
+dec_cons="$(sed -n '/^## Consequences$/,$p' "$dec" | grep -E '^### |^Revisit if:' | paste -sd'|' - || true)"
+[[ "$dec_cons" == "### Accepted Costs|### What This Makes Easier|### What This Makes Harder|Revisit if:"* ]] || {
+  echo "$dec Consequences is not the three-way split closing on Revisit if: $dec_cons" >&2
+  exit 1
+}
+refute_text inbox-to-memory/references/memory-bank-schema.md "(optional) Context"
+for lineage in '### Decision Body Lineage' 'MADR and governance extensions' 'Revisit if' 'sanctioned divergence' '2026-08-23'; do
+  require_text inbox-to-memory/references/memory-bank-schema.md "$lineage"
+done
+for roster in inbox-to-memory/assets/claude-md/project.template.md inbox-to-memory/assets/claude-md/client.template.md inbox-to-memory/SKILL.md; do
+  require_text "$roster" 'Owns / decides'
+done
+require_text inbox-to-memory/SKILL.md 'scoping-call \| working-session \| stakeholder-call \| internal \| reading \| braindump \| transcript \| status \| meeting \| decision \| source \| person \| debrief \| overview'
+
 # H: the real writers. A record filled from each template is already in
 # ltm's canonical form, and stays lint-clean after confirm and fmt rewrite it.
 # The templates quote their placeholders so the raw files parse, and fmt would
@@ -4480,6 +4504,14 @@ if command -v ltm >/dev/null 2>&1; then
     printf '%s\n' "$lo_fmt" >&2
     exit 1
   }
+  # Guard, not a red-to-green case: it passes on main too. A heading renamed to
+  # `## Consequences and Trade-offs` would make `ltm validate` warn body-sections.
+  lo_val="$(cd "$lo_tpl" && ltm validate 2>&1)" || true
+  if grep -Eq 'decision-Lt2Dec0002.*body-sections|body-sections.*decision-Lt2Dec0002' <<<"$lo_val"; then
+    echo "ltm validate draws body-sections on a record filled from the Decision template" >&2
+    printf '%s\n' "$lo_val" >&2
+    exit 1
+  fi
   lo_out="$(run_lint "$lo_tpl")"
   require_line "$lo_out" "failures: 0" "records filled from each template"
   (cd "$lo_tpl" && LTM_TODAY=2026-11-10 ltm confirm Lt1Ctx0001 >/dev/null && ltm fmt >/dev/null) || {

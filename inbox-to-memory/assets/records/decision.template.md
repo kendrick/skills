@@ -15,9 +15,13 @@ related: []
 
 # {{title}}
 
+## Context
+
+<!-- The forces at play: what pushed toward a decision, and what pulled against each option. Facts only; the outcome comes below. -->
+
 ## Decision Question
 
-<!-- The question being decided. Phrased neutrally. -->
+<!-- The question being decided. Phrased neutrally. Decision Question, Alternatives Considered, and Approved By are MADR and governance extensions to Nygard's Context/Decision/Consequences, and Decision Outcome is Nygard's Decision. Add no more extension sections. -->
 
 ## Decision Outcome
 
@@ -31,10 +35,20 @@ related: []
 
 <!-- Names or roles of the person/people who approved. -->
 
-## Context
-
-<!-- Any context that shaped the decision but isn't part of the outcome itself. -->
-
 ## Consequences
 
-<!-- What follows from the decision: what gets easier, what gets harder, what to revisit. -->
+<!-- List every consequence, not just the flattering ones. This record's consequences are the next record's context. -->
+
+### Accepted Costs
+
+<!-- What we knowingly give up or take on. -->
+
+### What This Makes Easier
+
+<!-- What the decision unlocks or simplifies. -->
+
+### What This Makes Harder
+
+<!-- What the decision blocks, complicates, or leaves open. -->
+
+Revisit if: <!-- The condition that would make this decision wrong. -->

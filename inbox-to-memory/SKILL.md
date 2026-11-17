@@ -269,7 +269,7 @@ The CLAUDE.md and README templates use double-curly placeholders. Substitute the
 | `{{MEMORY_TYPE_LIST}}` | Markdown bullet list of types with one-line descriptions (pull from `references/memory-bank-schema.md`). |
 | `{{MEMORY_TYPE_SUMMARY}}` | Short table or bullet list summarizing types for the human-facing `_memory/README.md`. |
 | `{{RULES_FOLDER}}` | `rules` (lightweight) or `policy-rules` (canonical). |
-| `{{NOTE_TYPE_ENUM}}` | Pipe-separated baseline note types: `scoping-call \| working-session \| stakeholder-call \| internal \| reading \| braindump \| transcript \| status`. The generated project CLAUDE.md will override this in its Deltas section if the user provides project-specific values. |
+| `{{NOTE_TYPE_ENUM}}` | Pipe-separated baseline note types: `scoping-call \| working-session \| stakeholder-call \| internal \| reading \| braindump \| transcript \| status \| meeting \| decision \| source \| person \| debrief \| overview`. The last six are the vault note templates' types, added so both vocabularies validate on one key; nothing is renamed. The generated project CLAUDE.md will override this in its Deltas section if the user provides project-specific values. |
 | `{{date}}` | Today's date in ISO format. |
 | `{{engagement-list}}`, `{{stakeholder-list}}`, `{{tag-list}}`, `{{type-enum-values}}`, `{{one-sentence-project-description}}` | User-supplied during scaffold; left as HTML-commented placeholders if the user defers. |
 
@@ -295,7 +295,7 @@ Each generated CLAUDE.md (client and project) carries a `## Deltas` section with
 
 **Client-level Deltas:**
 - `### Active engagements` — short list of in-flight projects and pursuits.
-- `### Cross-engagement stakeholders` — roster of people who appear across multiple projects at this client. Format: `Name — Role/Title. Additional facts.`
+- `### Cross-engagement stakeholders` — roster of people who appear across multiple projects at this client. Format: `Name — Role/Title. Owns / decides: what they sign off on. Additional facts.`
 - `### Alias table` — every name that arrives under more than one spelling, canonical form first.
 - `### Client-wide tag namespace` — controlled vocabulary for memory record `tags:`.
 

@@ -114,7 +114,7 @@ Directory-specific conventions live in [`notes/CLAUDE.md`](notes/CLAUDE.md), [`_
 
 ### Cross-engagement Stakeholders
 
-Roster format: `Name — Role/Title. Additional facts (timezone, team affiliation, comms preference).`
+Roster format: `Name — Role/Title. Owns / decides: what they sign off on. Additional facts (timezone, team affiliation, comms preference).`
 
 These are stakeholders who appear across multiple of this client's projects. Project-specific stakeholders live in the project's own CLAUDE.md.
 

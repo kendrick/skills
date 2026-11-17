@@ -72,7 +72,7 @@ Controlled vocabulary for note frontmatter `type:` field. Extends the skill's ba
 
 ### Active Stakeholders
 
-Roster format: `Name — Role/Title. Additional facts (timezone, team affiliation, comms preference).`
+Roster format: `Name — Role/Title. Owns / decides: what they sign off on. Additional facts (timezone, team affiliation, comms preference).`
 
 These are stakeholders specific to this {{pursuit|project}}. Cross-engagement stakeholders live in the client root's `CLAUDE.md`.
 
