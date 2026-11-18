@@ -61,7 +61,7 @@ Register gates the audit. The profile states the artifact's register and the aud
 
 - [references/commit-messages.md](references/commit-messages.md) — register, content, per-repo subject-line conventions, layers
 - [references/comments.md](references/comments.md) — when a comment earns its place, mode mapping, auditing existing comments
-- [references/pr-descriptions.md](references/pr-descriptions.md) — reviewer-first content, testing disclosure, squash-merge survival
+- [references/pr-descriptions.md](references/pr-descriptions.md) — reviewer-first content, testing disclosure, change outlines, squash-merge survival
 - [references/review-correspondence.md](references/review-correspondence.md) — answering register, the divergence rule, the SHA that goes stale
 - [references/readme.md](references/readme.md) — per-section mode mapping, register, the existing-voice rule
 - House prose rules, where your setup defines them — read fresh at Step 2, never summarized

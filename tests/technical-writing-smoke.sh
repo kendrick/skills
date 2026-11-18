@@ -279,6 +279,33 @@ require_text technical-writing/references/review-correspondence.md "Never hard-w
 # would silently create the third sync obligation the decision declines.
 refute_text technical-writing/references/review-correspondence.md "to commit messages or PR descriptions"
 
+# --- pr-descriptions change outline --------------------------------------
+# The trigger is structural, and the nearest wrong rule is size ("outline the
+# big PRs"). A writer keying on size outlines a forty-file rename and skips a
+# one-call move, so the trigger and its size clause are pinned whole. Mermaid
+# is the reason the outline defaults to fenced text: it renders only on the PR
+# web page, and a repo that squashes with the PR body puts raw source in
+# `git log`. Pin that sentence so nobody softens it into "renders best on GitHub".
+require_text technical-writing/references/pr-descriptions.md "Add a change outline when the change alters a structure the reviewer has to hold in mind: a call path, a file layout, a data structure, a contract, or a component tree."
+require_text technical-writing/references/pr-descriptions.md "The size of the change doesn't decide it: a one-call move gets an outline, and a rename across forty files gets none."
+require_text technical-writing/references/pr-descriptions.md "A change outline is not the diff restatement the Content section rules out: it shows a structure the diff spreads across files, which prose can't."
+require_text technical-writing/references/pr-descriptions.md "Mermaid renders only on GitHub's web page and shows as raw source everywhere else."
+
+# What the outline idea was borrowed from (HumanLayer's visual-pr) and cut:
+# its fixed headings, an HTML page for dense concepts, commit/push/open-PR
+# steps, and its own task paths. Each string below is one cut, and a
+# well-meaning edit would bring any of them back as "completeness". The last
+# two name the cut itself: a bare `git push` or `.html` also trips on harmless
+# prose, such as a file-tree outline naming `signup.html`.
+refute_text technical-writing/references/pr-descriptions.md "## Why the change"
+refute_text technical-writing/references/pr-descriptions.md "## Special things to note"
+refute_text technical-writing/references/pr-descriptions.md ".humanlayer/tasks"
+refute_text technical-writing/references/pr-descriptions.md "gh pr create"
+refute_text technical-writing/references/pr-descriptions.md "HTML page"
+
+require_text technical-writing/SKILL.md "testing disclosure, change outlines, squash-merge survival"
+require_text technical-writing/README.md "testing disclosure, change outlines, squash-merge survival"
+
 # --- Example-harvest pins -------------------------------------------------
 # EXPECTED TO FAIL until the harvest step lands. The Example sections come
 # from real eval runs later in the plan; do not stub them just to go green.
