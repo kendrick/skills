@@ -294,12 +294,14 @@ require_text technical-writing/references/pr-descriptions.md "Mermaid renders on
 # What the outline idea was borrowed from (HumanLayer's visual-pr) and cut:
 # its fixed headings, an HTML page for dense concepts, commit/push/open-PR
 # steps, and its own task paths. Each string below is one cut, and a
-# well-meaning edit would bring any of them back as "completeness".
+# well-meaning edit would bring any of them back as "completeness". The last
+# two name the cut itself: a bare `git push` or `.html` also trips on harmless
+# prose, such as a file-tree outline naming `signup.html`.
 refute_text technical-writing/references/pr-descriptions.md "## Why the change"
 refute_text technical-writing/references/pr-descriptions.md "## Special things to note"
 refute_text technical-writing/references/pr-descriptions.md ".humanlayer/tasks"
-refute_text technical-writing/references/pr-descriptions.md "git push"
-refute_text technical-writing/references/pr-descriptions.md ".html"
+refute_text technical-writing/references/pr-descriptions.md "gh pr create"
+refute_text technical-writing/references/pr-descriptions.md "HTML page"
 
 require_text technical-writing/SKILL.md "testing disclosure, change outlines, squash-merge survival"
 require_text technical-writing/README.md "testing disclosure, change outlines, squash-merge survival"
