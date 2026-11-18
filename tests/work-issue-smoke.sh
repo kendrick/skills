@@ -3252,9 +3252,9 @@ touch -t 202609200200 "$rt/redteam/round-2.json"
 expect_field "with two rounds" redteam_rounds 2 "$rt" "$lab_repo"
 expect_field "with a failed round older than a clean one" redteam_last_failed false "$rt" "$lab_repo"
 expect_field "with one failed round of two" redteam_failed_twice false "$rt" "$lab_repo"
-# #133: the codex path's files sit beside the rounds and must stay probe-blind.
-# A NOT_REPRODUCED verdict line that matched round-*.json would read as a
-# third, failed round.
+# #133: the codex path's files sit beside the rounds, and the probe must not
+# count them. A NOT_REPRODUCED verdict line that matched round-*.json would read
+# as a third, failed round.
 echo '{"claim": "x", "verdict": "NOT_REPRODUCED", "reproduced_at": null}' >"$rt/redteam/round-3.part-1.verdicts.jsonl"
 for f in round-3.part-1.prompt.md round-3.part-1.log claims-3.json uncovered-3.json fallback-3.txt executor.log; do
   echo x >"$rt/redteam/$f"
@@ -4755,7 +4755,7 @@ mv_want "missing claim exit" "$mv_status" 1
 mv_has_err "uncovered claim: b"
 mv_eq "$d/uncovered-1.json" 'd["claims"]' "[{'claim': 'b', 'path': 'p/b'}]"
 [[ ! -e "$d/round-1.json" ]] || { echo "#133: round-1.json written with b uncovered" >&2; exit 1; }
-# fallback merge, built on the same fixture: the subagent's block covers b, in a json fence.
+# fallback merge on the same fixture: the subagent's block arrives in a json fence and covers b.
 printf '```json\n{"verdicts": [{"claim": "b", "verdict": "REPRODUCED", "reproduced_at": "seam"}], "left_checks": []}\n```\n' > "$d/fallback-1.txt"
 mv_run "$d" 1 --fallback "$d/fallback-1.txt"
 mv_want "fallback merge exit" "$mv_status" 0
@@ -4777,7 +4777,7 @@ mv_has_err "rejected"
 mv_has_err "part-1.verdicts.jsonl:2"
 mv_eq "$d/uncovered-1.json" '[c["claim"] for c in d["claims"]]' "['b']"
 
-# truncated multi-byte line: codex killed mid-append must reject that line, not crash the merge.
+# truncated multi-byte line: when codex dies mid-append, the merge rejects that line instead of crashing.
 d="$(mv_dir)"
 mv_claims "$d" '[{"claim":"a"},{"claim":"b"}]' '[]'
 { mv_v a; printf '{"claim": "b", "verdict": "REPRODUCED", "note": "caf\xc3'; } > "$d/round-1.part-1.verdicts.jsonl"
@@ -4873,14 +4873,14 @@ mv_want "non-UTF-8 --fallback exit" "$mv_status" 3
 
 # --- #133: the reproducer's executor ---
 # WORK_ISSUE_REPRODUCER is opt-in. These pins keep the unset path routing to
-# today's subagent, the codex path capped and split, and every fallback named.
-# The unset path is today's behavior; losing this sentence loses the default.
+# the subagent, the codex path capped and split, and every fallback named.
+# This sentence is where SKILL.md states the default route.
 require_text work-issue/SKILL.md "With \`WORK_ISSUE_REPRODUCER\` unset or empty, the reproducer is a fresh general-purpose subagent, \`sonnet\` by default and \`opus\` when any claim's path matches a trigger row"
 # The codex path points at redteam.md, where the cap and split live.
 require_text work-issue/SKILL.md "set to a \`codex:\` value such as \`codex:gpt-6-luna:xhigh\`, it runs as \`codex exec\` under the cap and split in [references/redteam.md](references/redteam.md)"
-# The subagent covers exactly what the script says is uncovered, nothing more.
+# The subagent re-runs only the claims the script reports uncovered.
 require_text work-issue/SKILL.md "falls back to that subagent for exactly the claims \`work-issue/scripts/merge-verdicts.py\` reports uncovered"
-# A fallback is reported, never silent.
+# Every fallback leaves a line in executor.log, so none goes unreported.
 require_text work-issue/SKILL.md "and appends the reason to \`RUN_DIR/redteam/executor.log\`"
 # The script, not the orchestrator, writes round-<k>.json on the codex path.
 require_text work-issue/SKILL.md "on the codex path, \`merge-verdicts.py\` writes that file instead"
@@ -4890,20 +4890,21 @@ require_text work-issue/SKILL.md "where \`WORK_ISSUE_REPRODUCER\` was set, \`red
 require_text work-issue/SKILL.md "on the executor \`WORK_ISSUE_REPRODUCER\` resolves to, with the same fallback"
 # The user sees which rounds fell back, and why.
 require_text work-issue/SKILL.md "the lines of \`RUN_DIR/redteam/executor.log\` where it exists"
-# read-only blocks the suites and still yields a report that looks real.
+# Under -s read-only the suites can't run, yet codex still writes a report that looks real.
 require_text work-issue/references/redteam.md "-s workspace-write"
 require_text work-issue/references/redteam.md "-C <tree>"
-# stdin left open blocks codex exec forever; RUN_DIR sits outside <tree>.
+# Without the stdin redirect, codex exec waits forever. RUN_DIR sits outside
+# <tree>, so it needs --add-dir.
 require_text work-issue/references/redteam.md "--add-dir RUN_DIR/redteam - < RUN_DIR/redteam/round-<k>.part-<p>.prompt.md"
 # A dropped stream sits for hours without the cap.
 require_text work-issue/references/redteam.md "perl -e 'alarm shift; exec @ARGV' 2700"
-# 12- and 14-claim sets hit the 45-minute cap.
+# 12- and 14-claim sets hit the 45-minute cap in one run, so a large round splits.
 require_text work-issue/references/redteam.md "more than 8 claims"
-# The per-part name stays probe-blind: it never matches round-*.json.
+# The per-part name never matches round-*.json, so the probe never counts it.
 require_text work-issue/references/redteam.md "round-<k>.part-<p>.verdicts.jsonl"
-# The merge is the script's, called with the flags Task 1 defines.
+# The orchestrator calls merge-verdicts.py with its real flags rather than merging by hand.
 require_text work-issue/references/redteam.md "merge-verdicts.py --claims RUN_DIR/redteam/claims-<k>.json"
-# The falsifier: unset means today's subagent, codex on PATH or not.
+# The falsifier: unset means the subagent, whether or not codex is on PATH.
 require_text work-issue/references/redteam.md "With \`WORK_ISSUE_REPRODUCER\` unset or empty, one fresh general-purpose subagent per round"
 require_text work-issue/references/redteam.md "A \`codex\` on PATH with \`WORK_ISSUE_REPRODUCER\` unset changes nothing"
 # A value that fails the character class never reaches a shell command.
@@ -4930,14 +4931,14 @@ grep -Fq -- "Append with >>; never rewrite the file." <<<"$addendum" || {
   echo "#133: the codex addendum lets codex rewrite its verdicts file" >&2
   exit 1
 }
-# Cut: codex whenever it's on PATH, the falsifier's wrong neighbor; and the
-# hand merge merge-verdicts.py replaced.
+# Cut: running codex whenever it's on PATH, and merging verdict lines by hand.
+# Both sit in RATIONALE.md's Deliberately Not Built.
 for f in work-issue/SKILL.md work-issue/references/redteam.md; do
   refute_text "$f" "codex by default"
   refute_text "$f" '`codex` is installed'
   refute_text "$f" "merge the verdict lines by hand"
 done
-# The addendum rides only the codex path; the subagent's prompt stays as it was.
+# Only the codex prompt carries the addendum; the subagent's prompt never names VERDICTS_FILE.
 grep -Fq -- "VERDICTS_FILE" <<<"$prompt_block" && {
   echo "#133: the reproducer prompt names the codex verdicts file" >&2
   exit 1
@@ -4947,7 +4948,7 @@ grep -Fq -- "VERDICTS_FILE" <<<"$prompt_block" && {
 require_text _maintenance/work-issue/RATIONALE.md "\`WORK_ISSUE_REPRODUCER\` is opt-in, and every fallback reaches the subagent"
 require_text _maintenance/work-issue/RATIONALE.md "\`merge-verdicts.py\` builds \`round-<k>.json\`"
 require_text _maintenance/work-issue/RATIONALE.md "**The executor preference isn't recorded in RUN_DIR.**"
-# The README names the seventh script, and its count follows.
+# The README names merge-verdicts.py and counts it among the seven scripts.
 require_text work-issue/README.md "merge-verdicts.py"
 require_text work-issue/README.md "Python 3 for the seven bundled scripts"
 # Cut: routing other dispatches through WORK_ISSUE_REPRODUCER; the issue's Non-Goals keep it to the reproducer.
