@@ -14,26 +14,38 @@ happen. It also decides which claims the subagent fallback re-runs, so a
 miscount either drops a claim unverified or redoes finished work.
 
 --claims is `{"claims": [...], "left": [...]}`, the objects this round
-dispatched in report order. A line carrying a string `claim` is a verdict, and
-one carrying a string `what` is a left check.
+dispatched in report order. Each object carries an integer `n`, its 1-based
+position in its own list, so `claims` and `left` each run 1..len. A line
+carrying a string `claim` is a verdict, and one carrying a string `what` is a
+left check.
 
-Matching: claims group by exact `claim` string (left entries by `what`). Within
-a group the i-th accepted line carrying that string covers the i-th claim in
-report order. Positional matching exists because one line must never cover two
-claims that share their text. A line is rejected, with `merge-verdicts:
-rejected <file>:<lineno>: <reason>` on stderr, when it does not parse, is not
-an object, carries neither key, names a claim or left entry this round did not
-dispatch, or is a surplus duplicate. A rejection never covers a claim, and
-only an uncovered claim fails the run. Parts are read in ascending numeric <p>;
-coverage follows the lines in the files, never the file count or the part
-number.
+Matching: a line covers the entry its `n` names, in the list its key picks.
+Its `claim` (or `what`) string must equal that entry's text exactly, as a
+cross-check. Identity rides on `n` and never on text or line order: two claims
+can share their text, and when part 1 of a split stops before writing its copy,
+any rule that infers identity from the surviving lines gives part 2's verdict
+to the wrong claim and sends a finished claim to the fallback.
+
+A claim line is accepted only when its `verdict` is `REPRODUCED`,
+`NOT_REPRODUCED`, or `UNVERIFIABLE`, and a left line only when `holds` is a
+JSON boolean. Without that check, a line holding only the claim text counts as
+covered and its claim skips the fallback with no verdict at all.
+
+A line is rejected, with `merge-verdicts: rejected <file>:<lineno>: <reason>`
+on stderr, when it does not parse, is not an object, carries neither key, lacks
+an integer `n` naming a dispatched entry, disagrees with that entry's text,
+lacks a valid `verdict` or `holds`, or names an `n` an earlier line already
+covered. A rejection never covers a claim, and only an uncovered claim fails
+the run. Parts are read in ascending numeric <p>; coverage follows the lines in
+the files, never the file count or the part number.
 
 --fallback is a saved subagent answer, one fenced json block holding
-`verdicts` and `left_checks`. Its elements fill only what the part files left
-uncovered, by the same rule, after the part lines. An element naming a claim
-this round did not dispatch is rejected on stderr, like a part line. A part
-file is decoded with replacement characters, so a line cut mid-character is
-rejected per line; a --fallback file that is not UTF-8 is unreadable input.
+`verdicts` and `left_checks`. Its elements pass the same checks, after the part
+lines, and fill only the `n` values the part files left uncovered. An element
+naming an `n` already covered, or failing any other check, is rejected on
+stderr as `rejected --fallback <list>[<i>]: <reason>`. A part file is decoded
+with replacement characters, so a line cut mid-character is rejected per line;
+a --fallback file that is not UTF-8 is unreadable input.
 
 The script always writes --uncovered, holding the uncovered --claims objects
 unchanged. --out is `{"verdicts": [...], "left_checks": [...]}` in report
@@ -73,6 +85,10 @@ def load_claims(path):
         and all(isinstance(c, dict) and isinstance(c.get("what"), str) for c in data["left"])
     ):
         die(f'--claims {path} is not {{"claims": [...], "left": [...]}} of objects with `claim`/`what`')
+    for key in ("claims", "left"):
+        if [c.get("n") for c in data[key]] != list(range(1, len(data[key]) + 1)) or any(
+                isinstance(c["n"], bool) for c in data[key]):
+            die(f"--claims {path}: every `{key}` object needs an integer `n`, numbered 1..len in order")
     return data
 
 
@@ -107,56 +123,49 @@ def part_files(parts_dir, k):
     return [p for _, p in sorted(found)]
 
 
-def read_lines(files, claim_keys, left_keys):
-    """Return (accepted verdicts by key, accepted left checks by key, rejections)."""
-    got = {"claim": {}, "what": {}}
-    allowed = {"claim": claim_keys, "what": left_keys}
-    rejected = []
+VERDICTS = ("REPRODUCED", "NOT_REPRODUCED", "UNVERIFIABLE")
+
+
+def check(obj, entries, covered):
+    """Return (field, n) when `obj` covers an uncovered entry, else a rejection reason string."""
+    if not isinstance(obj, dict):
+        return "not a JSON object"
+    field = "claim" if isinstance(obj.get("claim"), str) else "what" if isinstance(obj.get("what"), str) else None
+    if field is None:
+        return "carries neither a string `claim` nor `what`"
+    n, items = obj.get("n"), entries[field]
+    if not isinstance(n, int) or isinstance(n, bool) or not 1 <= n <= len(items):
+        return f'{field} "{obj[field]}" carries no `n` naming a {field} dispatched this round'
+    if obj[field] != items[n - 1][field]:
+        return f'{field} "{obj[field]}" disagrees with the text of {field} n={n}'
+    if field == "claim" and obj.get("verdict") not in VERDICTS:
+        return f"claim n={n} carries no `verdict` of {', '.join(VERDICTS)}"
+    if field == "what" and not isinstance(obj.get("holds"), bool):
+        return f"what n={n} carries no boolean `holds`"
+    if n in covered[field]:
+        return f"surplus line for {field} n={n}, already covered"
+    return field, n
+
+
+def read_lines(files, entries, covered, rejected):
     for f in files:
         # errors="replace": the 2700 s cap can kill codex partway through a
         # multi-byte character. The damaged line then fails to parse or names no
         # dispatched claim, is rejected per line, and its claim stays uncovered.
         text = f.read_text(encoding="utf-8", errors="replace")
-        for n, line in enumerate(text.split("\n"), 1):
+        for lineno, line in enumerate(text.split("\n"), 1):
             if not line.strip():
                 continue
-            where = f"{f.name}:{n}"
             try:
                 obj = json.loads(line, strict=False)
             except ValueError as e:
-                rejected.append(f"rejected {where}: not JSON: {e}")
+                rejected.append(f"rejected {f.name}:{lineno}: not JSON: {e}")
                 continue
-            if not isinstance(obj, dict):
-                rejected.append(f"rejected {where}: not a JSON object")
-                continue
-            field = "claim" if isinstance(obj.get("claim"), str) else "what" if isinstance(obj.get("what"), str) else None
-            if field is None:
-                rejected.append(f"rejected {where}: carries neither a string `claim` nor `what`")
-                continue
-            key = obj[field]
-            if key not in allowed[field]:
-                rejected.append(f'rejected {where}: {field} "{key}" was not dispatched this round')
-                continue
-            bucket = got[field].setdefault(key, [])
-            if len(bucket) >= allowed[field][key]:
-                rejected.append(f'rejected {where}: surplus line for {field} "{key}"')
-                continue
-            bucket.append(obj)
-    return got["claim"], got["what"], rejected
-
-
-def fill(items, field, accepted, extra):
-    """Pair each item with its positional line; `extra` tops up from the fallback."""
-    seen = {}
-    result = []
-    for item in items:
-        key = item[field]
-        i = seen[key] = seen.get(key, -1) + 1
-        pool = accepted.setdefault(key, [])
-        if i >= len(pool) and extra.get(key):
-            pool.append(extra[key].pop(0))
-        result.append(pool[i] if i < len(pool) else None)
-    return result
+            got = check(obj, entries, covered)
+            if isinstance(got, str):
+                rejected.append(f"rejected {f.name}:{lineno}: {got}")
+            else:
+                covered[got[0]][got[1]] = obj
 
 
 def main():
@@ -174,36 +183,28 @@ def main():
     if not os.path.isdir(a.parts):
         die(f"--parts {a.parts} is not a directory")
 
-    sizes = {"claim": {}, "what": {}}
-    for field, items in (("claim", claims), ("what", left)):
-        for it in items:
-            sizes[field][it[field]] = sizes[field].get(it[field], 0) + 1
-
+    entries = {"claim": claims, "what": left}
+    covered = {"claim": {}, "what": {}}
+    rejected = []
     try:
-        got_v, got_l, rejected = read_lines(part_files(a.parts, a.round), sizes["claim"], sizes["what"])
+        read_lines(part_files(a.parts, a.round), entries, covered, rejected)
     except OSError as e:
         die(f"cannot read a part file: {e}")
+
+    if a.fallback:
+        fb = load_fallback(a.fallback)
+        for key in ("verdicts", "left_checks"):
+            for i, obj in enumerate(fb.get(key, [])):
+                got = check(obj, entries, covered)
+                if isinstance(got, str):
+                    rejected.append(f"rejected --fallback {key}[{i}]: {got}")
+                else:
+                    covered[got[0]][got[1]] = obj
     for r in rejected:
         print(f"merge-verdicts: {r}", file=sys.stderr)
 
-    extra_v, extra_l = {}, {}
-    if a.fallback:
-        fb = load_fallback(a.fallback)
-        for obj in fb.get("verdicts", []):
-            if isinstance(obj, dict) and isinstance(obj.get("claim"), str):
-                if obj["claim"] not in sizes["claim"]:
-                    print(f'merge-verdicts: rejected --fallback: claim "{obj["claim"]}" was not dispatched this round', file=sys.stderr)
-                    continue
-                extra_v.setdefault(obj["claim"], []).append(obj)
-        for obj in fb.get("left_checks", []):
-            if isinstance(obj, dict) and isinstance(obj.get("what"), str):
-                if obj["what"] not in sizes["what"]:
-                    print(f'merge-verdicts: rejected --fallback: what "{obj["what"]}" was not dispatched this round', file=sys.stderr)
-                    continue
-                extra_l.setdefault(obj["what"], []).append(obj)
-
-    verdicts = fill(claims, "claim", got_v, extra_v)
-    checks = fill(left, "what", got_l, extra_l)
+    verdicts = [covered["claim"].get(c["n"]) for c in claims]
+    checks = [covered["what"].get(c["n"]) for c in left]
 
     unc_claims = [c for c, v in zip(claims, verdicts) if v is None]
     unc_left = [c for c, v in zip(left, checks) if v is None]
@@ -216,9 +217,9 @@ def main():
 
     if unc_claims or unc_left:
         for c in unc_claims:
-            print(f"merge-verdicts: uncovered claim: {c['claim']}", file=sys.stderr)
+            print(f"merge-verdicts: uncovered claim n={c['n']}: {c['claim']}", file=sys.stderr)
         for c in unc_left:
-            print(f"merge-verdicts: uncovered left: {c['what']}", file=sys.stderr)
+            print(f"merge-verdicts: uncovered left n={c['n']}: {c['what']}", file=sys.stderr)
         return 1
 
     out = Path(a.out)

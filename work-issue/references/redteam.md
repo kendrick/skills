@@ -170,7 +170,7 @@ The `opus` routing above applies to the subagent only, a fallback subagent inclu
 
 **The codex path**, in order:
 
-1. Write `RUN_DIR/redteam/claims-<k>.json` as `{"claims": [...], "left": [...]}`: the claim and `left` objects this round dispatches, copied from the report in report order. Round k+1 after a `NOT_REPRODUCED` holds only the failed claims.
+1. Write `RUN_DIR/redteam/claims-<k>.json` as `{"claims": [...], "left": [...]}`: the claim and `left` objects this round dispatches, copied from the report in report order. Round k+1 after a `NOT_REPRODUCED` holds only the failed claims. Give each object an integer `"n"`, its 1-based position in its own list: `claims` run 1 to their count, and `left` entries run 1 to theirs separately. `merge-verdicts.py` matches a verdict line to its claim by `n` alone, with the text as a cross-check, because two claims can share their text. It exits 3 on a file whose numbering skips or repeats.
 2. Fall back without running codex when the value falls back as above, when `command -v codex` fails (`not on PATH`), when the host cannot run a background command and notify on exit (`no background execution`: a 45-minute run cannot outlive a foreground timeout), or when the round already has `round-<k>.part-*.verdicts.jsonl` files and no `round-<k>.json` (`resumed`: an earlier run was interrupted, and item 3 runs over the lines it left). Otherwise write each part's prompt file and run the invocation below, and read each part's `part <p> exit <n>` line when it returns.
 3. Run the merge:
 
@@ -179,7 +179,7 @@ The `opus` routing above applies to the subagent only, a fallback subagent inclu
    ```
 
    Exit 0 ends the round: `round-<k>.json` is written.
-4. Exit 1 means claims are uncovered. Dispatch the subagent with `uncovered-<k>.json`'s `claims` and `left` filling `{{CLAIMS}}` and `{{LEFT}}`, and save its answer verbatim to `RUN_DIR/redteam/fallback-<k>.txt`.
+4. Exit 1 means claims are uncovered. Dispatch the subagent with `uncovered-<k>.json`'s `claims` and `left` filling `{{CLAIMS}}` and `{{LEFT}}`, each object keeping its `n`. After the verdict JSON shape, add one instruction: each element of `verdicts` and `left_checks` copies the `"n"` of the claim or left entry it answers. Save its answer verbatim to `RUN_DIR/redteam/fallback-<k>.txt`. An element without a recognized `verdict`, without a boolean `holds`, or naming an `n` already covered is rejected and covers nothing.
 5. Run the merge again with the subagent's answer:
 
    ```
@@ -214,7 +214,7 @@ All parts run in one background command, as `( … ) & ( … ) & wait`, the way 
 
 **The split.** A round with more than 8 claims runs as two parts. Part 1 takes the first ceil(n/2) claims in report order and every `left` entry. Part 2 takes the rest, with `{{LEFT}}` filled as `none`. A round with 8 or fewer claims has only part 1. Each part's verdicts file is `RUN_DIR/redteam/round-<k>.part-<p>.verdicts.jsonl`.
 
-**The prompt file**, `RUN_DIR/redteam/round-<k>.part-<p>.prompt.md`, holds what a subagent dispatch carries for that part: the prompt above filled in, then the verdict JSON shape. After both comes the codex addendum below, with `{{VERDICTS_FILE}}` filled as the part's verdicts file by absolute path. The prompt files sit beside the round they fill, under `redteam/`, because the reproducer prompt never passes through `render-prompt.py` and `prompts/` is that script's.
+**The prompt file**, `RUN_DIR/redteam/round-<k>.part-<p>.prompt.md`, holds what a subagent dispatch carries for that part: the prompt above filled in from `claims-<k>.json`, so each claim and `left` object keeps its `n`, then the verdict JSON shape. After both comes the codex addendum below, with `{{VERDICTS_FILE}}` filled as the part's verdicts file by absolute path. The prompt files sit beside the round they fill, under `redteam/`, because the reproducer prompt never passes through `render-prompt.py` and `prompts/` is that script's.
 
 **Saved verbatim, on this path**, means `round-<k>.json` is what `merge-verdicts.py` assembled, every element field-for-field from a verdict line or from the fallback's block. The script exists so that no one, the orchestrator included, edits those elements by hand.
 
@@ -223,7 +223,7 @@ The names this path adds (`claims-<k>.json`, `uncovered-<k>.json`, `fallback-<k>
 ### The codex addendum
 
 ```
-Record each result in a file as you reach it, as well as in your final answer. When a claim is settled, append it to {{VERDICTS_FILE}} as one line of JSON: the same object the verdicts array holds for that claim, with its "claim" text copied exactly as you were given it. Do the same for each left entry: append the same object the left_checks array holds for it, with its "what" text copied exactly. Where two claims share their text, write their lines in the order the claims were given. Write each line the moment that claim is settled, never in a batch at the end: a run cut off by its time limit keeps every line already written, and a claim with no line is handed to someone else to redo. Append with >>; never rewrite the file. One object per line, with no line break inside it.
+Record each result in a file as you reach it, as well as in your final answer. When a claim is settled, append it to {{VERDICTS_FILE}} as one line of JSON: the same object the verdicts array holds for that claim, with its "claim" text copied exactly as you were given it and its "n" number copied too. Do the same for each left entry: append the same object the left_checks array holds for it, with its "what" text and its "n" copied exactly. Write each line the moment that claim is settled, never in a batch at the end: a run cut off by its time limit keeps every line already written, and a claim with no line is handed to someone else to redo. Append with >>; never rewrite the file. One object per line, with no line break inside it.
 
 Your final fenced json block is still due once every claim is settled.
 ```

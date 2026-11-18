@@ -4730,14 +4730,14 @@ mv_dir() { local d; d="$(mktemp -d "$tmp/mv.XXXXXX")"; echo "$d"; }
 mv_claims() { # DIR JSON-for-claims JSON-for-left
   printf '{"claims": %s, "left": %s}\n' "$2" "$3" > "$1/claims-1.json"
 }
-mv_v() { printf '{"claim": "%s", "verdict": "%s"}\n' "$1" "${2:-REPRODUCED}"; }
-ABC='[{"claim":"a","path":"p/a"},{"claim":"b","path":"p/b"},{"claim":"c","path":"p/c"}]'
+mv_v() { printf '{"claim": "%s", "n": %s, "verdict": "%s"}\n' "$1" "$2" "${3:-REPRODUCED}"; }
+ABC='[{"claim":"a","n":1,"path":"p/a"},{"claim":"b","n":2,"path":"p/b"},{"claim":"c","n":3,"path":"p/c"}]'
 
 # full coverage: lines arrive out of report order, and the round still lists
 # verdicts in report order with the left check kept.
 d="$(mv_dir)"
-mv_claims "$d" '[{"claim":"a","path":"p/a","command":"x"},{"claim":"b","path":"p/b","command":"y"}]' '[{"what":"L"}]'
-{ mv_v b; printf '{"what": "L", "holds": true}\n'; mv_v a; } > "$d/round-1.part-1.verdicts.jsonl"
+mv_claims "$d" '[{"claim":"a","n":1,"path":"p/a","command":"x"},{"claim":"b","n":2,"path":"p/b","command":"y"}]' '[{"what":"L","n":1}]'
+{ mv_v b 2; printf '{"what": "L", "n": 1, "holds": true}\n'; mv_v a 1; } > "$d/round-1.part-1.verdicts.jsonl"
 mv_run "$d" 1
 mv_want "full coverage exit" "$mv_status" 0
 mv_eq "$d/uncovered-1.json" 'd' "{'claims': [], 'left': []}"
@@ -4749,14 +4749,14 @@ mv_want "round-*.json count" "$(find "$d" -name 'round-*.json' | wc -l | tr -d '
 # missing claim: one gap fails the round and only that claim is handed on.
 d="$(mv_dir)"
 mv_claims "$d" "$ABC" '[]'
-{ mv_v a; mv_v c; } > "$d/round-1.part-1.verdicts.jsonl"
+{ mv_v a 1; mv_v c 3; } > "$d/round-1.part-1.verdicts.jsonl"
 mv_run "$d" 1
 mv_want "missing claim exit" "$mv_status" 1
-mv_has_err "uncovered claim: b"
-mv_eq "$d/uncovered-1.json" 'd["claims"]' "[{'claim': 'b', 'path': 'p/b'}]"
+mv_has_err "uncovered claim n=2: b"
+mv_eq "$d/uncovered-1.json" 'd["claims"]' "[{'claim': 'b', 'n': 2, 'path': 'p/b'}]"
 [[ ! -e "$d/round-1.json" ]] || { echo "#133: round-1.json written with b uncovered" >&2; exit 1; }
 # fallback merge on the same fixture: the subagent's block arrives in a json fence and covers b.
-printf '```json\n{"verdicts": [{"claim": "b", "verdict": "REPRODUCED", "reproduced_at": "seam"}], "left_checks": []}\n```\n' > "$d/fallback-1.txt"
+printf '```json\n{"verdicts": [{"claim": "b", "n": 2, "verdict": "REPRODUCED", "reproduced_at": "seam"}], "left_checks": []}\n```\n' > "$d/fallback-1.txt"
 mv_run "$d" 1 --fallback "$d/fallback-1.txt"
 mv_want "fallback merge exit" "$mv_status" 0
 mv_eq "$d/round-1.json" '[v["claim"] for v in d["verdicts"]]' "['a', 'b', 'c']"
@@ -4765,12 +4765,12 @@ printf '{"verdicts": [], "left_checks": []}\n' > "$d/fallback-1.txt"
 rm -f "$d/round-1.json"
 mv_run "$d" 1 --fallback "$d/fallback-1.txt"
 mv_want "empty fallback exit" "$mv_status" 1
-mv_has_err "uncovered claim: b"
+mv_has_err "uncovered claim n=2: b"
 
 # malformed line: a truncated line must not cover its claim.
 d="$(mv_dir)"
-mv_claims "$d" '[{"claim":"a","path":"p/a"},{"claim":"b","path":"p/b"}]' '[]'
-{ mv_v a; printf '{"claim": "b", "verdict": \n'; } > "$d/round-1.part-1.verdicts.jsonl"
+mv_claims "$d" '[{"claim":"a","n":1,"path":"p/a"},{"claim":"b","n":2,"path":"p/b"}]' '[]'
+{ mv_v a 1; printf '{"claim": "b", "n": 2, "verdict": \n'; } > "$d/round-1.part-1.verdicts.jsonl"
 mv_run "$d" 1
 mv_want "malformed line exit" "$mv_status" 1
 mv_has_err "rejected"
@@ -4779,8 +4779,8 @@ mv_eq "$d/uncovered-1.json" '[c["claim"] for c in d["claims"]]' "['b']"
 
 # truncated multi-byte line: when codex dies mid-append, the merge rejects that line instead of crashing.
 d="$(mv_dir)"
-mv_claims "$d" '[{"claim":"a"},{"claim":"b"}]' '[]'
-{ mv_v a; printf '{"claim": "b", "verdict": "REPRODUCED", "note": "caf\xc3'; } > "$d/round-1.part-1.verdicts.jsonl"
+mv_claims "$d" '[{"claim":"a","n":1},{"claim":"b","n":2}]' '[]'
+{ mv_v a 1; printf '{"claim": "b", "n": 2, "verdict": "REPRODUCED", "note": "caf\xc3'; } > "$d/round-1.part-1.verdicts.jsonl"
 mv_run "$d" 1
 mv_want "truncated multi-byte exit" "$mv_status" 1
 mv_has_err "rejected"
@@ -4788,38 +4788,77 @@ mv_eq "$d/uncovered-1.json" '[c["claim"] for c in d["claims"]]' "['b']"
 
 # stray fallback element: named on stderr, never counted.
 d="$(mv_dir)"
-mv_claims "$d" '[{"claim":"a"}]' '[]'
-printf '{"verdicts": [{"claim": "zz", "verdict": "REPRODUCED"}], "left_checks": []}\n' > "$d/fallback-1.txt"
+mv_claims "$d" '[{"claim":"a","n":1}]' '[]'
+printf '{"verdicts": [{"claim": "zz", "n": 1, "verdict": "REPRODUCED"}], "left_checks": []}\n' > "$d/fallback-1.txt"
 mv_run "$d" 1 --fallback "$d/fallback-1.txt"
 mv_want "stray fallback exit" "$mv_status" 1
-mv_has_err 'rejected --fallback: claim "zz"'
+mv_has_err 'rejected --fallback verdicts[0]: claim "zz" disagrees'
 
-# duplicate claim text: one line never covers two claims that share it.
+# duplicate claim text: identity is the claim's n, so each same-text line lands on the claim it names.
 d="$(mv_dir)"
-mv_claims "$d" '[{"claim":"same","path":"first"},{"claim":"same","path":"second"},{"claim":"other","path":"o"}]' '[]'
-{ mv_v same REPRODUCED; mv_v same NOT_REPRODUCED; mv_v other; } > "$d/round-1.part-1.verdicts.jsonl"
+mv_claims "$d" '[{"claim":"same","n":1,"path":"first"},{"claim":"same","n":2,"path":"second"},{"claim":"other","n":3,"path":"o"}]' '[]'
+{ mv_v same 2 NOT_REPRODUCED; mv_v same 1 REPRODUCED; mv_v other 3; } > "$d/round-1.part-1.verdicts.jsonl"
 mv_run "$d" 1
 mv_want "duplicate text exit" "$mv_status" 0
 mv_eq "$d/round-1.json" '[v["verdict"] for v in d["verdicts"]]' "['REPRODUCED', 'NOT_REPRODUCED', 'REPRODUCED']"
-{ mv_v same REPRODUCED; mv_v other; } > "$d/round-1.part-1.verdicts.jsonl"
+{ mv_v same 1 REPRODUCED; mv_v other 3; } > "$d/round-1.part-1.verdicts.jsonl"
 rm -f "$d/round-1.json"
 mv_run "$d" 1
 mv_want "one line for two same claims exit" "$mv_status" 1
 mv_eq "$d/uncovered-1.json" '[c["path"] for c in d["claims"]]' "['second']"
 
+# PR #367's repro: same-text claims split across two parts, and part 1 stopped
+# before writing its copy. Matching by surviving line order hands part 2's
+# verdict to the part-1 claim and sends the checked part-2 claim to the fallback.
+d="$(mv_dir)"
+mv_claims "$d" "$(python3 -c 'import json; t=["dup"]+[f"c{i}" for i in range(2, 10)]+["dup"]; print(json.dumps([{"claim": c, "n": i, "path": f"p{i}"} for i, c in enumerate(t, 1)]))')" '[]'
+for i in 2 3 4 5; do mv_v "c$i" "$i"; done > "$d/round-1.part-1.verdicts.jsonl"
+{ for i in 6 7 8 9; do mv_v "c$i" "$i"; done; printf '{"claim": "dup", "n": 10, "verdict": "REPRODUCED", "command": "check p10"}\n'; } > "$d/round-1.part-2.verdicts.jsonl"
+mv_run "$d" 1
+mv_want "split duplicate exit" "$mv_status" 1
+mv_eq "$d/uncovered-1.json" '[c["n"] for c in d["claims"]]' "[1]"
+printf '{"verdicts": [{"claim": "dup", "n": 1, "verdict": "NOT_REPRODUCED", "command": "check p1"}], "left_checks": []}\n' > "$d/fallback-1.txt"
+mv_run "$d" 1 --fallback "$d/fallback-1.txt"
+mv_want "split duplicate fallback exit" "$mv_status" 0
+mv_eq "$d/round-1.json" '[(v["n"], v.get("command")) for v in d["verdicts"] if v["claim"] == "dup"]' "[(1, 'check p1'), (10, 'check p10')]"
+
+# no verdict: a line holding only the claim text covers nothing. Counting it
+# lets a malformed executor result skip the fallback and resume as a clean round.
+d="$(mv_dir)"
+mv_claims "$d" '[{"claim":"a","n":1}]' '[{"what":"L","n":1}]'
+{ printf '{"claim": "a", "n": 1}\n'; printf '{"what": "L", "n": 1, "holds": "yes"}\n'; } > "$d/round-1.part-1.verdicts.jsonl"
+mv_run "$d" 1
+mv_want "no-verdict exit" "$mv_status" 1
+mv_has_err "claim n=1 carries no \`verdict\`"
+mv_has_err "what n=1 carries no boolean \`holds\`"
+mv_eq "$d/uncovered-1.json" '[c["n"] for c in d["claims"]], [c["n"] for c in d["left"]]' "([1], [1])"
+# the fallback's elements pass the same checks.
+printf '{"verdicts": [{"claim": "a", "n": 1, "verdict": "MAYBE"}], "left_checks": [{"what": "L", "n": 1}]}\n' > "$d/fallback-1.txt"
+mv_run "$d" 1 --fallback "$d/fallback-1.txt"
+mv_want "no-verdict fallback exit" "$mv_status" 1
+mv_has_err "rejected --fallback verdicts[0]: claim n=1 carries no \`verdict\`"
+mv_has_err "rejected --fallback left_checks[0]: what n=1 carries no boolean \`holds\`"
+[[ ! -e "$d/round-1.json" ]] || { echo "#133: round-1.json written from verdict-less elements" >&2; exit 1; }
+
 # surplus duplicate: a second line for a single claim is rejected, and the first one stands.
 d="$(mv_dir)"
-mv_claims "$d" '[{"claim":"same","path":"s"}]' '[]'
-{ mv_v same REPRODUCED; mv_v same NOT_REPRODUCED; } > "$d/round-1.part-1.verdicts.jsonl"
+mv_claims "$d" '[{"claim":"same","n":1,"path":"s"}]' '[]'
+{ mv_v same 1 REPRODUCED; mv_v same 1 NOT_REPRODUCED; } > "$d/round-1.part-1.verdicts.jsonl"
 mv_run "$d" 1
 mv_want "surplus exit" "$mv_status" 0
 mv_has_err "surplus line"
 mv_eq "$d/round-1.json" '[v["verdict"] for v in d["verdicts"]]' "['REPRODUCED']"
+# a fallback element for an n the part files already covered is a surplus too.
+printf '{"verdicts": [{"claim": "same", "n": 1, "verdict": "NOT_REPRODUCED"}], "left_checks": []}\n' > "$d/fallback-1.txt"
+mv_run "$d" 1 --fallback "$d/fallback-1.txt"
+mv_want "surplus fallback exit" "$mv_status" 0
+mv_has_err "rejected --fallback verdicts[0]: surplus line for claim n=1"
+mv_eq "$d/round-1.json" '[v["verdict"] for v in d["verdicts"]]' "['REPRODUCED']"
 
 # stray claim: a stale line from an earlier round is rejected and never counts.
 d="$(mv_dir)"
-mv_claims "$d" '[{"claim":"a","path":"p/a"}]' '[]'
-{ mv_v a; mv_v zz; } > "$d/round-1.part-1.verdicts.jsonl"
+mv_claims "$d" '[{"claim":"a","n":1,"path":"p/a"}]' '[]'
+{ mv_v a 1; mv_v zz 2; } > "$d/round-1.part-1.verdicts.jsonl"
 mv_run "$d" 1
 mv_want "stray exit" "$mv_status" 0
 mv_has_err "rejected"
@@ -4828,31 +4867,31 @@ mv_eq "$d/round-1.json" 'len(d["verdicts"])' 1
 
 # two-part split: part 2's lines arrive reversed, and the round still lists c1..c10 in order.
 d="$(mv_dir)"
-mv_claims "$d" "$(python3 -c 'import json; print(json.dumps([{"claim": f"c{i}"} for i in range(1, 11)]))')" '[]'
-for i in 1 2 3 4 5; do mv_v "c$i"; done > "$d/round-1.part-1.verdicts.jsonl"
-for i in 10 9 8 7 6; do mv_v "c$i"; done > "$d/round-1.part-2.verdicts.jsonl"
+mv_claims "$d" "$(python3 -c 'import json; print(json.dumps([{"claim": f"c{i}", "n": i} for i in range(1, 11)]))')" '[]'
+for i in 1 2 3 4 5; do mv_v "c$i" "$i"; done > "$d/round-1.part-1.verdicts.jsonl"
+for i in 10 9 8 7 6; do mv_v "c$i" "$i"; done > "$d/round-1.part-2.verdicts.jsonl"
 mv_run "$d" 1
 mv_want "two-part exit" "$mv_status" 0
 mv_eq "$d/round-1.json" '[v["claim"] for v in d["verdicts"]] == [f"c{i}" for i in range(1, 11)]' True
 
 # falsifier: coverage follows the lines in the files, not the file count or a fixed slice per part.
-ABCD='[{"claim":"a"},{"claim":"b"},{"claim":"c"},{"claim":"d"}]'
+ABCD='[{"claim":"a","n":1},{"claim":"b","n":2},{"claim":"c","n":3},{"claim":"d","n":4}]'
 d="$(mv_dir)"
 mv_claims "$d" "$ABCD" '[]'
-{ mv_v a; mv_v b; } > "$d/round-1.part-1.verdicts.jsonl"
-mv_v c > "$d/round-1.part-2.verdicts.jsonl"
+{ mv_v a 1; mv_v b 2; } > "$d/round-1.part-1.verdicts.jsonl"
+mv_v c 3 > "$d/round-1.part-2.verdicts.jsonl"
 mv_run "$d" 1
 mv_want "falsifier run 1 exit" "$mv_status" 1
 mv_eq "$d/uncovered-1.json" '[c["claim"] for c in d["claims"]]' "['d']"
-mv_v d > "$d/round-1.part-2.verdicts.jsonl"
+mv_v d 4 > "$d/round-1.part-2.verdicts.jsonl"
 mv_run "$d" 1
 mv_eq "$d/uncovered-1.json" '[c["claim"] for c in d["claims"]]' "['c']"
-mv_v c > "$d/round-1.part-2.verdicts.jsonl"
+mv_v c 3 > "$d/round-1.part-2.verdicts.jsonl"
 : > "$d/round-1.part-3.verdicts.jsonl"
 mv_run "$d" 1
 mv_eq "$d/uncovered-1.json" '[c["claim"] for c in d["claims"]]' "['d']"
 rm -f "$d/round-1.part-2.verdicts.jsonl" "$d/round-1.part-3.verdicts.jsonl"
-{ mv_v a; mv_v b; mv_v c; mv_v d; } > "$d/round-1.part-1.verdicts.jsonl"
+{ mv_v a 1; mv_v b 2; mv_v c 3; mv_v d 4; } > "$d/round-1.part-1.verdicts.jsonl"
 mv_run "$d" 1
 mv_want "falsifier run 4 exit" "$mv_status" 0
 
@@ -4863,6 +4902,13 @@ mv_want "missing --claims exit" "$mv_status" 3
 echo '[]' > "$d/claims-1.json"
 mv_run "$d" 1
 mv_want "--claims holding [] exit" "$mv_status" 3
+# a claims file without n leaves the lines nothing stable to name.
+mv_claims "$d" '[{"claim":"a"}]' '[]'
+mv_run "$d" 1
+mv_want "--claims missing n exit" "$mv_status" 3
+mv_claims "$d" '[{"claim":"a","n":2}]' '[]'
+mv_run "$d" 1
+mv_want "--claims n out of order exit" "$mv_status" 3
 mv_claims "$d" "$ABC" '[]'
 echo 'not json' > "$d/fallback-1.txt"
 mv_run "$d" 1 --fallback "$d/fallback-1.txt"
@@ -4931,6 +4977,13 @@ grep -Fq -- "Append with >>; never rewrite the file." <<<"$addendum" || {
   echo "#133: the codex addendum lets codex rewrite its verdicts file" >&2
   exit 1
 }
+# merge-verdicts.py matches by n, so a line without it covers nothing.
+grep -Fq -- 'its "n" number copied too' <<<"$addendum" || {
+  echo "#133: the codex addendum no longer tells codex to copy each claim's n" >&2
+  exit 1
+}
+require_text work-issue/references/redteam.md 'Give each object an integer `"n"`, its 1-based position in its own list'
+require_text work-issue/references/redteam.md 'each element of `verdicts` and `left_checks` copies the `"n"` of the claim or left entry it answers'
 # Cut: running codex whenever it's on PATH, and merging verdict lines by hand.
 # Both sit in RATIONALE.md's Deliberately Not Built.
 for f in work-issue/SKILL.md work-issue/references/redteam.md; do
