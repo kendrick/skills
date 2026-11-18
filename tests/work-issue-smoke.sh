@@ -4923,6 +4923,17 @@ grep -Fq -- "VERDICTS_FILE" <<<"$prompt_block" && {
   exit 1
 }
 
+# The ledger carries the opt-in row, the script row, and the limitation the unrecorded preference causes.
+require_text _maintenance/work-issue/RATIONALE.md "\`WORK_ISSUE_REPRODUCER\` is opt-in, and every fallback reaches the subagent"
+require_text _maintenance/work-issue/RATIONALE.md "\`merge-verdicts.py\` builds \`round-<k>.json\`"
+require_text _maintenance/work-issue/RATIONALE.md "**The executor preference isn't recorded in RUN_DIR.**"
+# The README names the seventh script, and its count follows.
+require_text work-issue/README.md "merge-verdicts.py"
+require_text work-issue/README.md "Python 3 for the seven bundled scripts"
+# Cut: routing other dispatches through WORK_ISSUE_REPRODUCER; the issue's Non-Goals keep it to the reproducer.
+refute_text work-issue/references/worker-prompt.md "WORK_ISSUE_REPRODUCER"
+refute_text adversarial-review/SKILL.md "WORK_ISSUE_REPRODUCER"
+
 # --- crash points ---
 # #147: resume_checks.py replays every write the skill makes and asks the real
 # probe and phase where a crash before each one resumes. The model is checked
