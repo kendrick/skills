@@ -3252,6 +3252,20 @@ touch -t 202609200200 "$rt/redteam/round-2.json"
 expect_field "with two rounds" redteam_rounds 2 "$rt" "$lab_repo"
 expect_field "with a failed round older than a clean one" redteam_last_failed false "$rt" "$lab_repo"
 expect_field "with one failed round of two" redteam_failed_twice false "$rt" "$lab_repo"
+# #133: the codex path's files sit beside the rounds and must stay probe-blind.
+# A NOT_REPRODUCED verdict line that matched round-*.json would read as a
+# third, failed round.
+echo '{"claim": "x", "verdict": "NOT_REPRODUCED", "reproduced_at": null}' >"$rt/redteam/round-3.part-1.verdicts.jsonl"
+for f in round-3.part-1.prompt.md round-3.part-1.log claims-3.json uncovered-3.json fallback-3.txt executor.log; do
+  echo x >"$rt/redteam/$f"
+done
+for f in round-3.part-1.verdicts.jsonl round-3.part-1.prompt.md round-3.part-1.log claims-3.json uncovered-3.json fallback-3.txt executor.log; do
+  touch -t 202609200250 "$rt/redteam/$f"
+done
+expect_field "beside codex part files" redteam_rounds 2 "$rt" "$lab_repo"
+expect_field "beside a failing verdict line" redteam_last_failed false "$rt" "$lab_repo"
+rm -f "$rt/redteam/round-3.part-1.verdicts.jsonl" "$rt/redteam/round-3.part-1.prompt.md" "$rt/redteam/round-3.part-1.log" \
+  "$rt/redteam/claims-3.json" "$rt/redteam/uncovered-3.json" "$rt/redteam/fallback-3.txt" "$rt/redteam/executor.log"
 touch -t 202609200300 "$rt/redteam/round-1.json"
 # A false left check is a red-team failure, and the probe has to read it.
 expect_field "with a newest round holding only \"holds\": false" redteam_last_failed true "$rt" "$lab_repo"
@@ -4836,6 +4850,78 @@ mv_claims "$d" "$ABC" '[]'
 echo 'not json' > "$d/fallback-1.txt"
 mv_run "$d" 1 --fallback "$d/fallback-1.txt"
 mv_want "unparseable --fallback exit" "$mv_status" 3
+
+# --- #133: the reproducer's executor ---
+# WORK_ISSUE_REPRODUCER is opt-in. These pins keep the unset path routing to
+# today's subagent, the codex path capped and split, and every fallback named.
+# The unset path is today's behavior; losing this sentence loses the default.
+require_text work-issue/SKILL.md "With \`WORK_ISSUE_REPRODUCER\` unset or empty, the reproducer is a fresh general-purpose subagent, \`sonnet\` by default and \`opus\` when any claim's path matches a trigger row"
+# The codex path points at redteam.md, where the cap and split live.
+require_text work-issue/SKILL.md "set to a \`codex:\` value such as \`codex:gpt-6-luna:xhigh\`, it runs as \`codex exec\` under the cap and split in [references/redteam.md](references/redteam.md)"
+# The subagent covers exactly what the script says is uncovered, nothing more.
+require_text work-issue/SKILL.md "falls back to that subagent for exactly the claims \`work-issue/scripts/merge-verdicts.py\` reports uncovered"
+# A fallback is reported, never silent.
+require_text work-issue/SKILL.md "and appends the reason to \`RUN_DIR/redteam/executor.log\`"
+# The script, not the orchestrator, writes round-<k>.json on the codex path.
+require_text work-issue/SKILL.md "on the codex path, \`merge-verdicts.py\` writes that file instead"
+# No RUN_DIR/ prefix: the crash-point check reads RUN_DIR/ spans in Done-when lines.
+require_text work-issue/SKILL.md "where \`WORK_ISSUE_REPRODUCER\` was set, \`redteam/executor.log\` has a line for the round"
+# Step 8's repair reproducer inherits the executor and its fallback.
+require_text work-issue/SKILL.md "on the executor \`WORK_ISSUE_REPRODUCER\` resolves to, with the same fallback"
+# The user sees which rounds fell back, and why.
+require_text work-issue/SKILL.md "the lines of \`RUN_DIR/redteam/executor.log\` where it exists"
+# read-only blocks the suites and still yields a report that looks real.
+require_text work-issue/references/redteam.md "-s workspace-write"
+require_text work-issue/references/redteam.md "-C <tree>"
+# stdin left open blocks codex exec forever; RUN_DIR sits outside <tree>.
+require_text work-issue/references/redteam.md "--add-dir RUN_DIR/redteam - < RUN_DIR/redteam/round-<k>.part-<p>.prompt.md"
+# A dropped stream sits for hours without the cap.
+require_text work-issue/references/redteam.md "perl -e 'alarm shift; exec @ARGV' 2700"
+# 12- and 14-claim sets hit the 45-minute cap.
+require_text work-issue/references/redteam.md "more than 8 claims"
+# The per-part name stays probe-blind: it never matches round-*.json.
+require_text work-issue/references/redteam.md "round-<k>.part-<p>.verdicts.jsonl"
+# The merge is the script's, called with the flags Task 1 defines.
+require_text work-issue/references/redteam.md "merge-verdicts.py --claims RUN_DIR/redteam/claims-<k>.json"
+# The falsifier: unset means today's subagent, codex on PATH or not.
+require_text work-issue/references/redteam.md "With \`WORK_ISSUE_REPRODUCER\` unset or empty, one fresh general-purpose subagent per round"
+require_text work-issue/references/redteam.md "A \`codex\` on PATH with \`WORK_ISSUE_REPRODUCER\` unset changes nothing"
+# A value that fails the character class never reaches a shell command.
+require_text work-issue/references/redteam.md "\`malformed value\`"
+# A 45-minute run cannot outlive a foreground timeout.
+require_text work-issue/references/redteam.md "\`no background execution\`"
+# A crash mid-codex resumes over the lines it left.
+require_text work-issue/references/redteam.md "\`resumed\`"
+# The addendum is what makes a capped run keep its finished verdicts.
+addendum="$(sed -n '/^### The codex addendum$/,$p' work-issue/references/redteam.md | sed '1,/^```$/d' | sed '/^```$/,$d' | tr '\n' ' ' | tr -s ' ')"
+grep -Fq -- "append it to {{VERDICTS_FILE}} as one line of JSON" <<<"$addendum" || {
+  echo "#133: the codex addendum lost its one-line-per-claim instruction" >&2
+  exit 1
+}
+grep -Fq -- "the same object the verdicts array holds for that claim" <<<"$addendum" || {
+  echo "#133: the codex addendum no longer ties a line to the verdict object" >&2
+  exit 1
+}
+grep -Fq -- "Write each line the moment that claim is settled, never in a batch at the end" <<<"$addendum" || {
+  echo "#133: the codex addendum lets verdicts batch at the end, which the cap loses" >&2
+  exit 1
+}
+grep -Fq -- "Append with >>; never rewrite the file." <<<"$addendum" || {
+  echo "#133: the codex addendum lets codex rewrite its verdicts file" >&2
+  exit 1
+}
+# Cut: codex whenever it's on PATH, the falsifier's wrong neighbor; and the
+# hand merge merge-verdicts.py replaced.
+for f in work-issue/SKILL.md work-issue/references/redteam.md; do
+  refute_text "$f" "codex by default"
+  refute_text "$f" '`codex` is installed'
+  refute_text "$f" "merge the verdict lines by hand"
+done
+# The addendum rides only the codex path; the subagent's prompt stays as it was.
+grep -Fq -- "VERDICTS_FILE" <<<"$prompt_block" && {
+  echo "#133: the reproducer prompt names the codex verdicts file" >&2
+  exit 1
+}
 
 # --- crash points ---
 # #147: resume_checks.py replays every write the skill makes and asks the real
