@@ -161,9 +161,9 @@ Saved verbatim to `RUN_DIR/redteam/round-<k>.json`. A verdict file you tidied is
 
 ### Running on an external executor
 
-Resolve the executor at the start of every reproducer round, Step 8's included, with `printenv WORK_ISSUE_REPRODUCER` in the orchestrator's environment. Read it fresh each round and keep it out of RUN_DIR.
+Resolve the executor fresh at the start of every reproducer round, Step 8's included, with `printenv WORK_ISSUE_REPRODUCER` in the orchestrator's environment, and keep the value out of RUN_DIR.
 
-- **Unset or empty:** the subagent above, exactly as described. Its answer is saved verbatim to `round-<k>.json`, `merge-verdicts.py` is not called, and `executor.log` gets nothing. A `codex` on PATH with `WORK_ISSUE_REPRODUCER` unset changes nothing.
+- **Unset or empty:** the subagent above, exactly as described. Save its answer verbatim to `round-<k>.json`, skip `merge-verdicts.py`, and leave `executor.log` untouched. A `codex` on PATH with `WORK_ISSUE_REPRODUCER` unset changes nothing.
 - **Set:** the value is exactly three non-empty `:`-separated fields, `<executor>:<model>:<effort>`, each matching `[A-Za-z0-9._-]+`, such as `codex:gpt-6-luna:xhigh`. That character class is what keeps the value from injecting into the shell command below, so check it before any field reaches a command. `codex` is the one supported executor. Any other shape falls back with reason `malformed value`, and any other executor with `unsupported executor <name>`.
 
 The `opus` routing above applies to the subagent only, a fallback subagent included. A fallback subagent routes by the paths of the claims in `uncovered-<k>.json`.
@@ -171,7 +171,7 @@ The `opus` routing above applies to the subagent only, a fallback subagent inclu
 **The codex path**, in order:
 
 1. Write `RUN_DIR/redteam/claims-<k>.json` as `{"claims": [...], "left": [...]}`: the claim and `left` objects this round dispatches, copied from the report in report order. Round k+1 after a `NOT_REPRODUCED` holds only the failed claims.
-2. The fallback is already decided when the value falls back as above, when `command -v codex` fails (`not on PATH`), when the host cannot run a background command and notify on exit (`no background execution`: a 45-minute run cannot outlive a foreground timeout), or when the round already has `round-<k>.part-*.verdicts.jsonl` files and no `round-<k>.json` (`resumed`: an earlier run was interrupted, and item 3 runs over the lines it left). Otherwise write each part's prompt file and run the invocation below, and read each part's `part <p> exit <n>` line when it returns.
+2. Fall back without running codex when the value falls back as above, when `command -v codex` fails (`not on PATH`), when the host cannot run a background command and notify on exit (`no background execution`: a 45-minute run cannot outlive a foreground timeout), or when the round already has `round-<k>.part-*.verdicts.jsonl` files and no `round-<k>.json` (`resumed`: an earlier run was interrupted, and item 3 runs over the lines it left). Otherwise write each part's prompt file and run the invocation below, and read each part's `part <p> exit <n>` line when it returns.
 3. Run the merge:
 
    ```

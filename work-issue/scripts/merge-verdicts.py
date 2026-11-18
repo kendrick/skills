@@ -8,10 +8,10 @@ An external reproducer writes one JSON line per finished claim into
 `round-<k>.part-<p>.verdicts.jsonl` files under --parts. This script matches
 those lines to the claims the round dispatched, names the claims no line
 covers, and writes --out once nothing is uncovered. It exists so that no one,
-the orchestrator included, assembles or tidies a verdict by hand: redteam.md
-forbids editing a verdict, and a hand merge is where that happens. It also
-decides which claims the subagent fallback re-runs, so a miscount either drops
-a claim unverified or redoes finished work.
+the orchestrator included, assembles or tidies a verdict by hand. The rule in
+redteam.md forbids editing a verdict, and a hand merge is where such edits
+happen. It also decides which claims the subagent fallback re-runs, so a
+miscount either drops a claim unverified or redoes finished work.
 
 --claims is `{"claims": [...], "left": [...]}`, the objects this round
 dispatched in report order. A line carrying a string `claim` is a verdict, and
@@ -23,8 +23,8 @@ report order. Positional matching exists because one line must never cover two
 claims that share their text. A line is rejected, with `merge-verdicts:
 rejected <file>:<lineno>: <reason>` on stderr, when it does not parse, is not
 an object, carries neither key, names a claim or left entry this round did not
-dispatch, or is a surplus duplicate. A rejection leaves its claim uncovered,
-and that is what fails the run. Parts are read in ascending numeric <p>;
+dispatch, or is a surplus duplicate. A rejection never covers a claim, and
+only an uncovered claim fails the run. Parts are read in ascending numeric <p>;
 coverage follows the lines in the files, never the file count or the part
 number.
 
@@ -35,7 +35,7 @@ this round did not dispatch is rejected on stderr, like a part line. A part
 file is decoded with replacement characters, so a line cut mid-character is
 rejected per line; a --fallback file that is not UTF-8 is unreadable input.
 
---uncovered is always written, holding the uncovered --claims objects
+The script always writes --uncovered, holding the uncovered --claims objects
 unchanged. --out is `{"verdicts": [...], "left_checks": [...]}` in report
 order, written only when nothing is uncovered, via a `.merge-<k>.tmp` file and
 os.replace: the resume probe counts any `round-*.json` it finds, so a
