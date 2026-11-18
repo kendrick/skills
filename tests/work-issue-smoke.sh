@@ -4777,6 +4777,23 @@ mv_has_err "rejected"
 mv_has_err "part-1.verdicts.jsonl:2"
 mv_eq "$d/uncovered-1.json" '[c["claim"] for c in d["claims"]]' "['b']"
 
+# truncated multi-byte line: codex killed mid-append must reject that line, not crash the merge.
+d="$(mv_dir)"
+mv_claims "$d" '[{"claim":"a"},{"claim":"b"}]' '[]'
+{ mv_v a; printf '{"claim": "b", "verdict": "REPRODUCED", "note": "caf\xc3'; } > "$d/round-1.part-1.verdicts.jsonl"
+mv_run "$d" 1
+mv_want "truncated multi-byte exit" "$mv_status" 1
+mv_has_err "rejected"
+mv_eq "$d/uncovered-1.json" '[c["claim"] for c in d["claims"]]' "['b']"
+
+# stray fallback element: named on stderr, never counted.
+d="$(mv_dir)"
+mv_claims "$d" '[{"claim":"a"}]' '[]'
+printf '{"verdicts": [{"claim": "zz", "verdict": "REPRODUCED"}], "left_checks": []}\n' > "$d/fallback-1.txt"
+mv_run "$d" 1 --fallback "$d/fallback-1.txt"
+mv_want "stray fallback exit" "$mv_status" 1
+mv_has_err 'rejected --fallback: claim "zz"'
+
 # duplicate claim text: one line never covers two claims that share it.
 d="$(mv_dir)"
 mv_claims "$d" '[{"claim":"same","path":"first"},{"claim":"same","path":"second"},{"claim":"other","path":"o"}]' '[]'
@@ -4850,6 +4867,9 @@ mv_claims "$d" "$ABC" '[]'
 echo 'not json' > "$d/fallback-1.txt"
 mv_run "$d" 1 --fallback "$d/fallback-1.txt"
 mv_want "unparseable --fallback exit" "$mv_status" 3
+printf '\xff' > "$d/fallback-1.txt"
+mv_run "$d" 1 --fallback "$d/fallback-1.txt"
+mv_want "non-UTF-8 --fallback exit" "$mv_status" 3
 
 # --- #133: the reproducer's executor ---
 # WORK_ISSUE_REPRODUCER is opt-in. These pins keep the unset path routing to

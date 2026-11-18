@@ -30,7 +30,10 @@ number.
 
 --fallback is a saved subagent answer, one fenced json block holding
 `verdicts` and `left_checks`. Its elements fill only what the part files left
-uncovered, by the same rule, after the part lines.
+uncovered, by the same rule, after the part lines. An element naming a claim
+this round did not dispatch is rejected on stderr, like a part line. A part
+file is decoded with replacement characters, so a line cut mid-character is
+rejected per line; a --fallback file that is not UTF-8 is unreadable input.
 
 --uncovered is always written, holding the uncovered --claims objects
 unchanged. --out is `{"verdicts": [...], "left_checks": [...]}` in report
@@ -76,7 +79,7 @@ def load_claims(path):
 def load_fallback(path):
     try:
         text = Path(path).read_text(encoding="utf-8")
-    except OSError as e:
+    except (OSError, ValueError) as e:  # ValueError covers UnicodeDecodeError
         die(f"cannot read --fallback {path}: {e}")
     # Same single-fence strip as run-state.py's round parser: the subagent's
     # answer is one fenced block, and digging JSON out of surrounding prose
@@ -110,7 +113,10 @@ def read_lines(files, claim_keys, left_keys):
     allowed = {"claim": claim_keys, "what": left_keys}
     rejected = []
     for f in files:
-        text = f.read_text(encoding="utf-8")
+        # errors="replace": the 2700 s cap can kill codex partway through a
+        # multi-byte character. The damaged line then fails to parse or names no
+        # dispatched claim, is rejected per line, and its claim stays uncovered.
+        text = f.read_text(encoding="utf-8", errors="replace")
         for n, line in enumerate(text.split("\n"), 1):
             if not line.strip():
                 continue
@@ -185,9 +191,15 @@ def main():
         fb = load_fallback(a.fallback)
         for obj in fb.get("verdicts", []):
             if isinstance(obj, dict) and isinstance(obj.get("claim"), str):
+                if obj["claim"] not in sizes["claim"]:
+                    print(f'merge-verdicts: rejected --fallback: claim "{obj["claim"]}" was not dispatched this round', file=sys.stderr)
+                    continue
                 extra_v.setdefault(obj["claim"], []).append(obj)
         for obj in fb.get("left_checks", []):
             if isinstance(obj, dict) and isinstance(obj.get("what"), str):
+                if obj["what"] not in sizes["what"]:
+                    print(f'merge-verdicts: rejected --fallback: what "{obj["what"]}" was not dispatched this round', file=sys.stderr)
+                    continue
                 extra_l.setdefault(obj["what"], []).append(obj)
 
     verdicts = fill(claims, "claim", got_v, extra_v)
