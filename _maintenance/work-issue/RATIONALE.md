@@ -296,6 +296,7 @@ Five sources:
 | Rendering a herdr dispatch to a file | Row 195. `herdr agent prompt` takes one task's text directly, so a file adds a read and saves no typing. Pinned by the `require_text` on "Herdr keeps sending the full prompt inline" in `work-issue/SKILL.md`, which fails if the sentence goes. |
 | Running the reproducer on codex whenever it's on PATH | Row 197. A machine that has codex would change executor without its owner asking, and an unset variable would stop meaning today's subagent. Pinned by the `refute_text` on "codex by default". |
 | Routing other dispatches through `WORK_ISSUE_REPRODUCER` | Row 197. The issue's Non-Goals limit the variable to the reproducer. Workers and the adversarial-review subagents keep their own routing. Pinned by the `refute_text` in `worker-prompt.md` and `adversarial-review/SKILL.md`. |
+| Merging the reproducer's verdict lines by hand | Row 200. A hand merge invites tidying a verdict, which `redteam.md` forbids, and a miscounted uncovered set either drops a claim unverified or re-runs finished work. `merge-verdicts.py` does the match and the count. Pinned by the `refute_text` on "merge the verdict lines by hand" in `work-issue/SKILL.md` and `references/redteam.md`. |
 
 ## Known Limitations
 
