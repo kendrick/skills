@@ -54,6 +54,7 @@ require_file work-issue/scripts/check-plan.py
 require_file work-issue/scripts/find-plan.py
 require_file work-issue/scripts/check-inflight.py
 require_file work-issue/scripts/run-state.py
+require_file work-issue/scripts/merge-verdicts.py
 require_file _maintenance/work-issue/RATIONALE.md
 require_file _maintenance/work-issue/EVALS.md
 
@@ -4672,6 +4673,169 @@ require_text work-issue/SKILL.md "Before every commit the run makes, each wave's
 require_text work-issue/SKILL.md "gh api repos/{owner}/{repo} --jq '{squash: .allow_squash_merge, merge: .allow_merge_commit, rebase: .allow_rebase_merge}' > RUN_DIR/merge_methods.json"
 require_text work-issue/SKILL.md "the message carries one more clause, \`squash-only repo: in-branch commits get bare subjects\`, ahead of \"Go?\""
 require_text work-issue/SKILL.md "5. The body goes through \`technical-writing\` on its pull-request-description profile"
+
+# --- #133: merge-verdicts.py ---
+# The script builds round-<k>.json from per-claim verdict lines and names the
+# claims no line covers. It decides which claims the subagent re-runs, so each
+# case below pins one way a miscount drops a claim unverified or redoes
+# finished work.
+merge_verdicts="$repo_root/work-issue/scripts/merge-verdicts.py"
+mv_run() {
+  local dir="$1" k="$2"
+  shift 2
+  set +e
+  python3 "$merge_verdicts" --claims "$dir/claims-$k.json" --parts "$dir" --round "$k" \
+    --uncovered "$dir/uncovered-$k.json" --out "$dir/round-$k.json" "$@" >"$dir/stdout" 2>"$dir/stderr"
+  mv_status=$?
+  set -e
+  mv_err="$(cat "$dir/stderr")"
+}
+# mv_eq FILE EXPR EXPECTED: EXPR sees the parsed file as `d` and must print EXPECTED.
+mv_eq() {
+  local got
+  got="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(eval(sys.argv[2]))' "$1" "$2")"
+  [[ "$got" == "$3" ]] || {
+    echo "#133: merge-verdicts: $1: $2 gave '$got', want '$3'" >&2
+    exit 1
+  }
+}
+mv_want() {
+  # mv_want WHAT ACTUAL EXPECTED
+  [[ "$2" == "$3" ]] || {
+    echo "#133: merge-verdicts: $1: got '$2', want '$3'" >&2
+    exit 1
+  }
+}
+mv_has_err() {
+  [[ "$mv_err" == *"$1"* ]] || {
+    echo "#133: merge-verdicts: stderr lacks '$1': $mv_err" >&2
+    exit 1
+  }
+}
+mv_dir() { local d; d="$(mktemp -d "$tmp/mv.XXXXXX")"; echo "$d"; }
+mv_claims() { # DIR JSON-for-claims JSON-for-left
+  printf '{"claims": %s, "left": %s}\n' "$2" "$3" > "$1/claims-1.json"
+}
+mv_v() { printf '{"claim": "%s", "verdict": "%s"}\n' "$1" "${2:-REPRODUCED}"; }
+ABC='[{"claim":"a","path":"p/a"},{"claim":"b","path":"p/b"},{"claim":"c","path":"p/c"}]'
+
+# full coverage: lines arrive out of report order, and the round still lists
+# verdicts in report order with the left check kept.
+d="$(mv_dir)"
+mv_claims "$d" '[{"claim":"a","path":"p/a","command":"x"},{"claim":"b","path":"p/b","command":"y"}]' '[{"what":"L"}]'
+{ mv_v b; printf '{"what": "L", "holds": true}\n'; mv_v a; } > "$d/round-1.part-1.verdicts.jsonl"
+mv_run "$d" 1
+mv_want "full coverage exit" "$mv_status" 0
+mv_eq "$d/uncovered-1.json" 'd' "{'claims': [], 'left': []}"
+mv_eq "$d/round-1.json" '[v["claim"] for v in d["verdicts"]], len(d["left_checks"])' "(['a', 'b'], 1)"
+# atomic write: the probe counts any round-*.json, so only the finished file may match and no temp may linger.
+mv_want "temp file left behind" "$(find "$d" -name '.merge-*.tmp' | wc -l | tr -d ' ')" 0
+mv_want "round-*.json count" "$(find "$d" -name 'round-*.json' | wc -l | tr -d ' ')" 1
+
+# missing claim: one gap fails the round and only that claim is handed on.
+d="$(mv_dir)"
+mv_claims "$d" "$ABC" '[]'
+{ mv_v a; mv_v c; } > "$d/round-1.part-1.verdicts.jsonl"
+mv_run "$d" 1
+mv_want "missing claim exit" "$mv_status" 1
+mv_has_err "uncovered claim: b"
+mv_eq "$d/uncovered-1.json" 'd["claims"]' "[{'claim': 'b', 'path': 'p/b'}]"
+[[ ! -e "$d/round-1.json" ]] || { echo "#133: round-1.json written with b uncovered" >&2; exit 1; }
+# fallback merge, built on the same fixture: the subagent's block covers b, in a json fence.
+printf '```json\n{"verdicts": [{"claim": "b", "verdict": "REPRODUCED", "reproduced_at": "seam"}], "left_checks": []}\n```\n' > "$d/fallback-1.txt"
+mv_run "$d" 1 --fallback "$d/fallback-1.txt"
+mv_want "fallback merge exit" "$mv_status" 0
+mv_eq "$d/round-1.json" '[v["claim"] for v in d["verdicts"]]' "['a', 'b', 'c']"
+# a fallback that covers nothing leaves b uncovered.
+printf '{"verdicts": [], "left_checks": []}\n' > "$d/fallback-1.txt"
+rm -f "$d/round-1.json"
+mv_run "$d" 1 --fallback "$d/fallback-1.txt"
+mv_want "empty fallback exit" "$mv_status" 1
+mv_has_err "uncovered claim: b"
+
+# malformed line: a truncated line must not cover its claim.
+d="$(mv_dir)"
+mv_claims "$d" '[{"claim":"a","path":"p/a"},{"claim":"b","path":"p/b"}]' '[]'
+{ mv_v a; printf '{"claim": "b", "verdict": \n'; } > "$d/round-1.part-1.verdicts.jsonl"
+mv_run "$d" 1
+mv_want "malformed line exit" "$mv_status" 1
+mv_has_err "rejected"
+mv_has_err "part-1.verdicts.jsonl:2"
+mv_eq "$d/uncovered-1.json" '[c["claim"] for c in d["claims"]]' "['b']"
+
+# duplicate claim text: one line never covers two claims that share it.
+d="$(mv_dir)"
+mv_claims "$d" '[{"claim":"same","path":"first"},{"claim":"same","path":"second"},{"claim":"other","path":"o"}]' '[]'
+{ mv_v same REPRODUCED; mv_v same NOT_REPRODUCED; mv_v other; } > "$d/round-1.part-1.verdicts.jsonl"
+mv_run "$d" 1
+mv_want "duplicate text exit" "$mv_status" 0
+mv_eq "$d/round-1.json" '[v["verdict"] for v in d["verdicts"]]' "['REPRODUCED', 'NOT_REPRODUCED', 'REPRODUCED']"
+{ mv_v same REPRODUCED; mv_v other; } > "$d/round-1.part-1.verdicts.jsonl"
+rm -f "$d/round-1.json"
+mv_run "$d" 1
+mv_want "one line for two same claims exit" "$mv_status" 1
+mv_eq "$d/uncovered-1.json" '[c["path"] for c in d["claims"]]' "['second']"
+
+# surplus duplicate: a second line for a single claim is rejected, and the first one stands.
+d="$(mv_dir)"
+mv_claims "$d" '[{"claim":"same","path":"s"}]' '[]'
+{ mv_v same REPRODUCED; mv_v same NOT_REPRODUCED; } > "$d/round-1.part-1.verdicts.jsonl"
+mv_run "$d" 1
+mv_want "surplus exit" "$mv_status" 0
+mv_has_err "surplus line"
+mv_eq "$d/round-1.json" '[v["verdict"] for v in d["verdicts"]]' "['REPRODUCED']"
+
+# stray claim: a stale line from an earlier round is rejected and never counts.
+d="$(mv_dir)"
+mv_claims "$d" '[{"claim":"a","path":"p/a"}]' '[]'
+{ mv_v a; mv_v zz; } > "$d/round-1.part-1.verdicts.jsonl"
+mv_run "$d" 1
+mv_want "stray exit" "$mv_status" 0
+mv_has_err "rejected"
+mv_has_err "zz"
+mv_eq "$d/round-1.json" 'len(d["verdicts"])' 1
+
+# two-part split: part 2's lines arrive reversed, and the round still lists c1..c10 in order.
+d="$(mv_dir)"
+mv_claims "$d" "$(python3 -c 'import json; print(json.dumps([{"claim": f"c{i}"} for i in range(1, 11)]))')" '[]'
+for i in 1 2 3 4 5; do mv_v "c$i"; done > "$d/round-1.part-1.verdicts.jsonl"
+for i in 10 9 8 7 6; do mv_v "c$i"; done > "$d/round-1.part-2.verdicts.jsonl"
+mv_run "$d" 1
+mv_want "two-part exit" "$mv_status" 0
+mv_eq "$d/round-1.json" '[v["claim"] for v in d["verdicts"]] == [f"c{i}" for i in range(1, 11)]' True
+
+# falsifier: coverage follows the lines in the files, not the file count or a fixed slice per part.
+ABCD='[{"claim":"a"},{"claim":"b"},{"claim":"c"},{"claim":"d"}]'
+d="$(mv_dir)"
+mv_claims "$d" "$ABCD" '[]'
+{ mv_v a; mv_v b; } > "$d/round-1.part-1.verdicts.jsonl"
+mv_v c > "$d/round-1.part-2.verdicts.jsonl"
+mv_run "$d" 1
+mv_want "falsifier run 1 exit" "$mv_status" 1
+mv_eq "$d/uncovered-1.json" '[c["claim"] for c in d["claims"]]' "['d']"
+mv_v d > "$d/round-1.part-2.verdicts.jsonl"
+mv_run "$d" 1
+mv_eq "$d/uncovered-1.json" '[c["claim"] for c in d["claims"]]' "['c']"
+mv_v c > "$d/round-1.part-2.verdicts.jsonl"
+: > "$d/round-1.part-3.verdicts.jsonl"
+mv_run "$d" 1
+mv_eq "$d/uncovered-1.json" '[c["claim"] for c in d["claims"]]' "['d']"
+rm -f "$d/round-1.part-2.verdicts.jsonl" "$d/round-1.part-3.verdicts.jsonl"
+{ mv_v a; mv_v b; mv_v c; mv_v d; } > "$d/round-1.part-1.verdicts.jsonl"
+mv_run "$d" 1
+mv_want "falsifier run 4 exit" "$mv_status" 0
+
+# usage: unreadable or misshapen input is exit 3, never a quiet pass.
+d="$(mv_dir)"
+mv_run "$d" 1
+mv_want "missing --claims exit" "$mv_status" 3
+echo '[]' > "$d/claims-1.json"
+mv_run "$d" 1
+mv_want "--claims holding [] exit" "$mv_status" 3
+mv_claims "$d" "$ABC" '[]'
+echo 'not json' > "$d/fallback-1.txt"
+mv_run "$d" 1 --fallback "$d/fallback-1.txt"
+mv_want "unparseable --fallback exit" "$mv_status" 3
 
 # --- crash points ---
 # #147: resume_checks.py replays every write the skill makes and asks the real
