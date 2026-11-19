@@ -171,7 +171,7 @@ require_text work-issue/SKILL.md "name: work-issue"
 # from siblings too—a wave reaches it once per lane. Refuted on the bare
 # key so `: false` fails here as loudly as `: true`.
 refute_text work-issue/SKILL.md "disable-model-invocation"
-require_text work-issue/SKILL.md "argument-hint: '<issue or pull request number or URL> [plan path] [--isolate | --no-isolate] [--deep] [--max-review-rounds N] [--no-publish] [--until-boundary] [--dry-run]'"
+require_text work-issue/SKILL.md "argument-hint: '<issue or pull request number or URL> [plan path] [--isolate | --no-isolate] [--deep] [--max-review-rounds N] [--review-loop[=<comment>]] [--no-publish] [--until-boundary] [--dry-run]'"
 
 # A description that summarizes the steps becomes the shortcut the model takes
 # instead of reading the body, which is how a nine-step skill collapses into
@@ -2164,6 +2164,34 @@ json.dump(probe, open(sys.argv[4], "w"))' "$probes_dir/$loop_fixture.json" "$loo
     exit 1
   }
 done
+
+# #230's prose. The probe only reads whether RUN_DIR/review_loop exists; the
+# agent writes the file, posts the request, and keeps the loop going, so each
+# of those instructions is pinned where the agent reads it.
+# FLAGS is the flag's only definition, and the file is the mode's only
+# persistence. Without the write, a resume reads review_loop false and the cap
+# comes back mid-loop.
+require_text work-issue/SKILL.md "\`--review-loop[=<comment>]\` turns on the review loop"
+require_text work-issue/SKILL.md "writes \`<comment>\`, \`@codex review\` where none is given, to \`RUN_DIR/review_loop\`"
+# Both posting sentences open on the file's existence, which keeps a run
+# without the mode from posting anything new at Step 5 or Step 8.
+require_text work-issue/SKILL.md "Where \`RUN_DIR/review_loop\` exists, post the review request once the pull request exists, before Step 6's first \`poll start\`."
+require_text work-issue/SKILL.md "Where \`RUN_DIR/review_loop\` exists, post the review request after the push and before the next \`poll start\`"
+# phase_of lifts the cap, but Step 6 is where the agent decides whether to
+# queue a round's rows; without this sentence it queues them anyway.
+require_text work-issue/SKILL.md "While \`RUN_DIR/review_loop\` exists, no round is capped"
+require_text work-issue/references/triage.md "While \`RUN_DIR/review_loop\` exists, no round is capped"
+# Step 6 holds the request command's one definition. Its body comes from the
+# file, so the comment the user gave is posted with no shell quoting between.
+require_text work-issue/SKILL.md 'addComment(input: {subjectId: $id, body: $b})'
+require_text work-issue/SKILL.md '-F b=@RUN_DIR/review_loop'
+# A crash between gh pr create and the request leaves the poll waiting on a
+# review nobody asked for, and re-invoking with the flag is how to ask again.
+require_text work-issue/SKILL.md "An invocation carrying \`--review-loop\` whose \`phase:\` answers row 14, or row 18 on a \`findings\` review, posts the review request"
+# The ledger row argues the opt-in against #159, and the Known Limitations
+# bullet records the crash window the Resume paragraph recovers.
+require_text _maintenance/work-issue/RATIONALE.md "\`--review-loop[=<comment>]\` lifts the review round cap (#159) by opt-in"
+require_text _maintenance/work-issue/RATIONALE.md "**A crash between \`gh pr create\` and the review request leaves the request unposted.**"
 
 # The cap's prose (#159). phase_of only reads the probe; the agent is what
 # writes the cap file, queues the capped rows, and stops on a blocker, so each
