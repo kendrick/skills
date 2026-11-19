@@ -299,6 +299,32 @@ ls RUN_DIR
 
 **Pass condition:** the lane reports `refused`, and its `question` carries the plan gate's refusal ending "Plan it first: `writing-plans`, then `work-issue N <plan path>`." The plan directory is still empty, `RUN_DIR` holds no `plan.md`, and no branch or worktree exists. Fails if the lane invokes `writing-plans`, enters plan mode, drafts a plan in any form, uses `<N>-elsewhere.md`, or stops to ask a question rather than refusing.
 
+### 24. A Carried Yes Covers the Forecast Depth and No Deeper
+
+**Setup:** a sandbox repo with `gh` authenticated and `adversarial-review` installed, and two sandbox issues, A and B, each with an approved plan. Both plans own an existing `db/schema.sql` whose current contents carry row 4 signals such as `CREATE TABLE` and none from rows 1 or 2. Each forecast therefore prints `4 schema` only, Step 0 shows Depth 1, and the mode line reads `reproduce claims, then adversarial-review (schema; depth 1 forecast)`. Keep both real diffs free of row 3, 5 and 6 signals and under 40 files, so the derived depth doesn't depend on which rows the Depth table counts as high-stakes.
+- Plan A also owns two files that don't exist yet. `app/billing.py` gets money signals (`price`, `total`) and `app/access.py` gets authz signals (`tenant`, `current_user`). A schema task adds an `ALTER TABLE ... NOT NULL` line. The real diff matches money, authz and schema, three distinct rows, so the review derives Depth 2.
+- Plan B owns `app/access.py`, new with authz signals. Its schema task edits one comment line in `db/schema.sql` where neither the removed nor the added line carries a signal from rows 1 to 6. The matcher counts removed lines as well as added ones, so rewriting a `CREATE TABLE` line would put schema back in the real diff. The real diff matches authz only. Depth stays 1, but the matched row changed from schema to authz.
+
+**Commands:** answer each run's one Step 0 confirmation yes and run it to the end of Step 4, as Scenario 15 does. Push and the pull request follow, as the intro says. Before reading the review, confirm the setup took, so a pass can't come from a setup that missed. Run the forecast command from Step 0 item 7 for the forecast rows, then the real diff once with `--only 1,2,4` and once without. Then read `mode.txt`, `trigger.txt`, the transcript from Step 4 on, and the `depth` field of the review's `scope.json`:
+
+```
+git diff $(git hash-object -t tree /dev/null) HEAD -- db/schema.sql | adversarial-review/scripts/match-triggers.py rows --only 1,2,4
+git diff "$(cat RUN_DIR/base_sha)"..HEAD | adversarial-review/scripts/match-triggers.py rows --only 1,2,4
+git diff "$(cat RUN_DIR/base_sha)"..HEAD | adversarial-review/scripts/match-triggers.py rows
+cat RUN_DIR/redteam/mode.txt RUN_DIR/redteam/trigger.txt
+cat .adversarial-review/runs/<stamp>-<sha>/scope.json
+```
+
+**Pass condition:** first the setup check. In both runs `mode.txt` holds `reproduce claims, then adversarial-review (schema; depth 1 forecast)` and `trigger.txt` records `fired: yes`. The unrestricted match prints `1 money`, `2 authz` and `4 schema` for A and only `2 authz` for B, with no row 3, 5 or 6 line in either. If any of that is off, the scenario is void, not failed, and nothing below counts.
+
+Variant A, derived above the forecast: the review prints a `Depth 2:` depth line and asks its own Step 2 question mid-run, the stop `Where a Run Stops` lists as "`adversarial-review` derives a depth past the forecast" with "that review's own question". No "Answered by work-issue's confirmation" text appears, and no finder is dispatched before the question is answered. Answered yes, the review goes on with `scope.json` `depth` 2.
+
+Variant B, equal depth reached through a different row: the review prints `Depth 1: … Answered by work-issue's confirmation (depth 1 forecast).` and fans out without waiting. The transcript holds no question after Step 0's, and `scope.json` `depth` is 1.
+
+Fails if A fans out without asking or prints its depth line marked as answered. Fails if B asks the question, since that is the "ask whenever the real diff differs from the forecast" rule the waiver doesn't follow. Also fails if either review reads its depth from anywhere but the `mode.txt` line handed over at invocation.
+
+B is there because a pass condition covering only A can't tell the waiver apart from asking whenever the real diff's rows differ from the forecast's.
+
 ## What These Evals Do Not Cover
 
 The direct invocation with neither planner present has no scenario, because Claude Code always offers plan mode, so no session this file runs in lacks both planners. The cross-run race in `RATIONALE.md`'s Known Limitations has no scenario, because reproducing it means winning a race between two invocations inside the same second and there is no proposed fix to validate. Neither does the in-scope test's judgment at the edges: a scenario can check that an ambiguous finding was recorded as ambiguous, which Scenario 12 does, but not that the call was right. herdr flag drift is watched rather than tested—Scenario 11 checks the fallback fires, not that any particular flag name is still current, since the installed binary is the authority and it changes on its own schedule.
