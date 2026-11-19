@@ -32,6 +32,7 @@
   "newest_repair_report": true,
   "triage_blocking_rows": 0,
   "max_review_rounds": 2,
+  "review_loop": false,
   "triage_stop_rows": 0,
   "repair_ar_settled": false,
   "review_over_budget": false,

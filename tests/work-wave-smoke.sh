@@ -89,7 +89,7 @@ require_file "$fixtures/copy-issue-8.md"
 
 require_text "$skill" "name: work-wave"
 require_text "$skill" 'description: "Run N GitHub issues at once, one work-issue run per issue in its own worktree, with the footprints proved disjoint, the cross-lane coupling question answered and recorded, the merge order fixed, and the branches merged together and verified before any lane opens a pull request. Use ONLY when the user explicitly invokes work-wave. It never plans an issue, never merges one, and never advances a single issue: for one issue, use work-issue."'
-require_text "$skill" "argument-hint: '<issue> <issue> [<issue>...] [--plan N=PATH ...] [--lane-model opus|fable] [--dry-run]'"
+require_text "$skill" "argument-hint: '<issue> <issue> [<issue>...] [--plan N=PATH ...] [--lane-model opus|fable] [--review-loop[=<comment>]] [--dry-run]'"
 require_text "$skill" "disable-model-invocation: true"
 
 # --- The steps. A dropped heading is a dropped step, and the resume table
@@ -268,7 +268,7 @@ require_text "$skill" "\"a human merges, in this order\""
 # --- The references. The brief is the whole prompt a lane receives, so every
 # placeholder, report field, and status the gate reads has to be in it. ---
 
-for placeholder in SIBLINGS ISSUE PLAN N WORKTREE RUN_DIR PHASE GRANT WAVE_DIR FACTS FACTS_PATH COUPLING ORDER; do
+for placeholder in SIBLINGS ISSUE PLAN N WORKTREE RUN_DIR PHASE GRANT WAVE_DIR FACTS FACTS_PATH COUPLING ORDER REVIEW_LOOP; do
   require_text "$brief" "- \`{{$placeholder}}\` —"
 done
 
@@ -288,15 +288,21 @@ require_text "$brief" "\`--isolate\` is not optional: your siblings are"
 # #224: the build line's --no-publish holds the withheld push when a lane
 # misreads the grant. The publish line has to go without it, or no lane ever
 # reaches work-issue's Step 5.
-require_text "$brief" "    work-issue {{N}} {{PLAN}} --isolate --no-publish"
+require_text "$brief" "    work-issue {{N}} {{PLAN}} --isolate --no-publish{{REVIEW_LOOP}}"
 require_text "$brief" "In the publish phase, exactly as:"
 # grep -F matches the build line as a substring, so pin the publish line whole.
 publish_line="$(grep -F -A2 "In the publish phase, exactly as:" "$brief" | tail -1)"
-[ "$publish_line" = "    work-issue {{N}} {{PLAN}} --isolate" ] || {
-  echo "publish line in $brief is not exactly: work-issue {{N}} {{PLAN}} --isolate" >&2
+[ "$publish_line" = "    work-issue {{N}} {{PLAN}} --isolate{{REVIEW_LOOP}}" ] || {
+  echo "publish line in $brief is not exactly: work-issue {{N}} {{PLAN}} --isolate{{REVIEW_LOOP}}" >&2
   exit 1
 }
 require_text "$skill" "again, with \`--no-publish\` dropped"
+
+# #230: a hand-written \`echo 99 >\` into seven run dirs is what the flag
+# replaces. Each pin ties the forwarding to a place a lane can be reached:
+# the flag line, and a resumed wave's next dispatch.
+require_text "$skill" "\`--review-loop[=<comment>]\` goes on every lane's \`work-issue\` invocation this run dispatches"
+require_text "$skill" "A wave re-invoked with \`--review-loop\` passes it on the next dispatch of every merge-set lane whose RUN_DIR is still open"
 # A failed gh check writes no gate record, so resume runs it again rather than reading a record that says none.
 require_text "$skill" "the wave stops with no gate record for that report"
 
@@ -407,6 +413,8 @@ require_text "$ledger" "## Where This Came From"
 require_text "$ledger" "## Decision Ledger"
 require_text "$ledger" "## Deliberately Not Built"
 require_text "$ledger" "## Known Limitations"
+# #230: the work-wave half of the review-loop ledger row.
+require_text "$ledger" "work-wave forwards \`--review-loop[=<comment>]\` on every lane dispatch"
 require_text "$ledger" "| 40 | The build dispatch runs \`work-issue <N> <PLAN> --isolate --no-publish\`, and Step 5 runs \`gh pr list --head issue-<N> --state all\` for every build report"
 # The root README carries this skill's own install flag, in the map table's
 # third column. The command form around it is pinned once, in

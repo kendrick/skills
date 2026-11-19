@@ -51,10 +51,11 @@ Type its name with two or more issues. It never fires on its own.
 > /work-wave 113 114 115
 > /work-wave 113 114 --plan 113=docs/plans/issue-113.md --plan 114=/tmp/plan-114.md
 > /work-wave 113 114 115 --lane-model fable
+> /work-wave 113 114 115 --review-loop
 > /work-wave 113 114 115 --dry-run
 ```
 
-Each issue needs a plan, found the way `work-issue` finds one: the `--plan N=PATH` argument, then `docs/plans/` in this repo, then a path the issue links under a `Plan` heading. `--lane-model fable` runs the lanes on `fable` instead of the default `opus`. `--dry-run` runs every step through the confirmation, then dispatches nothing, makes no worktree, and pushes nothing. To resume, type the same invocation again, plan paths included. The run works out where it stopped from what's on disk, down to which returned lanes it had finished checking.
+Each issue needs a plan, found the way `work-issue` finds one: the `--plan N=PATH` argument, then `docs/plans/` in this repo, then a path the issue links under a `Plan` heading. `--lane-model fable` runs the lanes on `fable` instead of the default `opus`. `--review-loop[=<comment>]` goes on every lane's `work-issue` run, so each lane posts the comment on its pull request after every push and keeps repairing past the usual review round cap, until the reviewer clears it or the review budget or poll cap stops it. The comment defaults to `@codex review`. `--dry-run` runs every step through the confirmation, then dispatches nothing, makes no worktree, and pushes nothing. To resume, type the same invocation again, plan paths included. The run works out where it stopped from what's on disk, down to which returned lanes it had finished checking.
 
 ## What's Here
 

@@ -140,7 +140,7 @@ done
 # The review round cap (#159): one round under it, one at it with only P1/P2
 # rows, the same round holding a P0, and a first round capped by
 # --max-review-rounds 1 whose replies are still owed.
-for capped in row-16-under-cap row-17-review-cap row-16-cap-blocker row-17-cap-replies-owed; do
+for capped in row-16-under-cap row-17-review-cap row-16-cap-blocker row-17-cap-replies-owed row-16-review-loop row-16-review-loop-over-budget row-17-review-loop-capped; do
   require_file "tests/fixtures/work-issue/probes/$capped.json"
 done
 # A base_sha that drifted from the live merge-base (#137), each kind of drift,
@@ -1646,6 +1646,40 @@ for case in "${review_cases[@]}"; do
   }
 done
 
+# #230: the run's own review request is the author's comment, never a finding.
+# The bundle is written inline so tests/fixtures/work-issue/review keeps the
+# eleven bundles EVALS.md counts.
+review_request="$(mktemp "$tmp/review-request.XXXXXX")"
+cat >"$review_request" <<'JSON'
+{
+  "author": "kendrick",
+  "reactions": [
+    {"content": "eyes", "user": "chatgpt-codex-connector[bot]", "created_at": "2026-09-17T16:31:00Z"}
+  ],
+  "reviews": [],
+  "threads": [],
+  "comments": [
+    {
+      "author": "kendrick",
+      "created_at": "2026-09-17T16:30:00Z",
+      "body": "@codex review",
+      "id": 3300000002,
+      "url": "https://github.com/kendrick/skills/pull/1#issuecomment-3300000002"
+    }
+  ]
+}
+JSON
+set +e
+review_out="$(python3 "$run_state" review 1 --since 2026-09-17T16:00:00Z --author kendrick \
+  --input "$review_request" 2>&1)"
+review_status=$?
+set -e
+rm -f "$review_request"
+[[ "$review_status" == "0" && "$(head -1 <<<"$review_out")" == "pending" ]] || {
+  echo "run-state.py review should score the run's own review request as pending, got: $review_status: $review_out" >&2
+  exit 1
+}
+
 # A thread's deciding line has to carry the id Step 8 replies to, not just the
 # thread's own GraphQL node id — `comments/<id>/replies` takes the root
 # comment's REST id, which findings-with-reaction.json's first thread pins
@@ -1835,6 +1869,7 @@ declare -a probe_cases=(
   "row-17-repair-advisory-only:8" "row-17-repair-blocking:8" "row-17-repair-blocking-settled:8" "row-17-repair-diff-trigger:8"
   "row-10-over-budget:stop" "row-11-over-budget:stop" "row-16-over-budget:stop" "row-16-over-budget-queued:8" "row-17-over-budget:stop"
   "row-16-under-cap:7" "row-17-review-cap:8" "row-16-cap-blocker:stop" "row-17-cap-replies-owed:8"
+  "row-16-review-loop:7" "row-16-review-loop-over-budget:stop" "row-17-review-loop-capped:8"
   "row-12-stale-base:5" "row-12-stale-base-rebasing:5" "base-sha-not-merge-base:stop" "base-sha-not-ancestor:stop"
 )
 for case in "${probe_cases[@]}"; do
@@ -2101,6 +2136,31 @@ json.dump(probe, open(sys.argv[2], "w"))' "$probes_dir/${pair%%:*}.json" "$tmp/c
   got="$(python3 "$run_state" phase --probe "$tmp/cap-over.json")"
   grep -Fq "${pair#*:}" <<<"$got" || {
     echo "an over-budget ${pair%%:*} should give '${pair#*:}' ahead of the budget stop, got: $got" >&2
+    exit 1
+  }
+done
+
+# #230: review_loop lifts the cap; the budget decides when repair stops.
+# Each case is FIXTURE|FIELD|VALUE|EXPECTED, FIELD empty for the fixture as
+# written. Without the mode, row-16-review-loop takes the capped route to row
+# 17, which shows review_loop is what moves it to repair. A stop row must not
+# fire the cap's blocker stop with the mode on: the loop repairs a P0 past
+# round 2 instead of handing it to a human.
+for loop_case in \
+  "row-16-review-loop|||phase: 7 reason: row 16:" \
+  "row-16-review-loop|review_loop|false|phase: 8 reason: row 17:" \
+  "row-16-review-loop-over-budget|||phase: stop reason: row 16: review time is over budget" \
+  "row-16-review-loop|triage_stop_rows|1|phase: 7 reason: row 16:" \
+  "row-17-review-loop-capped|||phase: 8 reason: row 17:"; do
+  IFS='|' read -r loop_fixture loop_field loop_value loop_expected <<<"$loop_case"
+  python3 -c 'import json, sys
+probe = json.load(open(sys.argv[1]))
+if sys.argv[2]:
+    probe[sys.argv[2]] = json.loads(sys.argv[3])
+json.dump(probe, open(sys.argv[4], "w"))' "$probes_dir/$loop_fixture.json" "$loop_field" "$loop_value" "$tmp/loop-case.json"
+  loop_got="$(python3 "$run_state" phase --probe "$tmp/loop-case.json")"
+  grep -Fq "$loop_expected" <<<"$loop_got" || {
+    echo "$loop_fixture${loop_field:+ with $loop_field $loop_value} should give '$loop_expected', got: $loop_got" >&2
     exit 1
   }
 done
@@ -3499,6 +3559,14 @@ m="$(new_run rounds)"
 expect_field "with no max_review_rounds file" max_review_rounds 2 "$m" "$lab_repo"
 echo 3 >"$m/max_review_rounds"
 expect_field "with 3 written" max_review_rounds 3 "$m" "$lab_repo"
+expect_field "with no review_loop file" review_loop false "$m" "$lab_repo"
+echo "@codex review" >"$m/review_loop"
+expect_field "with review_loop written" review_loop true "$m" "$lab_repo"
+# AC 5 of #230: opting in doesn't reopen rows the cap already queued. The
+# capped round's queued Scope cells still count 0, so row 16 never repairs it.
+mkdir -p "$m/triage"
+printf '# Triage round 2, since 2026-09-20T11:00:00Z\n\n| # | Source | Finding | Severity | Scope | Reply |\n|---|---|---|---|---|---|\n| 1 | https://example.com/t/3 | "tidy the loop" | P2 | in scope; queued: review round cap reached (2) | |\n' >"$m/triage/round-2.md"
+expect_field "on a capped round with review_loop present" triage_inscope_rows 0 "$m" "$lab_repo"
 
 # open-review.txt ends on an open Step 4 start. With no --now it closes at
 # that start and reads 0 min of review; a --now at resume time would charge

@@ -169,6 +169,7 @@ PROBE_FIELDS = (
     ("deferred_comment_needed", "bool", ()),
     ("triage_blocking_rows", "int", ()),
     ("max_review_rounds", "int", ()),
+    ("review_loop", "bool", ()),
     ("triage_stop_rows", "int", ()),
     ("repair_ar_settled", "bool", ()),
     ("review_over_budget", "bool", ()),
@@ -966,7 +967,7 @@ def null_fields(probe):
     """The fields `phase_of`'s generic null check stops on, in table order.
 
     A module-level function so `resume_checks.py invariants` and `liveness`
-    can stub it out: it reads all 39 fields, and their search splits on every
+    can stub it out: it reads all 40 fields, and their search splits on every
     field `phase_of` tests."""
     return [
         name
@@ -1019,7 +1020,8 @@ def phase_of(probe):
     # The Nth round is the capped one, not the one after it: with the default
     # of 2, round 1 is repaired and round 2 is answered and queued (#159).
     max_review_rounds = count(probe, "max_review_rounds")
-    at_review_cap = triage_rounds > 0 and triage_rounds >= max_review_rounds
+    # #230: with the review loop on, no round is capped and the budget stop ends repair.
+    at_review_cap = triage_rounds > 0 and triage_rounds >= max_review_rounds and not flag(probe, "review_loop")
     # Rows 10, 11, 16, and row 17's re-fire leg each start another review
     # cycle, and only those are gated. Rows past them publish, reply to, or
     # report on work already done, and stopping there would strand it. On
@@ -2108,6 +2110,14 @@ def g_max_review_rounds(ctx):
         return int(text.strip())
     except ValueError:
         raise ProbeError(f"max_review_rounds holds {text.strip()!r}, not a number")
+
+
+@gatherer("review_loop")
+def g_review_loop(ctx):
+    """Whether `--review-loop` turned the review loop on. The file's presence
+    is the mode; its content is the request comment, which only the agent
+    reads when it posts."""
+    return ctx.path("review_loop").is_file()
 
 
 @gatherer("triage_stop_rows")
