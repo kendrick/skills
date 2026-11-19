@@ -2177,6 +2177,9 @@ require_text work-issue/SKILL.md "writes \`<comment>\`, \`@codex review\` where 
 # without the mode from posting anything new at Step 5 or Step 8.
 require_text work-issue/SKILL.md "Where \`RUN_DIR/review_loop\` exists, post the review request once the pull request exists, before Step 6's first \`poll start\`."
 require_text work-issue/SKILL.md "Where \`RUN_DIR/review_loop\` exists, post the review request after the push and before the next \`poll start\`"
+# Step 8 posts only after a push, so a round of refused or queued findings
+# ends at the final report; without this exit named, that reads as a bug.
+require_text work-issue/SKILL.md "a round that pushes nothing, its findings all refused or queued, posts no request and ends at Step 8 item 5's final report"
 # phase_of lifts the cap, but Step 6 is where the agent decides whether to
 # queue a round's rows; without this sentence it queues them anyway.
 require_text work-issue/SKILL.md "While \`RUN_DIR/review_loop\` exists, no round is capped"
