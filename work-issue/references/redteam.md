@@ -6,7 +6,7 @@ Two mechanisms live here. The **reproducer** takes the worker's claims and tries
 
 ## The reproducer
 
-One fresh general-purpose subagent per round: `sonnet` by default, `opus` where any claim's path matches one of the trigger rows below. It is dispatched, it reports, and it is gone — it never repairs anything it refutes, because an agent that fixes what it found has authored the fix its own verdict now covers.
+With `WORK_ISSUE_REPRODUCER` unset or empty, one fresh general-purpose subagent per round: `sonnet` by default, `opus` where any claim's path matches one of the trigger rows below. With it set, the reproducer runs on the executor it names, as [Running on an external executor](#running-on-an-external-executor) describes, and that subagent covers whatever the executor leaves uncovered. The subagent is dispatched, it reports, and it is gone — it never repairs anything it refutes, because an agent that fixes what it found has authored the fix its own verdict now covers.
 
 ### What it receives
 
@@ -157,7 +157,76 @@ Your final message is exactly one fenced json block and nothing else.
 
 `holds` is the reproducer's read of a `left` entry's stated reason against the code. `false` with evidence is a finding, and it routes like a `NOT_REPRODUCED` claim.
 
-Saved verbatim to `RUN_DIR/redteam/round-<k>.json`. A verdict file you tidied is a verdict file you partly authored.
+Saved verbatim to `RUN_DIR/redteam/round-<k>.json`. A verdict file you tidied is a verdict file you partly authored. The codex path below amends what verbatim means there.
+
+### Running on an external executor
+
+Resolve the executor fresh at the start of every reproducer round, Step 8's included, with `printenv WORK_ISSUE_REPRODUCER` in the orchestrator's environment, and keep the value out of RUN_DIR.
+
+- **Unset or empty:** the subagent above, exactly as described. Save its answer verbatim to `round-<k>.json`, skip `merge-verdicts.py`, and leave `executor.log` untouched. A `codex` on PATH with `WORK_ISSUE_REPRODUCER` unset changes nothing.
+- **Set:** the value is exactly three non-empty `:`-separated fields, `<executor>:<model>:<effort>`, each matching `[A-Za-z0-9._-]+`, such as `codex:gpt-6-luna:xhigh`. That character class is what keeps the value from injecting into the shell command below, so check it before any field reaches a command. `codex` is the one supported executor. Any other shape falls back with reason `malformed value`, and any other executor with `unsupported executor <name>`.
+
+The `opus` routing above applies to the subagent only, a fallback subagent included. A fallback subagent routes by the paths of the claims in `uncovered-<k>.json`.
+
+**The codex path**, in order:
+
+1. Write `RUN_DIR/redteam/claims-<k>.json` as `{"claims": [...], "left": [...]}`: the claim and `left` objects this round dispatches, copied from the report in report order. Round k+1 after a `NOT_REPRODUCED` holds only the failed claims. Give each object an integer `"n"`, its 1-based position in its own list: `claims` run 1 to their count, and `left` entries run 1 to theirs separately. `merge-verdicts.py` matches a verdict line to its claim by `n` alone, with the text as a cross-check, because two claims can share their text. It exits 3 on a file whose numbering skips or repeats.
+2. Fall back without running codex when the value falls back as above, when `command -v codex` fails (`not on PATH`), when the host cannot run a background command and notify on exit (`no background execution`: a 45-minute run cannot outlive a foreground timeout), or when the round already has `round-<k>.part-*.verdicts.jsonl` files and no `round-<k>.json` (`resumed`: an earlier run was interrupted, and item 3 runs over the lines it left). Otherwise write each part's prompt file and run the invocation below, and read each part's `part <p> exit <n>` line when it returns.
+3. Run the merge:
+
+   ```
+   work-issue/scripts/merge-verdicts.py --claims RUN_DIR/redteam/claims-<k>.json --parts RUN_DIR/redteam --round <k> --uncovered RUN_DIR/redteam/uncovered-<k>.json --out RUN_DIR/redteam/round-<k>.json
+   ```
+
+   Exit 0 ends the round: `round-<k>.json` is written.
+4. Exit 1 means claims are uncovered. Dispatch the subagent with `uncovered-<k>.json`'s `claims` and `left` filling `{{CLAIMS}}` and `{{LEFT}}`, each object keeping its `n`. After the verdict JSON shape, add one instruction: each element of `verdicts` and `left_checks` copies the `"n"` of the claim or left entry it answers. Save its answer verbatim to `RUN_DIR/redteam/fallback-<k>.txt`. An element without a recognized `verdict`, without a boolean `holds`, or naming an `n` already covered is rejected and covers nothing.
+5. Run the merge again with the subagent's answer:
+
+   ```
+   work-issue/scripts/merge-verdicts.py --claims RUN_DIR/redteam/claims-<k>.json --parts RUN_DIR/redteam --round <k> --uncovered RUN_DIR/redteam/uncovered-<k>.json --fallback RUN_DIR/redteam/fallback-<k>.txt --out RUN_DIR/redteam/round-<k>.json
+   ```
+
+   Exit 0 ends the round. Exit 1 is a subagent that left claims uncovered. Re-run item 3's command, which restores `uncovered-<k>.json` to item 4's set because the part files are unchanged, re-dispatch the subagent once over it, replace `fallback-<k>.txt` with its answer, and run this command again. A second exit 1 stops the run quoting the script's stderr: a round nobody can fill is a round to stop on, never one to fill by guessing.
+6. Exit 3 from any merge stops the run quoting its stderr.
+
+Codex runs at most once per round.
+
+**Fallback reasons.** Every round on this path appends one line to `RUN_DIR/redteam/executor.log`, and Step 8's final report prints that file:
+
+```
+round <k>: <executor> <model> <effort>, <c> of <n> claims; fallback: <reason>, <m> to <sonnet|opus> subagent
+```
+
+`<c>` is the claims the part files covered, `<n>` the claims dispatched, and `<m>` the claims the subagent was given. A round item 3 closed writes `fallback: none`. A field the value did not supply is `-`. The reason is the first that applies, in backticks: `malformed value`, `unsupported executor <name>`, `not on PATH`, `no background execution`, `resumed`, `exit <n>` where `codex exec` exits non-zero, `cap fired` where it exits `142`, and `uncovered` where codex exited 0 and item 3's merge still exited 1, a verdict line that does not parse included, since the script rejects it and leaves its claim uncovered. A fallback never stops the run, and the subagent sees only what `uncovered-<k>.json` names.
+
+**The invocation**, one per part:
+
+```
+perl -e 'alarm shift; exec @ARGV' 2700 codex exec -m <model> -c 'model_reasoning_effort="<effort>"' -s workspace-write -C <tree> --add-dir RUN_DIR/redteam - < RUN_DIR/redteam/round-<k>.part-<p>.prompt.md > RUN_DIR/redteam/round-<k>.part-<p>.log 2>&1; echo "part <p> exit $?"
+```
+
+All parts run in one background command, as `( … ) & ( … ) & wait`, the way Step 6's poll uses the host's background execution. Each piece has its reason:
+
+- `- <` feeds the prompt file on stdin. With stdin left open, `codex exec` blocks forever reading it.
+- `-s workspace-write`, because `-s read-only` blocks the smoke suites and still produces a report that looks real.
+- `--add-dir RUN_DIR/redteam`, because RUN_DIR sits under the git common dir, outside `<tree>`, and the verdicts file has to be writable.
+- The 2700-second cap, because a `codex exec` whose stream drops can sit for hours. The cap firing shows as exit `142`.
+
+**The split.** A round with more than 8 claims runs as two parts. Part 1 takes the first ceil(n/2) claims in report order and every `left` entry. Part 2 takes the rest, with `{{LEFT}}` filled as `none`. A round with 8 or fewer claims has only part 1. Each part's verdicts file is `RUN_DIR/redteam/round-<k>.part-<p>.verdicts.jsonl`.
+
+**The prompt file**, `RUN_DIR/redteam/round-<k>.part-<p>.prompt.md`, holds what a subagent dispatch carries for that part: the prompt above filled in from `claims-<k>.json`, so each claim and `left` object keeps its `n`, then the verdict JSON shape. After both comes the codex addendum below, with `{{VERDICTS_FILE}}` filled as the part's verdicts file by absolute path. The prompt files sit beside the round they fill, under `redteam/`, because the reproducer prompt never passes through `render-prompt.py` and `prompts/` is that script's.
+
+**Saved verbatim, on this path**, means `round-<k>.json` is what `merge-verdicts.py` assembled, every element field-for-field from a verdict line or from the fallback's block. The script exists so that no one, the orchestrator included, edits those elements by hand.
+
+The names this path adds (`claims-<k>.json`, `uncovered-<k>.json`, `fallback-<k>.txt`, `executor.log`, and the part files) never match `round-*.json`, which the resume probe counts. Only the assembled `round-<k>.json` does, and the script writes it last in one write, so a crash anywhere before it resumes as a round not yet run.
+
+### The codex addendum
+
+```
+Record each result in a file as you reach it, as well as in your final answer. When a claim is settled, append it to {{VERDICTS_FILE}} as one line of JSON: the same object the verdicts array holds for that claim, with its "claim" text copied exactly as you were given it and its "n" number copied too. Do the same for each left entry: append the same object the left_checks array holds for it, with its "what" text and its "n" copied exactly. Write each line the moment that claim is settled, never in a batch at the end: a run cut off by its time limit keeps every line already written, and a claim with no line is handed to someone else to redo. Append with >>; never rewrite the file. One object per line, with no line break inside it.
+
+Your final fenced json block is still due once every claim is settled.
+```
 
 ## The adversarial-review trigger
 
