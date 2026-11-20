@@ -5217,6 +5217,89 @@ require_text work-issue/README.md "Python 3 for the seven bundled scripts"
 refute_text work-issue/references/worker-prompt.md "WORK_ISSUE_REPRODUCER"
 refute_text adversarial-review/SKILL.md "WORK_ISSUE_REPRODUCER"
 
+# --- #247: the change-exists check greps per-commit history ---
+# The net diff drops a line a later commit removed and never shows an absence claim's text, so PR #245 lost two true claims to it. Both docs that hand the reproducer its check carry the history grep.
+require_text work-issue/SKILL.md "git log -p BASE_SHA..HEAD -- <path> | grep -n <symbol>"
+require_text work-issue/references/redteam.md "git log -p BASE_SHA..HEAD -- <path> | grep -n <symbol>"
+# The fragment stops at `grep` because main's prompt block wrapped the old command after `grep -n`, and the trigger-reading hunk `git diff BASE_SHA..HEAD -- <path>` carries no `| grep`.
+for f in work-issue/SKILL.md work-issue/references/redteam.md _maintenance/work-issue/EVALS.md; do
+  refute_text "$f" "git diff BASE_SHA..HEAD -- <path> | grep"
+done
+# The prompt block is what reaches the reproducer and codex, so the prose above it keeping the command proves nothing.
+ce_prompt="$(sed -n '/^### The prompt$/,$p' work-issue/references/redteam.md | sed '1,/^```$/d' | sed '/^```$/,$d' | tr '\n' ' ' | tr -s ' ')"
+grep -Fq -- "\`git log -p BASE_SHA..HEAD -- <path> | grep -n <symbol>\`" <<<"$ce_prompt" || {
+  echo "work-issue/references/redteam.md: the prompt block no longer gives the reproducer the per-commit history grep" >&2
+  exit 1
+}
+grep -Fq -- "the claim's command decides whether the change survived" <<<"$ce_prompt" || {
+  echo "work-issue/references/redteam.md: the prompt block no longer says the claim's command decides whether the change survived" >&2
+  exit 1
+}
+# A history hit proves only that a commit touched the symbol, so each site says the claim's command still decides.
+require_text work-issue/references/redteam.md "the claim's command decides whether it survived"
+require_text work-issue/SKILL.md "shows in the range's per-commit history"
+require_text work-issue/README.md "a line one commit added and a later one removed still counts"
+refute_text work-issue/README.md "it proves at HEAD that the change the claim rests on exists"
+# The ledger carries the decision and the cut.
+require_text _maintenance/work-issue/RATIONALE.md "The change-exists check greps \`git log -p BASE_SHA..HEAD -- <path>\`"
+require_text _maintenance/work-issue/RATIONALE.md "| The net-diff change-exists grep |"
+# Run the command redteam.md actually spells against a real repo and assert what git prints for it.
+ce_cmd="$(awk '/^### Prove the change exists first$/ { on = 1; next } on && /^### / { exit } on && /^git / { print; exit }' work-issue/references/redteam.md)"
+[[ "$ce_cmd" == 'git log -p BASE_SHA..HEAD -- <path> | grep -n <symbol>' ]] || {
+  echo "work-issue/references/redteam.md: the change-exists command is '$ce_cmd', not the per-commit history grep" >&2
+  exit 1
+}
+ce_repo="$tmp/change-exists"
+ce_git() {
+  git -C "$ce_repo" -c user.name=smoke -c user.email=smoke@example.invalid -c commit.gpgsign=false "$@"
+}
+git init -q -b main "$ce_repo"
+echo x >"$ce_repo/guarded.py"
+echo '# pins' >"$ce_repo/suite.sh"
+ce_git add guarded.py suite.sh
+ce_git commit -q -m base
+ce_base="$(ce_git rev-parse HEAD)"
+printf '%s\n' '# pins todays_word' 'refute_text guarded.py "codex_state"' >>"$ce_repo/suite.sh"
+ce_git commit -q -am add
+sed -i.bak '/todays_word/d' "$ce_repo/suite.sh" && rm -f "$ce_repo/suite.sh.bak"
+ce_git commit -q -am remove
+echo z >>"$ce_repo/suite.sh"
+ce_git commit -q -am 'touch message_only_word'
+ce_head="$(ce_git rev-parse HEAD)"
+# `|| true` because an empty grep exits 1 under pipefail, and empty output is a verdict here.
+ce_run() {
+  local c="${ce_cmd//BASE_SHA/$ce_base}"
+  c="${c//..HEAD/..$ce_head}"
+  c="${c//<path>/$1}"
+  c="${c//<symbol>/$2}"
+  (cd "$ce_repo" && eval "$c") || true
+}
+[[ -n "$(ce_run suite.sh todays_word)" ]] || {
+  echo "#247 case 1: the change-exists check misses a line one commit added and a later one removed" >&2
+  exit 1
+}
+# Fixture sanity: case 1 only means something if the net diff misses it.
+[[ -z "$(git -C "$ce_repo" diff "$ce_base..$ce_head" -- suite.sh | grep -n todays_word || true)" ]] || {
+  echo "#247 case 1 fixture: the net diff still shows todays_word, so the case no longer separates the two checks" >&2
+  exit 1
+}
+[[ -z "$(ce_run suite.sh never_touched)" ]] || {
+  echo "#247 case 2: the change-exists check found a symbol no commit touched" >&2
+  exit 1
+}
+[[ -n "$(ce_run suite.sh codex_state)" ]] || {
+  echo "#247 case 3: the change-exists check misses an absence claim pathed at the file that enforces it" >&2
+  exit 1
+}
+[[ -z "$(ce_run guarded.py codex_state)" ]] || {
+  echo "#247 case 3: an absence claim pathed at the file the text is absent from passed the change-exists check" >&2
+  exit 1
+}
+[[ -z "$(ce_run guarded.py message_only_word)" ]] || {
+  echo "#247 case 4: a commit message on a commit that never touched <path> satisfied the change-exists check" >&2
+  exit 1
+}
+
 # --- crash points ---
 # #147: resume_checks.py replays every write the skill makes and asks the real
 # probe and phase where a crash before each one resumes. The model is checked

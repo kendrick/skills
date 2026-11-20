@@ -166,7 +166,7 @@ python3 work-issue/scripts/run-state.py review <PR> --since "$(cat RUN_DIR/pushe
 
 **Commands:** let Step 3 and Step 4 run, then read `RUN_DIR/redteam/round-1.json`.
 
-**Pass condition:** the reproducer's prove-the-change-exists step (`git diff BASE_SHA..HEAD -- <path> | grep -n <symbol>`) returns nothing, the claim comes back `NOT_REPRODUCED` with that empty grep as its evidence, and a repair round follows with the reproducer's command and output attached. Fails if the claim comes back `REPRODUCED` because the suite passed, if it comes back `UNVERIFIABLE` when a grep could have settled it, or if the run reaches Step 5 with an unreproduced claim.
+**Pass condition:** the reproducer's prove-the-change-exists step (`git log -p BASE_SHA..HEAD -- <path> | grep -n <symbol>`) returns nothing, the claim comes back `NOT_REPRODUCED` with that empty grep as its evidence, and a repair round follows with the reproducer's command and output attached. Fails if the claim comes back `REPRODUCED` because the suite passed, if it comes back `UNVERIFIABLE` when a grep could have settled it, or if the run reaches Step 5 with an unreproduced claim.
 
 ### 15. `adversarial-review` Fires on Schema and Reads Past Prose Signal Words
 
