@@ -16,7 +16,7 @@ Your plan, by absolute path: {{PLAN}}
 
 Invoke the `work-issue` skill by name. In the build phase, exactly as:
 
-    work-issue {{N}} {{PLAN}} --isolate --no-publish{{REVIEW_LOOP}}
+    work-issue {{N}} {{PLAN}} --isolate --no-publish --wave-baseline {{WAVE_DIR}}/baseline.txt{{REVIEW_LOOP}}
 
 In the publish phase, exactly as:
 
