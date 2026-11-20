@@ -168,6 +168,7 @@ The Decision body came from #42. The template put Context fifth and marked it op
 - A `proposed` record that overlaps an input spends one of that input's five body reads and can produce nothing but a report line. A scope heavy with `proposed` records reaches the budget sooner, and phase 6 names the input when it does.
 - `vsearch` returns its top k hits whatever their similarity, so each claim brings up to k records to the header read. There is no score floor.
 - A stale index now prints `vec stale:` when a record in a queried type folder is newer than the last `memory-index` refresh. An index that was never embedded over old files still can't be told from no match, because it has no stamp to be older than. Run `memory-index`'s refresh after records land.
+- `vec stale:` keys on mtimes only, so a record renamed or deleted since the last refresh prints no `vec stale:` line. `memory-index`'s `refresh --if-changed` hook does catch it, because it also compares each collection's file list.
 - A hit qmd returns under a path that no longer exists is skipped with a stderr line.
 - The smoke suite stubs qmd, so real ranking gets checked only by a live run.
 - `lint-scope.sh` doesn't check a `schema: 1` record for a literal `null`, or for a `supersedes` id that isn't ten characters long, and `ltm validate` rejects both. The lint can pass a hand-edited record that `ltm` fails, so run `ltm validate` as well, as step 8 in `references/migration.md` says.

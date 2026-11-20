@@ -53,7 +53,7 @@ python3 SCRIPT refresh --if-changed
 
 Every successful `refresh` records its start time and the registered collections in `~/.local/state/memory-index/` (under `$XDG_STATE_HOME` when that is set), outside every scope.
 
-`refresh --if-changed` is the hook mode. It prints nothing on stdout and exits 0 in every case. It starts a detached `refresh` only when a file in a registered collection, under the collection's path and matching its pattern, is newer than the last successful refresh, and two calls while that refresh runs start it once. The detached run logs to `refresh.log` in the same state folder; read that file when a hook refresh seems not to land.
+`refresh --if-changed` is the hook mode. It prints nothing on stdout and exits 0 in every case. It starts a detached `refresh` only when a file in a registered collection, under the collection's path and matching its pattern, is newer than the last successful refresh, or when a matching file was added, renamed, moved, or deleted since then. Two calls while that refresh runs start it once. The detached run logs to `refresh.log` in the same state folder; read that file when a hook refresh seems not to land.
 
 **Done when:** `refresh` exited 0, or it exited 1 and its `FAILED:` line was reported verbatim.
 

@@ -63,6 +63,11 @@ def changed_since(folder: Path, pattern: str, since: int | None) -> bool:
     return False
 
 
+def matching_files(folder: Path, pattern: str) -> list[str]:
+    """Sorted POSIX paths, relative to folder, of the regular files in folder.glob(pattern)."""
+    return sorted(f.relative_to(folder).as_posix() for f in folder.glob(pattern) if f.is_file())
+
+
 def section_body(text: str, matches) -> str | None:
     """Body of the first `## ` heading whose title satisfies `matches`."""
     lines = text.splitlines()
@@ -195,7 +200,8 @@ def refresh() -> int:
             print(f"FAILED: {shlex.join(cmd)}", file=sys.stderr)
             print("unreadable qmd output", file=sys.stderr)
             return 1
-        cols.append({"name": name, "path": path.group(1), "pattern": pattern.group(1)})
+        p, m = path.group(1), pattern.group(1)
+        cols.append({"name": name, "path": p, "pattern": m, "files": matching_files(Path(p), m)})
     stamp = state_dir() / "last-refresh.json"
     try:
         stamp.parent.mkdir(parents=True, exist_ok=True)
@@ -238,9 +244,16 @@ def cmd_if_changed() -> int:
     since = last_refresh_ns()
     try:
         cols = json.loads((sd / "last-refresh.json").read_text(encoding="utf-8"))["collections"]
-        stale = since is None or any(changed_since(Path(c["path"]), c["pattern"], since) for c in cols)
+        # mtimes alone miss a rename or a delete: mv keeps the file's mtime, and a
+        # deleted file drops out of the glob. Comparing the file list catches both.
+        stale = since is None or any(
+            changed_since(Path(c["path"]), c["pattern"], since)
+            or matching_files(Path(c["path"]), c["pattern"]) != c["files"]
+            for c in cols
+        )
     except (OSError, ValueError, KeyError, TypeError):
-        # No stamp, so nothing shows the index is current.
+        # No stamp, or one written before stamps listed files, so nothing shows
+        # the index is current.
         stale = True
     if not stale:
         return 0

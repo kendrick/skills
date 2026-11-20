@@ -342,7 +342,7 @@ grep -F 'context add qmd://plain-scope-rules ' <<<"$pdry" | grep -Fq 'rules reco
   exit 1
 }
 
-# Cases 10-17: `refresh --if-changed`, the hook mode.
+# Cases 10-21: `refresh --if-changed`, the hook mode.
 cols="$tmp/collections.tsv"
 printf '%s\t%s\t%s\n' \
   acme-pursuit-decisions "$abs/_memory/decisions" '**/*.md' \
@@ -549,9 +549,61 @@ wait_unlocked "case 17"
 count_is 1 update "case 17"
 require_file "$state/last-refresh.json"
 
+mtime_ns() {
+  python3 -c 'import os,sys; print(os.stat(sys.argv[1]).st_mtime_ns)' "$1"
+}
+
+# Case 18: mv keeps a record's mtime, so only the stamp's file list shows the
+# rename.
+: >"$log"
+before="$(mtime_ns "$scope/_memory/decisions/ship-d4e5f6.md")"
+mv "$scope/_memory/decisions/ship-d4e5f6.md" "$scope/_memory/decisions/ship-moved-d4e5f6.md"
+[[ "$(mtime_ns "$scope/_memory/decisions/ship-moved-d4e5f6.md")" == "$before" ]] || {
+  echo "test setup: case 18 mv changed the record's mtime" >&2
+  exit 1
+}
+if_changed QMD_COLLECTIONS="$cols"
+assert_hook_ok "case 18 rename"
+wait_unlocked "case 18 rename"
+count_is 1 update "case 18 rename"
+
+# Case 19: a deleted record leaves no file newer than the stamp.
+: >"$log"
+rm "$scope/_memory/rules/deploys-g7h8i9.md"
+if_changed QMD_COLLECTIONS="$cols"
+assert_hook_ok "case 19 delete"
+wait_unlocked "case 19 delete"
+count_is 1 update "case 19 delete"
+
+# Case 20: the refresh after the delete recorded the new list, so nothing is stale.
+: >"$log"
+if_changed QMD_COLLECTIONS="$cols"
+assert_hook_ok "case 20"
+log_empty "case 20"
+no_lock "case 20"
+
+# Case 21, falsifier: a move inside notes/raw/ stays outside the notes mask.
+: >"$log"
+mv "$scope/notes/raw/new.md" "$scope/notes/raw/moved.md"
+if_changed QMD_COLLECTIONS="$cols"
+assert_hook_ok "case 21"
+log_empty "case 21"
+no_lock "case 21"
+
+# Case 22: a stamp written before stamps listed files can't show the file set
+# is unchanged, so the hook refreshes once to rewrite it.
+: >"$log"
+python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); [c.pop("files") for c in d["collections"]]; json.dump(d, open(p, "w"))' "$state/last-refresh.json"
+if_changed QMD_COLLECTIONS="$cols"
+assert_hook_ok "case 22 legacy stamp"
+wait_unlocked "case 22 legacy stamp"
+count_is 1 update "case 22 legacy stamp"
+
 require_text memory-index/SKILL.md 'python3 SCRIPT refresh --if-changed'
 require_text memory-index/SKILL.md '`refresh --if-changed` is the hook mode. It prints nothing on stdout and exits 0 in every case.'
 require_text memory-index/SKILL.md 'python3 <absolute path to scripts/memory-index.py> refresh --if-changed'
+require_text memory-index/SKILL.md 'or when a matching file was added, renamed, moved, or deleted since then'
+require_text memory-index/README.md 'or for a file added, renamed, moved, or deleted since then'
 # Deliberately Not Built: SessionEnd's budget is too short for a refresh.
 refute_text memory-index/SKILL.md 'SessionEnd'
 refute_text memory-index/SKILL.md 'session-end'

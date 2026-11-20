@@ -12,7 +12,7 @@ One more collection, `<scope>-notes`, covers the groomed notes with the mask `*.
 
 Each collection's context string comes from the scope's own files: the "in One Paragraph" section of its `CLAUDE.md`, plus the type's one-line description from `_memory/CLAUDE.md`. The skill runs `register --dry-run` first and shows you every qmd command before anything changes. A real run ends by printing the `mcpServers` entry to add to your client.
 
-`refresh` runs `qmd update`, then `qmd embed`, and records its start time and every qmd collection it saw in a state file outside the scope. `refresh --if-changed` is the hook mode. It checks each recorded collection for a file newer than that start time and starts a detached `refresh` only when it finds one, so a turn that changed nothing costs no qmd call. Call `refresh` by hand, and put `refresh --if-changed` on a hook you wire up yourself. The skill gives you the command and never writes the hook.
+`refresh` runs `qmd update`, then `qmd embed`, and records its start time and every qmd collection it saw in a state file outside the scope. `refresh --if-changed` is the hook mode. It checks each recorded collection for a file newer than that start time, or for a file added, renamed, moved, or deleted since then, and starts a detached `refresh` only when it finds one, so a turn that changed nothing costs no qmd call. Call `refresh` by hand, and put `refresh --if-changed` on a hook you wire up yourself. The skill gives you the command and never writes the hook.
 
 ## Install
 
