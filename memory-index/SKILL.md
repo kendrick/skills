@@ -17,7 +17,7 @@ Resolve once per invocation:
 
 | Exit | Meaning |
 |---|---|
-| 0 | every qmd command succeeded and `refresh` wrote its stamp, or the dry run printed the commands |
+| 0 | every qmd command succeeded, and for `refresh` the stamp write did too; or the dry run printed the commands |
 | 1 | a qmd command failed; the script printed `FAILED: <command>` and qmd's first stderr line, and ran nothing after it. Or, after every qmd command succeeded, `refresh` couldn't write its stamp; it printed `FAILED: write <path>` and the OS error |
 | 3 | `not a memory scope: <path>` (no `_memory/` directory) or `qmd not on PATH` |
 
