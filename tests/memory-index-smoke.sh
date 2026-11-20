@@ -640,7 +640,8 @@ wait_unlocked "case 23 simultaneous calls"
 count_is 1 update "case 23 simultaneous calls"
 
 # Case 24: plain refresh, unlike the hook, reports a stamp write failure: the
-# index is fresh but the stamp isn't, so exit 1 tells the caller to rerun.
+# index is fresh but the stamp isn't, so it fails loudly with the path it
+# couldn't write.
 : >"$tmp/a-file"
 : >"$log"
 set +e
