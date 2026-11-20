@@ -3313,6 +3313,8 @@ fc_dir="$(mktemp -d "${TMPDIR:-/tmp}/i2m-find-candidates.XXXXXX")"
 trap 'rm -rf "$not_a_scope" "$inline_scope" "$dismissal_scope" "$mig" "$jrn" "$t2_extract_scope" "$t2x_dir" "$subset_scope" "$batched_scope" "$lifecycle_scope" "$idem_dir" "$v_pass" "$scripts_copy" "$v_combo" "$v_linkdrop" "$v_lintdefect" "$v1_broken_scope" "$v1_pass_scope" "$wt_headline" "$wt_backward" "$wt_dedupe" "$wt_status" "$wt_keyins" "$v_subdir" "$bench_dir" "$fc_dir"' EXIT
 
 mkdir -p "$fc_dir/bin" "$fc_dir/pybin" "$fc_dir/flaky"
+# The stamp memory-index writes lives outside every scope, so keep it out of the developer's real one.
+export XDG_STATE_HOME="$fc_dir/state"
 ln -s "$repo_root/$fc_shim" "$fc_dir/bin/qmd"
 # The developer's own qmd may sit later on PATH, so check the shim comes first.
 [[ "$(PATH="$fc_dir/bin:$PATH" command -v qmd)" == "$fc_dir/bin/qmd" ]] || {
@@ -3353,7 +3355,7 @@ fc_run() {
   : >"$fc_log"
   fc_rc=0
   QMD_SHIM_HITS="$2" QMD_SHIM_LOG="$fc_log" PATH="$1" \
-    bash "$fc" "$vc" --entities "$3" --claims "$4" >"$fc_dir/out" 2>"$fc_dir/err" || fc_rc=$?
+    bash "$fc" "${fc_scope:-$vc}" --entities "$3" --claims "$4" >"$fc_dir/out" 2>"$fc_dir/err" || fc_rc=$?
   fc_out="$(cat "$fc_dir/out")"
   fc_err="$(cat "$fc_dir/err")"
 }
@@ -3370,11 +3372,20 @@ fc_expect() {
   }
 }
 fc_shim_path="$fc_dir/bin:$PATH"
+# The stamp comes from memory-index itself, so the test can't agree with a copy of the rule it wrote.
+fc_stamp() {
+  QMD_SHIM_LOG=/dev/null PATH="$fc_shim_path" python3 memory-index/scripts/memory-index.py refresh >/dev/null || {
+    echo "memory-index refresh failed under the qmd shim" >&2
+    exit 1
+  }
+}
+fc_stamp
 
 # The issue's case: the claim names no entity, and only vec finds the record.
 fc_run "$fc_shim_path" "$fc_dir/hits-tol" "$fc_dir/empty" "$fc_dir/claim-vendor"
 fc_expect "the vendor claim" "counts: grep=0 vec=1 both=0"
 require_line "$fc_out" "candidate: $vc_tol accepted vec" "find-candidates on the vendor claim"
+refute_text "$fc_dir/err" 'vec stale:'
 
 # Falsifier 1: without a vec hit, grep alone misses the record.
 fc_run "$fc_shim_path" "$fc_dir/empty" "$fc_dir/empty" "$fc_dir/claim-vendor"
@@ -3496,6 +3507,61 @@ fc_out="$(PATH="$fc_bare" bash "$fc" "$fc_dir/quoted" --entities "$fc_dir/ents-m
 }
 require_line "$fc_out" "candidate: _memory/decisions/quoted-status.md accepted grep" "find-candidates on a quoted status with a comment"
 
+# vec stale: fires on a record newer than the stamp, and only on a type folder.
+fc_stale_line='vec stale: a record changed after the last memory-index refresh; vec hits may miss it'
+fc_stale="$fc_dir/stale/vec-candidates"
+mkdir -p "$fc_dir/stale"
+cp -R "$vc" "$fc_stale"
+mkdir -p "$fc_stale/notes/raw" "$fc_stale/notes/_inbox"
+fc_stamp
+printf 'raw\n' >"$fc_stale/notes/raw/new.md"
+printf 'inbox\n' >"$fc_stale/notes/_inbox/new.md"
+fc_scope="$fc_stale" fc_run "$fc_shim_path" "$fc_dir/hits-tol" "$fc_dir/empty" "$fc_dir/claim-vendor"
+fc_expect "a new file under notes/raw and notes/_inbox" "counts: grep=0 vec=1 both=0"
+refute_text "$fc_dir/err" 'vec stale:'
+touch "$fc_stale/$vc_tol"
+fc_scope="$fc_stale" fc_run "$fc_shim_path" "$fc_dir/hits-tol" "$fc_dir/empty" "$fc_dir/claim-vendor"
+fc_expect "a touched record" "counts: grep=0 vec=1 both=0"
+[[ "$(grep -c -x -F "$fc_stale_line" "$fc_dir/err")" == 1 ]] || {
+  echo "find-candidates should print exactly one vec stale line after a record changed, got:" >&2
+  cat "$fc_dir/err" >&2
+  exit 1
+}
+# The two lines never print together: vec off wins, and empty claims never check.
+QMD_SHIM_FAIL='Collection not found: vec-candidates-rules' \
+  fc_scope="$fc_stale" fc_run "$fc_shim_path" "$fc_dir/hits-tol" "$fc_dir/empty" "$fc_dir/claim-vendor"
+[[ "$(grep -c '^vec off:' "$fc_dir/err")" == 1 ]] || {
+  echo "find-candidates on a stale, unregistered scope should print one vec off line" >&2
+  cat "$fc_dir/err" >&2
+  exit 1
+}
+refute_text "$fc_dir/err" 'vec stale:'
+fc_scope="$fc_stale" fc_run "$fc_bare" "$fc_dir/hits-tol" "$fc_dir/empty" "$fc_dir/claim-vendor"
+[[ "$(cat "$fc_dir/err")" == "vec off: qmd not on PATH; grep only" ]] || {
+  echo "find-candidates on a stale scope with no qmd should print only the vec off line, got:" >&2
+  cat "$fc_dir/err" >&2
+  exit 1
+}
+fc_scope="$fc_stale" fc_run "$fc_shim_path" "$fc_dir/hits-tol" "$fc_dir/empty" "$fc_dir/empty"
+refute_text "$fc_dir/err" 'vec stale:'
+
+# The vendored refresh-time rule is byte-identical to memory-index's, so the two can't disagree about what is stale.
+python3 - "$fc" memory-index/scripts/memory-index.py <<'PYEOF' || {
+import sys
+dash = "# " + "-" * 75
+lines = open(sys.argv[1], encoding="utf-8").read().split("\n")
+heads = [i for i, ln in enumerate(lines) if ln.startswith("# Vendored verbatim") and "(lines 38-63)" in ln]
+assert len(heads) == 1, "want one refresh-time provenance header"
+start = lines.index(dash, heads[0]) + 1
+end = lines.index(dash, start)
+block = "\n".join(lines[start:end])
+assert block.strip() and block in open(sys.argv[2], encoding="utf-8").read(), "vendored refresh-time block drifted from memory-index.py"
+PYEOF
+  echo "find-candidates.sh's refresh-time block no longer matches memory-index.py" >&2
+  exit 1
+}
+require_text "$fc" 'def changed_since(folder: Path, pattern: str, since: int | None) -> bool:'
+
 # A drifted scope name reads as an unregistered collection and says nothing else.
 require_text "$fc" 're.sub(r"[^a-z0-9]+", "-", root.name.lower()).strip("-")'
 require_text memory-index/scripts/memory-index.py 're.sub(r"[^a-z0-9]+", "-", root.name.lower()).strip("-")'
@@ -3514,6 +3580,8 @@ require_text inbox-to-memory/SKILL.md 'A qmd query is not a body read, and a vec
 require_text inbox-to-memory/SKILL.md 'When the script prints `vec off:` on stderr, the lookup ran on grep alone.'
 require_text inbox-to-memory/SKILL.md '`candidates: <note-path> grep=<g> vec=<v> both=<b>`'
 require_text inbox-to-memory/SKILL.md 'When the fallback fired, name the `memory-index` skill in the report as what registers the scope.'
+require_text inbox-to-memory/SKILL.md 'When it prints `vec stale:` instead, vec search ran on an index older than some record; keep that line too.'
+require_text inbox-to-memory/SKILL.md 'When `vec stale:` fired, name the `memory-index` skill'"'"'s refresh hook as what keeps the index current.'
 require_text _maintenance/inbox-to-memory/EVALS.md '### 6. Vec-assisted lookup'
 require_text _maintenance/inbox-to-memory/EVALS.md 'tolland-carries-wholesale-Vc1TolWhs1'
 

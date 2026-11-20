@@ -84,12 +84,34 @@ require_text memory-index/SKILL.md 'Run `register` with `--dry-run` first, show 
 
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
+# Before anything runs the script, so no case reads or writes the developer's
+# real ~/.local/state/memory-index/.
+export XDG_STATE_HOME="$tmp/state"
+state="$XDG_STATE_HOME/memory-index"
 
 mkdir -p "$tmp/bin" "$tmp/pybin"
 cat >"$tmp/bin/qmd" <<'SHIM'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >>"$QMD_LOG"
+# Real qmd takes 3-4.8 s per call, so the hook cases sleep to prove they never wait on one.
+[[ -n "${QMD_SLOW:-}" ]] && sleep "$QMD_SLOW"
 [[ -n "${QMD_FAIL:-}" && "$1" == "$QMD_FAIL" ]] && exit 1
+# QMD_COLLECTIONS lines are name<TAB>path<TAB>pattern; output mimics qmd 2.8.3.
+if [[ "$1 ${2:-}" == "collection list" && -n "${QMD_COLLECTIONS:-}" ]]; then
+  echo "Collections ($(wc -l <"$QMD_COLLECTIONS" | tr -d ' ')):"
+  while IFS=$'\t' read -r n p m; do
+    printf '%s (qmd://%s/)\n  Pattern:  %s\n' "$n" "$n" "$m"
+  done <"$QMD_COLLECTIONS"
+elif [[ "$1 ${2:-}" == "collection show" && -n "${QMD_COLLECTIONS:-}" ]]; then
+  while IFS=$'\t' read -r n p m; do
+    [[ "$n" == "$3" ]] && {
+      printf 'Collection: %s\n  Path:     %s\n  Pattern:  %s\n' "$n" "$p" "$m"
+      exit 0
+    }
+  done <"$QMD_COLLECTIONS"
+  echo "Collection not found: $3" >&2
+  exit 1
+fi
 exit 0
 SHIM
 chmod +x "$tmp/bin/qmd"
@@ -215,14 +237,16 @@ printf '%s\n' \
   >"$expected"
 same_file "$expected" "$log5" "case 5 unfilled paragraph"
 
-# Case 6: refresh is update then embed, and stops at the first failure.
+# Case 6: refresh is update, embed, then the collection list it stamps, and
+# stops at the first failure without stamping.
 log6="$tmp/case6.log"
 : >"$log6"
 QMD_LOG="$log6" PATH="$shim_path" python3 "$script" refresh
-printf '%s\n' update embed >"$expected"
+printf '%s\n' update embed 'collection list' >"$expected"
 same_file "$expected" "$log6" "case 6 refresh"
 
 : >"$log6"
+rm -f "$state/last-refresh.json"
 set +e
 err="$(QMD_FAIL=update QMD_LOG="$log6" PATH="$shim_path" python3 "$script" refresh 2>&1 >/dev/null)"
 rc=$?
@@ -234,6 +258,10 @@ grep -Fq 'FAILED: qmd update' <<<"$err" || {
 }
 printf '%s\n' update >"$expected"
 same_file "$expected" "$log6" "case 6 refresh stops before embed"
+[[ ! -e "$state/last-refresh.json" ]] || {
+  echo "case 6: a failed refresh wrote the stamp" >&2
+  exit 1
+}
 
 # Case 7: unusable input exits 3 before any qmd command runs.
 mkdir -p "$tmp/not-a-scope"
@@ -313,5 +341,296 @@ grep -F 'context add qmd://plain-scope-rules ' <<<"$pdry" | grep -Fq 'rules reco
   echo "$pdry" >&2
   exit 1
 }
+
+# Cases 10-23: `refresh --if-changed`, the hook mode.
+cols="$tmp/collections.tsv"
+printf '%s\t%s\t%s\n' \
+  acme-pursuit-decisions "$abs/_memory/decisions" '**/*.md' \
+  acme-pursuit-rules "$abs/_memory/rules" '**/*.md' \
+  acme-pursuit-notes "$abs/notes" '*.md' \
+  >"$cols"
+log="$tmp/ic.log"
+
+now_ms() {
+  python3 -c 'import time; print(time.time_ns() // 1000000)'
+}
+
+# Command substitution waits for every writer of the pipe to close, which is
+# how a harness reads a hook, so a child holding stdout would show in ic_ms.
+if_changed() {
+  local t0
+  t0="$(now_ms)"
+  set +e
+  ic_out="$(env "$@" QMD_LOG="$log" PATH="${ic_path:-$shim_path}" python3 "$script" refresh --if-changed 2>"$tmp/ic.err")"
+  ic_rc=$?
+  set -e
+  ic_ms=$(($(now_ms) - t0))
+}
+
+assert_hook_ok() {
+  [[ "$ic_rc" == 0 ]] || {
+    echo "$1: --if-changed exited $ic_rc" >&2
+    exit 1
+  }
+  [[ -z "$ic_out" ]] || {
+    echo "$1: --if-changed printed on stdout: $ic_out" >&2
+    exit 1
+  }
+  [[ "$ic_ms" -lt 1000 ]] || {
+    echo "$1: --if-changed took ${ic_ms} ms" >&2
+    exit 1
+  }
+}
+
+# The lock file outlives every refresh, so "running" means another process
+# holds its flock. Probes only the state dir, never a scope.
+lock_held() {
+  ! python3 -c 'import fcntl,os,sys; fd=os.open(sys.argv[1], os.O_CREAT|os.O_WRONLY); fcntl.flock(fd, fcntl.LOCK_EX|fcntl.LOCK_NB)' "$state/refresh.lock" 2>/dev/null
+}
+
+wait_unlocked() {
+  local i=0
+  while lock_held; do
+    i=$((i + 1))
+    [[ "$i" -le 150 ]] || {
+      echo "$1: refresh still holds the lock after 15 s" >&2
+      exit 1
+    }
+    sleep 0.1
+  done
+}
+
+log_empty() {
+  [[ ! -s "$log" ]] || {
+    echo "$1: qmd ran; log:" >&2
+    cat "$log" >&2
+    exit 1
+  }
+}
+
+no_lock() {
+  ! lock_held || {
+    echo "$1: a refresh holds the lock" >&2
+    exit 1
+  }
+}
+
+count_is() {
+  local want="$1"
+  local line="$2"
+  local what="$3"
+  [[ "$(grep -cx -- "$line" "$log")" == "$want" ]] || {
+    echo "$what: expected $want '$line' line(s) in the qmd log; got:" >&2
+    cat "$log" >&2
+    exit 1
+  }
+}
+
+# Case 10: refresh stamps the collections it read from qmd, outside the scope.
+: >"$log"
+QMD_COLLECTIONS="$cols" QMD_LOG="$log" PATH="$shim_path" python3 "$script" refresh
+printf '%s\n' update embed 'collection list' \
+  'collection show acme-pursuit-decisions' \
+  'collection show acme-pursuit-rules' \
+  'collection show acme-pursuit-notes' \
+  >"$expected"
+same_file "$expected" "$log" "case 10 refresh"
+require_file "$state/last-refresh.json"
+[[ -z "$(find "$scope" -name 'last-refresh*' -o -name 'refresh.l*')" ]] || {
+  echo "case 10: refresh wrote state inside the scope" >&2
+  exit 1
+}
+
+# Case 11: nothing changed, so no qmd call, even one that would take 3 s.
+: >"$log"
+if_changed QMD_SLOW=3
+assert_hook_ok "case 11"
+log_empty "case 11"
+no_lock "case 11"
+
+# Case 12, falsifier: notes/raw/ and notes/_inbox/ sit under the notes
+# collection's path but outside its *.md mask.
+: >"$log"
+printf x >"$scope/notes/raw/new.md"
+printf x >"$scope/notes/_inbox/new.md"
+if_changed QMD_SLOW=3
+assert_hook_ok "case 12"
+log_empty "case 12"
+no_lock "case 12"
+
+# Case 13, falsifier: a record changed, so one detached refresh starts, and a
+# second call while it runs starts nothing.
+: >"$log"
+touch "$scope/_memory/decisions/vendor-a1b2c3.md"
+if_changed QMD_SLOW=1 QMD_COLLECTIONS="$cols"
+assert_hook_ok "case 13 first call"
+lock_held || {
+  echo "case 13: no lock while the refresh runs" >&2
+  exit 1
+}
+if_changed QMD_SLOW=1 QMD_COLLECTIONS="$cols"
+assert_hook_ok "case 13 second call"
+wait_unlocked "case 13"
+count_is 1 update "case 13"
+count_is 1 embed "case 13"
+cp "$log" "$tmp/case13.log"
+if_changed QMD_SLOW=1 QMD_COLLECTIONS="$cols"
+assert_hook_ok "case 13 third call"
+wait_unlocked "case 13 third call"
+same_file "$tmp/case13.log" "$log" "case 13 third call after the refresh"
+
+# Case 14: the stamp is the refresh's start time, so a note written while
+# update runs still counts as changed afterward. Waiting for the `update` line
+# makes sure the child took its stamp before the write.
+: >"$log"
+touch "$scope/_memory/rules/deploys-g7h8i9.md"
+if_changed QMD_SLOW=1 QMD_COLLECTIONS="$cols"
+assert_hook_ok "case 14 first call"
+i=0
+until grep -qx update "$log"; do
+  i=$((i + 1))
+  [[ "$i" -le 50 ]] || {
+    echo "case 14: the detached refresh never ran qmd update" >&2
+    exit 1
+  }
+  sleep 0.1
+done
+lock_held || {
+  echo "case 14: refresh finished before the mid-run write" >&2
+  exit 1
+}
+touch "$scope/notes/2026-10-27-kickoff-abc123.md"
+wait_unlocked "case 14 first refresh"
+if_changed QMD_SLOW=1 QMD_COLLECTIONS="$cols"
+assert_hook_ok "case 14 second call"
+wait_unlocked "case 14 second refresh"
+count_is 2 update "case 14"
+
+# Case 15: a held lock blocks a refresh, and the kernel frees it when the
+# holder dies, even by SIGKILL, so the next call refreshes without waiting.
+: >"$log"
+touch "$scope/_memory/decisions/vendor-a1b2c3.md"
+python3 -c 'import fcntl,os,sys,time; fd=os.open(sys.argv[1], os.O_CREAT|os.O_WRONLY); fcntl.flock(fd, fcntl.LOCK_EX); time.sleep(60)' "$state/refresh.lock" &
+holder=$!
+i=0
+until lock_held; do
+  i=$((i + 1))
+  [[ "$i" -le 50 ]] || {
+    echo "test setup: case 15 holder never took the lock" >&2
+    exit 1
+  }
+  sleep 0.1
+done
+if_changed QMD_COLLECTIONS="$cols"
+assert_hook_ok "case 15 held lock"
+log_empty "case 15 held lock"
+kill -9 "$holder"
+wait "$holder" 2>/dev/null || true
+if_changed QMD_COLLECTIONS="$cols"
+assert_hook_ok "case 15 killed holder"
+wait_unlocked "case 15 killed holder"
+count_is 1 update "case 15"
+
+# Case 16: failures stay off stdout and exit 0, and a failed refresh keeps the
+# old stamp.
+: >"$log"
+touch "$scope/_memory/decisions/vendor-a1b2c3.md"
+cp "$state/last-refresh.json" "$tmp/stamp.before"
+if_changed QMD_FAIL=update
+assert_hook_ok "case 16 qmd failing"
+wait_unlocked "case 16 qmd failing"
+cmp -s "$tmp/stamp.before" "$state/last-refresh.json" || {
+  echo "case 16: a failed refresh changed the stamp" >&2
+  exit 1
+}
+require_text "$state/refresh.log" "FAILED: qmd update"
+
+ic_path="$bare_path" if_changed
+assert_hook_ok "case 16 no qmd"
+no_lock "case 16 no qmd"
+require_text "$tmp/ic.err" "qmd not on PATH"
+
+: >"$tmp/a-file"
+if_changed XDG_STATE_HOME="$tmp/a-file"
+assert_hook_ok "case 16 state dir unwritable"
+
+# Case 17: no stamp means nothing proves the index current.
+: >"$log"
+rm "$state/last-refresh.json"
+if_changed QMD_COLLECTIONS="$cols"
+assert_hook_ok "case 17"
+wait_unlocked "case 17"
+count_is 1 update "case 17"
+require_file "$state/last-refresh.json"
+
+mtime_ns() {
+  python3 -c 'import os,sys; print(os.stat(sys.argv[1]).st_mtime_ns)' "$1"
+}
+
+# Case 18: mv keeps a record's mtime, so only the stamp's file list shows the
+# rename.
+: >"$log"
+before="$(mtime_ns "$scope/_memory/decisions/ship-d4e5f6.md")"
+mv "$scope/_memory/decisions/ship-d4e5f6.md" "$scope/_memory/decisions/ship-moved-d4e5f6.md"
+[[ "$(mtime_ns "$scope/_memory/decisions/ship-moved-d4e5f6.md")" == "$before" ]] || {
+  echo "test setup: case 18 mv changed the record's mtime" >&2
+  exit 1
+}
+if_changed QMD_COLLECTIONS="$cols"
+assert_hook_ok "case 18 rename"
+wait_unlocked "case 18 rename"
+count_is 1 update "case 18 rename"
+
+# Case 19: a deleted record leaves no file newer than the stamp.
+: >"$log"
+rm "$scope/_memory/rules/deploys-g7h8i9.md"
+if_changed QMD_COLLECTIONS="$cols"
+assert_hook_ok "case 19 delete"
+wait_unlocked "case 19 delete"
+count_is 1 update "case 19 delete"
+
+# Case 20: the refresh after the delete recorded the new list, so nothing is stale.
+: >"$log"
+if_changed QMD_COLLECTIONS="$cols"
+assert_hook_ok "case 20"
+log_empty "case 20"
+no_lock "case 20"
+
+# Case 21, falsifier: a move inside notes/raw/ stays outside the notes mask.
+: >"$log"
+mv "$scope/notes/raw/new.md" "$scope/notes/raw/moved.md"
+if_changed QMD_COLLECTIONS="$cols"
+assert_hook_ok "case 21"
+log_empty "case 21"
+no_lock "case 21"
+
+# Case 22: a stamp written before stamps listed files can't show the file set
+# is unchanged, so the hook refreshes once to rewrite it.
+: >"$log"
+python3 -c 'import json,sys; p=sys.argv[1]; d=json.load(open(p)); [c.pop("files") for c in d["collections"]]; json.dump(d, open(p, "w"))' "$state/last-refresh.json"
+if_changed QMD_COLLECTIONS="$cols"
+assert_hook_ok "case 22 legacy stamp"
+wait_unlocked "case 22 legacy stamp"
+count_is 1 update "case 22 legacy stamp"
+
+# Case 23: two hook calls started at once on a changed collection start one
+# refresh between them.
+: >"$log"
+touch "$scope/_memory/decisions/vendor-a1b2c3.md"
+for _ in 1 2; do
+  env QMD_SLOW=1 QMD_COLLECTIONS="$cols" QMD_LOG="$log" PATH="$shim_path" python3 "$script" refresh --if-changed >/dev/null 2>&1 &
+done
+wait
+wait_unlocked "case 23 simultaneous calls"
+count_is 1 update "case 23 simultaneous calls"
+
+require_text memory-index/SKILL.md 'python3 SCRIPT refresh --if-changed'
+require_text memory-index/SKILL.md '`refresh --if-changed` is the hook mode. It prints nothing on stdout and exits 0 in every case.'
+require_text memory-index/SKILL.md 'python3 <absolute path to scripts/memory-index.py> refresh --if-changed'
+require_text memory-index/SKILL.md 'or when a matching file was added, renamed, moved, or deleted since then'
+require_text memory-index/README.md 'or for a file added, renamed, moved, or deleted since then'
+# Deliberately Not Built: SessionEnd's budget is too short for a refresh.
+refute_text memory-index/SKILL.md 'SessionEnd'
+refute_text memory-index/SKILL.md 'session-end'
 
 echo "memory-index smoke: OK"

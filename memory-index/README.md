@@ -12,7 +12,7 @@ One more collection, `<scope>-notes`, covers the groomed notes with the mask `*.
 
 Each collection's context string comes from the scope's own files: the "in One Paragraph" section of its `CLAUDE.md`, plus the type's one-line description from `_memory/CLAUDE.md`. The skill runs `register --dry-run` first and shows you every qmd command before anything changes. A real run ends by printing the `mcpServers` entry to add to your client.
 
-`refresh` runs `qmd update`, then `qmd embed`. Call it by hand, or from a hook you wire up yourself. The skill gives you the command and never writes the hook.
+`refresh` runs `qmd update`, then `qmd embed`, and records its start time and every qmd collection it saw in a state file outside the scope. `refresh --if-changed` is the hook mode. It checks each recorded collection for a file newer than that start time, or for a file added, renamed, moved, or deleted since then, and starts a detached `refresh` only when it finds one, so a turn that changed nothing costs no qmd call. Call `refresh` by hand, and put `refresh --if-changed` on a hook you wire up yourself. The skill gives you the command and never writes the hook.
 
 ## Install
 
@@ -43,5 +43,9 @@ It needs Python 3 and [qmd](https://github.com/tobi/qmd) on your `PATH`. The scr
 - A note in the older v1 body format keeps its transcript inline, so the `notes/` mask can't keep that text out of the index. `register` doesn't detect v1 notes.
 - A `[journal candidate:]` marker that appears only in the raw source text lives in `notes/raw/`, which the index skips. Markers that `inbox-to-memory` flags inside the extracted sections stay in the top-level note, so the index does see them. To find the raw-only ones, grep `notes/` recursively.
 - `notes/CLAUDE.md` and `notes/README.md` sit directly in `notes/`, so the mask indexes them along with the notes.
+- `--if-changed` doesn't watch a collection registered after the last refresh. The state file lists only the collections that refresh saw, so the new one joins at the next refresh.
+- A collection's files can be older than the last refresh when `register` adds it, so `--if-changed` doesn't count them as changed and they stay unembedded. Run `refresh` once after `register`.
+- Plain `refresh` takes no lock, so it can overlap a refresh that a hook started. Both run the same qmd commands, so the overlap only wastes time.
+- When nothing changed, `--if-changed` checks every file in every qmd collection, including ones another tool registered. One large collection, such as `~/code` with `**/*.md`, can push the hook past one second.
 
 The decision ledger behind these choices is [`_maintenance/memory-index/RATIONALE.md`](../_maintenance/memory-index/RATIONALE.md).
