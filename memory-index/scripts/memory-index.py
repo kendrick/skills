@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Register a memory scope's folders with qmd as collections, and refresh the index.
 
-Exit codes: 0 pass, 1 a qmd command failed, 2 usage error (argparse's own
+Exit codes: 0 pass, 1 a qmd command failed or refresh could not write its
+stamp after every qmd command succeeded (FAILED: write <path>), 2 usage error (argparse's own
 code), 3 not a memory scope or qmd not on PATH. refresh --if-changed always
 exits 0.
 

@@ -654,6 +654,7 @@ grep -Eq '^FAILED: write ' <<<"$err" || {
 }
 
 require_text memory-index/SKILL.md 'python3 SCRIPT refresh --if-changed'
+require_text memory-index/SKILL.md 'FAILED: write <path>'
 require_text memory-index/SKILL.md '`refresh --if-changed` is the hook mode. It prints nothing on stdout and exits 0 in every case.'
 require_text memory-index/SKILL.md 'python3 <absolute path to scripts/memory-index.py> refresh --if-changed'
 require_text memory-index/SKILL.md 'or when a matching file was added, renamed, moved, or deleted since then'
