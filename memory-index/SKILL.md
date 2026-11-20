@@ -40,7 +40,9 @@ A second `register` on a scope already registered fails at its first `collection
 
 After the real run, relay the script's last line, which starts `MCP:` and gives the `mcpServers` entry the user adds to their client by hand.
 
-**Done when:** the user saw the dry run and either declined it, or the real run exited 0 and its `MCP:` line was relayed; or a run exited 1 or 3 and its message was reported verbatim.
+Then, once the real run exited 0, run Step 2's `refresh` once before the hook offer. The last stamp doesn't list the new collection, so the hook doesn't watch it until some refresh runs. Tell the user this first refresh may take minutes. If it exits 1, report its `FAILED:` line verbatim and still make the offer: this is the one exit 1 that doesn't stop Step 1. When an earlier refresh left a stamp, a failed one keeps that stamp, which doesn't list the new collection, so the hook doesn't retry it. Tell the user the new scope stays out of the index until a `refresh` succeeds, so they rerun Step 2's `refresh` by hand once the failure is fixed. Then make Step 3's hook offer. A dry run, a declined dry run, and a run that exited 1 or 3 end Step 1 without either.
+
+**Done when:** the user saw the dry run and either declined it, or the real run exited 0, its `MCP:` line was relayed, `refresh` ran once, and Step 3 ran; or a run exited 1 or 3 and its message was reported verbatim.
 
 ## Step 2 — Refresh
 
@@ -59,14 +61,23 @@ Every successful `refresh` records its start time and the registered collections
 
 ## Step 3 — Wire a Hook
 
-Reach this step only when the user asks to keep the index current without running Step 2 by hand.
+Reach this step from Step 1 after a real `register` exits 0, when the user asks to keep the index current without running Step 2 by hand, or when `inbox-to-memory` reports `vec stale:`. A scope registered before this offer existed reaches it this way, since a second `register` fails on qmd's duplicate collection name.
 
-The scope's owner owns its hooks, so this step writes no hook file. Give the user the command their hook runs, with SCRIPT spelled as an absolute path, since a hook runs from whatever directory its harness chooses:
+The scope's owner owns its hooks, so this step writes no hook file. It makes one offer, and the harness's own config mechanism does the writing.
+
+Check for a refresh hook first. Read the harness's hook config wherever it is readable: in Claude Code, the `hooks` key in `~/.claude/settings.json`, and in `.claude/settings.json` and `.claude/settings.local.json` under the working directory. A hook counts only when its command contains `memory-index.py refresh`. A hook on Stop or SessionStart that runs anything else, such as a notifier, leaves the question to ask. When a hook counts, name its file and event, quote its command, and end the step without asking. If that command lacks `--if-changed`, tell the user a per-turn hook should run `refresh --if-changed`; that is information, not a question.
+
+In a harness with no hooks, end the step here. Step 2 runs by hand any time.
+
+Otherwise, ask once per invocation whether to add a hook that runs:
 
 ```
 python3 <absolute path to scripts/memory-index.py> refresh --if-changed
 ```
 
-Name the events it belongs on. In Claude Code these are Stop, which fires after each agent turn, and SessionStart, which catches the last turn before a quit. In another harness, name its equivalents: an after-each-turn event and a session-start event.
+Spell SCRIPT as an absolute path, since a hook runs from whatever directory its harness chooses. Attach it to two events: Stop, which fires after each agent turn, and SessionStart, which catches the last turn before a quit. These are Claude Code's names; elsewhere, use the harness's equivalents. Step 2's hook-mode paragraph covers why `--if-changed` is safe to run every turn.
 
-**Done when:** the user has the absolute `refresh --if-changed` command and the hook events to attach it to, and no hook file was written.
+- **Yes:** hand the write to the harness's config mechanism, which in Claude Code is the `update-config` skill, with the command and both events. Recommend user-level placement (`~/.claude/settings.json` in Claude Code). `refresh` covers every registered collection, so one hook serves every scope on the machine, while a hook in one repo's project settings fires only in sessions started there.
+- **No:** end the step. Step 2 runs by hand any time.
+
+**Done when:** an existing refresh hook was reported and nothing was asked; or the user was asked once and either declined, or the write went to the harness's config mechanism with the absolute `refresh --if-changed` command on Stop and SessionStart and user-level placement recommended; and this skill wrote no hook file.

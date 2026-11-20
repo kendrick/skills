@@ -82,6 +82,21 @@ refute_text memory-index/SKILL.md "--daemon"
 refute_text "$script" "memory_type"
 require_text memory-index/SKILL.md 'Run `register` with `--dry-run` first, show the user every command it prints, and run it for real only on a yes:'
 
+# Case 24: the hook offer (#339). Step 1 hands off to Step 3, so one passage serves both.
+require_text memory-index/SKILL.md "run Step 2's \`refresh\` once before the hook offer"
+require_text memory-index/SKILL.md 'Then make Step 3'"'"'s hook offer.'
+require_text memory-index/SKILL.md 'A dry run, a declined dry run, and a run that exited 1 or 3 end Step 1 without either.'
+require_text memory-index/SKILL.md 'ask once per invocation'
+require_text memory-index/SKILL.md 'A scope registered before this offer existed reaches it this way'
+require_text memory-index/SKILL.md 'A hook counts only when its command contains `memory-index.py refresh`.'
+require_text memory-index/SKILL.md 'end the step without asking'
+require_text memory-index/SKILL.md 'such as a notifier, leaves the question to ask'
+require_text memory-index/SKILL.md 'this step writes no hook file'
+require_text memory-index/SKILL.md 'the `update-config` skill'
+require_text memory-index/SKILL.md 'Recommend user-level placement'
+require_text memory-index/SKILL.md 'Stop, which fires after each agent turn, and SessionStart'
+require_text memory-index/SKILL.md "Step 2's hook-mode paragraph"
+
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 # Before anything runs the script, so no case reads or writes the developer's
