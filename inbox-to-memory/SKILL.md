@@ -70,7 +70,7 @@ For each inbox file, in order:
 
    It greps the entities against each record's frontmatter, runs each claim as a `qmd vsearch` against the scope's per-type `_memory` collections, and merges the two hit lists before any header is read. Those collections exist once the `memory-index` skill has registered the scope, a step that waits on the user's yes to its dry run, so a scope it hasn't reached falls back to grep and the report points the user at `memory-index`. Stdout ends on a `counts:` line, which phase 6 copies.
 
-   When the script prints `vec off:` on stderr, the lookup ran on grep alone. Keep that line for the phase 6 report.
+   When the script prints `vec off:` on stderr, the lookup ran on grep alone. Keep that line for the phase 6 report. When it prints `vec stale:` instead, vec search ran on an index older than some record; keep that line too.
 4. **Read the headers of the `candidate:` lines.** Frontmatter, and no further. That's stage 3 of [references/retrieval-funnel.md](references/retrieval-funnel.md). A `superseded` or `deprecated` record leaves at the header read and never costs a body read, whichever lookup found it.
 5. **Body-read only the records whose headers suggest overlap** with something this input actually claims.
 
@@ -231,7 +231,7 @@ Then report what phase 2.5 and the stamper did:
 - Every record the stamper stamped, with its new date, off its `stamped:` lines.
 - Every record the stamper declined, with its reason, off its `skipped:` lines and nothing else.
 - Every `proposed` record an input restated, one line per record and note, as `restated proposed: <record-path> by <note-path>`, both paths relative to the scope root.
-- Every input's candidate sources, one line per note, as `candidates: <note-path> grep=<g> vec=<v> both=<b>`, copied from that input's `counts:` line, with its `vec off:` line beneath it when the fallback fired. When the fallback fired, name the `memory-index` skill in the report as what registers the scope.
+- Every input's candidate sources, one line per note, as `candidates: <note-path> grep=<g> vec=<v> both=<b>`, copied from that input's `counts:` line, with its `vec off:` or `vec stale:` line beneath it when either fired. When the fallback fired, name the `memory-index` skill in the report as what registers the scope. When `vec stale:` fired, name the `memory-index` skill's refresh hook as what keeps the index current.
 - Every line `stale-records.sh` printed, stdout and stderr, verbatim. It only reports; confirming or deprecating a record is the user's call.
 
 Report failures. Don't silently retry or auto-fix — those bugs hide.

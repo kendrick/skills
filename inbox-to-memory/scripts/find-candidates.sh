@@ -19,9 +19,11 @@
 # qmd is optional. With it off PATH, or with any qmd call failing, the run
 # falls back to grep alone and says so in exactly one `vec off:` line on
 # stderr. Vec hits gathered before a failure are discarded, because partial
-# hits make counts that describe an index that answered half the claims. The
-# script never registers or refreshes a scope: memory-index does that, after
-# the user approves its dry run.
+# hits make counts that describe an index that answered half the claims. When
+# vec ran clean but a record is newer than the last memory-index refresh, one
+# `vec stale:` line says the hits may miss it (#374). The script never
+# registers or refreshes a scope: memory-index does that, after the user
+# approves its dry run.
 #
 # Exit 0 once output is printed, the fallback included. Exit 2 on a usage
 # error, an unreadable entities, claims, or record file, frontmatter that
@@ -32,6 +34,8 @@ set -euo pipefail
 # The Python program arrives on stdin via a quoted heredoc, so nothing in it is
 # expanded by the shell and a bare apostrophe below is safe.
 exec python3 - "$@" <<'PY'
+from __future__ import annotations
+
 import argparse
 import json
 import os
@@ -67,7 +71,7 @@ def die(msg):
 
 
 # ---------------------------------------------------------------------------
-# Vendored verbatim from memory-index/scripts/memory-index.py (lines 30-31),
+# Vendored verbatim from memory-index/scripts/memory-index.py (lines 33-34),
 # 2026-10-30. Upstream is authoritative: fix a bug there first, then re-copy.
 # A name that drifts from the one memory-index registers fails every lookup
 # as an unregistered collection and says nothing else. This skill installs
@@ -75,6 +79,42 @@ def die(msg):
 # ---------------------------------------------------------------------------
 def scope_name(root: Path) -> str:
     return re.sub(r"[^a-z0-9]+", "-", root.name.lower()).strip("-")
+# ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# Vendored verbatim from memory-index/scripts/memory-index.py (lines 38-63),
+# 2026-11-19. Upstream is authoritative: fix a bug there first, then re-copy.
+# A rule that drifts from the one `refresh` stamps against reports a stale
+# index as fresh, or the reverse, and says nothing else. This skill installs
+# standalone, so importing from the sibling skill is not available.
+# ---------------------------------------------------------------------------
+def state_dir() -> Path:
+    return Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state") / "memory-index"
+
+
+def last_refresh_ns() -> int | None:
+    """Start time of the last successful refresh, or None when no stamp is readable."""
+    try:
+        return int(json.loads((state_dir() / "last-refresh.json").read_text(encoding="utf-8"))["started_ns"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def changed_since(folder: Path, pattern: str, since: int | None) -> bool:
+    """True when a regular file in folder.glob(pattern) is newer than since.
+
+    pathlib's glob, not fnmatch: fnmatch's `*` crosses `/`, so "*.md" would
+    match notes/raw/x.md, which qmd's `*.md` mask leaves out. since None means
+    no stamp, so every matching file counts as newer.
+    """
+    for f in folder.glob(pattern):
+        try:
+            if f.is_file() and (since is None or f.stat().st_mtime_ns > since):
+                return True
+        except OSError:
+            continue
+    return False
 # ---------------------------------------------------------------------------
 
 
@@ -244,9 +284,16 @@ def main():
             if any(e in text for e in entities):
                 grep.add(rel)
 
+    since = last_refresh_ns()
     vec, off = vec_hits(scope, types, recs, claims, k)
     if off:
         sys.stderr.write("vec off: %s; grep only\n" % off)
+    # `**/*.md` is the qmd default `register` leaves on type folders. Only runs
+    # when vec ran clean, so this line never pairs with `vec off:`.
+    elif claims and types and any(
+        changed_since(Path(scope) / "_memory" / t, "**/*.md", since) for t in types
+    ):
+        sys.stderr.write("vec stale: a record changed after the last memory-index refresh; vec hits may miss it\n")
 
     counts = {"grep": 0, "vec": 0, "both": 0}
     for rel in sorted(grep | vec):
