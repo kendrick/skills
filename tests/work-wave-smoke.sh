@@ -302,6 +302,16 @@ require_text "$skill" "again, with \`--no-publish\` dropped"
 # the flag line, and a resumed wave's next dispatch.
 require_text "$skill" "\`--review-loop[=<comment>]\` goes on every lane's \`work-issue\` invocation this run dispatches"
 require_text "$skill" "A wave re-invoked with \`--review-loop\` passes it on the next dispatch of every merge-set lane whose RUN_DIR is still open"
+# #361: Step 8 re-polls a lane stopped at work-issue's review poll cap, once,
+# with the record written before the dispatch and ahead of the re-test.
+require_text "$skill" "A merge-set lane whose open RUN_DIR holds \`triage/waiting\` and that has no \`WAVE_DIR/repoll/issue-<N>\` is re-polled once."
+require_text "$skill" "Write every such lane's \`WAVE_DIR/repoll/issue-<N>\` before the dispatch,"
+require_text "$skill" "a resumed wave never re-polls a lane twice"
+require_text "$skill" "The re-polls run before the merge-test re-check below"
+require_text "$skill" "Step 8 re-polls it once before the report."
+refute_text "$skill" "until #361 lands"
+require_text "$brief" "In the repoll phase, run the publish-phase line above unchanged."
+require_text "$brief" "- \`{{PHASE}}\` — \`build\` at Step 4, \`publish\` at Step 7, \`repoll\` at Step 8's re-poll."
 # A failed gh check writes no gate record, so resume runs it again rather than reading a record that says none.
 require_text "$skill" "the wave stops with no gate record for that report"
 
@@ -414,6 +424,8 @@ require_text "$ledger" "## Deliberately Not Built"
 require_text "$ledger" "## Known Limitations"
 # #230: the work-wave half of the review-loop ledger row.
 require_text "$ledger" "work-wave forwards \`--review-loop[=<comment>]\` on every lane dispatch"
+# #361: the re-poll ledger row.
+require_text "$ledger" "Step 8 re-polls each merge-set lane stopped at \`work-issue\`'s review poll cap once"
 require_text "$ledger" "| 40 | The build dispatch runs \`work-issue <N> <PLAN> --isolate --no-publish\`, and Step 5 runs \`gh pr list --head issue-<N> --state all\` for every build report"
 # The root README carries this skill's own install flag, in the map table's
 # third column. The command form around it is pinned once, in
