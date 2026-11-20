@@ -22,7 +22,8 @@ fail() { echo "FAIL: $1" >&2; exit 1; }
 soft_failures=0
 soft() { echo "FAIL: $1" >&2; soft_failures=$((soft_failures + 1)); }
 sz() { wc -c < "$1" | tr -d ' '; }
-filler() { head -c "$1" /dev/zero | tr '\0' x; echo; }
+bytes_of() { head -c "$1" /dev/zero | tr '\0' x; }
+filler() { bytes_of "$1"; echo; }
 
 p="$tmp/pieces"
 mkdir -p "$p"
@@ -51,10 +52,10 @@ build() {
   mkdir -p "$d/references"
   local f; : > "$d/SKILL.md"
   for f in "$@"; do cat "$p/$f" >> "$d/SKILL.md"; done
-  head -c 4000 /dev/zero | tr '\0' x > "$d/references/resume.md"
-  head -c 300 /dev/zero | tr '\0' x > "$d/references/worker-prompt.md"
-  head -c 500 /dev/zero | tr '\0' x > "$d/references/redteam.md"
-  head -c 700 /dev/zero | tr '\0' x > "$d/references/triage.md"
+  bytes_of 4000 > "$d/references/resume.md"
+  bytes_of 300 > "$d/references/worker-prompt.md"
+  bytes_of 500 > "$d/references/redteam.md"
+  bytes_of 700 > "$d/references/triage.md"
 }
 all=(fm pre step0 adopt step1 step2 step3 step4 step5 step6 step7 step8 stops resume further)
 fx="$tmp/fx"
@@ -117,6 +118,13 @@ echo extra > "$tmp/untagged/references/extra.md"
 rc=0; python3 "$script" --skill-dir "$tmp/untagged" >/dev/null 2>"$tmp/err" || rc=$?
 [[ $rc == 1 ]] || fail "case 8: untagged reference exited $rc, expected 1"
 grep -qF 'references/extra.md: untagged' "$tmp/err" || fail "case 8: stderr lacks 'references/extra.md: untagged'"
+
+# 8b. no Further Reading section: one stderr line, never a traceback
+build "$tmp/nofr" fm pre step0 adopt step1 step2 step3 step4 step5 step6 step7 step8 stops resume
+rc=0; python3 "$script" --skill-dir "$tmp/nofr" >/dev/null 2>"$tmp/err" || rc=$?
+[[ $rc == 1 ]] || fail "case 8b: no Further Reading exited $rc, expected 1"
+grep -qF 'measure-load: SKILL.md: no "## Further Reading" section' "$tmp/err" || fail "case 8b: stderr lacks the no-Further-Reading line"
+! grep -q Traceback "$tmp/err" || fail "case 8b: a traceback reached stderr"
 
 # 9. token mode with no credential
 rc=0; env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN -u ANTHROPIC_BASE_URL python3 "$script" --skill-dir "$fx" --count tokens >"$tmp/o9" 2>"$tmp/err" || rc=$?

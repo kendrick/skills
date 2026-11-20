@@ -81,8 +81,8 @@ def split_units(text):
 def reference_tags(skill_text, ref_names):
     """name -> sorted step numbers, or [] for always. Fails on untagged or missing.
 
-    Takes the Further Reading text only: other sections mention references in
-    prose, some of which don't exist as files.
+    Callers pass the Further Reading text only: other sections mention
+    references in prose (even another skill's), and those aren't files here.
     """
     tagged, named = {}, set()
     for line in skill_text.splitlines():
@@ -132,17 +132,20 @@ def make_counter(mode, model):
 
 
 def run(skill_dir, mode, model):
-    sd = Path(skill_dir)
+    root = Path(skill_dir)
     try:
-        skill_text = (sd / "SKILL.md").read_text(encoding="utf-8")
-        refs = {p.name: p.read_text(encoding="utf-8") for p in sorted((sd / "references").glob("*.md"))}
+        skill_text = (root / "SKILL.md").read_text(encoding="utf-8")
+        refs = {p.name: p.read_text(encoding="utf-8") for p in sorted((root / "references").glob("*.md"))}
     except (OSError, UnicodeDecodeError) as e:
         raise Fail(3, [f"measure-load: {e}"])
     units = split_units(skill_text)
-    tags = reference_tags(next(t for n, _, t in units if n.startswith("Further Reading")), list(refs))
+    reading = next((t for n, _, t in units if n.startswith("Further Reading")), None)
+    if reading is None:
+        raise Fail(1, ['measure-load: SKILL.md: no "## Further Reading" section'])
+    tags = reference_tags(reading, list(refs))
     count = make_counter(mode, model)
     sizes = [count(t) for _, _, t in units]
-    rsize = {n: count(t) for n, t in refs.items()}
+    ref_sizes = {n: count(t) for n, t in refs.items()}
 
     def label(n):
         s = tags[n]
@@ -157,15 +160,15 @@ def run(skill_dir, mode, model):
         if tag == "always":
             always_total += n
     for n in sorted(refs):
-        out.append(f"| references/{n} | {label(n)} | {rsize[n]} |")
+        out.append(f"| references/{n} | {label(n)} | {ref_sizes[n]} |")
         if not tags[n]:
-            always_total += rsize[n]
+            always_total += ref_sizes[n]
     out += [f"| always-loaded total | always | {always_total} |", "",
             "| Phase | Today | Only its step | Not needed |", "|---|---|---|---|"]
-    resume = rsize["resume.md"]
+    resume = ref_sizes["resume.md"]
     saves = []
     for k in PHASES:
-        step_refs = sum(rsize[n] for n in refs if k in tags[n])
+        step_refs = sum(ref_sizes[n] for n in refs if k in tags[n])
         today = sum(sizes) + resume + step_refs
         only = sum(n for (_, t, _), n in zip(units, sizes) if t in ("always", f"Step {k}")) + resume + step_refs
         saves.append(today - only)
@@ -181,13 +184,13 @@ class Parser(argparse.ArgumentParser):
 
 
 def main():
-    p = Parser(description=__doc__.splitlines()[0])
-    p.add_argument("--skill-dir", default="work-issue")
-    p.add_argument("--count", choices=["bytes", "tokens"], default="bytes")
-    p.add_argument("--model", default="claude-opus-5-5")
-    a = p.parse_args()
+    parser = Parser(description=__doc__.splitlines()[0])
+    parser.add_argument("--skill-dir", default="work-issue")
+    parser.add_argument("--count", choices=["bytes", "tokens"], default="bytes")
+    parser.add_argument("--model", default="claude-opus-5-5")
+    args = parser.parse_args()
     try:
-        print("\n".join(run(a.skill_dir, a.count, a.model)))
+        print("\n".join(run(args.skill_dir, args.count, args.model)))
     except Fail as f:
         print("\n".join(f.lines), file=sys.stderr)
         return f.code

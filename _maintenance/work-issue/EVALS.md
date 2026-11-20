@@ -336,7 +336,7 @@ The caller search has three blind spots and no scenario reaches any of them. It 
 
 This section records a measurement for #190, not a scenario, so it has a result where the scenarios above have none.
 
-Method: from the repo root at commit `d540fa7`, run `python3 _maintenance/work-issue/measure-load.py --count tokens --model claude-opus-5-5` (the byte count is the same command with `--count bytes`). It counts `work-issue/SKILL.md` and every `work-issue/references/*.md`. It skips `README.md`, which no step reads, and `scripts/`, whose source never enters context when a run executes it. Token mode posts each unit to Anthropic's `count_tokens` endpoint and subtracts the count for a lone `.` to strip the request wrapper, so a unit can read one token low. Pass `--skill-dir` to point it at another skill: `inbox-to-memory` can reuse the counter, though the phase model is `work-issue`'s own.
+Method: from the repo root at commit `d540fa7`, run `python3 _maintenance/work-issue/measure-load.py --count tokens --model claude-opus-5-5` (the byte count is the same command with `--count bytes`). It counts `work-issue/SKILL.md` and every `work-issue/references/*.md`. It skips `README.md`, which no step reads, and `scripts/`, whose source never enters context when a run executes it. Token mode posts each unit to Anthropic's `count_tokens` endpoint and subtracts the count for a lone `.` to strip the request wrapper, so a unit can read one token low. The unit splitting and the counter are what another skill could reuse. The script itself needs `work-issue`'s nine `## Step` headings, so `--skill-dir` pointed at a skill without them exits 1.
 
 ```
 measure-load: tokens (model claude-opus-5-5) over work-issue
