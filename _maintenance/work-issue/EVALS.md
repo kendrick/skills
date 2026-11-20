@@ -331,3 +331,57 @@ B is there because a pass condition covering only A can't tell the waiver apart 
 The direct invocation with neither planner present has no scenario, because Claude Code always offers plan mode, so no session this file runs in lacks both planners. The cross-run race in `RATIONALE.md`'s Known Limitations has no scenario, because reproducing it means winning a race between two invocations inside the same second and there is no proposed fix to validate. Neither does the in-scope test's judgment at the edges: a scenario can check that an ambiguous finding was recorded as ambiguous, which Scenario 12 does, but not that the call was right. herdr flag drift is watched rather than tested—Scenario 11 checks the fallback fires, not that any particular flag name is still current, since the installed binary is the authority and it changes on its own schedule.
 
 The caller search has three blind spots and no scenario reaches any of them. It is a grep, so it finds the callers that spell the symbol and misses the ones that do not: dynamic dispatch, a string-keyed registry, reflection, a framework that binds by convention. A scenario for that would have to plant a caller the grep was built to miss, which measures the planted caller and not the search. So Scenario 17 cannot tell a seam nothing calls from a seam whose caller is hidden, and neither can whoever reads the verdict. The grep runs wide in the other direction too. Its only exclusions are test, spec, and fixture paths, so a ledger row or an agent doc that spells the symbol out comes back among the hits. Neither scenario plants such a hit, so nothing here checks that the reproducer reads them before it picks a caller. Nearest is judgment as well: where several production paths reach the symbol directly, Scenario 16 checks that a caller was driven, not that the closest one was. Treat each of these as an open risk to watch while running the scenarios above.
+
+## Context Load per Invocation
+
+This section records a measurement for #190, not a scenario, so it has a result where the scenarios above have none.
+
+Method: from the repo root at commit `d540fa7`, run `python3 _maintenance/work-issue/measure-load.py --count tokens --model claude-opus-5-5` (the byte count is the same command with `--count bytes`). It counts `work-issue/SKILL.md` and every `work-issue/references/*.md`. It skips `README.md`, which no step reads, and `scripts/`, whose source never enters context when a run executes it. Token mode posts each unit to Anthropic's `count_tokens` endpoint and subtracts the count for a lone `.` to strip the request wrapper, so a unit can read one token low. Pass `--skill-dir` to point it at another skill: `inbox-to-memory` can reuse the counter, though the phase model is `work-issue`'s own.
+
+```
+measure-load: tokens (model claude-opus-5-5) over work-issue
+| Unit | Read at | Tokens |
+|---|---|---|
+| SKILL.md: frontmatter | always | 258 |
+| SKILL.md: preamble | always | 7421 |
+| SKILL.md: Step 0 — Gate and confirm | Step 0 | 5445 |
+| SKILL.md: Adopt — enter at Step 6 | adopted runs | 2222 |
+| SKILL.md: Step 1 — Isolate | Step 1 | 1119 |
+| SKILL.md: Step 2 — Dispatch | Step 2 | 2689 |
+| SKILL.md: Step 3 — Build and self-review | Step 3 | 3144 |
+| SKILL.md: Step 4 — Red-team | Step 4 | 3840 |
+| SKILL.md: Step 5 — Publish | Step 5 | 2145 |
+| SKILL.md: Step 6 — Triage | Step 6 | 3334 |
+| SKILL.md: Step 7 — Repair | Step 7 | 882 |
+| SKILL.md: Step 8 — Close | Step 8 | 2828 |
+| SKILL.md: Where a Run Stops | always | 2817 |
+| SKILL.md: Resume | always | 2807 |
+| SKILL.md: Further Reading | always | 955 |
+| references/redteam.md | Step 4 | 10576 |
+| references/resume.md | always | 14844 |
+| references/triage.md | Steps 6, 8 | 5178 |
+| references/worker-prompt.md | Steps 2, 7 | 3306 |
+| always-loaded total | always | 29102 |
+
+| Phase | Today | Only its step | Not needed |
+|---|---|---|---|
+| 0 | 56750 | 34547 | 39.1% |
+| 1 | 56750 | 30221 | 46.7% |
+| 2 | 60056 | 35097 | 41.6% |
+| 3 | 56750 | 32246 | 43.2% |
+| 4 | 67326 | 43518 | 35.4% |
+| 5 | 56750 | 31247 | 44.9% |
+| 6 | 61928 | 37614 | 39.3% |
+| 7 | 60056 | 33290 | 44.6% |
+| 8 | 61928 | 37108 | 40.1% |
+
+median saving (phases 0-8): 24820
+```
+
+In bytes, `SKILL.md` is 113,237 and `references/resume.md` is 41,008. The issue's figure of about 61 KB for `SKILL.md` was stale by the time of this measurement.
+
+The rule was fixed before measuring, on the median saving S across phases 0 to 8: S of 20,000 tokens or more means restructure, under 5,000 means leave it, and anything between means trim in place. The issue says a few thousand tokens per launch does not cover a restructure's price and a much larger saving might; 5,000 stands for "a few thousand" and 20,000 is four times that. `resume.md` counts as always loaded, because the resume probe reads it on every invocation before it knows the phase.
+
+Verdict: restructure. S is 24,820 tokens per launch, over the 20,000 line. The split is one `references/step-<n>.md` per step body, with the always-loaded units staying in `SKILL.md`. Its price at `d540fa7`: `grep -cE '^\s*(require_text|refute_text) "?work-issue/SKILL\.md' tests/work-issue-smoke.sh` prints 330 against 643 from `grep -cE '^\s*(require_text|refute_text) ' tests/work-issue-smoke.sh`, and `gh issue list -R kendrick/skills --state open --limit 200 --json number,title,body --jq '[.[] | select((.title + .body) | test("work-issue")) | select(.body | test("SKILL\\.md"))] | length'` prints 29. That query also catches issues about sibling skills that mention `work-issue`, so it overstates the `work-issue` backlog. The restructure is filed as #373, scheduled after the open `work-issue` issues that cite `SKILL.md` have landed.
+
+A phase means the step the resume probe places the run at. A run that crosses several steps before it stops loads each step it crosses, so the table understates its load. A `work-wave` lane invokes `work-issue` at least twice per phase, which doubles S there; that is context only and moves no threshold.

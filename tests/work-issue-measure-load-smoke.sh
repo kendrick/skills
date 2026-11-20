@@ -165,4 +165,7 @@ rc=0; ANTHROPIC_BASE_URL="$base" ANTHROPIC_API_KEY=test python3 "$script" --skil
 python3 "$script" --count bytes > "$tmp/real.out" || fail "case 12: the real work-issue did not measure"
 [[ "$(grep -cE '^\| [0-8] \| ' "$tmp/real.out")" == 9 ]] || fail "case 12: expected nine phase rows for the real work-issue"
 
+# 13. the write-up heading the spike's deliverable lives under
+grep -qF '## Context Load per Invocation' _maintenance/work-issue/EVALS.md || fail "case 13: _maintenance/work-issue/EVALS.md lost its '## Context Load per Invocation' section"
+
 echo "work-issue measure-load smoke: OK"
