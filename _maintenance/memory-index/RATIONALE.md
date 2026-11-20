@@ -47,3 +47,4 @@ Five sources:
 - `--if-changed` doesn't watch a collection registered after the last refresh. The stamp lists only the collections that refresh saw, so the new one is picked up the next time any refresh runs.
 - `register` over files older than the stamp leaves them unembedded, and the rule doesn't count them as changed. Run `refresh` once after `register`.
 - Plain `refresh` takes no lock, so it can run alongside a hook's detached refresh. Both run the same idempotent qmd commands, so the cost is wasted time, and the one that finishes last writes the stamp.
+- The hook's cost grows with the largest registered collection. When nothing changed, `--if-changed` stats every file in every qmd collection, memory-index's own or not, so one large collection (`~/code` with `**/*.md`) can push it past the one-second budget.
