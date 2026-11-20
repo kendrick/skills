@@ -171,7 +171,7 @@ require_text work-issue/SKILL.md "name: work-issue"
 # from siblings too—a wave reaches it once per lane. Refuted on the bare
 # key so `: false` fails here as loudly as `: true`.
 refute_text work-issue/SKILL.md "disable-model-invocation"
-require_text work-issue/SKILL.md "argument-hint: '<issue or pull request number or URL> [plan path] [--isolate | --no-isolate] [--deep] [--max-review-rounds N] [--review-loop[=<comment>]] [--no-publish] [--until-boundary] [--dry-run]'"
+require_text work-issue/SKILL.md "argument-hint: '<issue or pull request number or URL> [plan path] [--isolate | --no-isolate] [--deep] [--max-review-rounds N] [--review-loop[=<comment>]] [--no-publish] [--until-boundary] [--wave-baseline PATH] [--dry-run]'"
 
 # A description that summarizes the steps becomes the shortcut the model takes
 # instead of reading the body, which is how a nine-step skill collapses into
@@ -1050,7 +1050,7 @@ require_text work-issue/SKILL.md "A baseline captured before any worker runs is 
 # lost divvy-up's in-memory refresh, and the run-start file would pass a
 # failure an earlier wave fixed and a later one brought back.
 require_text work-issue/SKILL.md "Then INSTALL_CMD, then VERIFY_CMD, saved to \`RUN_DIR/baseline.txt\` as a first line \`exit: <status>\` holding its exit status, then its output tail."
-require_text work-issue/SKILL.md "and \`RUN_DIR/baseline.txt\` opens with \`exit: <status>\`, VERIFY_CMD's real exit status, followed by its real output, or, where VERIFY_CMD is \`absent\`, holds the single line \`absent\`."
+require_text work-issue/SKILL.md "and \`RUN_DIR/baseline.txt\` opens with \`exit: <status>\`, VERIFY_CMD's real exit status, followed by its real output, or, where VERIFY_CMD is \`absent\`, holds the single line \`absent\`, or, where \`reuse-baseline\` exited 0, holds the wave baseline's \`exit:\` line and output tail as that command copied them."
 require_text work-issue/SKILL.md "\`baseline.txt\`, \`baseline-<wave>.txt\`, \`baseline-repair-<n>.txt\`, \`max_review_rounds\`"
 require_text work-issue/SKILL.md "Each time Step 2 continues \`divvy-up\` at a wave, the first dispatch after a resume included, name instead the \`RUN_DIR/baseline-<wave>.txt\` of the highest-numbered wave already settled, and \`baseline.txt\` only while no wave has settled."
 # A run gated before baseline-<wave>.txt existed has markers and no file.
@@ -4786,6 +4786,108 @@ require_text work-issue/SKILL.md "Before every commit the run makes, each wave's
 require_text work-issue/SKILL.md "gh api repos/{owner}/{repo} --jq '{squash: .allow_squash_merge, merge: .allow_merge_commit, rebase: .allow_rebase_merge}' > RUN_DIR/merge_methods.json"
 require_text work-issue/SKILL.md "the message carries one more clause, \`squash-only repo: in-branch commits get bare subjects\`, ahead of \"Go?\""
 require_text work-issue/SKILL.md "5. The body goes through \`technical-writing\` on its pull-request-description profile"
+
+# --- #359: reuse-baseline ---
+# A lane copies the wave's no-branch baseline instead of running VERIFY_CMD
+# again, but only on an exact match of the base SHA and both commands. A false
+# match would charge workers with failures their tree already had (#188).
+rb_sha=1111111111111111111111111111111111111111
+rb_other=2222222222222222222222222222222222222222
+rb_wave() {
+  printf 'exit: 0\nbase: origin/main %s\ninstall: npm ci\nverify: bash tests/x.sh\nok 1\nok 2\n' "$rb_sha"
+}
+rb_case() {
+  local dir="$1"
+  shift
+  set +e
+  python3 "$run_state" reuse-baseline --wave-baseline "$dir/wave.txt" --base-sha "$rb_sha" \
+    --install "npm ci" --verify "bash tests/x.sh" --out "$dir/baseline.txt" "$@" \
+    >"$dir/out" 2>"$dir/err"
+  rb_status=$?
+  set -e
+}
+rb_fail() {
+  echo "#359: $1, got status $rb_status: $(cat "$2/out" "$2/err")" >&2
+  exit 1
+}
+# A mismatch must leave baseline.txt unwritten, or the probe reads Step 1 as done
+# and VERIFY_CMD never runs.
+rb_expect_fallback() {
+  local dir="$1" label="$2" want="$3"
+  [[ "$rb_status" == "1" ]] || rb_fail "$label should exit 1" "$dir"
+  grep -Fq -- "$want" "$dir/err" || rb_fail "$label should say '$want' on stderr" "$dir"
+  [[ ! -e "$dir/baseline.txt" ]] || rb_fail "$label should leave baseline.txt unwritten" "$dir"
+}
+
+# 1. A match copies the exit line and the tail, byte for byte, with no temp file
+# left behind, since a half-written baseline.txt would resume as Step 1 finished.
+d="$(mktemp -d "$tmp/rb.XXXXXX")"
+rb_wave >"$d/wave.txt"
+rb_case "$d"
+[[ "$rb_status" == "0" ]] || rb_fail "a match should exit 0" "$d"
+[[ "$(cat "$d/out")" == "reused: $d/wave.txt" ]] || rb_fail "a match should print reused: <path>" "$d"
+printf 'exit: 0\nok 1\nok 2\n' >"$d/want"
+cmp -s "$d/want" "$d/baseline.txt" || rb_fail "a match should copy the exit line and tail exactly" "$d"
+[[ ! -e "$d/.baseline.txt.tmp" ]] || rb_fail "a match should leave no .baseline.txt.tmp" "$d"
+
+# 2. Falsifier: the base moved by one commit between the wave's run and the lane's.
+d="$(mktemp -d "$tmp/rb.XXXXXX")"
+rb_wave | sed "s/$rb_sha/$rb_other/" >"$d/wave.txt"
+rb_case "$d"
+rb_expect_fallback "$d" "a different base SHA" "is not BASE_SHA"
+
+# 3. Falsifier: the lane resolved a different INSTALL_CMD.
+d="$(mktemp -d "$tmp/rb.XXXXXX")"
+rb_wave | sed 's/^install: npm ci$/install: pnpm install --frozen-lockfile/' >"$d/wave.txt"
+rb_case "$d"
+rb_expect_fallback "$d" "a different INSTALL_CMD" "is not INSTALL_CMD"
+
+# 4. A different VERIFY_CMD means the copy would describe another suite.
+d="$(mktemp -d "$tmp/rb.XXXXXX")"
+rb_wave | sed 's|^verify: bash tests/x.sh$|verify: bash tests/y.sh|' >"$d/wave.txt"
+rb_case "$d"
+rb_expect_fallback "$d" "a different VERIFY_CMD" "is not VERIFY_CMD"
+
+# 5. Every mismatch gets its own line, so the lane's reader sees all of them.
+d="$(mktemp -d "$tmp/rb.XXXXXX")"
+rb_wave | sed -e "s/$rb_sha/$rb_other/" -e 's/^install: npm ci$/install: yarn/' >"$d/wave.txt"
+rb_case "$d"
+rb_expect_fallback "$d" "a different SHA and INSTALL_CMD" "is not BASE_SHA"
+rb_expect_fallback "$d" "a different SHA and INSTALL_CMD" "is not INSTALL_CMD"
+[[ "$(wc -l <"$d/err" | tr -d ' ')" == "2" ]] || rb_fail "two mismatches should print two stderr lines" "$d"
+
+# 6. The nearest wrong rule would key on the exit status or the tail. A red wave
+# baseline is still the truth about that SHA, so it is copied as it is.
+d="$(mktemp -d "$tmp/rb.XXXXXX")"
+printf 'exit: 7\nbase: origin/main %s\ninstall: npm ci\nverify: bash tests/x.sh\nFAIL t_foo\n' "$rb_sha" >"$d/wave.txt"
+rb_case "$d"
+[[ "$rb_status" == "0" ]] || rb_fail "a red wave baseline with matching keys should exit 0" "$d"
+printf 'exit: 7\nFAIL t_foo\n' >"$d/want"
+cmp -s "$d/want" "$d/baseline.txt" || rb_fail "a red wave baseline should be copied unchanged" "$d"
+
+# 7. A wave resumed across this change still holds the old bare tail.
+d="$(mktemp -d "$tmp/rb.XXXXXX")"
+printf 'baseline tail\n' >"$d/wave.txt"
+rb_case "$d"
+rb_expect_fallback "$d" "an old-format wave baseline" "has no exit line"
+
+# 8. A baseline that never recorded a command can't prove it matches.
+d="$(mktemp -d "$tmp/rb.XXXXXX")"
+printf 'exit: 0\nbase: origin/main %s\nverify: bash tests/x.sh\nok 1\n' "$rb_sha" >"$d/wave.txt"
+rb_case "$d"
+rb_expect_fallback "$d" "a wave baseline with no install line" "has no install line"
+
+# 9. A missing handed file is exit 3, which Step 1 meets with its own VERIFY_CMD run.
+d="$(mktemp -d "$tmp/rb.XXXXXX")"
+rb_case "$d"
+[[ "$rb_status" == "3" ]] || rb_fail "a missing wave baseline should exit 3" "$d"
+[[ ! -e "$d/baseline.txt" ]] || rb_fail "a missing wave baseline should leave baseline.txt unwritten" "$d"
+
+require_text work-issue/SKILL.md "Step 1 reuses the handed baseline exactly when BASE_SHA equals its \`base:\` SHA and both recorded commands equal the resolved INSTALL_CMD and VERIFY_CMD."
+require_text work-issue/SKILL.md "INSTALL_CMD runs in this tree first whether or not the baseline is reused, because the workers need its dependencies; the reuse replaces only the VERIFY_CMD run."
+require_text work-issue/SKILL.md "\`--wave-baseline <path>\` is \`work-wave\`'s flag"
+require_text work-issue/SKILL.md "run-state.py reuse-baseline --wave-baseline"
+require_text _maintenance/work-issue/RATIONALE.md "Step 1 copies a \`--wave-baseline\` file into \`baseline.txt\` instead of running VERIFY_CMD when BASE_SHA and both commands match"
 
 # --- #133: merge-verdicts.py ---
 # The script builds round-<k>.json from per-claim verdict lines and names the

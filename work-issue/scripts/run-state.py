@@ -2910,6 +2910,81 @@ def cmd_commit_style(args):
     return 0
 
 
+def cmd_reuse_baseline(args):
+    """Copy a work-wave baseline into baseline.txt when its base SHA and both commands match.
+
+    The wave's file opens with four header lines read by position, `exit:`,
+    `base: <ref> <sha>`, `install:` and `verify:`, then VERIFY_CMD's output
+    tail. On a match, --out gets the `exit:` line and the tail, byte for byte,
+    which is the format Step 1 writes itself.
+
+    The match is exact string equality, with no whitespace folding and no
+    short-SHA prefix match. A near miss only costs the lane its own VERIFY_CMD
+    run. A false match hands the workers a baseline from another tree, so their
+    gate charges them with a failure the tree already had, which #188 added the
+    baseline to stop.
+
+    The guard never reads the `exit:` value or the tail. A red wave baseline is
+    still the truth about that SHA, so it is copied as it is.
+
+    Exits 0 on a match, 1 with one stderr line per mismatch, 3 on an unreadable
+    wave file or a missing --out directory. Step 1 runs VERIFY_CMD on 1 or 3.
+    """
+    out = Path(args.out)
+    if not out.parent.is_dir():
+        sys.stderr.write(f"run-state: reuse-baseline: --out {args.out}: directory does not exist\n")
+        return 3
+    try:
+        with open(args.wave_baseline, "rb") as f:
+            lines = f.read().splitlines(keepends=True)
+    except OSError as e:
+        sys.stderr.write(f"run-state: reuse-baseline: {args.wave_baseline}: {e.strerror or e}\n")
+        return 3
+
+    values = {}
+    problems = []
+    for i, key in enumerate(("exit", "base", "install", "verify")):
+        prefix = f"{key}: ".encode()
+        line = lines[i].rstrip(b"\r\n") if i < len(lines) else b""
+        value = line[len(prefix):].decode("utf-8", "replace")
+        # A malformed exit or base line counts as absent: the format is the contract.
+        malformed = (key == "exit" and not re.fullmatch(r"-?\d+", value)) or (
+            key == "base" and len(value.split()) < 2
+        )
+        if not line.startswith(prefix) or malformed:
+            problems.append(f"{args.wave_baseline} has no {key} line")
+            continue
+        values[key] = value
+    if problems:
+        for problem in problems:
+            sys.stderr.write(f"run-state: reuse-baseline: {problem}\n")
+        return 1
+
+    wave_sha = values["base"].split()[-1]
+    if wave_sha != args.base_sha:
+        problems.append(f"base {wave_sha} is not BASE_SHA {args.base_sha}")
+    if values["install"] != args.install:
+        problems.append(f"install {values['install']} is not INSTALL_CMD {args.install}")
+    if values["verify"] != args.verify:
+        problems.append(f"verify {values['verify']} is not VERIFY_CMD {args.verify}")
+    if problems:
+        for problem in problems:
+            sys.stderr.write(f"run-state: reuse-baseline: {problem}\n")
+        return 1
+
+    # The probe reads baseline.txt's existence as "Step 1 finished", so a
+    # half-written copy would resume as done. Write beside it, then rename.
+    tmp = out.parent / f".{out.name}.tmp"
+    try:
+        tmp.write_bytes(lines[0] + b"".join(lines[4:]))
+        os.replace(tmp, out)
+    except OSError as e:
+        sys.stderr.write(f"run-state: reuse-baseline: cannot write {args.out}: {e.strerror or e}\n")
+        return 3
+    print(f"reused: {args.wave_baseline}")
+    return 0
+
+
 def parse_args(argv=None):
     ap = argparse.ArgumentParser(
         description="Read a PR's review state, or map a resume probe to a phase."
@@ -2947,6 +3022,14 @@ def parse_args(argv=None):
     c = sub.add_parser("commit-style", help="bare or full: the commit-message style for in-branch commits")
     c.add_argument("--run-dir", metavar="DIR", required=True, help="RUN_DIR; reads merge_methods.json and full_commit_pass")
     c.set_defaults(func=cmd_commit_style)
+
+    rb = sub.add_parser("reuse-baseline", help="copy a work-wave baseline into baseline.txt when its base SHA and commands match")
+    rb.add_argument("--wave-baseline", metavar="PATH", required=True, help="the wave's no-branch baseline, as --wave-baseline handed it")
+    rb.add_argument("--base-sha", metavar="SHA", required=True, help="the BASE_SHA Step 1 writes to RUN_DIR/base_sha")
+    rb.add_argument("--install", metavar="CMD", required=True, help="the resolved INSTALL_CMD, or absent")
+    rb.add_argument("--verify", metavar="CMD", required=True, help="the resolved VERIFY_CMD")
+    rb.add_argument("--out", metavar="PATH", required=True, help="RUN_DIR/baseline.txt; written only on a match")
+    rb.set_defaults(func=cmd_reuse_baseline)
 
     g = sub.add_parser("probe", help="gather the resume probe that phase reads")
     g.add_argument("--run-dir", metavar="DIR", required=True, help="RUN_DIR; read, never created")
