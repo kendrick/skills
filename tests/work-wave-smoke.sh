@@ -288,7 +288,6 @@ require_text "$brief" "\`--isolate\` is not optional: your siblings are"
 # #224: the build line's --no-publish holds the withheld push when a lane
 # misreads the grant. The publish line has to go without it, or no lane ever
 # reaches work-issue's Step 5.
-require_text "$brief" "    work-issue {{N}} {{PLAN}} --isolate --no-publish{{REVIEW_LOOP}}"
 require_text "$brief" "In the publish phase, exactly as:"
 # grep -F matches the build line as a substring, so pin the publish line whole.
 publish_line="$(grep -F -A2 "In the publish phase, exactly as:" "$brief" | tail -1)"
@@ -652,6 +651,13 @@ require_file "$wave_state"
 # stops.
 require_text "$skill" "Its first line is \`route: <done|stopped|failed|refused|early-publish|recheck-failed>\`"
 require_text "$merge_test" "a \`result: <green|red|conflict>\` line, and VERIFY_CMD's saved tail"
+
+# #359: the baseline's header order is a format work-issue's reuse-baseline reads by position.
+require_text "$merge_test" "\`exit: <status>\`, the same \`base:\` line, \`install: <INSTALL_CMD>\`, and \`verify: <VERIFY_CMD>\`"
+require_text "$skill" "saved to \`WAVE_DIR/baseline.txt\` with \`exit: <status>\`, the \`base:\` line, \`install: <INSTALL_CMD>\`, and \`verify: <VERIFY_CMD>\` ahead of its tail"
+require_text "$skill" "plus \`--wave-baseline <WAVE_DIR>/baseline.txt\`"
+require_text "$brief" "    work-issue {{N}} {{PLAN}} --isolate --no-publish --wave-baseline {{WAVE_DIR}}/baseline.txt{{REVIEW_LOOP}}"
+require_text "$ledger" "| 60 | The no-branch baseline records \`exit:\`, \`base:\`, \`install:\` and \`verify:\` lines, and every build lane is handed it as \`--wave-baseline\`"
 require_text "$skill" "Then \`work-wave/scripts/wave-state.py probe --wave-dir WAVE_DIR --root ROOT --default DEFAULT [--pr-bundle FILE]\`"
 require_text "$skill" "Exit 1 is a stop: report its reason and every null field the probe's stderr names, and stop the wave."
 
