@@ -162,7 +162,7 @@ Run `gh pr list` at each stop the wave makes.
 
 **Commands:** re-invoke the wave with the same issues.
 
-**Pass condition:** the resume probe lands on row 10, a new `merge-test/<k>.md` records the moved SHA beside the other lane's, and only then does the final report print. Fails if the report prints on the old merge test, or if the re-test merges in any order but `order.md`'s.
+**Pass condition:** the resume probe lands on row 11, a new `merge-test/<k>.md` records the moved SHA beside the other lane's, and only then does the final report print. Fails if the report prints on the old merge test, or if the re-test merges in any order but `order.md`'s.
 
 ### 13. Re-Invoking on the Same Set Resumes
 
