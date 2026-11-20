@@ -5300,6 +5300,21 @@ ce_run() {
   exit 1
 }
 
+# A worker sees only the preamble, so the absence-path guidance has to sit there;
+# a copy in the report contract alone never reaches it. Pins read the flattened
+# preamble for that reason, not the whole file.
+ce_preamble="$(awk '/^## The preamble/ { on = 1; next } on && /^## The report contract/ { exit } on { print }' work-issue/references/worker-prompt.md | tr '\n' ' ' | tr -s ' ')"
+for ce_pin in \
+  'For a claim that some text is absent, name the file whose diff enforces or creates the absence' \
+  'the test that refutes or pins it, or the file a removed line came out of'; do
+  grep -Fq -- "$ce_pin" <<<"$ce_preamble" || {
+    echo "work-issue/references/worker-prompt.md: the preamble no longer tells a worker which path an absence claim names" >&2
+    exit 1
+  }
+done
+# The reproducer greps per-commit history now, so the old "at HEAD" wording is stale.
+refute_text work-issue/references/worker-prompt.md "the file the reproducer greps at HEAD"
+
 # --- crash points ---
 # #147: resume_checks.py replays every write the skill makes and asks the real
 # probe and phase where a crash before each one resumes. The model is checked
