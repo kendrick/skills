@@ -12,7 +12,7 @@
       "{default}"
     ],
     "probe_keys": [],
-    "rows": 11,
+    "rows": 12,
     "steps": 9,
     "end_phases": [
       "done",
@@ -361,9 +361,9 @@
           "to": "work-issue/closed/issue-7",
           "resume": {
             "phase": "8",
-            "row": 11
+            "row": 12
           },
-          "cite": "Resume row 11: every publish report, and a merge test green over exactly the merge set at its current HEADs; Step 8's report; work-issue moves a finished run to <COMMON>/work-issue/closed/issue-<N>/"
+          "cite": "Resume row 12: every publish report, and a merge test green over exactly the merge set at its current HEADs; Step 8's report; work-issue moves a finished run to <COMMON>/work-issue/closed/issue-<N>/"
         },
         {
           "step": 8,
@@ -374,9 +374,9 @@
           "to": "work-issue/closed/issue-8",
           "resume": {
             "phase": "8",
-            "row": 11
+            "row": 12
           },
-          "cite": "Resume row 11: every publish report, and a merge test green over exactly the merge set at its current HEADs; Step 8's report"
+          "cite": "Resume row 12: every publish report, and a merge test green over exactly the merge set at its current HEADs; Step 8's report"
         },
         {
           "step": 8,
@@ -387,9 +387,9 @@
           "to": "work-wave/closed/wave-7-8",
           "resume": {
             "phase": "8",
-            "row": 11
+            "row": 12
           },
-          "cite": "Resume row 11: every publish report, and a merge test green over exactly the merge set at its current HEADs; Step 8's report; Step 8 moves WAVE_DIR to closed/ only once every lane's RUN_DIR has moved to its closed/",
+          "cite": "Resume row 12: every publish report, and a merge test green over exactly the merge set at its current HEADs; Step 8's report; Step 8 moves WAVE_DIR to closed/ only once every lane's RUN_DIR has moved to its closed/",
           "id": "closed"
         }
       ],
@@ -883,7 +883,7 @@
       ],
       "end": {
         "phase": "8",
-        "row": 11
+        "row": 12
       }
     },
     {
@@ -1038,9 +1038,9 @@
           "message": "repair round",
           "resume": {
             "phase": "8",
-            "row": 11
+            "row": 12
           },
-          "cite": "Resume row 11: every publish report, and a merge test green over exactly the merge set at its current HEADs; Step 8's report"
+          "cite": "Resume row 12: every publish report, and a merge test green over exactly the merge set at its current HEADs; Step 8's report"
         },
         {
           "step": 8,
@@ -1050,14 +1050,14 @@
           "content": "base: origin/main {rev:origin/main}\nissue-7 {rev:issue-7}\nissue-8 {rev:issue-8}\nresult: green\nverify tail\n",
           "resume": {
             "phase": "8",
-            "row": 10
+            "row": 11
           },
-          "cite": "Resume row 10: every publish report, and the HEAD of some lane in the merge set moved since the newest merge test; Step 8's re-test, then the report; Step 8 runs the merge test once more, in order, before anything is reported"
+          "cite": "Resume row 11: every publish report, and the HEAD of some lane in the merge set moved since the newest merge test; Step 8's re-test, then the report; Step 8 runs the merge test once more, in order, before anything is reported"
         }
       ],
       "end": {
         "phase": "8",
-        "row": 11
+        "row": 12
       }
     },
     {
@@ -1283,7 +1283,7 @@
       ],
       "end": {
         "phase": "8",
-        "row": 11
+        "row": 12
       }
     },
     {
@@ -1326,14 +1326,14 @@
           "content": "base: origin/main {rev:origin/main}\nissue-7 {rev:issue-7}\nresult: green\nverify tail\n",
           "resume": {
             "phase": "8",
-            "row": 10
+            "row": 11
           },
-          "cite": "Resume row 10: every publish report, and the newest merge test merged a lane a publish report took out of the merge set; Step 7 routes a publish report by Step 5's table, so failed leaves the set; Step 8's re-test, then the report"
+          "cite": "Resume row 11: every publish report, and the newest merge test merged a lane a publish report took out of the merge set; Step 7 routes a publish report by Step 5's table, so failed leaves the set; Step 8's re-test, then the report"
         }
       ],
       "end": {
         "phase": "8",
-        "row": 11
+        "row": 12
       }
     },
     {
@@ -1383,7 +1383,7 @@
       ],
       "end": {
         "phase": "8",
-        "row": 11
+        "row": 12
       }
     },
     {
@@ -1413,7 +1413,7 @@
           "common": true,
           "path": "work-issue/issue-8/triage/waiting",
           "content": "no review yet on https://github.com/o/r/pull/8\n",
-          "blind": "the probe reads triage/waiting only beside a stopped publish report, and the lane's own work-issue writes it before reporting",
+          "blind": "before issue-8's publish report nothing reads triage/waiting: the stopped-as-done reading needs that report, and the re-poll row needs every publish report",
           "cite": "work-issue Step 6: pending at the cap writes RUN_DIR/triage/waiting and stops"
         },
         {
@@ -1427,11 +1427,138 @@
             "row": 9
           },
           "cite": "Resume row 9: the newest merge test over exactly the merge set at its current HEADs green, origin/DEFAULT equal to its base:, and this lane has no publish report; Step 7 for those lanes only"
+        },
+        {
+          "id": "repoll",
+          "step": 8,
+          "subpath": "repoll/issue-<N>",
+          "op": "write",
+          "path": "repoll/issue-8",
+          "content": "dispatched: 2026-11-18T00:00:00Z\n",
+          "resume": {
+            "phase": "8",
+            "row": 10
+          },
+          "cite": "Resume row 10: every publish report, and a merge-set lane's open RUN_DIR holds triage/waiting with no repoll/issue-<N> record; Step 8's re-poll for those lanes only, then probe again; Step 8 writes the record before the re-poll dispatch"
+        },
+        {
+          "step": 8,
+          "subpath": "reports/issue-<N>-repoll.json",
+          "op": "write",
+          "path": "reports/issue-8-repoll.json",
+          "content": "{\"issue\": 8, \"status\": \"stopped\", \"pr\": \"https://github.com/o/r/pull/8\"}\n",
+          "blind": "no row reads a re-poll report; Step 8's final report quotes it",
+          "cite": "Step 8: save every re-poll report verbatim to reports/issue-<N>-repoll.json"
         }
       ],
       "end": {
         "phase": "8",
-        "row": 11
+        "row": 12
+      }
+    },
+    {
+      "name": "repoll-repair",
+      "run_dir": "wave-7-8",
+      "prefix": {
+        "sequence": "main",
+        "through": "merge-test"
+      },
+      "entries": [
+        {
+          "step": 7,
+          "subpath": "reports/issue-<N>-publish.json",
+          "op": "write",
+          "path": "reports/issue-7-publish.json",
+          "content": "{\"issue\": 7, \"status\": \"done\", \"pr\": \"https://github.com/o/r/pull/7\"}\n",
+          "resume": {
+            "phase": "7",
+            "row": 9
+          },
+          "cite": "Resume row 9: the newest merge test over exactly the merge set at its current HEADs green, origin/DEFAULT equal to its base:, and this lane has no publish report; Step 7 for those lanes only"
+        },
+        {
+          "step": 7,
+          "subpath": "lane-run-dir",
+          "op": "write",
+          "common": true,
+          "path": "work-issue/issue-8/triage/waiting",
+          "content": "no review yet on https://github.com/o/r/pull/8\n",
+          "blind": "before issue-8's publish report nothing reads triage/waiting: the stopped-as-done reading needs that report, and the re-poll row needs every publish report",
+          "cite": "work-issue Step 6: pending at the cap writes RUN_DIR/triage/waiting and stops"
+        },
+        {
+          "step": 7,
+          "subpath": "reports/issue-<N>-publish.json",
+          "op": "write",
+          "path": "reports/issue-8-publish.json",
+          "content": "{\"issue\": 8, \"status\": \"stopped\", \"pr\": \"https://github.com/o/r/pull/8\"}\n",
+          "resume": {
+            "phase": "7",
+            "row": 9
+          },
+          "cite": "Resume row 9: the newest merge test over exactly the merge set at its current HEADs green, origin/DEFAULT equal to its base:, and this lane has no publish report; Step 7 for those lanes only"
+        },
+        {
+          "step": 8,
+          "subpath": "repoll/issue-<N>",
+          "op": "write",
+          "path": "repoll/issue-8",
+          "content": "dispatched: 2026-11-18T00:00:00Z\n",
+          "resume": {
+            "phase": "8",
+            "row": 10
+          },
+          "cite": "Resume row 10: every publish report, and a merge-set lane's open RUN_DIR holds triage/waiting with no repoll/issue-<N> record; Step 8's re-poll for those lanes only, then probe again; Step 8 writes the record before the re-poll dispatch"
+        },
+        {
+          "step": 8,
+          "subpath": "commit",
+          "op": "edit",
+          "file": "lane-8-repair.txt",
+          "content": "repair\n",
+          "blind": "a worker's edit is the work tree half of the re-polled lane's repair commit, and no row reads the work tree",
+          "cite": "Step 8: a review that lands during the re-poll carries the lane through triage and repair"
+        },
+        {
+          "step": 8,
+          "subpath": "commit",
+          "op": "commit",
+          "branch": "issue-8",
+          "paths": [
+            "lane-8-repair.txt"
+          ],
+          "message": "repair round",
+          "resume": {
+            "phase": "8",
+            "row": 12
+          },
+          "cite": "Resume row 12: every publish report, and a merge test green over exactly the merge set at its current HEADs; Step 8's report; the repoll/issue-8 record exists, so a crash mid-re-poll goes to the report and never re-polls"
+        },
+        {
+          "step": 8,
+          "subpath": "reports/issue-<N>-repoll.json",
+          "op": "write",
+          "path": "reports/issue-8-repoll.json",
+          "content": "{\"issue\": 8, \"status\": \"done\", \"pr\": \"https://github.com/o/r/pull/8\"}\n",
+          "blind": "no row reads a re-poll report; Step 8's final report quotes it",
+          "cite": "Step 8: save every re-poll report verbatim to reports/issue-<N>-repoll.json"
+        },
+        {
+          "step": 8,
+          "subpath": "merge-test/<k>.md",
+          "op": "write",
+          "path": "merge-test/2.md",
+          "content": "base: origin/main {rev:origin/main}\nissue-7 {rev:issue-7}\nissue-8 {rev:issue-8}\nresult: green\nverify tail\n",
+          "resume": {
+            "phase": "8",
+            "row": 11
+          },
+          "cite": "Resume row 11: every publish report, and the HEAD of some lane in the merge set moved since the newest merge test; Step 8's re-test, then the report; the re-poll's repair moved issue-8's HEAD after the newest merge test, and the re-test runs after the re-poll"
+        }
+      ],
+      "end": {
+        "phase": "8",
+        "row": 12
       }
     }
   ],
@@ -1726,12 +1853,22 @@
             "merge_test_green": false,
             "base_current": false
           }
+        },
+        {
+          "name": "every lane published, one stopped at the poll cap",
+          "set": {
+            "publish_unreported": 0,
+            "heads_moved": false,
+            "repoll_due": 1
+          }
         }
       ]
     },
     {
       "step": 8,
-      "done_when": [],
+      "done_when": [
+        "repoll/"
+      ],
       "cite": "SKILL.md Step 8 Done when: the merge test is green at the current HEAD of every lane in the merge set and the report ends on the line the state earns; WAVE_DIR moves to closed/ only when every lane's own RUN_DIR has moved to its closed/",
       "outcomes": [
         {
@@ -1742,7 +1879,8 @@
             "heads_moved": false,
             "wave_closed": true,
             "lane_run_dirs_open": 0,
-            "wave_dir": false
+            "wave_dir": false,
+            "repoll_due": 0
           }
         },
         {
@@ -1752,6 +1890,36 @@
         {
           "name": "the re-test is red or conflicts",
           "terminal": "stop"
+        },
+        {
+          "name": "re-polled, no HEAD moved",
+          "if": [
+            [
+              "repoll_due",
+              ">",
+              0
+            ]
+          ],
+          "set": {
+            "repoll_due": 0
+          }
+        },
+        {
+          "name": "re-polled, a repair moved a HEAD",
+          "if": [
+            [
+              "repoll_due",
+              ">",
+              0
+            ]
+          ],
+          "set": {
+            "repoll_due": 0,
+            "heads_moved": true,
+            "merge_test_matches": false,
+            "merge_test_green": false,
+            "base_current": false
+          }
         }
       ]
     }
