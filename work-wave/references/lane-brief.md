@@ -1,6 +1,6 @@
 # Lane brief
 
-Read at Steps 4 and 7 to instantiate each lane's dispatch, and at Steps 5 and 7 to read what a lane hands back.
+Read at Steps 4, 7, and 8 to instantiate each lane's dispatch, and at Steps 5, 7, and 8 to read what a lane hands back.
 
 A lane is not a `divvy-up` worker. A worker writes files into a shared tree and leaves every git write to the orchestrator; a lane is a whole `work-issue` run, and it takes a worktree, commits, and, once granted, pushes and opens a pull request. So this brief says almost nothing about how to do the issue, because `work-issue` already says that. What it carries is what the wave knows and the lane cannot: who else is running, which coupling rows name this lane, what the wave has learned so far, where to hand results back, and which half of `work-issue`'s own confirmation the wave has already answered on the lane's behalf.
 
@@ -21,6 +21,8 @@ Invoke the `work-issue` skill by name. In the build phase, exactly as:
 In the publish phase, exactly as:
 
     work-issue {{N}} {{PLAN}} --isolate{{REVIEW_LOOP}}
+
+In the repoll phase, run the publish-phase line above unchanged.
 
 Your phase is named below. Follow work-issue as written. `--isolate` is not optional: your siblings are
 taking worktrees at this same moment, and the flag is what makes your
@@ -132,8 +134,8 @@ Fourteen substitutions. Thirteen stand for a single value; `{{GRANT}}` stands fo
 - `{{N}}` — the lane's bare issue number. It stands alone in the two invocation lines and the facts-file line, and joins `issue-` everywhere else the brief names the branch.
 - `{{WORKTREE}}` — LANE[N]'s WORKTREE, absolute: `<ROOT>/../<PROJECT>-issue-<N>/`.
 - `{{RUN_DIR}}` — LANE[N]'s RUN_DIR, absolute: `<COMMON>/work-issue/issue-<N>/`.
-- `{{PHASE}}` — `build` at Step 4, `publish` at Step 7.
-- `{{GRANT}}` — the build half at Step 4, verbatim: *"Yes to executing every wave and committing each passing one in your worktree, on issue-{{N}}. The push and pull-request half is withheld for this invocation: treat it as a no for Steps 5 through 8, stop once Step 4's Done-when holds, and report. The wave runs a merge test across every lane before any of them publishes, and you will be invoked again with the other half."* The full grant at Step 7, verbatim: *"Yes to all of it: rebase, push issue-{{N}} to origin as issue-{{N}}, open a pull request against {{DEFAULT}}, triage, repair, and answer every thread, without asking again. Never {{DEFAULT}}. The wave's merge test is green at your current HEAD."* `{{DEFAULT}}` inside that second text is work-wave's own DEFAULT, already resolved before the grant reaches this brief; nothing about it is a lane-brief placeholder.
+- `{{PHASE}}` — `build` at Step 4, `publish` at Step 7, `repoll` at Step 8's re-poll.
+- `{{GRANT}}` — the build half at Step 4, verbatim: *"Yes to executing every wave and committing each passing one in your worktree, on issue-{{N}}. The push and pull-request half is withheld for this invocation: treat it as a no for Steps 5 through 8, stop once Step 4's Done-when holds, and report. The wave runs a merge test across every lane before any of them publishes, and you will be invoked again with the other half."* The full grant at Step 7 and at Step 8's re-poll, verbatim: *"Yes to all of it: rebase, push issue-{{N}} to origin as issue-{{N}}, open a pull request against {{DEFAULT}}, triage, repair, and answer every thread, without asking again. Never {{DEFAULT}}. The wave's merge test is green at your current HEAD."* `{{DEFAULT}}` inside that second text is work-wave's own DEFAULT, already resolved before the grant reaches this brief; nothing about it is a lane-brief placeholder.
 - `{{WAVE_DIR}}` — WAVE_DIR, absolute, under COMMON.
 - `{{FACTS}}` — the concatenated contents of every `facts/*.md` under WAVE_DIR at dispatch time, or the literal `none yet` where nothing has been learned yet, so the brief goes across unchanged rather than growing a conditional paragraph.
 - `{{FACTS_PATH}}` — this lane's own fact file, `{{WAVE_DIR}}/facts/issue-{{N}}.md`. Every lane reads the whole facts directory; only this lane writes to this file.

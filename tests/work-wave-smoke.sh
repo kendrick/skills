@@ -302,6 +302,16 @@ require_text "$skill" "again, with \`--no-publish\` dropped"
 # the flag line, and a resumed wave's next dispatch.
 require_text "$skill" "\`--review-loop[=<comment>]\` goes on every lane's \`work-issue\` invocation this run dispatches"
 require_text "$skill" "A wave re-invoked with \`--review-loop\` passes it on the next dispatch of every merge-set lane whose RUN_DIR is still open"
+# #361: Step 8 re-polls a lane stopped at work-issue's review poll cap, once,
+# with the record written before the dispatch and ahead of the re-test.
+require_text "$skill" "A merge-set lane whose open RUN_DIR holds \`triage/waiting\` and that has no \`WAVE_DIR/repoll/issue-<N>\` is re-polled once."
+require_text "$skill" "Write every such lane's \`WAVE_DIR/repoll/issue-<N>\` before the dispatch,"
+require_text "$skill" "a resumed wave never re-polls a lane twice"
+require_text "$skill" "The re-polls run before the merge-test re-check below"
+require_text "$skill" "Step 8 re-polls it once before the report."
+refute_text "$skill" "until #361 lands"
+require_text "$brief" "In the repoll phase, run the publish-phase line above unchanged."
+require_text "$brief" "- \`{{PHASE}}\` — \`build\` at Step 4, \`publish\` at Step 7, \`repoll\` at Step 8's re-poll."
 # A failed gh check writes no gate record, so resume runs it again rather than reading a record that says none.
 require_text "$skill" "the wave stops with no gate record for that report"
 
@@ -414,6 +424,8 @@ require_text "$ledger" "## Deliberately Not Built"
 require_text "$ledger" "## Known Limitations"
 # #230: the work-wave half of the review-loop ledger row.
 require_text "$ledger" "work-wave forwards \`--review-loop[=<comment>]\` on every lane dispatch"
+# #361: the re-poll ledger row.
+require_text "$ledger" "Step 8 re-polls each merge-set lane stopped at \`work-issue\`'s review poll cap once"
 require_text "$ledger" "| 40 | The build dispatch runs \`work-issue <N> <PLAN> --isolate --no-publish\`, and Step 5 runs \`gh pr list --head issue-<N> --state all\` for every build report"
 # The root README carries this skill's own install flag, in the map table's
 # third column. The command form around it is pinned once, in
@@ -766,6 +778,17 @@ wave_state phase --probe "$tmp/probe.json"
 expect_status 1 "a recorded stop"
 expect_prefix "phase: stop reason: row 6:" "a recorded stop"
 
+# #361: the re-poll ranks ahead of the re-test, and a null count stops rather
+# than reading as 0 and skipping the re-poll.
+make_probe "$tmp/probe.json" "${through_baseline[@]}" merge_test_matches=true merge_test_green=true base_current=true heads_moved=true merge_set_size=2 repoll_due=1
+wave_state phase --probe "$tmp/probe.json"
+expect_status 0 "a re-poll due with a HEAD moved"
+expect_prefix "phase: 8 reason: row 10:" "a re-poll due with a HEAD moved"
+make_probe "$tmp/probe.json" "${through_baseline[@]}" merge_test_matches=true merge_test_green=true base_current=true heads_moved=true merge_set_size=2 repoll_due=null
+wave_state phase --probe "$tmp/probe.json"
+expect_status 1 "an unreadable repoll_due"
+expect_prefix "phase: stop reason: unknown probe fields: repoll_due" "an unreadable repoll_due"
+
 make_probe "$tmp/probe.json" -heads_moved
 wave_state phase --probe "$tmp/probe.json"
 expect_status 3 "a probe missing heads_moved"
@@ -923,10 +946,10 @@ wave_state probe --wave-dir "$wd2" --root "$repo" --default main
 cp "$tmp/out" "$tmp/probe.json"
 wave_state phase --probe "$tmp/probe.json"
 expect_status 0 "phase over an empty merge set"
-expect_prefix "phase: 8 reason: row 11:" "phase over an empty merge set"
+expect_prefix "phase: 8 reason: row 12:" "phase over an empty merge set"
 
 # PR #347 review: an order.md torn after issue-7's row. Read as complete, issue-8
-# had no build or hold and still answered row 11, so it must null and stop.
+# had no build or hold and still answered row 12, so it must null and stop.
 printf '| Order | Lane | After | Why |\n|---|---|---|---|\n| 1 | issue-7 | — | no coupling |\n' >"$wd2/order.md"
 wave_state probe --wave-dir "$wd2" --root "$repo" --default main
 cp "$tmp/out" "$tmp/probe.json"
@@ -979,13 +1002,13 @@ printf '{"lane": "issue-18", "status": "failed"}\n' >"$wd3/reports/issue-18-publ
 wave_state probe --wave-dir "$wd3" --root "$repo" --default main
 cp "$tmp/out" "$tmp/probe.json"
 wave_state phase --probe "$tmp/probe.json"
-expect_prefix "phase: 8 reason: row 10:" "phase after a lane failed publishing"
+expect_prefix "phase: 8 reason: row 11:" "phase after a lane failed publishing"
 printf 'base: origin/main %s\nissue-17 %s\nresult: green\n' "$base_sha" "$base_sha" >"$wd3/merge-test/2.md"
 wave_state probe --wave-dir "$wd3" --root "$repo" --default main
 cp "$tmp/out" "$tmp/probe.json"
 wave_state phase --probe "$tmp/probe.json"
 expect_status 0 "phase over a green re-test of the publish survivors"
-expect_prefix "phase: 8 reason: row 11:" "phase over a green re-test of the publish survivors"
+expect_prefix "phase: 8 reason: row 12:" "phase over a green re-test of the publish survivors"
 # A publish report with no status is unknown, never in the set or out of it.
 printf '{"lane": "issue-18"}\n' >"$wd3/reports/issue-18-publish.json"
 wave_state probe --wave-dir "$wd3" --root "$repo" --default main
@@ -1027,7 +1050,65 @@ if probe["merge_set_size"] != 0 or probe["heads_moved"] is not False:
 PY
 wave_state phase --probe "$tmp/probe.json"
 expect_status 0 "phase after a lane failed publishing and its successor was held"
-expect_prefix "phase: 8 reason: row 11:" "phase after a lane failed publishing and its successor was held"
+expect_prefix "phase: 8 reason: row 12:" "phase after a lane failed publishing and its successor was held"
+
+# #361: a merge-set lane whose open RUN_DIR holds triage/waiting and that has no
+# WAVE_DIR/repoll/issue-<N> is re-polled once. The rule keys on the file, never on
+# the publish report's status.
+wd5="$repo/.git/work-wave/wave-27-28"
+mkdir -p "$wd5/footprint" "$wd5/merge-test" "$wd5/reports" "$wd5/gate"
+touch "$wd5/lanes.md" "$wd5/harvest.md" "$wd5/footprint/check.txt"
+printf '| Pair | Answer | Evidence | Resolution |\n|---|---|---|---|\n' >"$wd5/coupling.md"
+printf '| Order | Lane | After | Why |\n|---|---|---|---|\n| 1 | issue-27 | — | no coupling |\n| 2 | issue-28 | — | no coupling |\n' >"$wd5/order.md"
+printf 'base: origin/main %s\nresult: green\n' "$base_sha" >"$wd5/merge-test/0.md"
+git -C "$repo" branch issue-27
+git -C "$repo" branch issue-28
+for n in 27 28; do
+  printf '{"lane": "issue-%s", "status": "done"}\n' "$n" >"$wd5/reports/issue-$n-build.json"
+  printf 'route: done\nfootprint re-check: exit 0\n' >"$wd5/gate/issue-$n.md"
+done
+printf 'base: origin/main %s\nissue-27 %s\nissue-28 %s\nresult: green\n' "$base_sha" "$base_sha" "$base_sha" >"$wd5/merge-test/1.md"
+printf '{"status": "done"}\n' >"$wd5/reports/issue-27-publish.json"
+printf '{"status": "stopped"}\n' >"$wd5/reports/issue-28-publish.json"
+mkdir -p "$repo/.git/work-issue/issue-28/triage"
+touch "$repo/.git/work-issue/issue-28/triage/waiting"
+
+# CASE WANT_REPOLL_DUE. Probes wd5 and checks repoll_due; the caller checks phase.
+probe_repoll() {
+  wave_state probe --wave-dir "$wd5" --root "$repo" --default main
+  cp "$tmp/out" "$tmp/probe.json"
+  python3 -c 'import json,sys; sys.exit(0 if json.load(open(sys.argv[1]))["repoll_due"] == int(sys.argv[2]) else 1)' "$tmp/probe.json" "$2" || {
+    echo "$1 should probe repoll_due $2, got: $(cat "$tmp/probe.json") stderr: $err" >&2
+    exit 1
+  }
+  wave_state phase --probe "$tmp/probe.json"
+}
+probe_repoll "case A, waiting with no record" 1
+expect_prefix "phase: 8 reason: row 10:" "case A, waiting with no record"
+mkdir -p "$wd5/repoll"
+printf 'dispatched: 2026-11-18T00:00:00Z\n' >"$wd5/repoll/issue-28"
+probe_repoll "case B, waiting with the record" 0
+expect_prefix "phase: 8 reason: row 12:" "case B, waiting with the record"
+# A lane stopped for a question has no triage/waiting, so it leaves the merge set,
+# isn't re-polled, and row 11 re-tests without it.
+rm "$wd5/repoll/issue-28" "$repo/.git/work-issue/issue-28/triage/waiting"
+probe_repoll "case C, stopped with no triage/waiting" 0
+[[ "$out" != "phase: 8 reason: row 10:"* ]] || {
+  echo "case C, stopped with no triage/waiting, should not re-poll, got: $out" >&2
+  exit 1
+}
+expect_prefix "phase: 8 reason: row 11:" "case C, stopped with no triage/waiting"
+printf '{"status": "done"}\n' >"$wd5/reports/issue-28-publish.json"
+probe_repoll "case D, done with no triage/waiting" 0
+expect_prefix "phase: 8 reason: row 12:" "case D, done with no triage/waiting"
+# A closed RUN_DIR still counts as done for the merge set (ledger row 55), but
+# work-issue N can't resume a finished run, so the lane isn't re-polled.
+printf '{"status": "stopped"}\n' >"$wd5/reports/issue-28-publish.json"
+rm -r "$repo/.git/work-issue/issue-28"
+mkdir -p "$repo/.git/work-issue/closed/issue-28/triage"
+touch "$repo/.git/work-issue/closed/issue-28/triage/waiting"
+probe_repoll "case E, triage/waiting only under closed/" 0
+expect_prefix "phase: 8 reason: row 12:" "case E, triage/waiting only under closed/"
 
 printf '{"issue-7": "not a list"}\n' >"$tmp/bundle.json"
 wave_state probe --wave-dir "$wd" --root "$repo" --default main --pr-bundle "$tmp/bundle.json"
@@ -1103,8 +1184,8 @@ logic_run "$checks" invariants "$wave_model" "$tmp/inv"
 
 resume_checks crash-points --model "$wave_model"
 expect_status 0 "crash-points over wave-order.json"
-[[ "$(tail -n 1 "$tmp/out")" == "rows covered: 1 2 3 4 5 6 7 8 9 10 11" ]] || {
-  echo "crash-points over wave-order.json should cover rows 1-11, got: $out stderr: $err" >&2
+[[ "$(tail -n 1 "$tmp/out")" == "rows covered: 1 2 3 4 5 6 7 8 9 10 11 12" ]] || {
+  echo "crash-points over wave-order.json should cover rows 1-12, got: $out stderr: $err" >&2
   exit 1
 }
 
@@ -1163,6 +1244,27 @@ def all_lanes(module):
     return module
 
 
+# Wave.repoll_due's `not self.has(...)` becomes `not False`, so the record never
+# stops a second re-poll (#361).
+def ignore_repoll_record(module):
+    global hits
+    for cls in module.body:
+        if isinstance(cls, ast.ClassDef) and cls.name == "Wave":
+            for fn in cls.body:
+                if isinstance(fn, ast.FunctionDef) and fn.name == "repoll_due":
+                    for node in ast.walk(fn):
+                        if (
+                            isinstance(node, ast.UnaryOp)
+                            and isinstance(node.op, ast.Not)
+                            and isinstance(node.operand, ast.Call)
+                            and isinstance(node.operand.func, ast.Attribute)
+                            and node.operand.func.attr == "has"
+                        ):
+                            node.operand = ast.Constant(False)
+                            hits += 1
+    return module
+
+
 if kind == "ignore-ungated":
     tree = Swap("count", "build_ungated", 0).visit(tree)
 elif kind == "ignore-stop":
@@ -1171,6 +1273,8 @@ elif kind == "ignore-harvest":
     tree = Swap("flag", "harvest_md", True).visit(tree)
 elif kind == "merge-set-all-lanes":
     tree = all_lanes(tree)
+elif kind == "ignore-repoll-record":
+    tree = ignore_repoll_record(tree)
 else:
     sys.exit(f"unknown falsifier {kind}")
 if hits == 0:
@@ -1185,6 +1289,14 @@ python3 - "$wave_model" "$tmp/two-seq.json" <<'PY'
 import json, sys
 model = json.load(open(sys.argv[1]))
 model["sequences"] = [q for q in model["sequences"] if q["name"] in ("main", "out-of-set")]
+assert len(model["sequences"]) == 2
+json.dump(model, open(sys.argv[2], "w"))
+PY
+# The re-poll falsifier likewise needs only main and publish-waiting.
+python3 - "$wave_model" "$tmp/waiting-seq.json" <<'PY'
+import json, sys
+model = json.load(open(sys.argv[1]))
+model["sequences"] = [q for q in model["sequences"] if q["name"] in ("main", "publish-waiting")]
 assert len(model["sequences"]) == 2
 json.dump(model, open(sys.argv[2], "w"))
 PY
@@ -1217,6 +1329,7 @@ falsifier ignore-ungated invariants "$wave_model" &
 falsifier ignore-stop invariants "$wave_model" &
 falsifier ignore-harvest invariants "$wave_model" &
 falsifier merge-set-all-lanes crash-points "$tmp/two-seq.json" &
+falsifier ignore-repoll-record crash-points "$tmp/waiting-seq.json" &
 
 # Subpaths pin: the WAVE_DIR bullet and the model's subpath labels name the same
 # artifacts, so a write the skill documents can't go unmodeled and a modeled
@@ -1321,6 +1434,7 @@ expect_falsified ignore-ungated err '^step-6-needs-every-report-gated: 6 row 8 o
 expect_falsified ignore-stop err '^step-6-never-past-a-recorded-stop: 6 row 8 on'
 expect_falsified ignore-harvest err '^step-1-needs-harvest: 1 row 3 on'
 expect_falsified merge-set-all-lanes out '^out-of-set#[0-9@.]+[^:]*: expected 7 row 9, got 6 row 8'
+expect_falsified ignore-repoll-record out '^publish-waiting#[0-9]+ end: expected 8 row 12, got 8 row 10'
 
 [[ "$(cat "$tmp/live.status")" == "0" ]] && [[ ! -s "$tmp/live.err" ]] \
   && [[ "$(tail -n 1 "$tmp/live.out")" =~ ^paths:\ [0-9]+$ ]] || {

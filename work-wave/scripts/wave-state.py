@@ -56,6 +56,7 @@ PROBE_FIELDS = (
     ("publish_unreported", "int", ()),
     ("heads_moved", "bool", ()),
     ("merge_set_size", "int", ()),
+    ("repoll_due", "int", ()),
 )
 
 # Copied cell for cell from SKILL.md's Resume table, and pinned against it by
@@ -71,8 +72,9 @@ RESUME_ROWS = (
     (7, '`merge-test/0.md`; some unheld lane has no `reports/issue-N-build.json`', 'Step 4 for those lanes only, in one message; a lane whose RUN_DIR exists is resumed by its own `work-issue`, and its build report is whatever it returns'),
     (8, 'every gate record; some lane in the merge set has no `reports/issue-N-publish.json`, and the newest `merge-test/<k>.md` with k > 0 whose recorded branches are exactly the merge set, each at its current HEAD, is missing or not green', 'Step 6, which stops again on a red or conflicted record'),
     (9, 'the newest merge test over exactly the merge set at its current HEADs is green; some lane in the merge set has no `reports/issue-N-publish.json`', "Step 7 for those lanes only, when the fetched `origin/DEFAULT` equals that merge test's `base:`; where it differs, Step 6, then Step 7"),
-    (10, 'every publish report; a non-empty merge set; the HEAD of some lane in it moved since the newest merge test, or that test merged a lane that has since left the merge set', "Step 8's re-test, then the report"),
-    (11, 'every publish report; the newest merge test over exactly the merge set at its current HEADs is green, or an empty merge set', "Step 8's report"),
+    (10, "every publish report; some merge-set lane's open RUN_DIR holds `triage/waiting` and WAVE_DIR has no `repoll/issue-<N>`", "Step 8's re-poll for those lanes only, then probe again"),
+    (11, 'every publish report; a non-empty merge set; the HEAD of some lane in it moved since the newest merge test, or that test merged a lane that has since left the merge set', "Step 8's re-test, then the report"),
+    (12, 'every publish report; the newest merge test over exactly the merge set at its current HEADs is green, or an empty merge set', "Step 8's report"),
 )
 
 ROUTES = ("done", "stopped", "failed", "refused", "early-publish", "recheck-failed")
@@ -183,7 +185,7 @@ def phase_of(probe):
         return "5", "row 6: a saved build report has no gate record; run Step 5 for the ungated reports only, then probe again"
     if count(probe, "unheld_unreported") > 0:
         return "4", "row 7: an unheld lane has no build report; run Step 4 for those lanes only, in one message"
-    # Row 8 is pre-publish only, or it shadows row 10 once a repair moves a
+    # Row 8 is pre-publish only, or it shadows row 11 once a repair moves a
     # published HEAD. It asks for green too, or a red record at the current
     # HEADs matches no row at all (ledger row 48).
     if count(probe, "publish_unreported") > 0 and not (
@@ -194,14 +196,18 @@ def phase_of(probe):
         if not flag(probe, "base_current"):
             return "6", "row 9: origin/DEFAULT differs from the green merge test's base:; run Step 6, then Step 7"
         return "7", "row 9: a green merge test over the merge set at its current HEADs, and a lane has no publish report; run Step 7 for those lanes only"
+    # The re-poll goes ahead of the re-test: a re-polled lane that repairs moves
+    # its HEAD, and row 11 has to see that move (#361).
+    if count(probe, "publish_unreported") == 0 and count(probe, "repoll_due") > 0:
+        return "8", "row 10: every publish report, and a merge-set lane's open RUN_DIR holds triage/waiting with no repoll/issue-<N> record; run Step 8's re-poll for those lanes only, then probe again"
     if count(probe, "publish_unreported") == 0 and flag(probe, "heads_moved"):
-        return "8", "row 10: every publish report, and a merge-set lane's HEAD moved or a lane left the merge set since the newest merge test; run Step 8's re-test, then the report"
+        return "8", "row 11: every publish report, and a merge-set lane's HEAD moved or a lane left the merge set since the newest merge test; run Step 8's re-test, then the report"
     # Every lane failed, stopped, or held leaves nothing to merge-test or
     # publish, and no green record can ever match an empty set.
     if count(probe, "publish_unreported") == 0 and (
         flag(probe, "merge_test_green") or count(probe, "merge_set_size") == 0
     ):
-        return "8", "row 11: every publish report, and a green merge test over the merge set at its current HEADs or an empty merge set; run Step 8's report"
+        return "8", "row 12: every publish report, and a green merge test over the merge set at its current HEADs or an empty merge set; run Step 8's report"
     return (
         "stop",
         "no resume row matches: a merge test records the merge set at its current HEADs and is not green; "
@@ -392,6 +398,19 @@ class Wave:
             records[k] = (base, lanes, result)
         return records
 
+    def repoll_due(self):
+        """How many merge-set lanes Step 8 still has to re-poll (#361): the open
+        RUN_DIR holds `triage/waiting` and WAVE_DIR has no `repoll/issue-<N>`.
+        Only the open RUN_DIR counts. One under `closed/` belongs to a run
+        `work-issue` already finished, and re-dispatching `work-issue N` can't
+        resume it. `published()` reads both places, since a closed run still
+        counts as done for the merge set."""
+        return sum(
+            1 for lane in self.merge_set()
+            if (self.common / "work-issue" / f"issue-{lane}" / "triage" / "waiting").is_file()
+            and not self.has(f"repoll/issue-{lane}")
+        )
+
     def heads(self, lanes):
         return {lane: self.rev(f"refs/heads/issue-{lane}") for lane in lanes}
 
@@ -469,6 +488,7 @@ def gather(wave):
         "publish_unreported": lambda: sum(1 for lane in wave.merge_set() if lane not in reports("publish")),
         "heads_moved": wave.heads_moved,
         "merge_set_size": lambda: len(wave.merge_set()),
+        "repoll_due": wave.repoll_due,
     }
     probe, why = {}, []
     for name, _, _ in PROBE_FIELDS:
