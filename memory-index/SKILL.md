@@ -40,7 +40,7 @@ A second `register` on a scope already registered fails at its first `collection
 
 After the real run, relay the script's last line, which starts `MCP:` and gives the `mcpServers` entry the user adds to their client by hand.
 
-Then, once the real run exited 0, run Step 2's `refresh` once before the hook offer. A new collection over files older than the last refresh doesn't count as changed, so no hook would ever embed them. Report a `FAILED:` line verbatim and carry on. Then make Step 3's hook offer. A dry run, a declined dry run, and a run that exited 1 or 3 end Step 1 without either.
+Then, once the real run exited 0, run Step 2's `refresh` once before the hook offer. The last stamp doesn't list the new collection, so the hook doesn't watch it until some refresh runs. Tell the user this first refresh may take minutes. If it exits 1, report its `FAILED:` line verbatim and still make the offer: this is the one exit 1 that doesn't stop Step 1, since a failed refresh writes no stamp, a missing stamp counts as changed, and the hook retries. Then make Step 3's hook offer. A dry run, a declined dry run, and a run that exited 1 or 3 end Step 1 without either.
 
 **Done when:** the user saw the dry run and either declined it, or the real run exited 0, its `MCP:` line was relayed, `refresh` ran once, and Step 3 ran; or a run exited 1 or 3 and its message was reported verbatim.
 
