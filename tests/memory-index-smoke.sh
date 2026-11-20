@@ -342,7 +342,7 @@ grep -F 'context add qmd://plain-scope-rules ' <<<"$pdry" | grep -Fq 'rules reco
   exit 1
 }
 
-# Cases 10-21: `refresh --if-changed`, the hook mode.
+# Cases 10-23: `refresh --if-changed`, the hook mode.
 cols="$tmp/collections.tsv"
 printf '%s\t%s\t%s\n' \
   acme-pursuit-decisions "$abs/_memory/decisions" '**/*.md' \
@@ -382,9 +382,15 @@ assert_hook_ok() {
   }
 }
 
+# The lock file outlives every refresh, so "running" means another process
+# holds its flock. Probes only the state dir, never a scope.
+lock_held() {
+  ! python3 -c 'import fcntl,os,sys; fd=os.open(sys.argv[1], os.O_CREAT|os.O_WRONLY); fcntl.flock(fd, fcntl.LOCK_EX|fcntl.LOCK_NB)' "$state/refresh.lock" 2>/dev/null
+}
+
 wait_unlocked() {
   local i=0
-  while [[ -e "$state/refresh.lock" ]]; do
+  while lock_held; do
     i=$((i + 1))
     [[ "$i" -le 150 ]] || {
       echo "$1: refresh still holds the lock after 15 s" >&2
@@ -403,8 +409,8 @@ log_empty() {
 }
 
 no_lock() {
-  [[ ! -e "$state/refresh.lock" ]] || {
-    echo "$1: refresh.lock left behind" >&2
+  ! lock_held || {
+    echo "$1: a refresh holds the lock" >&2
     exit 1
   }
 }
@@ -458,7 +464,7 @@ no_lock "case 12"
 touch "$scope/_memory/decisions/vendor-a1b2c3.md"
 if_changed QMD_SLOW=1 QMD_COLLECTIONS="$cols"
 assert_hook_ok "case 13 first call"
-[[ -e "$state/refresh.lock" ]] || {
+lock_held || {
   echo "case 13: no lock while the refresh runs" >&2
   exit 1
 }
@@ -489,7 +495,7 @@ until grep -qx update "$log"; do
   }
   sleep 0.1
 done
-[[ -e "$state/refresh.lock" ]] || {
+lock_held || {
   echo "case 14: refresh finished before the mid-run write" >&2
   exit 1
 }
@@ -500,21 +506,29 @@ assert_hook_ok "case 14 second call"
 wait_unlocked "case 14 second refresh"
 count_is 2 update "case 14"
 
-# Case 15: a held lock blocks a refresh, and one an hour old does not.
+# Case 15: a held lock blocks a refresh, and the kernel frees it when the
+# holder dies, even by SIGKILL, so the next call refreshes without waiting.
 : >"$log"
 touch "$scope/_memory/decisions/vendor-a1b2c3.md"
-: >"$state/refresh.lock"
-if_changed
+python3 -c 'import fcntl,os,sys,time; fd=os.open(sys.argv[1], os.O_CREAT|os.O_WRONLY); fcntl.flock(fd, fcntl.LOCK_EX); time.sleep(60)' "$state/refresh.lock" &
+holder=$!
+i=0
+until lock_held; do
+  i=$((i + 1))
+  [[ "$i" -le 50 ]] || {
+    echo "test setup: case 15 holder never took the lock" >&2
+    exit 1
+  }
+  sleep 0.1
+done
+if_changed QMD_COLLECTIONS="$cols"
 assert_hook_ok "case 15 held lock"
 log_empty "case 15 held lock"
-[[ -e "$state/refresh.lock" ]] || {
-  echo "case 15: the held lock was removed" >&2
-  exit 1
-}
-python3 -c 'import os,sys,time; t=time.time()-7200; os.utime(sys.argv[1],(t,t))' "$state/refresh.lock"
+kill -9 "$holder"
+wait "$holder" 2>/dev/null || true
 if_changed QMD_COLLECTIONS="$cols"
-assert_hook_ok "case 15 aged lock"
-wait_unlocked "case 15 aged lock"
+assert_hook_ok "case 15 killed holder"
+wait_unlocked "case 15 killed holder"
 count_is 1 update "case 15"
 
 # Case 16: failures stay off stdout and exit 0, and a failed refresh keeps the
@@ -598,6 +612,17 @@ if_changed QMD_COLLECTIONS="$cols"
 assert_hook_ok "case 22 legacy stamp"
 wait_unlocked "case 22 legacy stamp"
 count_is 1 update "case 22 legacy stamp"
+
+# Case 23: two hook calls started at once on a changed collection start one
+# refresh between them.
+: >"$log"
+touch "$scope/_memory/decisions/vendor-a1b2c3.md"
+for _ in 1 2; do
+  env QMD_SLOW=1 QMD_COLLECTIONS="$cols" QMD_LOG="$log" PATH="$shim_path" python3 "$script" refresh --if-changed >/dev/null 2>&1 &
+done
+wait
+wait_unlocked "case 23 simultaneous calls"
+count_is 1 update "case 23 simultaneous calls"
 
 require_text memory-index/SKILL.md 'python3 SCRIPT refresh --if-changed'
 require_text memory-index/SKILL.md '`refresh --if-changed` is the hook mode. It prints nothing on stdout and exits 0 in every case.'

@@ -215,24 +215,6 @@ def refresh() -> int:
     return 0
 
 
-def take_lock(lock: Path) -> bool:
-    flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
-    try:
-        os.close(os.open(lock, flags))
-        return True
-    except FileExistsError:
-        pass
-    # shortcut: a SIGKILLed refresh blocks hook refreshes for up to an hour; upgrade to a pid check if that bites.
-    try:
-        if time.time() - lock.stat().st_mtime < 3600:
-            return False
-        lock.unlink()
-        os.close(os.open(lock, flags))
-        return True
-    except (FileNotFoundError, FileExistsError):
-        return False
-
-
 def cmd_if_changed() -> int:
     """Hook mode: never a qmd call, nothing on stdout, exit 0 on every branch.
 
@@ -257,20 +239,39 @@ def cmd_if_changed() -> int:
         stale = True
     if not stale:
         return 0
-    # Before the lock, so a machine without qmd never leaves one every turn.
+    # Before the lock, so a machine without qmd never spawns a child that can only fail.
     if shutil.which("qmd") is None:
         print("qmd not on PATH", file=sys.stderr)
         return 0
-    lock = sd / "refresh.lock"
+    # Imported here because a top-level import would shift the lines find-candidates.sh vendors.
+    # Windows has no fcntl, and the hook contract still wants exit 0 there.
+    try:
+        import fcntl
+    except ImportError:
+        print("memory-index: no fcntl on this platform; hook refresh skipped", file=sys.stderr)
+        return 0
+
     try:
         sd.mkdir(parents=True, exist_ok=True)
-        if not take_lock(lock):
-            return 0
+        fd = os.open(sd / "refresh.lock", os.O_CREAT | os.O_WRONLY, 0o600)
     except OSError as e:
         print(f"memory-index: {e}", file=sys.stderr)
         return 0
     try:
+        # flock, not an O_EXCL file: the kernel drops it when the child exits,
+        # even on SIGKILL, so no stale lock is left for two callers to reclaim at once.
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        # A refresh is running.
+        os.close(fd)
+        return 0
+    except OSError as e:
+        os.close(fd)
+        print(f"memory-index: {e}", file=sys.stderr)
+        return 0
+    try:
         # The child must not hold the hook's pipes, or the harness waits on it.
+        # The child inherits fd, so the lock lasts exactly as long as the refresh.
         with open(sd / "refresh.log", "w", encoding="utf-8") as log:
             subprocess.Popen(
                 [sys.executable, str(Path(__file__).resolve()), "refresh", "--holding-lock"],
@@ -278,21 +279,19 @@ def cmd_if_changed() -> int:
                 stdout=log,
                 stderr=log,
                 start_new_session=True,
+                pass_fds=(fd,),
             )
     except OSError as e:
-        lock.unlink(missing_ok=True)
         print(f"memory-index: {e}", file=sys.stderr)
+    finally:
+        os.close(fd)
     return 0
 
 
 def cmd_refresh(args) -> int:
     if args.if_changed:
         return cmd_if_changed()
-    try:
-        return refresh()
-    finally:
-        if args.holding_lock:
-            (state_dir() / "refresh.lock").unlink(missing_ok=True)
+    return refresh()
 
 
 def main() -> int:
@@ -308,7 +307,7 @@ def main() -> int:
         action="store_true",
         help="hook mode: no stdout, exit 0, refresh detached only when a collection changed",
     )
-    # Set only by --if-changed on the child it spawns, which owns the lock.
+    # Marks the child --if-changed spawns, so `ps` shows which refresh holds the lock.
     f.add_argument("--holding-lock", action="store_true", help=argparse.SUPPRESS)
     f.set_defaults(fn=cmd_refresh)
     args = p.parse_args()
