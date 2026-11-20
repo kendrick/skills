@@ -28,13 +28,15 @@ Refutation. The reproducer is not checking whether the claim is plausible or whe
 
 ### Prove the change exists first
 
-Every claim rests on some edit. Before running a claim's command, prove that edit exists at HEAD:
+Every claim rests on some edit. Before running a claim's command, prove that edit shows in the range's per-commit history:
 
 ```
-git diff BASE_SHA..HEAD -- <path> | grep -n <symbol>
+git log -p BASE_SHA..HEAD -- <path> | grep -n <symbol>
 ```
 
 Empty output is the verdict. The claim is `NOT_REPRODUCED` with that grep as its evidence, and the run does not proceed to the claim's command — a suite passing against a file nothing changed is the exact failure this whole step exists to catch, and it passes just as cheerfully for the reproducer as it did for the worker.
+
+Grep the history, because two kinds of true claim cancel out of the net diff, and PR #245 lost one of each to it: a line one commit added and a later commit removed, and an absence claim, whose text no commit adds to the file it is about. A hit proves only that a commit in range touched the symbol, and the claim's command decides whether it survived. An absence claim's `path` is the file whose diff enforces or creates the absence, such as the test that refutes the text or the file a removed line came out of. A claim pathed at the file the text is absent from comes back empty, and `NOT_REPRODUCED` is the right verdict for it.
 
 The same rule binds the reproducer's own writes: every edit is proved before anything reads a result that depends on it. Where it edits a fixture to provoke a failure, it shows the changed bytes first, then runs the suite. A provocation that never landed produces a green suite and the false conclusion that the guard works.
 
@@ -86,10 +88,7 @@ each reason against the code, not against whether it sounds reasonable:
 
 {{LEFT}}
 
-For every claim, before you run anything: prove the change the claim rests on
-exists at the head commit, with `git diff BASE_SHA..HEAD -- <path> | grep -n
-<symbol>`. Empty output means NOT_REPRODUCED, and that grep is your evidence.
-Do not run the claim's command in that case.
+For every claim, before you run anything: prove the change the claim rests on shows in the range's per-commit history, with `git log -p BASE_SHA..HEAD -- <path> | grep -n <symbol>`. That history keeps a line a later commit removed, which the net diff drops, so a hit proves only that a commit touched the symbol, and the claim's command decides whether the change survived. Empty output means NOT_REPRODUCED, and that grep is your evidence. Do not run the claim's command in that case.
 
 Once the claim's command has run at the seam, find the change's production
 callers at HEAD: `git -C TREE grep -n -w <symbol> HEAD -- . ':!*test*'

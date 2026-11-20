@@ -54,6 +54,8 @@ reasoning and works only from the command you wrote down. So write the
 command you actually ran against the tree as it now stands, and paste its
 real output — not a tidied version, and not the command you meant to run.
 
+A claim's `path` is the file whose per-commit history shows the change, because the reproducer greps that file's history for the text the claim names before it runs your command. For a claim that some text is absent, name the file whose diff enforces or creates the absence: the test that refutes or pins it, or the file a removed line came out of, and quote the text that line carries in the claim. The file the text is absent from usually never changed, so naming it fails the check.
+
 Leave every git write to the orchestrator. Write files, and run no command
 that stages, commits, stashes, rebases, pushes, or moves HEAD. This holds
 even where you have a whole shell to yourself and this repo's own agent docs
@@ -114,7 +116,7 @@ Review findings to repair, each quoted with its source URL:
 }
 ```
 
-- `claims` is the red-team's whole input. `path` is the file the reproducer greps at HEAD before it runs anything, and the file whose name decides whether the reproducer runs on `opus`; a claim with no path fails the change-exists check and comes back `NOT_REPRODUCED`. A claim with no command is unreproducible and comes back `UNVERIFIABLE`, which reaches the pull request as a section saying so. An empty `claims` on the final build report fails Step 3 rather than passing Step 4 by having nothing to check.
+- `claims` is the red-team's whole input. `path` is the file whose per-commit history the reproducer greps before it runs anything, and for an absence claim the preamble says which file that is. It is also the file whose name decides whether the reproducer runs on `opus`; a claim with no path fails the change-exists check and comes back `NOT_REPRODUCED`. A claim with no command is unreproducible and comes back `UNVERIFIABLE`, which reaches the pull request as a section saying so. An empty `claims` on the final build report fails Step 3 rather than passing Step 4 by having nothing to check.
 - `left` is checked entry by entry against the code by the same reproducer. A reason that does not hold is a finding.
 - `plan_concerns` reaches the pull-request body, and the deferred queue when `open` is true or absent; the preamble says when a worker sets each value. It is the only channel a worker has for "the plan asked for something the code cannot support", and a worker that stays silent here hands the next reader a diff that disagrees with its own plan for no visible reason.
 
