@@ -7,6 +7,7 @@
     work-issue/scripts/run-state.py phase --probe PROBE.json
     work-issue/scripts/run-state.py commit-style --run-dir DIR
     work-issue/scripts/run-state.py adopt M --pr-json FILE --bundle FILE --run-dir DIR --root ROOT --default DEFAULT --invoker LOGIN [--max-review-rounds R] [--dry-run]
+    work-issue/scripts/run-state.py reuse-baseline --wave-baseline PATH --base-sha SHA --install CMD --verify CMD --out PATH
 
 Neither `review` nor `phase` is a gate. `review` answers `findings`, `cleared`, or
 `pending` on its first stdout line, then lists every item that bore on the
@@ -53,10 +54,17 @@ pass on every repo the token cannot see into. DIR/full_commit_pass, an empty
 marker the run writes when the user overrules at Stop 2, forces `full` and
 survives a resume. It never calls `gh` and never exits 1.
 
-Exit codes: 0 with an answer on stdout; 3 usage, a `gh` failure, an unwritable
-`--save` path, or input this script cannot read (an unparseable bundle, a
-bundle missing a top-level key, a probe missing a field). Argparse supplies 2
-for a mistyped flag, except under `probe` and `adopt`, where it is 3 too,
+`reuse-baseline` copies a work-wave baseline to --out when its base SHA and
+both recorded commands match the lane's exactly. It exits 1 with one
+`run-state: reuse-baseline:` line per mismatch or missing or malformed header
+line, and leaves --out unwritten. It never calls `gh` or git.
+
+Exit codes: 0 with an answer on stdout; 1 only from `adopt` and
+`reuse-baseline`, as above; 3 usage, a `gh` failure, an unwritable `--save`
+path, a `reuse-baseline` --out with no directory, or input this script cannot
+read (an unparseable bundle, a bundle missing a top-level key, a probe missing
+a field, a wave baseline that cannot be read). Argparse supplies 2 for a
+mistyped flag, except under `probe` and `adopt`, where it is 3 too,
 because the issue that asked for `probe` asked for the validator convention.
 
 Stdlib only, so the skill stays copy-in portable.
@@ -2928,7 +2936,8 @@ def cmd_reuse_baseline(args):
     still the truth about that SHA, so it is copied as it is.
 
     Exits 0 on a match, 1 with one stderr line per mismatch, 3 on an unreadable
-    wave file or a missing --out directory. Step 1 runs VERIFY_CMD on 1 or 3.
+    wave file or a missing --out directory, and argparse's 2 on a mistyped
+    flag. Step 1 runs VERIFY_CMD on any non-zero exit.
     """
     out = Path(args.out)
     if not out.parent.is_dir():
@@ -2947,12 +2956,14 @@ def cmd_reuse_baseline(args):
         prefix = f"{key}: ".encode()
         line = lines[i].rstrip(b"\r\n") if i < len(lines) else b""
         value = line[len(prefix):].decode("utf-8", "replace")
-        # A malformed exit or base line counts as absent: the format is the contract.
-        malformed = (key == "exit" and not re.fullmatch(r"-?\d+", value)) or (
-            key == "base" and len(value.split()) < 2
-        )
-        if not line.startswith(prefix) or malformed:
+        if not line.startswith(prefix):
             problems.append(f"{args.wave_baseline} has no {key} line")
+            continue
+        # The format is the contract, so a malformed exit or base line can't match either.
+        if (key == "exit" and not re.fullmatch(r"-?\d+", value)) or (
+            key == "base" and len(value.split()) < 2
+        ):
+            problems.append(f"{args.wave_baseline} has a malformed {key} line: {value}")
             continue
         values[key] = value
     if problems:

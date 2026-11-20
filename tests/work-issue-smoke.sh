@@ -4877,6 +4877,12 @@ printf 'exit: 0\nbase: origin/main %s\nverify: bash tests/x.sh\nok 1\n' "$rb_sha
 rb_case "$d"
 rb_expect_fallback "$d" "a wave baseline with no install line" "has no install line"
 
+# 10. A present but malformed header names the bad value, not a missing line.
+d="$(mktemp -d "$tmp/rb.XXXXXX")"
+printf 'exit: ok\nbase: origin/main %s\ninstall: npm ci\nverify: bash tests/x.sh\nok 1\n' "$rb_sha" >"$d/wave.txt"
+rb_case "$d"
+rb_expect_fallback "$d" "a non-integer exit line" "has a malformed exit line: ok"
+
 # 9. A missing handed file is exit 3, which Step 1 meets with its own VERIFY_CMD run.
 d="$(mktemp -d "$tmp/rb.XXXXXX")"
 rb_case "$d"
@@ -4887,6 +4893,8 @@ require_text work-issue/SKILL.md "Step 1 reuses the handed baseline exactly when
 require_text work-issue/SKILL.md "INSTALL_CMD runs in this tree first whether or not the baseline is reused, because the workers need its dependencies; the reuse replaces only the VERIFY_CMD run."
 require_text work-issue/SKILL.md "\`--wave-baseline <path>\` is \`work-wave\`'s flag"
 require_text work-issue/SKILL.md "run-state.py reuse-baseline --wave-baseline"
+require_text work-issue/SKILL.md "\`--wave-baseline\` refuses the run the same way, because an adopted run has no Step 1 and no wave hands it one."
+require_text work-issue/SKILL.md "Any other exit status means print the script's stderr once"
 require_text _maintenance/work-issue/RATIONALE.md "Step 1 copies a \`--wave-baseline\` file into \`baseline.txt\` instead of running VERIFY_CMD when BASE_SHA and both commands match"
 
 # --- #133: merge-verdicts.py ---
