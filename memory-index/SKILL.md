@@ -46,9 +46,14 @@ After the real run, relay the script's last line, which starts `MCP:` and gives 
 
 ```
 python3 SCRIPT refresh
+python3 SCRIPT refresh --if-changed
 ```
 
 `refresh` runs `qmd update`, then `qmd embed`, and covers every registered collection, so it takes no scope. Run it after records or notes land, move, or change. `qmd embed` can download models on its first run, so tell the user a first refresh may take minutes.
+
+Every successful `refresh` records its start time and the registered collections in `~/.local/state/memory-index/` (under `$XDG_STATE_HOME` when that is set), outside every scope.
+
+`refresh --if-changed` is the hook mode. It prints nothing on stdout and exits 0 in every case. It starts a detached `refresh` only when a file in a registered collection, under the collection's path and matching its pattern, is newer than the last successful refresh, and two calls while that refresh runs start it once. The detached run logs to `refresh.log` in the same state folder; read that file when a hook refresh seems not to land.
 
 **Done when:** `refresh` exited 0, or it exited 1 and its `FAILED:` line was reported verbatim.
 
@@ -59,9 +64,9 @@ Reach this step only when the user asks to keep the index current without runnin
 The scope's owner owns its hooks, so this step writes no hook file. Give the user the command their hook runs, with SCRIPT spelled as an absolute path, since a hook runs from whatever directory its harness chooses:
 
 ```
-python3 <absolute path to scripts/memory-index.py> refresh
+python3 <absolute path to scripts/memory-index.py> refresh --if-changed
 ```
 
-Name the event it belongs on: the one that fires after an agent writes under `_memory/` or `notes/` in that scope, such as a post-write or session-end hook in the user's harness.
+Name the events it belongs on. In Claude Code these are Stop, which fires after each agent turn, and SessionStart, which catches the last turn before a quit. In another harness, name its equivalents: an after-each-turn event and a session-start event.
 
-**Done when:** the user has the absolute `refresh` command and the hook event to attach it to, and no hook file was written.
+**Done when:** the user has the absolute `refresh --if-changed` command and the hook events to attach it to, and no hook file was written.
