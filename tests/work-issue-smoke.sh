@@ -5803,4 +5803,11 @@ require_text work-issue/SKILL.md "its prompt inline too: the repair spans tasks"
 require_text work-issue/SKILL.md "\`reports/\`, \`prompts/\`, \`gated/\`"
 require_text _maintenance/work-issue/RATIONALE.md "Worker and repair prompts render into \`RUN_DIR/prompts/\`"
 
+# #243: a repair round judges `left` reasons and claims against the repair's own
+# range, so a reason true of the repair alone doesn't read as false of the branch.
+require_text work-issue/SKILL.md "write \`git rev-parse HEAD\` to \`RUN_DIR/redteam/redteam-repair-base-<k>\`, k the round the repair answers, unless that file already exists. Write it once and never overwrite it, as Step 7 does for \`repair-base-<k>\`"
+require_text work-issue/references/redteam.md "A reason about the change is judged against \`git diff REPAIR_BASE..HEAD\` where REPAIR_BASE was given, and against \`git diff BASE_SHA..HEAD\` where it wasn't"
+require_text work-issue/references/redteam.md "Where REPAIR_BASE is given above and the claim is about the repair itself (\"the repair\", \"only this line changed\"), the range is \`REPAIR_BASE..HEAD\`"
+require_text work-issue/references/worker-prompt.md "In a repair round it judges a reason or claim about the repair against \`git diff REPAIR_BASE..HEAD\`, so cite that range, not the whole branch."
+
 echo "work-issue smoke: OK"
