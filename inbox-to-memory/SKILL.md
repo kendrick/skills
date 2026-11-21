@@ -210,7 +210,7 @@ Nothing crystallizes without the user's sign-off. Every record creation requires
 Run the lint over the scope first:
 
 ```bash
-bash <skill-path>/scripts/lint-scope.sh <scope-root>
+bash <skill-path>/scripts/lint-scope.sh <scope-root> --drained
 ```
 
 Then list accepted records nobody has confirmed lately:
@@ -219,11 +219,9 @@ Then list accepted records nobody has confirmed lately:
 bash <skill-path>/scripts/stale-records.sh <scope-root>
 ```
 
-Among the lint's checks, every wiki-link path resolves (`check_links`). Then check by hand what the lint can't:
+The lint also fails a record whose `id`, `memory_type` folder, or `source_refs` is wrong, and an `_inbox/` holding anything but `.gitkeep`. Check by hand the one thing it can't:
 
 - Every candidate flag in every groomed note has either been resolved to a wiki link OR retains its original prefix. No half-rewrites, no orphans.
-- Every record file has a valid `id`, a `memory_type` matching its folder, and at least one entry in `source_refs`.
-- The `_inbox/` is empty.
 
 Then report what phase 2.5 and the stamper did:
 
