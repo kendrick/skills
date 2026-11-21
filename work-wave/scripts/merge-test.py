@@ -70,14 +70,15 @@ def write_atomic(path, text):
     os.replace(tmp, path)
 
 
-def conflict_line(args, tree, base, lane, merged):
+def conflict_line(args, tree, base, shas, lane, merged):
     """Name every already-merged branch whose own diff against base touches a
     conflicted path (ledger row 35), or DEFAULT when none does. Never the
-    branch merged just before by position."""
+    branch merged just before by position. Diffs the captured SHAs: a lane
+    still running can move its branch after build() recorded it."""
     conflicted = lines_of(git(tree, "diff", "--name-only", "--diff-filter=U"))
     culprits = []
     for other in merged:
-        theirs = set(lines_of(git(args.root, "diff", "--name-only", f"{base}...{other}")))
+        theirs = set(lines_of(git(args.root, "diff", "--name-only", f"{base}...{shas[other]}")))
         if theirs & set(conflicted):
             culprits.append(other)
     return f"conflict: {lane} with {', '.join(culprits) or 'DEFAULT'} — {', '.join(conflicted)}"
@@ -125,12 +126,12 @@ def merge_and_verify(args, tree, base, base_line, shas, head):
     merged = []
     for lane in args.lane:
         head.append(f"{lane} {shas[lane]}")
-        p = git(tree, "merge", "--no-ff", "--no-edit", lane, check=False)
+        p = git(tree, "merge", "--no-ff", "--no-edit", shas[lane], check=False)
         if p.returncode == 0:
             merged.append(lane)
             continue
         if git(tree, "diff", "--name-only", "--diff-filter=U").stdout.strip():
-            head.append(conflict_line(args, tree, base, lane, merged))
+            head.append(conflict_line(args, tree, base, shas, lane, merged))
             kind, note = "conflict", ""
         else:
             # A merge that failed with nothing unmerged (a hook, an identity

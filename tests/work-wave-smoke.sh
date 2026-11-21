@@ -1682,6 +1682,30 @@ set +e; wait "$runner_pid"; st=$?; set -e
 [[ $st -eq 143 ]] || { echo "a SIGTERM should exit 143, got $st" >&2; exit 1; }
 expect_gone "SIGTERM"
 
+# A lane that has not returned can advance its branch after build() captured
+# the SHA. The record names the captured commit, so that commit is what must be
+# merged. A post-checkout hook, which `worktree add` fires, moves issue-2 once.
+old2="$(git -C "$mrepo" rev-parse issue-2)"
+cat >"$mrepo/.git/hooks/post-checkout" <<HOOK
+#!/bin/sh
+rm -f "$mrepo/.git/hooks/post-checkout"
+g="git --git-dir=$mrepo/.git"
+blob=\$(echo moved | \$g hash-object -w --stdin)
+tree=\$({ \$g ls-tree issue-2; printf '100644 blob %s\tmoved\n' "\$blob"; } | \$g mktree)
+new=\$(\$g commit-tree "\$tree" -p issue-2 -m moved)
+\$g update-ref refs/heads/issue-2 "\$new"
+HOOK
+chmod +x "$mrepo/.git/hooks/post-checkout"
+merge_test 'git rev-parse HEAD^2 >"'"$mt"'/tested"' --lane issue-2
+rm -f "$mrepo/.git/hooks/post-checkout"
+[[ "$(git -C "$mrepo" rev-parse issue-2)" != "$old2" ]] || { echo "moved-branch case: the hook never moved issue-2" >&2; exit 1; }
+rec="$(cat "$mt/out")"
+expect_record "moved branch" "$rec" "^issue-2 $old2\$"
+[[ "$(cat "$mt/tested")" == "$old2" ]] || { echo "moved branch: tested $(cat "$mt/tested"), recorded $old2" >&2; exit 1; }
+expect_record "moved branch" "$rec" '^result: green$'
+expect_gone "moved branch"
+git -C "$mrepo" branch -q -f issue-2 "$old2"
+
 # Perturb what the rule keys on: with A touching z instead, C no longer meets
 # any merged branch, so the line names DEFAULT. issue-5 stands in for that A.
 git -C "$mrepo" checkout -q -b issue-6 main
