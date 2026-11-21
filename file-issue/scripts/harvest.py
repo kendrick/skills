@@ -73,6 +73,8 @@ def org_templates(owner):
     if owner is None:
         return "unchecked", []
     found, unchecked = [], False
+    # GitHub reads default templates from the org's .github repo in either
+    # location, mirroring the two local rungs.
     for path in (".github/ISSUE_TEMPLATE", "ISSUE_TEMPLATE"):
         try:
             r = subprocess.run(
@@ -112,7 +114,7 @@ def template(root, blank):
             return {"rung": rung, "files": found}
     d = root / "ISSUE_TEMPLATE"
     if d.is_dir():
-        found = sorted(str(p.relative_to(root)) for p in d.iterdir() if p.is_file())
+        found = sorted(str(p.relative_to(root)) for p in d.iterdir() if p.is_file() and p.stem != "config")
         if found:
             return {"rung": "root", "files": found}
     status, found = org_templates(org_owner())
@@ -156,9 +158,8 @@ def script_candidates(root):
 
 
 def workflow_runs(root):
-    wf = root / ".github" / "workflows"
     out = []
-    for p in sorted(wf.glob("*.y*ml")) if wf.is_dir() else []:
+    for p in workflow_files(root):
         lines = p.read_text(errors="replace").splitlines()
         i = 0
         while i < len(lines):
@@ -177,6 +178,11 @@ def workflow_runs(root):
             elif rest:
                 out.append(rest.strip("'\""))
     return list(dict.fromkeys(out))
+
+
+def workflow_files(root):
+    wf = root / ".github" / "workflows"
+    return sorted(wf.glob("*.y*ml")) if wf.is_dir() else []
 
 
 def verification(root):
@@ -208,7 +214,7 @@ def main(argv):
     result["codeowners"] = any(
         (root / d / "CODEOWNERS").is_file() for d in (".github", ".", "docs")
     )
-    result["workflows"] = bool(list((root / ".github" / "workflows").glob("*.y*ml"))) if (root / ".github" / "workflows").is_dir() else False
+    result["workflows"] = bool(workflow_files(root))
     # --since matches `git shortlog` in SKILL.md; HEAD keeps an empty repo from reading stdin.
     rc, out = git("shortlog", "-sne", "--since=90 days ago", "HEAD")
     result["contributors_90d"] = len(out.splitlines()) if rc == 0 else 0

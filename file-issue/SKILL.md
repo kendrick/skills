@@ -34,7 +34,7 @@ Template ladder, first hit wins:
 
 The detected template's sections are the issue's sections, exactly. If the repo asks for four, the issue has four — a repo's own conventions outrank anything you would invent.
 
-Harvest at the same time. This is where the agent-readiness gate gets its answers without spending a question on them:
+Harvest at the same time. The script covers the manifest, `.github/workflows/`, `CODEOWNERS`, and `git shortlog` rows below; walk those by hand only after exit 3. This is where the agent-readiness gate gets its answers without spending a question on them:
 
 | Source | Facts |
 | --- | --- |

@@ -959,4 +959,20 @@ rm "$d/tests/a-smoke.sh"
 hv_run "$d" gh-empty > "$hv_tmp/ladder.json"
 require_json "$hv_tmp/ladder.json" 'd["verification"]' '{"rung": "workflows", "candidates": ["make ci"]}'
 
+# config.yml is never a template at either location, so a root ISSUE_TEMPLATE/
+# holding only config.yml is no repo-level template (review of #386).
+d="$(hv_repo rootcfg)"
+mkdir -p "$d/ISSUE_TEMPLATE"
+printf 'blank_issues_enabled: true\n' > "$d/ISSUE_TEMPLATE/config.yml"
+hv_commit "$d" alice init
+hv_run "$d" gh-empty > "$hv_tmp/rootcfg.json"
+require_json "$hv_tmp/rootcfg.json" 'd["template"]["rung"]' '"builtin"'
+require_json "$hv_tmp/rootcfg.json" 'd["template"]["files"]' '[]'
+
+# Criterion 6: Step 1 names the script and its done-when admits unchecked for
+# the org rung, so the template source can be named without a false absent.
+require_text file-issue/SKILL.md "Run \`python3 scripts/harvest.py\` from inside the target repo"
+require_text file-issue/SKILL.md "The org rung may instead hold \`unchecked\`, which is not \`absent\`."
+require_text file-issue/README.md "harvest.py"
+
 echo "file-issue smoke: OK"
