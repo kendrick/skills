@@ -13,6 +13,7 @@ With `WORK_ISSUE_REPRODUCER` unset or empty, one fresh general-purpose subagent 
 - the `claims` array out of the final report: `claim`, `path`, `command`, `output`. The reproducer never sees `files_changed`, so `path` is the only file name it has for the change-exists grep, and the only one the `opus` routing reads against the trigger rows
 - the `left` array: `what` and `why`
 - BASE_SHA and HEAD
+- REPAIR_BASE, in a repair round only: the SHA HEAD stood at before the repair whose report this round checks. A build round has none
 - the absolute path of the tree
 - `RUN_DIR/baseline.txt`, so a failure that was already failing before this run is recognized rather than attributed. A file reading `absent` means the repo has no verification command, so nothing ran before this run and nothing was already failing
 
@@ -73,6 +74,11 @@ Tree: {{TREE}} — name it by absolute path in every command; your shell's
 working directory resets between calls.
 
 Fixed point: BASE_SHA = {{BASE_SHA}}. Current head: {{HEAD}}.
+Repair base: REPAIR_BASE = {{REPAIR_BASE}}, or `none` in a build round. In a repair round,
+judge a `left` reason about the change or the repair, and a claim about the repair
+itself, against `git diff REPAIR_BASE..HEAD`. With `none`, judge against
+`git diff BASE_SHA..HEAD`. A `left` reason that cites text you were not given,
+such as a dispatch's Done-when, is `holds: false` with that as the evidence.
 
 The suite's output before any of this work began, for telling a pre-existing
 failure from a new one:
@@ -88,7 +94,7 @@ each reason against the code, not against whether it sounds reasonable:
 
 {{LEFT}}
 
-For every claim, before you run anything: prove the change the claim rests on shows in the range's per-commit history, with `git log -p BASE_SHA..HEAD -- <path> | grep -n <symbol>`. That history keeps a line a later commit removed, which the net diff drops, so a hit proves only that a commit touched the symbol, and the claim's command decides whether the change survived. Empty output means NOT_REPRODUCED, and that grep is your evidence. Do not run the claim's command in that case.
+For every claim, before you run anything: prove the change the claim rests on shows in the range's per-commit history, with `git log -p BASE_SHA..HEAD -- <path> | grep -n <symbol>`. Where REPAIR_BASE is given above and the claim is about the repair itself ("the repair", "only this line changed"), the range is `REPAIR_BASE..HEAD`. That history keeps a line a later commit removed, which the net diff drops, so a hit proves only that a commit touched the symbol, and the claim's command decides whether the change survived. Empty output means NOT_REPRODUCED, and that grep is your evidence. Do not run the claim's command in that case.
 
 Once the claim's command has run at the seam, find the change's production
 callers at HEAD: `git -C TREE grep -n -w <symbol> HEAD -- . ':!*test*'
@@ -154,7 +160,7 @@ Your final message is exactly one fenced json block and nothing else.
 
 `REPRODUCED` with `reproduced_at: seam` is the weaker of the two: the seam held against an input the reproducer built, and no production caller built that input for it. Step 5's verification section marks that claim seam only and names which of the cases above it was.
 
-`holds` is the reproducer's read of a `left` entry's stated reason against the code. `false` with evidence is a finding, and it routes like a `NOT_REPRODUCED` claim.
+`holds` is the reproducer's read of a `left` entry's stated reason against the code. A reason about the change is judged against `git diff REPAIR_BASE..HEAD` where REPAIR_BASE was given, and against `git diff BASE_SHA..HEAD` where it wasn't, so a reason true of the repair alone is not read as false of the whole branch. A reason that cites text the reproducer didn't receive, a dispatch's Done-when for one, comes back `holds: false` with that as its evidence. `false` with evidence is a finding, and it routes like a `NOT_REPRODUCED` claim.
 
 Saved verbatim to `RUN_DIR/redteam/round-<k>.json`. A verdict file you tidied is a verdict file you partly authored. The codex path below amends what verbatim means there.
 
@@ -213,7 +219,7 @@ All parts run in one background command, as `( … ) & ( … ) & wait`, the way 
 
 **The split.** A round with more than 8 claims runs as two parts. Part 1 takes the first ceil(n/2) claims in report order and every `left` entry. Part 2 takes the rest, with `{{LEFT}}` filled as `none`. A round with 8 or fewer claims has only part 1. Each part's verdicts file is `RUN_DIR/redteam/round-<k>.part-<p>.verdicts.jsonl`.
 
-**The prompt file**, `RUN_DIR/redteam/round-<k>.part-<p>.prompt.md`, holds what a subagent dispatch carries for that part: the prompt above filled in from `claims-<k>.json`, so each claim and `left` object keeps its `n`, then the verdict JSON shape. After both comes the codex addendum below, with `{{VERDICTS_FILE}}` filled as the part's verdicts file by absolute path. The prompt files sit beside the round they fill, under `redteam/`, because the reproducer prompt never passes through `render-prompt.py` and `prompts/` is that script's.
+**The prompt file**, `RUN_DIR/redteam/round-<k>.part-<p>.prompt.md`, holds what a subagent dispatch carries for that part: the prompt above filled in from `claims-<k>.json`, so each claim and `left` object keeps its `n`, and REPAIR_BASE filled in or `none`, then the verdict JSON shape. After both comes the codex addendum below, with `{{VERDICTS_FILE}}` filled as the part's verdicts file by absolute path. The prompt files sit beside the round they fill, under `redteam/`, because the reproducer prompt never passes through `render-prompt.py` and `prompts/` is that script's.
 
 **Saved verbatim, on this path**, means `round-<k>.json` is what `merge-verdicts.py` assembled, every element field-for-field from a verdict line or from the fallback's block. The script exists so that no one, the orchestrator included, edits those elements by hand.
 
