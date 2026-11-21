@@ -798,6 +798,30 @@ rc=$?
 set -e
 expect_rc 0 "$rc" "case 29 register with the state dir a file"
 
+# Case 30: a stamp register can't delete stops the run before any qmd command,
+# since going on would keep the stamp that hides the new collections.
+QMD_COLLECTIONS="$cols" QMD_LOG=/dev/null PATH="$shim_path" python3 "$script" refresh
+require_file "$state/last-refresh.json"
+log30="$tmp/case30.log"
+: >"$log30"
+chmod a-w "$state"
+set +e
+err="$(QMD_LOG="$log30" PATH="$shim_path" python3 "$script" register "$eps" 2>&1 >/dev/null)"
+rc=$?
+set -e
+# Restored before any assertion can exit, so the EXIT trap can remove $tmp.
+chmod u+w "$state"
+expect_rc 1 "$rc" "case 30 register with an undeletable stamp"
+grep -q '^FAILED: remove ' <<<"$err" || {
+  echo "case 30: missing FAILED: remove line; got: $err" >&2
+  exit 1
+}
+[[ ! -s "$log30" ]] || {
+  echo "case 30: qmd ran after the stamp removal failed" >&2
+  exit 1
+}
+require_file "$state/last-refresh.json"
+
 require_text memory-index/SKILL.md 'relay that line to the user'
 refute_text memory-index/SKILL.md 'when the dry run shows that fallback'
 refute_text memory-index/README.md 'Run `refresh` once after `register`.'

@@ -43,7 +43,7 @@ It needs Python 3 and [qmd](https://github.com/tobi/qmd) on your `PATH`. The scr
 - A note in the older v1 body format keeps its transcript inline, so the `notes/` mask can't keep that text out of the index. `register` doesn't detect v1 notes.
 - A `[journal candidate:]` marker that appears only in the raw source text lives in `notes/raw/`, which the index skips. Markers that `inbox-to-memory` flags inside the extracted sections stay in the top-level note, so the index does see them. To find the raw-only ones, grep `notes/` recursively.
 - `notes/CLAUDE.md` and `notes/README.md` sit directly in `notes/`, so the mask indexes them along with the notes.
-- Plain `refresh` takes no lock, so it can overlap a refresh that a hook started. Both run the same qmd commands, so the overlap only wastes time.
+- Plain `refresh` takes no lock, so it can overlap a refresh that a hook started. Both run the same qmd commands, so the overlap only wastes time. A hook refresh that listed its collections before you ran `register` can finish afterward and write a state file without the new ones, so run `refresh` again if the new scope doesn't show up in search.
 - When nothing changed, `--if-changed` checks every file in every qmd collection, including ones another tool registered. One large collection, such as `~/code` with `**/*.md`, can push the hook past one second.
 
 The decision ledger behind these choices is [`_maintenance/memory-index/RATIONALE.md`](../_maintenance/memory-index/RATIONALE.md).

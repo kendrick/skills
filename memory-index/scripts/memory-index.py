@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Register a memory scope's folders with qmd as collections, and refresh the index.
 
-Exit codes: 0 pass, 1 a step failed (a qmd command, or the stamp write
-that follows them; the latter prints FAILED: write <path>), 2 usage error
-(argparse's own code), 3 not a memory scope or qmd not on PATH.
-refresh --if-changed always exits 0.
+Exit codes: 0 pass, 1 a step failed (a qmd command; refresh's stamp write after
+them, which prints FAILED: write <path>; or register's stamp removal before them,
+which prints FAILED: remove <path>), 2 usage error (argparse's own code), 3 not a
+memory scope or qmd not on PATH. refresh --if-changed always exits 0.
 
 Collections key on folders and the script never opens a record file under
 _memory/<type>/. Frontmatter can drift from the folder a record sits in, and
@@ -178,12 +178,13 @@ def cmd_register(args) -> int:
         # ones hold files older than it, so --if-changed would never embed
         # them. No stamp reads as changed (ledger row 15). Removed before any
         # qmd call, so a run that fails partway also invalidates it.
+        stamp = state_dir() / "last-refresh.json"
         try:
-            (state_dir() / "last-refresh.json").unlink(missing_ok=True)
+            stamp.unlink(missing_ok=True)
         except NotADirectoryError:
             pass  # A state path through a file can hold no stamp.
         except OSError as e:
-            print(f"FAILED: remove {state_dir() / 'last-refresh.json'}", file=sys.stderr)
+            print(f"FAILED: remove {stamp}", file=sys.stderr)
             print(e, file=sys.stderr)
             return 1
         if (rc := run_all(cmds)) != 0:
