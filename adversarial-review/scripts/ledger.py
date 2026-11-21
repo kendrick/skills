@@ -551,9 +551,8 @@ def load_findings_file(path):
 
 
 def finding_problems(line, schema):
-    """Every (json_path, reason) wrong with one finding line, one per field.
-    schema_violation stops at the first, which is right for validate's
-    per-line report but would hide a finding's other problems at import."""
+    """Return one (json_path, reason) for each wrong field in one finding line.
+    schema_violation returns only the first, for validate's per-line report."""
     problems = [(k, "required field missing") for k in schema["required"] if k not in line]
     extra = sorted(set(line) - set(schema["properties"]))
     if extra:
@@ -668,8 +667,8 @@ def cmd_report(args):
         raise Unreadable(f"{args.scope}: {e}")
     except json.JSONDecodeError as e:
         raise Unreadable(f"{args.scope}: not valid JSON: {e}")
-    # Wrong shape is unreadable input, the same as a file that isn't JSON:
-    # check-territories validate owns scope.json's semantics, not this script.
+    # A wrong shape is unreadable input, like a file that isn't JSON, because
+    # check-territories validate owns scope.json's semantics and this script only reads it.
     if not isinstance(scope, dict):
         raise Unreadable(f"{args.scope}: expected a JSON object")
     if not isinstance(scope.get("territories", []), list) or not all(
