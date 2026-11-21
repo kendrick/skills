@@ -134,4 +134,4 @@ Both are real blockers from this skill's own runs. The `grep -f` stage is #153's
 
 ## Why the output is only JSON
 
-The orchestrator copies fields straight from this block into `ledger.py` flags. No parsing step, no interpretation, nothing that could drift between what the finder meant and what the ledger records. A prose summary alongside the JSON reintroduces exactly that gap, which is why the template asks for the block alone.
+`ledger.py import-findings` reads this block straight from the saved message into the ledger. No interpretation, nothing that could drift between what the finder meant and what the ledger records. A prose summary alongside the JSON reintroduces exactly that gap, which is why the template asks for the block alone.

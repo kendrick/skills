@@ -70,7 +70,7 @@ adversarial-review/
 └── scripts/
     ├── check-territories.py  # proves territories disjoint; intersects a fix diff
     ├── match-triggers.py     # matches a diff's changed lines to trigger-table rows
-    └── ledger.py             # appends findings and events, derives state
+    └── ledger.py             # imports findings, appends events, derives state, prints verifier input and the report skeleton
 ```
 
 ## Gotchas
