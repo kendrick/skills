@@ -38,7 +38,7 @@ Argparse supplies 2 for a mistyped flag. The three later subcommands,
 import-findings, verifier-input, and report, follow the validator convention
 instead: 1 for a semantic failure with one `ledger:` line per problem, 3 for a
 usage error or input that can't be read. The first four keep 2 because
-work-issue reads their output and exit codes as they stand.
+#385 left them and their output unchanged; work-issue calls only `state`.
 
 Stdlib only, so the skill stays copy-in portable.
 """
