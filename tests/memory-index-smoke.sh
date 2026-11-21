@@ -245,12 +245,16 @@ cat >"$beta/CLAUDE.md" <<'EOF'
 ## Next
 EOF
 log5="$tmp/case5.log"
-register "$beta" "$log5" >/dev/null
+register "$beta" "$log5" >/dev/null 2>"$tmp/case5.err"
+beta_abs="$(cd "$beta" && pwd -P)"
 printf '%s\n' \
-  "collection add $(cd "$beta" && pwd -P)/_memory/context --name beta-scope-context" \
+  "collection add $beta_abs/_memory/context --name beta-scope-context" \
   "context add qmd://beta-scope-context Memory scope beta-scope. context records." \
   >"$expected"
 same_file "$expected" "$log5" "case 5 unfilled paragraph"
+# The real run reports the fallback the same way the dry run does (case 25).
+printf 'unfilled scope paragraph: %s/CLAUDE.md\n' "$beta_abs" >"$expected"
+same_file "$expected" "$tmp/case5.err" "case 5 real run stderr"
 
 # Case 6: refresh is update, embed, then the collection list it stamps, and
 # stops at the first failure without stamping.
@@ -332,7 +336,7 @@ for shape in 'D — d' 'D—d' 'D. d' 'D (d)'; do
   dec="${shape/D/**Decision**}"
   dec="${dec/d/a choice made under standing rules}"
   printf '## Record Types (lightweight mode)\n\n- %s\n- **Rule** — a standing constraint\n' "$dec" >"$gamma/_memory/CLAUDE.md"
-  gdry="$(PATH="$bare_path" python3 "$script" register "$gamma" --dry-run)"
+  gdry="$(PATH="$bare_path" python3 "$script" register "$gamma" --dry-run 2>/dev/null)"
   grep -F "context add qmd://gamma-scope-$n-rules " <<<"$gdry" | grep -Fq 'rules records: Rule — a standing constraint' || {
     echo "case 9 ($shape): rules collection did not get the Rule line; got:" >&2
     echo "$gdry" >&2
@@ -350,7 +354,7 @@ done
 plain="$tmp/Plain Scope"
 mkdir -p "$plain/_memory/decisions" "$plain/_memory/rules"
 printf '## Record Types (lightweight mode)\n\n- Decision a choice made under standing rules\n- Rule a standing constraint\n' >"$plain/_memory/CLAUDE.md"
-pdry="$(PATH="$bare_path" python3 "$script" register "$plain" --dry-run)"
+pdry="$(PATH="$bare_path" python3 "$script" register "$plain" --dry-run 2>/dev/null)"
 grep -F 'context add qmd://plain-scope-rules ' <<<"$pdry" | grep -Fq 'rules records: Rule a standing constraint' || {
   echo "case 9 (plain bullets): rules collection did not get the Rule line; got:" >&2
   echo "$pdry" >&2
@@ -653,6 +657,154 @@ grep -Eq '^FAILED: write ' <<<"$err" || {
   echo "case 24: missing FAILED: write line; got: $err" >&2
   exit 1
 }
+
+# Case 25: an unfilled paragraph is reported on stderr once per run, and stdout
+# is what it was before the report existed. A filled paragraph prints nothing,
+# even when the type line takes the other fallback for a missing Record Types.
+set +e
+QMD_LOG=/dev/null PATH="$bare_path" python3 "$script" register "$beta" --dry-run >"$tmp/case25.out" 2>"$tmp/case25.err"
+rc=$?
+set -e
+expect_rc 0 "$rc" "case 25 dry run on an unfilled paragraph"
+printf '%s\n' \
+  "qmd collection add '$beta_abs/_memory/context' --name beta-scope-context" \
+  "qmd context add qmd://beta-scope-context 'Memory scope beta-scope. context records.'" \
+  "$mcp" \
+  >"$expected"
+same_file "$expected" "$tmp/case25.out" "case 25 dry run stdout"
+[[ "$(grep -c '^unfilled scope paragraph: ' "$tmp/case25.err")" == "1" ]] || {
+  echo "case 25: expected one 'unfilled scope paragraph:' line on stderr; got:" >&2
+  cat "$tmp/case25.err" >&2
+  exit 1
+}
+printf 'unfilled scope paragraph: %s/CLAUDE.md\n' "$beta_abs" >"$expected"
+same_file "$expected" "$tmp/case25.err" "case 25 dry run stderr"
+
+PATH="$bare_path" python3 "$script" register "$scope" --dry-run >/dev/null 2>"$tmp/case25.err"
+refute_text "$tmp/case25.err" "unfilled scope paragraph"
+
+delta="$tmp/Delta Scope"
+mkdir -p "$delta/_memory/decisions"
+printf '## The Project in One Paragraph\n\nDelta ships widgets.\n' >"$delta/CLAUDE.md"
+printf '# Memory\n\nNo type list here.\n' >"$delta/_memory/CLAUDE.md"
+ddry="$(PATH="$bare_path" python3 "$script" register "$delta" --dry-run 2>"$tmp/case25.err")"
+grep -Fq "'Delta ships widgets. decisions records.'" <<<"$ddry" || {
+  echo "case 25: delta did not take the no-Record-Types fallback; got:" >&2
+  echo "$ddry" >&2
+  exit 1
+}
+refute_text "$tmp/case25.err" "unfilled scope paragraph"
+
+# Cases 26-29: a real register invalidates the stamp, whatever the files' mtimes.
+# Epsilon's record predates the stamp and its collection isn't in it, which is
+# the scope the hook used to miss.
+eps="$tmp/Epsilon Scope"
+mkdir -p "$eps/_memory/decisions"
+printf '## The Project in One Paragraph\n\nEpsilon.\n' >"$eps/CLAUDE.md"
+printf 'old\n' >"$eps/_memory/decisions/old-a1b2c3.md"
+: >"$log"
+QMD_COLLECTIONS="$cols" QMD_LOG="$log" PATH="$shim_path" python3 "$script" refresh
+python3 -c 'import json,os,sys; s=json.load(open(sys.argv[1]))["started_ns"]; sys.exit(0 if os.stat(sys.argv[2]).st_mtime_ns < s else 1)' \
+  "$state/last-refresh.json" "$eps/_memory/decisions/old-a1b2c3.md" || {
+  echo "test setup: case 26 record is not older than the stamp" >&2
+  exit 1
+}
+cp "$state/last-refresh.json" "$tmp/stamp.before"
+
+stamp_kept() {
+  cmp -s "$tmp/stamp.before" "$state/last-refresh.json" || {
+    echo "$1: the stamp changed" >&2
+    exit 1
+  }
+}
+
+stamp_gone() {
+  [[ ! -e "$state/last-refresh.json" ]] || {
+    echo "$1: last-refresh.json still exists" >&2
+    exit 1
+  }
+}
+
+# Case 26, falsifier: a dry run and both exit-3 registers leave the stamp, so
+# the hook still sees nothing to do. A rule keyed on "register ran" fails here.
+PATH="$bare_path" python3 "$script" register "$eps" --dry-run >/dev/null 2>&1
+stamp_kept "case 26 dry run"
+set +e
+QMD_LOG=/dev/null PATH="$shim_path" python3 "$script" register "$tmp/not-a-scope" 2>/dev/null
+rc=$?
+set -e
+expect_rc 3 "$rc" "case 26 register without _memory/"
+stamp_kept "case 26 register without _memory/"
+set +e
+PATH="$bare_path" python3 "$script" register "$eps" >/dev/null 2>&1
+rc=$?
+set -e
+expect_rc 3 "$rc" "case 26 register with no qmd on PATH"
+stamp_kept "case 26 register with no qmd on PATH"
+: >"$log"
+if_changed QMD_COLLECTIONS="$cols"
+assert_hook_ok "case 26"
+log_empty "case 26"
+no_lock "case 26"
+
+# Case 27: a real register that exits 0 removes the stamp, so the next hook
+# call refreshes though every file predates the old stamp.
+set +e
+QMD_LOG=/dev/null PATH="$shim_path" python3 "$script" register "$eps" >/dev/null 2>&1
+rc=$?
+set -e
+expect_rc 0 "$rc" "case 27 register"
+stamp_gone "case 27 register"
+: >"$log"
+if_changed QMD_COLLECTIONS="$cols"
+assert_hook_ok "case 27"
+wait_unlocked "case 27"
+count_is 1 update "case 27"
+require_file "$state/last-refresh.json"
+
+# Case 28: a register whose first collection add fails still removes the stamp,
+# since the deletion comes before any qmd command.
+log28="$tmp/case28.log"
+: >"$log28"
+set +e
+err="$(QMD_FAIL=collection QMD_LOG="$log28" PATH="$shim_path" python3 "$script" register "$eps" 2>&1 >/dev/null)"
+rc=$?
+set -e
+expect_rc 1 "$rc" "case 28 register with collection add failing"
+grep -Fq 'FAILED: qmd collection add' <<<"$err" || {
+  echo "case 28: missing FAILED: line; got: $err" >&2
+  exit 1
+}
+[[ "$(wc -l <"$log28" | tr -d ' ')" == "1" ]] || {
+  echo "case 28: register ran past the failed collection add" >&2
+  exit 1
+}
+stamp_gone "case 28 failed register"
+
+# Case 29: no stamp, and a state dir that can't exist, are not errors.
+set +e
+out="$(QMD_LOG=/dev/null PATH="$shim_path" python3 "$script" register "$eps")"
+rc=$?
+set -e
+expect_rc 0 "$rc" "case 29 register with no stamp"
+[[ "$(tail -n1 <<<"$out")" == "$mcp" ]] || {
+  echo "case 29: stdout does not end with the MCP line" >&2
+  exit 1
+}
+stamp_gone "case 29 register with no stamp"
+set +e
+XDG_STATE_HOME="$tmp/a-file" QMD_LOG=/dev/null PATH="$shim_path" python3 "$script" register "$eps" >/dev/null
+rc=$?
+set -e
+expect_rc 0 "$rc" "case 29 register with the state dir a file"
+
+require_text memory-index/SKILL.md 'relay that line to the user'
+refute_text memory-index/SKILL.md 'when the dry run shows that fallback'
+refute_text memory-index/README.md 'Run `refresh` once after `register`.'
+refute_text memory-index/README.md "\`--if-changed\` doesn't watch a collection registered after the last refresh."
+refute_text _maintenance/memory-index/RATIONALE.md '`register` over files older than the stamp leaves them unembedded'
+refute_text _maintenance/memory-index/RATIONALE.md "\`--if-changed\` doesn't watch a collection registered after the last refresh."
+require_text _maintenance/memory-index/RATIONALE.md '| 15 | A real `register` deletes `last-refresh.json`'
 
 require_text memory-index/SKILL.md 'python3 SCRIPT refresh --if-changed'
 require_text memory-index/SKILL.md 'FAILED: write <path>'

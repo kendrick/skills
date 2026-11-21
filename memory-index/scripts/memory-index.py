@@ -90,13 +90,13 @@ def read_text(path: Path) -> str:
         return ""
 
 
-def scope_text(root: Path, scope: str) -> str:
+def scope_text(root: Path) -> str:
+    """The scope paragraph on one line, or "" when it is missing or unfilled."""
     # Strip comments before splitting lines: a multi-line fill-in comment
     # would otherwise leak its text into every context string.
     text = re.sub(r"<!--.*?-->", "", read_text(root / "CLAUDE.md"), flags=re.S)
     body = section_body(text, lambda t: t.endswith("in One Paragraph"))
-    body = " ".join((body or "").split())
-    return body or f"Memory scope {scope}."
+    return " ".join((body or "").split())
 
 
 def letters(s: str) -> str:
@@ -121,7 +121,12 @@ def type_description(root: Path, folder: str) -> str | None:
 
 def register_commands(root: Path) -> list[list[str]]:
     scope = scope_name(root)
-    base = scope_text(root, scope)
+    base = scope_text(root)
+    if not base:
+        # Said once here, because the fallback is otherwise visible only
+        # inside each context string, where the agent had to spot it by eye.
+        print(f"unfilled scope paragraph: {root / 'CLAUDE.md'}", file=sys.stderr)
+        base = f"Memory scope {scope}."
     cmds = []
     types = sorted(p.name for p in (root / "_memory").iterdir() if p.is_dir() and not p.name.startswith("."))
     for t in types:
@@ -168,8 +173,21 @@ def cmd_register(args) -> int:
     if args.dry_run:
         for cmd in cmds:
             print(shlex.join(cmd))
-    elif (rc := run_all(cmds)) != 0:
-        return rc
+    else:
+        # The stamp lists only the collections that refresh saw, and the new
+        # ones hold files older than it, so --if-changed would never embed
+        # them. No stamp reads as changed (ledger row 15). Removed before any
+        # qmd call, so a run that fails partway also invalidates it.
+        try:
+            (state_dir() / "last-refresh.json").unlink(missing_ok=True)
+        except NotADirectoryError:
+            pass  # A state path through a file can hold no stamp.
+        except OSError as e:
+            print(f"FAILED: remove {state_dir() / 'last-refresh.json'}", file=sys.stderr)
+            print(e, file=sys.stderr)
+            return 1
+        if (rc := run_all(cmds)) != 0:
+            return rc
     print(MCP_LINE)
     return 0
 
