@@ -520,7 +520,8 @@ def cmd_validate(args):
 # later can't reach the verifier by default.
 VERIFIER_KEYS = ("id", "file", "quoted_evidence", "claim", "proposed_repro")
 
-# The finder's message is one fenced json block, and Step 3 saves it verbatim.
+# Step 3 saves the finder's fenced message verbatim, so stripping the fence by
+# hand first would be the tidying Step 3 forbids.
 FENCE = re.compile(r"^```json[ \t]*\n(.*?)^```[ \t]*$", re.MULTILINE | re.DOTALL)
 
 
@@ -547,6 +548,22 @@ def load_findings_file(path):
         return json.loads(blocks[0])
     except json.JSONDecodeError as e:
         raise Unreadable(f"{path}: fenced json block is not valid JSON: {e}")
+
+
+def finding_problems(line, schema):
+    """Every (json_path, reason) wrong with one finding line, one per field.
+    schema_violation stops at the first, which is right for validate's
+    per-line report but would hide a finding's other problems at import."""
+    problems = [(k, "required field missing") for k in schema["required"] if k not in line]
+    extra = sorted(set(line) - set(schema["properties"]))
+    if extra:
+        problems.append(("$", f"additional properties not allowed: {extra}"))
+    for key, subschema in schema["properties"].items():
+        if key in line:
+            violation = schema_violation(line[key], subschema, key)
+            if violation:
+                problems.append(violation)
+    return problems
 
 
 def require_readable(path):
@@ -592,9 +609,7 @@ def cmd_import_findings(args):
         for key in ("record", "id", "round", "territory"):
             if key in finding:
                 problems.append(f"findings[{pos - 1}]: {key}: assigned by import, not by the finder")
-        violation = schema_violation(line, schema)
-        if violation:
-            json_path, reason = violation
+        for json_path, reason in finding_problems(line, schema):
             problems.append(f"findings[{pos - 1}]: {json_path}: {reason}")
         lines.append(line)
 
@@ -653,6 +668,20 @@ def cmd_report(args):
         raise Unreadable(f"{args.scope}: {e}")
     except json.JSONDecodeError as e:
         raise Unreadable(f"{args.scope}: not valid JSON: {e}")
+    # Wrong shape is unreadable input, the same as a file that isn't JSON:
+    # check-territories validate owns scope.json's semantics, not this script.
+    if not isinstance(scope, dict):
+        raise Unreadable(f"{args.scope}: expected a JSON object")
+    if not isinstance(scope.get("territories", []), list) or not all(
+        isinstance(t, dict) and isinstance(t.get("name"), str)
+        for t in scope.get("territories", [])
+    ):
+        raise Unreadable(f"{args.scope}: territories: expected a list of objects with a name")
+    if not isinstance(scope.get("rounds", []), list) or not all(
+        isinstance(r, dict) and isinstance(r.get("territories"), list)
+        for r in scope.get("rounds", [])
+    ):
+        raise Unreadable(f"{args.scope}: rounds: expected a list of objects with a territories list")
     if not os.path.isdir(args.findings_dir):
         raise Unreadable(f"{args.findings_dir}: not a directory")
     require_readable(args.ledger)
@@ -666,7 +695,7 @@ def cmd_report(args):
             reproduced[obj.get("finding_id")] = obj
 
     problems = []
-    territories = [t.get("name") for t in scope.get("territories", []) if isinstance(t, dict)]
+    territories = [t["name"] for t in scope.get("territories", [])]
     rounds = scope.get("rounds") or []
     if not rounds:
         problems.append(f"{args.scope}: rounds: no round recorded")
@@ -693,7 +722,7 @@ def cmd_report(args):
         # "marked failed" lives in the agent's context, not in a file.
         latest = None
         for rnd in rounds:
-            if name in rnd.get("territories", []):
+            if name in rnd["territories"]:
                 latest = rnd.get("round")
         doc = None
         if latest is not None:
@@ -705,7 +734,10 @@ def cmd_report(args):
         if doc is None:
             out.append("**Verdict:** UNREVIEWED")
             out.append("")
-            out.append(f"No findings file for round {latest}: this territory's finder never reported.")
+            if latest is None:
+                out.append("No round fanned out to this territory, so no finder ever reviewed it.")
+            else:
+                out.append(f"No findings file for round {latest}: this territory's finder never reported.")
         else:
             out.append("**Verdict:** (write this territory's verdict)")
             out.append("")

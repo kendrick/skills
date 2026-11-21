@@ -1363,6 +1363,22 @@ ar_case_report_unreviewed() {
     echo "a territory with no findings file must report UNREVIEWED: $section" >&2
     exit 1
   }
+  # A territory no round lists has no round number to name; "round None"
+  # leaked through before.
+  python3 - "$d/scope.json" <<'PY2'
+import json, sys
+p = sys.argv[1]
+s = json.load(open(p))
+for r in s["rounds"]:
+    r["territories"] = [t for t in r["territories"] if t != "tenancy"]
+json.dump(s, open(p, "w"))
+PY2
+  section="$(ar_report "$d" | sed -n '/^## tenancy/,/^## /p')"
+  grep -Fq "**Verdict:** UNREVIEWED" <<<"$section" && grep -Fq "No round fanned out" <<<"$section" \
+    && ! grep -Fq "round None" <<<"$section" || {
+    echo "a territory no round lists must report UNREVIEWED without naming round None: $section" >&2
+    exit 1
+  }
 }
 
 ar_case_report_listed() {
@@ -1432,6 +1448,48 @@ ar_case_docs_name_subcommands() {
   require_text adversarial-review/references/verifier-prompt.md "ledger.py verifier-input"
 }
 
+# One finding with two problems gets two stderr lines, not only its first.
+ar_case_import_every_problem() {
+  local d="$tmp/ar385-every" status err
+  mkdir -p "$d"
+  ar_findings "$d/f.json" ABC blocking
+  python3 - "$d/f.json" <<'PY'
+import json, sys
+text = open(sys.argv[1]).read().split("\n", 1)[1].rsplit("```", 1)[0]
+doc = json.loads(text)
+del doc["findings"][0]["claim"]
+doc["findings"][0]["reachability"] = "sometimes"
+open(sys.argv[1], "w").write(json.dumps(doc))
+PY
+  set +e
+  err="$(python3 "$ledger_py" import-findings --ledger "$d/l.jsonl" --round 1 "$d/f.json" 2>&1 >/dev/null)"
+  status=$?
+  set -e
+  [[ "$status" == "1" && "$(grep -c '^ledger: findings\[0\]' <<<"$err")" == "2" ]] \
+    && grep -q 'claim' <<<"$err" && grep -q 'reachability' <<<"$err" || {
+    echo "a finding with two problems must print one ledger: line for each, got exit $status: $err" >&2
+    exit 1
+  }
+}
+
+# A scope.json that parses but has the wrong shape is unreadable input: exit 3
+# with a ledger: line, never a traceback.
+ar_case_report_bad_scope() {
+  local d="$tmp/ar385-badscope" status err shape
+  ar_report_run "$d"
+  for shape in '[]' '{"territories": [{"name": "money"}], "rounds": [1]}' '{"territories": "money", "rounds": []}'; do
+    printf '%s\n' "$shape" >"$d/scope.json"
+    set +e
+    err="$(ar_report "$d" 2>&1 >/dev/null)"
+    status=$?
+    set -e
+    [[ "$status" == "3" ]] && grep -q '^ledger: ' <<<"$err" && ! grep -q 'Traceback' <<<"$err" || {
+      echo "report on scope.json $shape must exit 3 with a ledger: line, got exit $status: $err" >&2
+      exit 1
+    }
+  done
+}
+
 ar_case_import_order
 ar_case_rank_falsifiers
 ar_case_import_twice
@@ -1442,5 +1500,7 @@ ar_case_report_unreviewed
 ar_case_report_listed
 ar_case_exit_codes
 ar_case_docs_name_subcommands
+ar_case_import_every_problem
+ar_case_report_bad_scope
 
 echo "adversarial-review smoke: OK"
