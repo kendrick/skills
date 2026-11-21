@@ -887,6 +887,31 @@ rm "$d/.github/ISSUE_TEMPLATE/config.yml"
 hv_run "$d" gh-empty > "$hv_tmp/cfg.json"
 require_json "$hv_tmp/cfg.json" '"blank_issues_enabled" in d' 'false'
 
+# YAML 1.2 core booleans come in three spellings, and a trailing comment is
+# legal after the value; a missed False would send the agent to built-ins.
+d="$(hv_repo capbool)"
+mkdir -p "$d/.github/ISSUE_TEMPLATE"
+printf 'blank_issues_enabled: False  # forms only\n' > "$d/.github/ISSUE_TEMPLATE/config.yml"
+hv_commit "$d" alice init
+hv_run "$d" gh-empty > "$hv_tmp/capbool.json"
+require_json "$hv_tmp/capbool.json" 'd["template"]["rung"]' '"none"'
+require_json "$hv_tmp/capbool.json" 'd["blank_issues_enabled"]' 'false'
+printf 'blank_issues_enabled: TRUE\n' > "$d/.github/ISSUE_TEMPLATE/config.yml"
+hv_run "$d" gh-empty > "$hv_tmp/capbool.json"
+require_json "$hv_tmp/capbool.json" 'd["blank_issues_enabled"]' 'true'
+# GitHub parses config.yml as YAML 1.1, where no/yes/off/on are booleans.
+printf 'blank_issues_enabled: No\n' > "$d/.github/ISSUE_TEMPLATE/config.yml"
+hv_run "$d" gh-empty > "$hv_tmp/capbool.json"
+require_json "$hv_tmp/capbool.json" 'd["template"]["rung"]' '"none"'
+require_json "$hv_tmp/capbool.json" 'd["blank_issues_enabled"]' 'false'
+printf 'blank_issues_enabled: on\n' > "$d/.github/ISSUE_TEMPLATE/config.yml"
+hv_run "$d" gh-empty > "$hv_tmp/capbool.json"
+require_json "$hv_tmp/capbool.json" 'd["blank_issues_enabled"]' 'true'
+# A value that merely starts like a boolean is a string, not a setting.
+printf 'blank_issues_enabled: off-topic\n' > "$d/.github/ISSUE_TEMPLATE/config.yml"
+hv_run "$d" gh-empty > "$hv_tmp/capbool.json"
+require_json "$hv_tmp/capbool.json" '"blank_issues_enabled" in d' 'false'
+
 # Criterion 3: forms and legacy templates together report the forms rung.
 d="$(hv_repo both)"
 mkdir -p "$d/.github/ISSUE_TEMPLATE"

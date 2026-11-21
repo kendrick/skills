@@ -61,9 +61,10 @@ def blank_issues_enabled(root):
     for name in ("config.yml", "config.yaml"):
         p = root / ".github" / "ISSUE_TEMPLATE" / name
         if p.is_file():
-            m = re.search(r"^blank_issues_enabled:\s*(true|false)\b", p.read_text(errors="replace"), re.M)
+            # GitHub parses config.yml as YAML 1.1 (Ruby's Psych), where yes/no/on/off are booleans too.
+            m = re.search(r"^blank_issues_enabled:\s*(true|false|yes|no|on|off)[ \t]*(?:#.*)?\r?$", p.read_text(errors="replace"), re.M | re.I)
             if m:
-                return m.group(1) == "true"
+                return m.group(1).lower() in ("true", "yes", "on")
     return None
 
 
