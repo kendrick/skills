@@ -27,6 +27,7 @@ read wrong; see Known Limitations in the ledger.
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -195,6 +196,25 @@ def run_value(value):
     return re.sub(r"\s+#.*$", "", value)
 
 
+def step_directory(lines, run_at, key_col, marked):
+    """Return the `working-directory:` of the step holding the `run:` line, or None."""
+    # A `run:` after other keys sits under a `- ` marker one level out; find that
+    # marker so a sibling key before `run:` is seen and a prior step's is not.
+    start = run_at
+    if not marked:
+        while start > 0 and (not lines[start].strip() or len(lines[start]) - len(lines[start].lstrip()) >= key_col):
+            start -= 1
+    marker_col = len(lines[start]) - len(lines[start].lstrip())
+    end = run_at + 1
+    while end < len(lines) and (not lines[end].strip() or len(lines[end]) - len(lines[end].lstrip()) > marker_col):
+        end += 1
+    for line in lines[start:end]:
+        m = re.match(r"^(\s*(?:-\s+)?)working-directory:\s*(.*)$", line)
+        if m and len(m.group(1)) == key_col:
+            return run_value(m.group(2).strip()) or None
+    return None
+
+
 def workflow_runs(root):
     out = []
     for p in workflow_files(root):
@@ -208,17 +228,20 @@ def workflow_runs(root):
             if not m:
                 continue
             indent, rest = len(m.group(1)), m.group(2).strip()
+            # Without the directory the harvested command fails from the repo root.
+            cwd = step_directory(lines, i - 1, indent, "-" in m.group(1))
+            prefix = f"cd {cwd if re.fullmatch(r'[A-Za-z0-9_./-]+', cwd) else shlex.quote(cwd)} && " if cwd else ""
             if rest[:1] in ("|", ">"):
                 block = []
                 while i < len(lines) and (not lines[i].strip() or len(lines[i]) - len(lines[i].lstrip()) > indent):
                     if lines[i].strip():
-                        block.append(lines[i].strip())
+                        block.append(prefix + lines[i].strip())
                     i += 1
                 out += block
             elif rest:
                 command = run_value(rest)
                 if command:
-                    out.append(command)
+                    out.append(prefix + command)
     return list(dict.fromkeys(out))
 
 

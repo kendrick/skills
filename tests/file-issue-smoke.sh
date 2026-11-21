@@ -936,7 +936,8 @@ require_json "$hv_tmp/noloc.json" 'd["template"]["rung"]' '"builtin"'
 # and python3 via symlinks only, so gh really is absent.
 mkdir -p "$hv_tmp/bare"
 ln -sf "$(command -v git)" "$hv_tmp/bare/git"
-ln -sf "$(command -v python3)" "$hv_tmp/bare/python3"
+# sys.executable, not command -v: a pyenv shim is a wrapper that cannot find its own files from a bare PATH.
+ln -sf "$(python3 -c 'import sys; print(sys.executable)')" "$hv_tmp/bare/python3"
 (cd "$d" && PATH="$hv_tmp/bare" python3 "$hv_script") > "$hv_tmp/noloc.json"
 require_json "$hv_tmp/noloc.json" 'd["template"]["rung"]' '"unchecked"'
 
@@ -1130,6 +1131,32 @@ first="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["verifi
 rc=0; bash -n -c "$first" > /dev/null 2>&1 || rc=$?
 expect_rc 0 "$rc" "harvested quoted run: command parses under bash -n"
 
+# A step's working-directory rides on its candidate, before or after run:, so
+# the command is runnable from the repo root as harvested.
+d="$(hv_repo wfcwd)"
+mkdir -p "$d/.github/workflows" "$d/component" "$d/my dir"
+printf 'print("tests OK")\n' > "$d/component/check.py"
+printf 'print("tests OK")\n' > "$d/my dir/check.py"
+cat > "$d/.github/workflows/ci.yml" <<'YML'
+jobs:
+  t:
+    steps:
+      - name: after
+        run: python3 check.py
+        working-directory: component
+      - working-directory: "my dir"
+        run: |
+          python3 check.py
+          echo done
+      - run: make other
+YML
+hv_commit "$d" alice init
+hv_run "$d" gh-empty > "$hv_tmp/wfcwd.json"
+require_json "$hv_tmp/wfcwd.json" 'd["verification"]["candidates"]' '["cd component && python3 check.py", "cd '"'"'my dir'"'"' && python3 check.py", "cd '"'"'my dir'"'"' && echo done", "make other"]'
+first="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["verification"]["candidates"][0])' "$hv_tmp/wfcwd.json")"
+got="$(cd "$d" && bash -c "$first")"
+[[ "$got" == "tests OK" ]] || { echo "wfcwd: candidate printed '$got' from the fixture root, expected 'tests OK'" >&2; exit 1; }
+
 # A run: block ends at the run key's own indentation, with or without a
 # leading list marker, so sibling keys never become commands.
 d="$(hv_repo wfrun)"
@@ -1149,7 +1176,7 @@ jobs:
 YML
 hv_commit "$d" alice init
 hv_run "$d" gh-empty > "$hv_tmp/wfrun.json"
-require_json "$hv_tmp/wfrun.json" 'd["verification"]' '{"rung": "workflows", "candidates": ["python3 -m unittest", "make lint"]}'
+require_json "$hv_tmp/wfrun.json" 'd["verification"]' '{"rung": "workflows", "candidates": ["cd sub && python3 -m unittest", "make lint"]}'
 
 # Criterion 6: Step 1 names the script and its done-when admits unchecked for
 # the org rung, so the template source can be named without a false absent.
