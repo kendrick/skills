@@ -4282,6 +4282,11 @@ cr_scope="$cr_dir/scope"
 cp -R tests/fixtures/memory-consolidate/scope "$cr_scope"
 mkdir -p "$cr_scope/notes/raw"
 printf 'verbatim transcript text\n' >"$cr_scope/notes/raw/Cr1Sidecar.md"
+# memory-consolidate's records carry no source_refs, which the kit never asked for and record-source-refs does (#384). The copy gets one so this case keeps pinning the report count; the checked-in fixture is untouched, since another skill's suite owns it.
+for cr_record in "$cr_scope"/_memory/*/*.md; do
+  sed -i.bak 's/^applies_to: .*/&\
+source_refs: [Cr0Source0]/' "$cr_record" && rm "$cr_record.bak"
+done
 LTM_TODAY=2026-10-01 python3 memory-consolidate/scripts/consolidate.py --scope "$cr_scope" --json tests/fixtures/memory-consolidate/doctor.json >/dev/null
 cr_report="$cr_scope/notes/reports/2026-10-01-consolidation.md"
 require_file "$cr_report"
@@ -4607,6 +4612,184 @@ else
 fi
 
 rm -rf "$lo_dir"
+
+# ---------------------------------------------------------------------------
+# #384: phase 6's record and inbox checks live in the lint
+# ---------------------------------------------------------------------------
+
+# Every case works on a copy; the section removes its own scratch dir.
+p6_dir="$(mktemp -d "${TMPDIR:-/tmp}/i2m-p6.XXXXXX")"
+run_lint_drained() {
+  bash "$lint" "$1" --drained 2>&1 || true
+}
+
+# The issue's reproduction, change by change. Each change alone must name itself,
+# and undoing it must clear exactly its own line.
+p6_fixture() {
+  rm -rf "$1"
+  cp -R "$fixtures/ltm-migrate" "$1"
+}
+p6_a="$p6_dir/a"
+p6_fixture "$p6_a"
+p6_out="$(run_lint_drained "$p6_a")"
+require_line "$p6_out" "failures: 0" "ltm-migrate as it stands, rules/ and Rule included, run with --drained"
+
+p6_id="Lm1EmeLdg1"
+p6_name="emea-invoices-use-shared-ledger-$p6_id.md"
+p6_file="$p6_a/_memory/decisions/$p6_name"
+sed -i.bak 's/^id: Lm1EmeLdg1/id: bad/' "$p6_file" && rm "$p6_file.bak"
+p6_out="$(run_lint "$p6_a")"
+require_failure "$p6_out" "record-id:"
+require_line "$p6_out" "failures: 1" "a schema: 2 record with id: bad"
+p6_fixture "$p6_a"
+
+mv "$p6_file" "$p6_a/_memory/context/$p6_name"
+p6_out="$(run_lint "$p6_a")"
+require_failure "$p6_out" 'record-type: `memory_type: Decision` belongs in `_memory/decisions`'
+require_line "$p6_out" "failures: 1" "a schema: 2 Decision in _memory/context"
+p6_fixture "$p6_a"
+
+sed -i.bak 's/^source_refs: .*/source_refs: []/' "$p6_file" && rm "$p6_file.bak"
+p6_out="$(run_lint "$p6_a")"
+require_failure "$p6_out" "record-source-refs:"
+require_line "$p6_out" "failures: 1" "a schema: 2 record with source_refs: []"
+sed -i.bak '/^source_refs: /d' "$p6_file" && rm "$p6_file.bak"
+p6_out="$(run_lint "$p6_a")"
+require_failure "$p6_out" "record-source-refs:"
+p6_fixture "$p6_a"
+
+# A schema: 2 Rule belongs in rules/ and nowhere else.
+p6_rule="$p6_a/_memory/rules/dunning-notices-need-ops-signoff-Lm2DunOps2.md"
+mv "$p6_rule" "$p6_a/_memory/context/"
+p6_out="$(run_lint "$p6_a")"
+require_failure "$p6_out" 'record-type: `memory_type: Rule` belongs in `_memory/rules`'
+p6_fixture "$p6_a"
+sed -i.bak 's/^memory_type: Rule/memory_type: Policy/' "$p6_rule" && rm "$p6_rule.bak"
+p6_out="$(run_lint "$p6_a")"
+require_failure "$p6_out" 'record-type: `memory_type: Policy` is not one of: Decision PolicyRule Exception Context Rule'
+p6_fixture "$p6_a"
+
+# All three changes at once, plus the leftover inbox file: the reproduction.
+mv "$p6_file" "$p6_a/_memory/context/"
+p6_file="$p6_a/_memory/context/$p6_name"
+sed -i.bak 's/^id: Lm1EmeLdg1/id: bad/; s/^source_refs: .*/source_refs: []/' "$p6_file" && rm "$p6_file.bak"
+echo leftover >"$p6_a/notes/_inbox/leftover.md"
+p6_out="$(run_lint "$p6_a")"
+require_failure "$p6_out" "record-id:"
+require_failure "$p6_out" "record-type:"
+require_failure "$p6_out" "record-source-refs:"
+require_line "$p6_out" "failures: 3" "the #384 reproduction without --drained"
+if grep -Fq "inbox-not-empty" <<<"$p6_out"; then
+  echo "inbox-not-empty reported without --drained" >&2
+  exit 1
+fi
+p6_out="$(run_lint_drained "$p6_a")"
+require_failure "$p6_out" "inbox-not-empty:"
+require_line "$p6_out" "failures: 4" "the #384 reproduction with --drained"
+# The flag is accepted ahead of the path too.
+p6_out="$(bash "$lint" --drained "$p6_a" 2>&1 || true)"
+require_failure "$p6_out" "inbox-not-empty:"
+
+# --drained fails on any entry but .gitkeep, at either queue location.
+for p6_leftover in notes/_inbox/.DS_Store notes/_inbox/half-done; do
+  p6_fixture "$p6_a"
+  mkdir -p "$p6_a/$(dirname "$p6_leftover")"
+  case "$p6_leftover" in
+    */half-done) mkdir "$p6_a/$p6_leftover" ;;
+    *) : >"$p6_a/$p6_leftover" ;;
+  esac
+  p6_out="$(run_lint_drained "$p6_a")"
+  require_failure "$p6_out" "inbox-not-empty:"
+done
+p6_fixture "$p6_a"
+mkdir "$p6_a/_inbox"
+echo leftover >"$p6_a/_inbox/root-leftover.txt"
+p6_out="$(run_lint_drained "$p6_a")"
+require_failure "$p6_out" "inbox-not-empty:"
+p6_fixture "$p6_a"
+p6_rc=0
+bash "$lint" "$p6_a" --bogus >/dev/null 2>&1 || p6_rc=$?
+[[ "$p6_rc" -eq 2 ]] || {
+  echo "an unknown flag exited $p6_rc (want 2)" >&2
+  exit 1
+}
+
+# schema: 1 records get the same id and source_refs checks. The fixtures are
+# built the way phase 5 builds them, with the bank in place.
+p6_b="$p6_dir/b"
+p6_fixture "$p6_b"
+sed 's/{{SCOPE_NAME}}/p6/' inbox-to-memory/assets/memory-bank.template.yaml >"$p6_b/memory-bank.yaml"
+p6_ltm="$p6_b/_memory/decisions/phase-6-decision-Lm7NewDec7.md"
+lm_fill decision Lm7NewDec7 >"$p6_ltm"
+rm -f "$p6_b"/_memory/*/*Lm[1-4]*.md
+p6_out="$(run_lint_drained "$p6_b")"
+require_line "$p6_out" "failures: 0" "a schema: 1 record with a good id"
+sed -i.bak 's/^id: .*/id: bad/' "$p6_ltm" && rm "$p6_ltm.bak"
+p6_out="$(run_lint "$p6_b")"
+require_failure "$p6_out" "record-id:"
+# The Rule's falsifier: one character off the filename's id fails.
+sed -i.bak 's/^id: bad/id: Lm7NewDec8/' "$p6_ltm" && rm "$p6_ltm.bak"
+p6_out="$(run_lint "$p6_b")"
+require_failure "$p6_out" 'record-id: filename `phase-6-decision-Lm7NewDec7.md` does not end in `-Lm7NewDec8.md`'
+sed -i.bak 's/^id: Lm7NewDec8/id: Lm7NewDec7/; s/^source_refs: .*/source_refs: []/' "$p6_ltm" && rm "$p6_ltm.bak"
+p6_out="$(run_lint "$p6_b")"
+require_failure "$p6_out" "record-source-refs:"
+
+# Rule's other falsifier: an id with a hyphen of its own, whose filename ends
+# in it. A basename split on the last hyphen reads `hfD5u` and fails this.
+p6_c="$p6_dir/c"
+p6_fixture "$p6_c"
+sed 's/{{SCOPE_NAME}}/p6/' inbox-to-memory/assets/memory-bank.template.yaml >"$p6_c/memory-bank.yaml"
+rm -f "$p6_c"/_memory/*/*Lm[1-4]*.md
+lm_fill decision zFpm-hfD5u >"$p6_c/_memory/decisions/freeze-owner-zFpm-hfD5u.md"
+p6_out="$(run_lint "$p6_c")"
+require_line "$p6_out" "failures: 0" "an id holding a hyphen, filename ending in -zFpm-hfD5u.md"
+
+# v1 records, no schema key, get none of the new checks.
+p6_d="$p6_dir/d"
+p6_fixture "$p6_d"
+p6_v1="$p6_d/_memory/context/regional-ledger-closes-June-Lm3LdgCls3.md"
+sed -i.bak '/^schema: 2/d; s/^id: Lm3LdgCls3/id: bad/; s/^source_refs: .*/source_refs: []/; s/^memory_type: Context/memory_type: Decision/' "$p6_v1" && rm "$p6_v1.bak"
+p6_out="$(run_lint_drained "$p6_d")"
+require_line "$p6_out" "v1 files: 1" "a v1 record with every new defect"
+for p6_name in record-id record-type record-source-refs; do
+  refute_failure "$p6_out" "$p6_name"
+done
+# Journal entries under entries/ get id, source_refs, and a Journal-only type
+# (widened past #384's Non-Goal on PR #435's review). A well-formed one passes.
+p6_j="$p6_dir/j"
+mkdir -p "$p6_j/entries" "$p6_j/_inbox"
+p6_je() { # id memory_type source_refs
+  printf -- '---\nschema: 2\nid: %s\nmemory_type: %s\ntitle: A pattern\nstatus: current\ndate: 2025-12-09\nlast_confirmed: 2025-12-09\nsource_refs: %s\napplies_to: []\nthemes: []\nrelated: []\n---\n\n# A pattern\n\nBody.\n' "$1" "$2" "$3"
+}
+p6_je Jn1GoodEnt Journal '[a/b::ZGulgExW0q]' >"$p6_j/entries/2025-12-09-good-Jn1GoodEnt.md"
+p6_out="$(run_lint_drained "$p6_j")"
+require_line "$p6_out" "failures: 0" "a well-formed journal entry"
+p6_je bad Journal '[a/b::ZGulgExW0q]' >"$p6_j/entries/2025-12-09-badid-Jn2BadId02.md"
+p6_je Jn3NoRefs3 Journal '[]' >"$p6_j/entries/2025-12-09-norefs-Jn3NoRefs3.md"
+p6_je Jn4WrongTy Decision '[a/b::ZGulgExW0q]' >"$p6_j/entries/2025-12-09-wrongtype-Jn4WrongTy.md"
+p6_out="$(run_lint "$p6_j")"
+require_failure "$p6_out" "record-id:"
+require_failure "$p6_out" "record-source-refs:"
+require_failure "$p6_out" 'record-type: `memory_type: Decision` is not `Journal`'
+require_line "$p6_out" "failures: 3" "three malformed journal entries, one defect each"
+rm -rf "$p6_dir"
+
+# Phase 6 hands the id, type, source_refs, and inbox checks to the script and
+# keeps only the half-rewrite check by hand.
+require_text inbox-to-memory/SKILL.md 'bash <skill-path>/scripts/lint-scope.sh <scope-root> --drained'
+refute_text inbox-to-memory/SKILL.md 'Every record file has a valid `id`'
+refute_text inbox-to-memory/SKILL.md 'The `_inbox/` is empty.'
+[[ "$(wc -c <inbox-to-memory/SKILL.md)" -le 45056 ]] || {
+  echo "inbox-to-memory/SKILL.md is over its 45056-byte ceiling" >&2
+  exit 1
+}
+for p6_check in record-id record-source-refs inbox-not-empty; do
+  require_table_row "$contracts" "$p6_check"
+done
+# The id comes from the frontmatter and the filename is compared against it.
+# Reading the id off the basename's last hyphen rejects any nanoid with a hyphen.
+refute_text "$lint" '${base##*-}'
 
 # The checked-in fixtures are never migrated or stamped in place. Every
 # migration or write-through test works on a copy, and a test that forgets

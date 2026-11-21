@@ -224,11 +224,14 @@ Each failure names the file and the check that caught it, so a defect whose caus
 | `contradiction-fields`      | A contradiction names no record, or never states what that record claims. |
 | `raw-file`                  | A v2-body note's `raw_file` doesn't resolve or resolves to an empty file, or its `## Raw Content` links into `raw/` with no `raw_file`. |
 | `record-facet`              | A `schema: 1` record's `applies_to` or `owners` entry fails `^[a-z][a-z0-9-]*:[^:]`, or uses a prefix the scope's `memory-bank.yaml` doesn't list under `facet_prefixes`. |
-| `record-type`               | A `schema: 1` record's `memory_type` is not one of the kit's four types, or the record sits outside the folder `memory-bank.yaml`'s `folders` names for that type, or the kit default where it names none. |
+| `record-type`               | A record's `memory_type` is not one of the kit's four types, or the record sits outside the folder `memory-bank.yaml`'s `folders` names for that type, or the kit default where it names none. A `schema: 2` record also accepts `Rule`, in `_memory/rules`, and takes the kit defaults whatever the bank says. A `schema: 2` journal entry under `entries/` must say `memory_type: Journal`. |
+| `record-id`                 | A record's `id` is not ten characters from `A-Za-z0-9_-`, or its filename doesn't end in `-<id>.md`. The suffix is compared against the `id` as written, so a nanoid holding a hyphen passes. |
+| `record-source-refs`        | A record's `source_refs` is missing, not a list, or empty. |
 | `record-supersedes`         | A `schema: 1` record carries `supersedes` as anything other than an inline list. |
 | `bank-config`               | A scope holding a `schema: 1` record has no `memory-bank.yaml`, or one missing `schema: 1`, a `name`, or a `facet_prefixes` entry. |
+| `inbox-not-empty`           | Only with `--drained`: `_inbox/` or `notes/_inbox/` holds an entry other than `.gitkeep`. |
 
-The four `record-` and `bank-config` checks run only where a record carries `schema: 1`. A `schema: 2` record and a note get none of them, which is what keeps a scope that hasn't migrated passing.
+`record-facet`, `record-supersedes`, and `bank-config` run only where a record carries `schema: 1`. `record-id`, `record-type`, and `record-source-refs` run on every `schema: 1` record, on every `schema: 2` file under `_memory/<type>/`, and on every `schema: 2` file under `entries/`, where `record-type` requires `memory_type: Journal` and nothing else; and `record-id` and `record-source-refs` skip a file whose frontmatter block `frontmatter-fences`, `frontmatter-parses`, `frontmatter-budget`, `frontmatter-single-line`, or `frontmatter-key-domain` already refused. `record-type` on a `schema: 1` record still runs on a refused file. A note and a file with no `schema` key get none of them, which is what keeps a scope that hasn't migrated passing. `inbox-not-empty` is off unless the run passes `--drained`, because the lint also runs mid-migration, when a queue may hold files on purpose.
 
 `frontmatter-key-domain` is checked ahead of the budget on purpose. A record carrying both keys plus most of the order runs past line 20, and the budget failure would report that overrun without ever naming the mixup underneath it.
 

@@ -50,18 +50,33 @@ REGISTERED_TOKENS="[memory candidate:
 FRONTMATTER_LINE_BUDGET=20
 
 usage() {
-  echo "usage: ${0##*/} <scope-path>" >&2
+  echo "usage: ${0##*/} <scope-path> [--drained]" >&2
   echo "  scope-path: a directory with _inbox/ or notes/_inbox/, plus _memory/ or entries/" >&2
+  echo "  --drained: also fail when an _inbox/ holds anything but .gitkeep" >&2
 }
 
-if [[ $# -ne 1 ]]; then
+# Opt-in because the lint also runs mid-task, a migration for one, when the queue
+# may hold files on purpose. Only phase 6 can claim the queue should be empty.
+drained=0
+scope=""
+for arg in "$@"; do
+  case "$arg" in
+    --drained) drained=1 ;;
+    -*) usage; exit 2 ;;
+    *)
+      [[ -z "$scope" ]] || { usage; exit 2; }
+      scope="$arg"
+      ;;
+  esac
+done
+if [[ -z "$scope" ]]; then
   usage
   exit 2
 fi
 
 # Trailing slashes would otherwise show up in the reported path and in every
 # assertion written against it.
-scope="${1%/}"
+scope="${scope%/}"
 
 if [[ ! -d "$scope" ]]; then
   echo "not a directory: $scope" >&2
@@ -174,6 +189,9 @@ check_key_order() {
   fi
 }
 
+# Returns 1 when it refused the block outright (fences, key domain, budget, parse,
+# single-line), so the record checks can skip a block that was never trustworthy.
+# A key-order failure still returns 0: the block parses and its values can be read.
 check_frontmatter() {
   local file="$1"
   local end
@@ -181,7 +199,7 @@ check_frontmatter() {
 
   if [[ "$end" -eq 0 ]]; then
     fail frontmatter-fences "no closing --- for the frontmatter block"
-    return
+    return 1
   fi
 
   local block
@@ -195,17 +213,17 @@ check_frontmatter() {
   themes_lines="$(printf '%s\n' "$block" | grep -cE '^themes:' || true)"
   if [[ "$tags_lines" -gt 0 && "$themes_lines" -gt 0 ]]; then
     fail frontmatter-key-domain "carries both \`tags\` and \`themes\`, a record's key and a journal entry's"
-    return
+    return 1
   fi
 
   if [[ "$end" -gt "$FRONTMATTER_LINE_BUDGET" ]]; then
     fail frontmatter-budget "closing --- on line $end, past the $FRONTMATTER_LINE_BUDGET-line budget"
-    return
+    return 1
   fi
 
   if ! printf '%s\n' "$block" | yq '.' >/dev/null 2>&1; then
     fail frontmatter-parses "yq could not parse the block"
-    return
+    return 1
   fi
 
   # A comment or a `key: value` at column zero, and nothing else. This one textual
@@ -216,7 +234,7 @@ check_frontmatter() {
   if [[ -n "$offender" ]]; then
     local lineno="${offender%%:*}"
     fail frontmatter-single-line "line $((lineno + 1)) is not a comment or a single-line key: ${offender#*:}"
-    return
+    return 1
   fi
 
   local keys order
@@ -576,17 +594,27 @@ check_record_facets() {
 }
 
 check_record_type() {
-  local file="$1" block="$2" type folder actual
+  local file="$1" block="$2" schema="$3" shown="$KIT_TYPES" type folder actual
+  # A schema: 2 record still says `Rule` until --to-ltm renames it, and its
+  # folder is the lightweight scaffold's `_memory/rules`.
+  [[ "$schema" == 2 ]] && shown="$KIT_TYPES Rule"
   type="$(printf '%s\n' "$block" | yq -r '.memory_type // ""' 2>/dev/null || true)"
-  if ! has_key "${KIT_TYPES// /$'\n'}" "$type"; then
-    fail record-type "\`memory_type: $type\` is not one of: $KIT_TYPES"
+  if [[ "$schema" == 2 && "$type" == Rule ]]; then
+    :
+  elif ! has_key "${KIT_TYPES// /$'\n'}" "$type"; then
+    fail record-type "\`memory_type: $type\` is not one of: $shown"
     return
   fi
   folder=""
-  if [[ "$bank_parses" -eq 1 ]]; then
+  # memory-bank.yaml belongs to the kit, so it only moves a schema: 1 record's folder.
+  if [[ "$schema" == 1 && "$bank_parses" -eq 1 ]]; then
     folder="$(yq -r ".folders.$type // \"\"" "$scope/memory-bank.yaml" 2>/dev/null || true)"
   fi
-  [[ -n "$folder" ]] || folder="$(kit_default_folder "$type")"
+  if [[ "$type" == Rule ]]; then
+    folder="_memory/rules"
+  else
+    [[ -n "$folder" ]] || folder="$(kit_default_folder "$type")"
+  fi
   folder="${folder%/}"
   actual="$(dirname "${file#"$scope"/}")"
   if [[ "$actual" != "$folder" ]]; then
@@ -602,6 +630,71 @@ check_record_supersedes() {
   fi
 }
 
+# The id pattern is the kit's. The suffix is compared against the id the frontmatter
+# gives, never an id read back off the filename: nanoids hold hyphens, so splitting
+# on the last one reads `zFpm-hfD5u` as `hfD5u` and fails a good record.
+check_record_id() {
+  local file="$1" block="$2" id base
+  id="$(printf '%s\n' "$block" | yq -r '.id // ""' 2>/dev/null || true)"
+  # The shipped templates carry `{{nanoid}}` and the suite lints them from a
+  # scratch scope. A placeholder is no more an id than check_links' `{{`
+  # targets are links.
+  [[ "$id" == *'{{'* ]] && return 0
+  if ! [[ "$id" =~ ^[A-Za-z0-9_-]{10}$ ]]; then
+    fail record-id "\`id: $id\` is not ten characters from A-Za-z0-9_-"
+    return
+  fi
+  base="$(basename "$file" .md)"
+  [[ "$base" == *"-$id" ]] || fail record-id "filename \`${file##*/}\` does not end in \`-$id.md\`"
+}
+
+check_record_source_refs() {
+  local block="$1"
+  if [[ "$(printf '%s\n' "$block" | yq '.source_refs | tag' 2>/dev/null || true)" != '!!seq' ||
+    "$(printf '%s\n' "$block" | yq '.source_refs | length' 2>/dev/null || true)" -eq 0 ]]; then
+    fail record-source-refs "\`source_refs\` needs a list with at least one entry"
+  fi
+}
+
+# A journal entry is no kit type and no `_memory/` folder holds it, so it gets its
+# own type check: `Journal`, and nothing else, under `entries/` (#384, widened on
+# PR #435's review once phase 6 stopped checking these by hand).
+check_journal_type() {
+  local type
+  type="$(printf '%s\n' "$1" | yq -r '.memory_type // ""' 2>/dev/null || true)"
+  [[ "$type" == Journal ]] || fail record-type "\`memory_type: $type\` is not \`Journal\`, which is what \`entries/\` holds"
+}
+
+# Every schema: 1 file is a record. A schema: 2 file is one under `_memory/` or
+# `entries/`, where notes (which also carry schema: 2) never live. v1 files never
+# reach here.
+check_record() {
+  local file="$1" schema end block journal=0
+  schema="$(frontmatter_schema_value "$file")"
+  case "$schema" in
+    1) ;;
+    2)
+      if [[ "$file" == "$scope"/entries/* ]]; then
+        journal=1
+      else
+        [[ "$file" == "$scope"/_memory/*/* ]] || return 0
+      fi
+      ;;
+    *) return 0 ;;
+  esac
+  end="$(frontmatter_end "$file")"
+  [[ "$end" -eq 0 ]] && return 0
+  block="$(sed -n "2,$((end - 1))p" "$file")"
+  check_record_id "$file" "$block"
+  # schema: 1 records get record-type from check_ltm_record, bank folders and all.
+  if [[ "$journal" -eq 1 ]]; then
+    check_journal_type "$block"
+  elif [[ "$schema" == 2 ]]; then
+    check_record_type "$file" "$block" 2
+  fi
+  check_record_source_refs "$block"
+}
+
 check_ltm_record() {
   local file="$1" end block
   [[ "$(frontmatter_schema_value "$file")" == 1 ]] || return 0
@@ -609,8 +702,23 @@ check_ltm_record() {
   end="$(frontmatter_end "$file")"
   block="$(sed -n "2,$((end - 1))p" "$file")"
   check_record_facets "$block"
-  check_record_type "$file" "$block"
+  check_record_type "$file" "$block" 1
   check_record_supersedes "$block"
+}
+
+# Any entry but .gitkeep counts, dotfiles and directories included: an agent that
+# left a .DS_Store or a half-processed folder behind has not drained the queue.
+check_inbox_empty() {
+  local dir leftover saved="$current_file"
+  for dir in "$scope/_inbox" "$scope/notes/_inbox"; do
+    [[ -d "$dir" ]] || continue
+    leftover="$(find "$dir" -mindepth 1 -maxdepth 1 ! -name .gitkeep -print -quit)"
+    if [[ -n "$leftover" ]]; then
+      current_file="$dir"
+      fail inbox-not-empty "holds \`${leftover##*/}\`, and phase 6 expects the queue drained"
+    fi
+  done
+  current_file="$saved"
 }
 
 # Once per scope, after the walk. The bank file is what makes `_memory/` a kit
@@ -697,8 +805,10 @@ for file in ${v2_files[@]+"${v2_files[@]}"}; do
   index=$((index + 1))
   current_file="$file"
   body="${body_for_index[$index]}"
-  check_frontmatter "$file"
+  frontmatter_ok=1
+  check_frontmatter "$file" || frontmatter_ok=0
   check_ltm_record "$file"
+  [[ "$frontmatter_ok" -eq 1 ]] && check_record "$file"
 
   # The body grammar checks are the ones a v1 body cannot satisfy and was never
   # asked to. Links stay on either way, and they run on files with no `schema` key
@@ -729,6 +839,7 @@ for file in ${v2_files[@]+"${v2_files[@]}"}; do
 done
 
 if [[ "$ltm_records" -gt 0 ]]; then check_bank_config; fi
+if [[ "$drained" -eq 1 ]]; then check_inbox_empty; fi
 
 # A link is broken the same way regardless of which schema generation wrote it,
 # so it's the one check the v1/v2 split above was never meant to gate. Nothing
