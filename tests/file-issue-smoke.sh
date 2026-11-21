@@ -827,3 +827,136 @@ require_text _maintenance/file-issue/RATIONALE.md "## Known Limitations"
 # table's third column. The command form around it is pinned once, in
 # repo-docs-smoke.sh, so this does not re-pin it twelve times.
 require_text README.md "--skill file-issue"
+
+# harvest.py (#386): Step 1's filesystem and git reads as one call. Fixtures
+# are scratch repos; gh is a shim, so no case touches GitHub.
+hv_tmp="$(mktemp -d)"
+trap 'rm -rf "$link_tmp" "$hv_tmp"' EXIT
+hv_script="$repo_root/file-issue/scripts/harvest.py"
+mkdir -p "$hv_tmp/gh-fail" "$hv_tmp/gh-empty"
+printf '#!/bin/sh\necho "gh: HTTP 500" >&2\nexit 1\n' > "$hv_tmp/gh-fail/gh"
+printf '#!/bin/sh\necho "[]"\n' > "$hv_tmp/gh-empty/gh"
+chmod +x "$hv_tmp/gh-fail/gh" "$hv_tmp/gh-empty/gh"
+
+# A fresh repo with an https origin, so the org rung has an owner to read.
+hv_repo() {
+  local d="$hv_tmp/$1"
+  mkdir -p "$d"
+  git -C "$d" init -q
+  git -C "$d" remote add origin https://github.com/acme/widget.git
+  echo "$d"
+}
+hv_commit() {
+  git -C "$1" add -A
+  GIT_AUTHOR_NAME="$2" GIT_AUTHOR_EMAIL="$2@example.com" GIT_COMMITTER_NAME="$2" GIT_COMMITTER_EMAIL="$2@example.com" \
+    git -C "$1" commit -q --allow-empty -m "$3"
+}
+# Runs harvest.py inside a fixture with the chosen gh shim first on PATH.
+hv_run() {
+  local d="$1" shim="$2"
+  (cd "$d" && PATH="$hv_tmp/$shim:$PATH" python3 "$hv_script")
+}
+
+# Usage error and non-repo both exit 3.
+rc=0; (cd "$hv_tmp" && python3 "$hv_script") > /dev/null 2>&1 || rc=$?
+expect_rc 3 "$rc" "harvest outside a git repository"
+rc=0; (cd "$repo_root" && python3 "$hv_script" --bogus) > /dev/null 2>&1 || rc=$?
+expect_rc 3 "$rc" "harvest with an unknown flag"
+
+# Criterion 1: this repo's own verification candidates include its smoke test.
+(cd "$repo_root" && PATH="$hv_tmp/gh-empty:$PATH" python3 "$hv_script") > "$hv_tmp/self.json"
+require_json "$hv_tmp/self.json" '"tests/file-issue-smoke.sh" in d["verification"]["candidates"]' 'true'
+require_json "$hv_tmp/self.json" 'd["verification"] != "absent"' 'true'
+
+# Criterion 2: config.yml alone is not a template; blank_issues_enabled rides
+# on its own key. The org rung is absent (empty listing), so the built-in
+# fallback is chosen only when blank issues are not disabled.
+d="$(hv_repo cfg)"
+mkdir -p "$d/.github/ISSUE_TEMPLATE"
+printf 'blank_issues_enabled: false\ncontact_links: []\n' > "$d/.github/ISSUE_TEMPLATE/config.yml"
+hv_commit "$d" alice init
+hv_run "$d" gh-empty > "$hv_tmp/cfg.json"
+require_json "$hv_tmp/cfg.json" 'd["blank_issues_enabled"]' 'false'
+require_json "$hv_tmp/cfg.json" 'd["template"]["files"]' '[]'
+require_json "$hv_tmp/cfg.json" 'd["template"]["rung"]' '"none"'
+printf 'blank_issues_enabled: true\n' > "$d/.github/ISSUE_TEMPLATE/config.yml"
+hv_run "$d" gh-empty > "$hv_tmp/cfg.json"
+require_json "$hv_tmp/cfg.json" 'd["blank_issues_enabled"]' 'true'
+require_json "$hv_tmp/cfg.json" 'd["template"]["rung"]' '"builtin"'
+rm "$d/.github/ISSUE_TEMPLATE/config.yml"
+hv_run "$d" gh-empty > "$hv_tmp/cfg.json"
+require_json "$hv_tmp/cfg.json" '"blank_issues_enabled" in d' 'false'
+
+# Criterion 3: forms and legacy templates together report the forms rung.
+d="$(hv_repo both)"
+mkdir -p "$d/.github/ISSUE_TEMPLATE"
+printf 'name: Bug\nbody: []\n' > "$d/.github/ISSUE_TEMPLATE/bug.yml"
+printf 'name: Old\n' > "$d/.github/ISSUE_TEMPLATE/old.md"
+printf 'blank_issues_enabled: true\n' > "$d/.github/ISSUE_TEMPLATE/config.yml"
+hv_commit "$d" alice init
+hv_run "$d" gh-fail > "$hv_tmp/both.json"
+require_json "$hv_tmp/both.json" 'd["template"]["rung"]' '"forms"'
+require_json "$hv_tmp/both.json" 'd["template"]["files"]' '[".github/ISSUE_TEMPLATE/bug.yml"]'
+
+# Criterion 4, falsifier one: with no local template, a failing gh makes the
+# org rung unchecked and the built-in fallback is not chosen; an empty
+# listing makes it absent and the fallback is chosen.
+d="$(hv_repo noloc)"
+hv_commit "$d" alice init
+hv_run "$d" gh-fail > "$hv_tmp/noloc.json"
+require_json "$hv_tmp/noloc.json" 'd["template"]["rung"]' '"unchecked"'
+hv_run "$d" gh-empty > "$hv_tmp/noloc.json"
+require_json "$hv_tmp/noloc.json" 'd["template"]["rung"]' '"builtin"'
+# gh missing from PATH reads the same as a failing gh. A bare PATH holds git
+# and python3 via symlinks only, so gh really is absent.
+mkdir -p "$hv_tmp/bare"
+ln -sf "$(command -v git)" "$hv_tmp/bare/git"
+ln -sf "$(command -v python3)" "$hv_tmp/bare/python3"
+(cd "$d" && PATH="$hv_tmp/bare" python3 "$hv_script") > "$hv_tmp/noloc.json"
+require_json "$hv_tmp/noloc.json" 'd["template"]["rung"]' '"unchecked"'
+
+# Criterion 4, falsifier two: the nearest wrong key. A local .md template
+# keeps its rung under the same failing gh, so a gh failure never marks the
+# whole template harvest unchecked.
+mkdir -p "$d/.github/ISSUE_TEMPLATE"
+printf 'name: Bug\n' > "$d/.github/ISSUE_TEMPLATE/bug.md"
+hv_run "$d" gh-fail > "$hv_tmp/noloc.json"
+require_json "$hv_tmp/noloc.json" 'd["template"]["rung"]' '"markdown"'
+require_json "$hv_tmp/noloc.json" 'd["template"]["files"]' '[".github/ISSUE_TEMPLATE/bug.md"]'
+
+# Criterion 5: contributors_90d is the shortlog line count on the same repo.
+d="$(hv_repo crew)"
+hv_commit "$d" alice one
+hv_commit "$d" bob two
+hv_commit "$d" carol three
+hv_commit "$d" alice four
+hv_run "$d" gh-empty > "$hv_tmp/crew.json"
+want="$(git -C "$d" shortlog -sne --since='90 days ago' HEAD | wc -l | tr -d ' ')"
+[[ "$want" == "3" ]] || { echo "crew fixture should have 3 contributors, shortlog says $want" >&2; exit 1; }
+require_json "$hv_tmp/crew.json" 'd["contributors_90d"]' "$want"
+require_json "$hv_tmp/crew.json" 'd["codeowners"]' 'false'
+require_json "$hv_tmp/crew.json" 'd["workflows"]' 'false'
+require_json "$hv_tmp/crew.json" 'd["verification"]' '"absent"'
+
+# The verification ladder lists every candidate on the first rung that hits
+# and never picks one; a lower rung stays unread once a higher one hits.
+d="$(hv_repo ladder)"
+mkdir -p "$d/tests" "$d/.github/workflows"
+printf '{"scripts":{"test":"x","lint":"y"}}\n' > "$d/package.json"
+printf 'test:\n\techo\nbuild:\n\techo\n' > "$d/Makefile"
+printf '#!/bin/sh\n' > "$d/tests/a-smoke.sh"
+printf 'jobs:\n  t:\n    steps:\n      - run: make ci\n' > "$d/.github/workflows/ci.yml"
+mkdir -p "$d/.github" && : > "$d/.github/CODEOWNERS"
+hv_commit "$d" alice init
+hv_run "$d" gh-empty > "$hv_tmp/ladder.json"
+require_json "$hv_tmp/ladder.json" 'd["verification"]["rung"]' '"manifest"'
+require_json "$hv_tmp/ladder.json" 'sorted(d["verification"]["candidates"])' '["Makefile:build", "Makefile:test", "package.json:lint", "package.json:test"]'
+require_json "$hv_tmp/ladder.json" '[d["codeowners"], d["workflows"]]' '[true, true]'
+rm "$d/package.json" "$d/Makefile"
+hv_run "$d" gh-empty > "$hv_tmp/ladder.json"
+require_json "$hv_tmp/ladder.json" 'd["verification"]' '{"rung": "scripts", "candidates": ["tests/a-smoke.sh"]}'
+rm "$d/tests/a-smoke.sh"
+hv_run "$d" gh-empty > "$hv_tmp/ladder.json"
+require_json "$hv_tmp/ladder.json" 'd["verification"]' '{"rung": "workflows", "candidates": ["make ci"]}'
+
+echo "file-issue smoke: OK"

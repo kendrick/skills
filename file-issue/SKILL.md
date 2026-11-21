@@ -21,12 +21,16 @@ Mechanical, no judgment, before any question.
 
 Preflight `gh auth status`. Missing or unauthenticated → say so plainly and continue in dry-run only. A rendered draft must never read as a filed issue.
 
+Run `python3 scripts/harvest.py` from inside the target repo, with the path taken from this skill's directory. One call prints JSON for the template ladder (`template`, plus `blank_issues_enabled` when `config.yml` sets it), the verification ladder (`verification`), `codeowners`, `workflows`, and `contributors_90d`. Exit 3 means the directory is not a git repository or the call had a usage error; walk the ladders below by hand instead. The script lists verification candidates and never picks one.
+
 Template ladder, first hit wins:
 
 1. `.github/ISSUE_TEMPLATE/*.yml` — issue forms. Read [references/issue-forms.md](references/issue-forms.md) and fill the declared fields.
 2. `.github/ISSUE_TEMPLATE/*.md` — legacy templates. Same handling.
 3. `ISSUE_TEMPLATE/` at the repo root, then the org-level `.github` repo, which supplies defaults to every repo lacking its own.
 4. Nothing found → this skill's own templates in `assets/`.
+
+`template.rung` names the hit: `forms`, `markdown`, `root`, `org`, `builtin`, or `none` when `config.yml` sets `blank_issues_enabled: false` and no template exists, since that repo has ruled out the built-in ones. `unchecked` means `gh` could not read the org-level `.github` repo, so nothing was found and nothing was ruled out: report the org rung as `unchecked`, leave `assets/` unchosen, and ask the user whether an org template exists. A local rung that hit above it still wins.
 
 The detected template's sections are the issue's sections, exactly. If the repo asks for four, the issue has four — a repo's own conventions outrank anything you would invent.
 
@@ -40,9 +44,9 @@ Harvest at the same time. This is where the agent-readiness gate gets its answer
 | `.github/workflows/`, `CODEOWNERS` | repo complexity |
 | `git shortlog -sne --since='90 days ago'` | contributor count |
 
-The verification row is a ladder like the template one, first hit wins. A repo with no manifest still answers mechanically: shell scripts under `tests/` name the command (`bash tests/<component>-smoke.sh`, picking the script named for the component under change), and the steps a CI workflow runs name it where the scripts don't. `absent` is the answer only after every rung misses.
+The verification row is a ladder like the template one, first hit wins; `verification.candidates` lists everything on the winning rung, and choosing among them stays with you. A repo with no manifest still answers mechanically: shell scripts under `tests/` name the command (`bash tests/<component>-smoke.sh`, picking the script named for the component under change), and the steps a CI workflow runs name it where the scripts don't. `absent` is the answer only after every rung misses.
 
-**Done when:** the template source is named and every harvest row holds a concrete value or an explicit `absent`.
+**Done when:** the template source is named and every harvest row holds a concrete value or an explicit `absent`. The org rung may instead hold `unchecked`, which is not `absent`.
 
 ## Step 2 — Assign Depth
 

@@ -13,6 +13,8 @@ Resolution order, first hit wins:
 
 `.github/ISSUE_TEMPLATE/config.yml` is not a template. It configures the chooser: `blank_issues_enabled` and `contact_links`. When `blank_issues_enabled: false`, the repo has decided every issue goes through a form — respect that and never fall back to the built-in templates.
 
+`scripts/harvest.py` reports `config.yml` this way: never as a template, with `blank_issues_enabled` on its own key when the file sets it, and `none` in place of the built-in fallback when it sets `false`.
+
 Forms do not apply to pull requests.
 
 ## Top-Level Keys
