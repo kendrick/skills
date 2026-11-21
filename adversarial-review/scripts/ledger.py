@@ -912,8 +912,9 @@ def main(argv=None):
     try:
         args = parse_args(argv)
     except SystemExit as e:
-        # Only the later subcommands move argparse's 2 to 3; the first four
-        # keep 2, since work-issue reads them as they are.
+        # Only the later subcommands move argparse's 2 to 3. The first four
+        # keep 2, which existing callers such as work-issue's
+        # `ledger.py state` already handle.
         if validator and e.code == 2:
             raise SystemExit(3)
         raise
