@@ -39,6 +39,14 @@ you decided against, a test you could not write: each goes into `left` with
 its reason. An omission with a reason attached is a decision somebody can
 check; a silent one is a hole nobody finds until review.
 
+Each `left` reason cites only a `plan.md` line, a path at HEAD, or a commit
+range. The reproducer that checks it receives your `claims` and `left`, the
+commit range, `baseline.txt`, and the tree, and nothing else, so a reason
+resting on text it never saw, such as a dispatch's Done-when, comes back as a
+finding. In a repair round, a reason or claim about
+the repair itself is judged against the repair's own commit range, so name that
+range rather than the whole branch.
+
 Prove the mutation, then read the result. Every edit is
 proved before anything reads a result that depends on it: after writing,
 show the changed bytes (`git diff -- <path>` non-empty, or a grep for the
@@ -117,7 +125,7 @@ Review findings to repair, each quoted with its source URL:
 ```
 
 - `claims` is the red-team's whole input. `path` is the file whose per-commit history the reproducer greps before it runs anything, and for an absence claim the preamble says which file that is. It is also the file whose name decides whether the reproducer runs on `opus`; a claim with no path fails the change-exists check and comes back `NOT_REPRODUCED`. A claim with no command is unreproducible and comes back `UNVERIFIABLE`, which reaches the pull request as a section saying so. An empty `claims` on the final build report fails Step 3 rather than passing Step 4 by having nothing to check.
-- `left` is checked entry by entry against the code by the same reproducer. A reason that does not hold is a finding.
+- `left` is checked entry by entry against the code by the same reproducer. A reason that does not hold is a finding. Every worker, build or repair, cites only a `plan.md` line, a path at HEAD, or a commit range in a `left` reason, because that is all the reproducer receives. In a repair round it judges a reason or claim about the repair against `git diff REPAIR_BASE..HEAD`, so cite that range, not the whole branch.
 - `plan_concerns` reaches the pull-request body, and the deferred queue when `open` is true or absent; the preamble says when a worker sets each value. It is the only channel a worker has for "the plan asked for something the code cannot support", and a worker that stays silent here hands the next reader a diff that disagrees with its own plan for no visible reason.
 
 ## Placeholders
