@@ -40,6 +40,10 @@ def git(*args):
     return r.returncode, r.stdout
 
 
+# Excluded by full filename: a template may legitimately be named config.md.
+CHOOSER_CONFIGS = ("config.yml", "config.yaml")
+
+
 def files_in(root, directory, suffixes):
     d = root / directory
     if not d.is_dir():
@@ -47,7 +51,7 @@ def files_in(root, directory, suffixes):
     return sorted(
         str(p.relative_to(root))
         for p in d.iterdir()
-        if p.is_file() and p.suffix in suffixes and p.stem != "config"
+        if p.is_file() and p.suffix in suffixes and p.name not in CHOOSER_CONFIGS
     )
 
 
@@ -109,7 +113,7 @@ def template(root, blank):
             return {"rung": rung, "files": found}
     d = root / "ISSUE_TEMPLATE"
     if d.is_dir():
-        found = sorted(str(p.relative_to(root)) for p in d.iterdir() if p.is_file() and p.stem != "config")
+        found = sorted(str(p.relative_to(root)) for p in d.iterdir() if p.is_file() and p.name not in CHOOSER_CONFIGS)
         if found:
             return {"rung": "root", "files": found}
     status, found = org_templates(org_owner())

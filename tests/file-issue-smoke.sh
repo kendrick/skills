@@ -969,6 +969,21 @@ hv_run "$d" gh-empty > "$hv_tmp/rootcfg.json"
 require_json "$hv_tmp/rootcfg.json" 'd["template"]["rung"]' '"builtin"'
 require_json "$hv_tmp/rootcfg.json" 'd["template"]["files"]' '[]'
 
+# Only config.yml and config.yaml are chooser configs; a Markdown template
+# named config.md is a real template at both locations.
+d="$(hv_repo cfgmd)"
+mkdir -p "$d/.github/ISSUE_TEMPLATE"
+printf '# bug\n' > "$d/.github/ISSUE_TEMPLATE/config.md"
+hv_commit "$d" alice init
+hv_run "$d" gh-empty > "$hv_tmp/cfgmd.json"
+require_json "$hv_tmp/cfgmd.json" 'd["template"]' '{"rung": "markdown", "files": [".github/ISSUE_TEMPLATE/config.md"]}'
+d="$(hv_repo cfgmdroot)"
+mkdir -p "$d/ISSUE_TEMPLATE"
+printf '# bug\n' > "$d/ISSUE_TEMPLATE/config.md"
+hv_commit "$d" alice init
+hv_run "$d" gh-empty > "$hv_tmp/cfgmdroot.json"
+require_json "$hv_tmp/cfgmdroot.json" 'd["template"]' '{"rung": "root", "files": ["ISSUE_TEMPLATE/config.md"]}'
+
 # The org rung reads only .github/ISSUE_TEMPLATE in the owner's .github repo.
 # A gh that lists templates only at the org repo root must not make the org
 # rung a hit: GitHub does not serve that location.
