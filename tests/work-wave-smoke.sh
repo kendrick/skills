@@ -1653,14 +1653,15 @@ expect_gone "merge failed"
 # A git failure after merging has started is a red record, never exit 3, which
 # is reserved for failures before any merge. VERIFY_CMD breaks the tree's .git.
 set +e; merge_test 'rm .git' --lane issue-2; st=$?; set -e
-[[ $st -eq 1 ]] || { echo "a git failure after the first merge should exit 1, got $st" >&2; exit 1; }
 rec="$(cat "$mt/out")"
+[[ -n "$rec" && -f "$rec" ]] || { echo "a git failure after the first merge should write a record, got none" >&2; exit 1; }
+[[ $st -eq 1 ]] || { echo "a git failure after the first merge should exit 1, got $st" >&2; exit 1; }
 expect_record "git failed" "$rec" '^git failed: git '
 expect_record "git failed" "$rec" '^result: red$'
 expect_gone "git failed"
 
 # A baseline red only because the suite dirtied the tree writes a non-zero
-# exit:, since a lane's reuse-baseline reads that line as green or red.
+# exit:, since reuse-baseline copies that line to each lane and divvy-up reads it.
 python3 "$runner" --wave-dir "$mt/wave-7" --root "$mrepo" --default main --merge-tree "$mtree" \
   --install absent --verify 'touch stray.txt' --baseline >"$mt/out" 2>"$mt/err" && {
   echo "a dirty baseline should exit 1" >&2; exit 1; }

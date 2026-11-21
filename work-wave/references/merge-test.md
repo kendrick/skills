@@ -29,8 +29,8 @@ python3 SKILL_DIR/scripts/merge-test.py --wave-dir WAVE_DIR --root ROOT --defaul
 - `--baseline` takes no `--lane` and writes `merge-test/0.md` and `baseline.txt`. Otherwise k is one past the highest record, and the script prints the record's path.
 - `absent` for either command runs nothing for it.
 - Exit 0 on `result: green`. Exit 1 on `red` or `conflict`, with the record written. Exit 3 on usage or a git failure before any merge, with nothing written under `merge-test/`.
-- A git failure after the first merge starts writes a red record with a `git failed: <command>` line, so exit 3 always means nothing ran. A merge that fails with no conflicted path, a hook refusing it for one, writes a `merge failed: issue-N` line and `result: red`.
-- On `--baseline`, a tree dirty after a passing suite is red, and `baseline.txt` records `exit: 1` so a lane's `reuse-baseline` doesn't read it as green.
+- A git failure after the first merge starts writes a red record with a `git failed: <command>` line, so exit 3 always means no merge started. A merge refused with no conflicted path, as a hook refuses one, writes a `merge failed: issue-N` line and `result: red`.
+- On `--baseline`, a tree dirty after a passing suite is red, and `baseline.txt` records `exit: 1`. `reuse-baseline` copies that line into each lane's `baseline.txt` unread, and `divvy-up` reads the lane's baseline as green or red from it.
 - It keeps the last 200 lines of the suite's output as the tail.
 - Teardown runs on every route out, a SIGTERM included. SIGKILL can't be trapped, so a killed run can leave MERGE_TREE for step 1 of the next run to clear.
 

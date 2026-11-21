@@ -8,9 +8,8 @@
 Prints the path of the record it wrote. Exit 0 on `result: green`, 1 on `red`
 or `conflict` with the record written, 3 on usage or a git failure before any
 merge, with nothing written under merge-test/. A git failure once merging has
-started is a red record carrying a `git failed:` line, never exit 3, so a
-conductor can't read a half-run as a typo. Argparse's own 2 covers a mistyped
-flag.
+started writes a red record with a `git failed:` line and exits 1. Argparse's
+own 2 covers a mistyped flag.
 
 The script is the procedure and nothing else. Reading a red result against
 coupling.md, writing facts/wave.md and deciding to stop stay with the conductor.
@@ -116,8 +115,8 @@ def run(args, state):
     try:
         return merge_and_verify(args, tree, base, base_line, shas, head)
     except GitFailure as e:
-        # Merging has started, so a bare exit 3 would read as a usage error and
-        # leave no record. Red with the failed command is what the probe can read.
+        # Merging has started, so exit 3 would pass for a usage error and leave
+        # no record. A red record naming the failed command is one the probe reads.
         head.append(f"git failed: {e}")
         return head, "red", 1, [], base_line
 
@@ -161,8 +160,8 @@ def merge_and_verify(args, tree, base, base_line, shas, head):
         head.append(f"dirty after verify: untracked — {', '.join(others)}")
         result = "red"
     if result == "red" and status == 0:
-        # baseline.txt's exit: line is what a lane's reuse-baseline reads as
-        # green or red, and a tree that was dirty after a passing suite is red.
+        # reuse-baseline copies baseline.txt's exit: line into each lane unread,
+        # and divvy-up takes green or red from it, so a dirty tree must exit 1.
         status = 1
     return head, result, status, tail, base_line
 
@@ -195,8 +194,8 @@ def main(argv=None):
         sys.stderr.write(f"merge-test: {e}\n")
         return 3
 
-    # Teardown has to survive a kill, so SIGTERM becomes an exception the
-    # finally below sees.
+    # SIGTERM becomes SystemExit so the finally below still tears down. SIGKILL
+    # can't be trapped, and VERIFY_CMD's own children outlive either signal.
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
     state = {"created": False}
     try:
