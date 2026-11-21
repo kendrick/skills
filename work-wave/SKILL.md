@@ -218,5 +218,6 @@ A lane's `work-issue` may itself be mid-run on a herdr agent or a stranded workt
 
 - [references/lane-brief.md](references/lane-brief.md) — read at Steps 4, 7, and 8 to instantiate each lane's dispatch and the report contract it returns
 - [references/merge-test.md](references/merge-test.md) — read at Steps 4, 5, 6, and 8 to build the scratch tree, merge in order, verify, and remove it
+- [scripts/merge-test.py](scripts/merge-test.py) — run at Steps 4, 5, 6, and 8 as `merge-test.py --wave-dir WAVE_DIR --root ROOT --default DEFAULT --merge-tree MERGE_TREE --install INSTALL_CMD --verify VERIFY_CMD [--lane issue-N ...] [--baseline]`, in the background, to run the merge test and write its record
 - [scripts/check-footprints.py](scripts/check-footprints.py) — run at Step 1 to prove the lanes' footprints disjoint and list the pairs, and at Step 5 to prove it again over what the lanes derived: `work-wave/scripts/check-footprints.py --lane issue-N=PATH --lane issue-M=PATH [...] [--runs DIR]`
 - [scripts/wave-state.py](scripts/wave-state.py) — run at every resume to gather the probe and answer its phase: `work-wave/scripts/wave-state.py probe --wave-dir WAVE_DIR --root ROOT --default DEFAULT [--pr-bundle FILE]`, then `work-wave/scripts/wave-state.py phase --probe FILE`

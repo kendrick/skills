@@ -1450,6 +1450,17 @@ expect_falsified ignore-repoll-record out '^publish-waiting#[0-9]+ end: expected
 runner=work-wave/scripts/merge-test.py
 require_file "$runner"
 require_text "$runner" "TAIL_LINES = 200"
+require_text "$skill" "as one background call to \`scripts/merge-test.py --baseline\`"
+require_text "$skill" "triggers a merge test now over every lane branch that has commits, returned or not, as one \`scripts/merge-test.py\` call with a \`--lane\` per branch"
+require_text "$skill" "as one \`scripts/merge-test.py\` call with a \`--lane\` per branch, which does one"
+require_text "$skill" "as one \`scripts/merge-test.py\` call over the merge set"
+require_text "$skill" "- [scripts/merge-test.py](scripts/merge-test.py) — run at Steps 4, 5, 6, and 8"
+require_text "$merge_test" "\`scripts/merge-test.py\` runs the Procedure below in one call"
+require_text "$merge_test" "Exit 3 on usage or a git failure before any merge, with nothing written under \`merge-test/\`."
+require_text "$merge_test" "a \`git failed: <command>\` line"
+require_text "$merge_test" "a \`merge failed: issue-N\` line"
+require_text "$merge_test" "It keeps the last 200 lines of the suite's output as the tail."
+require_text "$merge_test" "VERIFY_CMD's whole run blocks the call"
 # stdlib only: any import outside this set is a dependency the skill can't carry.
 python3 - "$runner" <<'PY' || exit 1
 import ast, sys
@@ -1484,6 +1495,7 @@ mk_branch issue-1 x "x from A"
 mk_branch issue-2 y "y from B"
 mk_branch issue-3 x "x from C"
 mk_branch issue-4 z "z from D"
+mk_branch issue-5 z "z from A2"
 mkdir -p "$mt/wave-7"
 
 mtree="$mt/merge-tree"
@@ -1618,9 +1630,59 @@ grep -Fxq 'conflict: issue-3 with issue-2 — x' "$(cat "$mt/out")" || {
   echo "falsifier: the neighbor-blaming copy should name issue-2" >&2; exit 1; }
 git -C "$mrepo" worktree prune
 
+# Perturb what the rule keys on, the other way: with A touching z, C meets no
+# merged branch and nothing conflicts at all. issue-5 stands in for that A.
+set +e; merge_test 'echo ok' --lane issue-5 --lane issue-2 --lane issue-3; st=$?; set -e
+[[ $st -eq 0 ]] || { echo "A(z), B(y), C(x) should merge clean and exit 0, got $st" >&2; exit 1; }
+! grep -q '^conflict:' "$(cat "$mt/out")" || { echo "A(z), B(y), C(x) should record no conflict" >&2; exit 1; }
+expect_gone "A(z) perturbation"
+
+# A merge that fails with no unmerged path (a hook here) is red with its own
+# line, never a conflict that sends the conductor hunting for overlapping paths.
+printf '#!/bin/sh\necho refused >&2\nexit 1\n' >"$mrepo/.git/hooks/pre-merge-commit"
+chmod +x "$mrepo/.git/hooks/pre-merge-commit"
+set +e; merge_test 'echo never' --lane issue-2; st=$?; set -e
+rm -f "$mrepo/.git/hooks/pre-merge-commit"
+[[ $st -eq 1 ]] || { echo "a failed merge with no conflict should exit 1, got $st" >&2; exit 1; }
+rec="$(cat "$mt/out")"
+expect_record "merge failed" "$rec" '^merge failed: issue-2$'
+expect_record "merge failed" "$rec" '^result: red$'
+! grep -q '^conflict:' "$rec" || { echo "a hook refusal should not record a conflict" >&2; exit 1; }
+expect_gone "merge failed"
+
+# A git failure after merging has started is a red record, never exit 3, which
+# is reserved for failures before any merge. VERIFY_CMD breaks the tree's .git.
+set +e; merge_test 'rm .git' --lane issue-2; st=$?; set -e
+[[ $st -eq 1 ]] || { echo "a git failure after the first merge should exit 1, got $st" >&2; exit 1; }
+rec="$(cat "$mt/out")"
+expect_record "git failed" "$rec" '^git failed: git '
+expect_record "git failed" "$rec" '^result: red$'
+expect_gone "git failed"
+
+# A baseline red only because the suite dirtied the tree writes a non-zero
+# exit:, since a lane's reuse-baseline reads that line as green or red.
+python3 "$runner" --wave-dir "$mt/wave-7" --root "$mrepo" --default main --merge-tree "$mtree" \
+  --install absent --verify 'touch stray.txt' --baseline >"$mt/out" 2>"$mt/err" && {
+  echo "a dirty baseline should exit 1" >&2; exit 1; }
+[[ "$(head -n 1 "$mt/wave-7/baseline.txt")" == "exit: 1" ]] || {
+  echo "a dirty baseline should write exit: 1, got: $(head -n 1 "$mt/wave-7/baseline.txt")" >&2; exit 1; }
+expect_record "dirty baseline" "$mt/wave-7/merge-test/0.md" '^result: red$'
+
+# SIGTERM mid-suite still removes MERGE_TREE. SIGKILL can't be trapped and is
+# not covered.
+python3 "$runner" --wave-dir "$mt/wave-7" --root "$mrepo" --default main --merge-tree "$mtree" \
+  --install absent --verify 'sleep 30' --lane issue-2 >/dev/null 2>&1 &
+runner_pid=$!
+for _ in $(seq 100); do [[ -e "$mtree/.git" ]] && break; sleep 0.1; done
+[[ -e "$mtree/.git" ]] || { echo "SIGTERM case: the merge tree never appeared" >&2; kill "$runner_pid" 2>/dev/null; exit 1; }
+sleep 0.3
+kill -TERM "$runner_pid"
+set +e; wait "$runner_pid"; st=$?; set -e
+[[ $st -eq 143 ]] || { echo "a SIGTERM should exit 143, got $st" >&2; exit 1; }
+expect_gone "SIGTERM"
+
 # Perturb what the rule keys on: with A touching z instead, C no longer meets
 # any merged branch, so the line names DEFAULT. issue-5 stands in for that A.
-mk_branch issue-5 z "z from A2"
 git -C "$mrepo" checkout -q -b issue-6 main
 printf 'x from D2\n' >"$mrepo/x"
 git -C "$mrepo" -c commit.gpgsign=false commit -q -am issue-6

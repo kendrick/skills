@@ -7,8 +7,10 @@
 
 Prints the path of the record it wrote. Exit 0 on `result: green`, 1 on `red`
 or `conflict` with the record written, 3 on usage or a git failure before any
-merge, with nothing written under merge-test/. Argparse's own 2 covers a
-mistyped flag.
+merge, with nothing written under merge-test/. A git failure once merging has
+started is a red record carrying a `git failed:` line, never exit 3, so a
+conductor can't read a half-run as a typo. Argparse's own 2 covers a mistyped
+flag.
 
 The script is the procedure and nothing else. Reading a red result against
 coupling.md, writing facts/wave.md and deciding to stop stay with the conductor.
@@ -33,10 +35,14 @@ class Usage(Exception):
     pass
 
 
+class GitFailure(Exception):
+    pass
+
+
 def git(root, *args, check=True):
     p = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True)
     if check and p.returncode != 0:
-        raise Usage(f"git {' '.join(args)}: {(p.stderr or p.stdout).strip()}")
+        raise GitFailure(f"git {' '.join(args)}: {(p.stderr or p.stdout).strip()}")
     return p
 
 
@@ -79,7 +85,8 @@ def conflict_line(args, tree, base, lane, merged):
 
 
 def build(args, state):
-    """Raises Usage before any merge for a bad lane, fetch, or worktree add."""
+    """Raises Usage or GitFailure before any merge, for a bad lane, fetch, or
+    worktree add. main() turns either into exit 3."""
     root, tree = args.root, args.merge_tree
     shas = {}
     for lane in args.lane:
@@ -106,6 +113,16 @@ def build(args, state):
 def run(args, state):
     tree, base, base_line, shas = build(args, state)
     head = [base_line]
+    try:
+        return merge_and_verify(args, tree, base, base_line, shas, head)
+    except GitFailure as e:
+        # Merging has started, so a bare exit 3 would read as a usage error and
+        # leave no record. Red with the failed command is what the probe can read.
+        head.append(f"git failed: {e}")
+        return head, "red", 1, [], base_line
+
+
+def merge_and_verify(args, tree, base, base_line, shas, head):
     merged = []
     for lane in args.lane:
         head.append(f"{lane} {shas[lane]}")
@@ -115,15 +132,14 @@ def run(args, state):
             continue
         if git(tree, "diff", "--name-only", "--diff-filter=U").stdout.strip():
             head.append(conflict_line(args, tree, base, lane, merged))
-            note = ""
+            kind, note = "conflict", ""
         else:
             # A merge that failed with nothing unmerged (a hook, an identity
             # error) is not a conflict, and calling it one would send the
             # conductor hunting for overlapping paths.
             head.append(f"merge failed: {lane}")
-            note = (p.stderr or p.stdout).strip()
+            kind, note = "red", (p.stderr or p.stdout).strip()
         git(tree, "merge", "--abort", check=False)
-        kind = "conflict" if note == "" else "red"
         return head, kind, None, note.split("\n") if note else [], base_line
 
     status, tail = 0, []
@@ -144,6 +160,10 @@ def run(args, state):
     if others:
         head.append(f"dirty after verify: untracked — {', '.join(others)}")
         result = "red"
+    if result == "red" and status == 0:
+        # baseline.txt's exit: line is what a lane's reuse-baseline reads as
+        # green or red, and a tree that was dirty after a passing suite is red.
+        status = 1
     return head, result, status, tail, base_line
 
 
@@ -182,7 +202,7 @@ def main(argv=None):
     try:
         try:
             head, result, status, tail, base_line = run(args, state)
-        except Usage as e:
+        except (Usage, GitFailure) as e:
             sys.stderr.write(f"merge-test: {e}\n")
             return 3
         tail = tail[-TAIL_LINES:]
