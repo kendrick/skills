@@ -3878,6 +3878,9 @@ require_text work-issue/SKILL.md "lands at \`RUN_DIR/reports/redteam-repair-<k>.
 require_text work-issue/SKILL.md "Route nothing, and run none of items 3 through 6, until both the reproducer's verdicts and the review, or a \`trigger.txt\` reading \`fired: no\`, have returned"
 require_text work-issue/SKILL.md "The review re-fires exactly when a line reads \`implements\`, whether or not item 7's review fired."
 require_text work-issue/SKILL.md 'git worktree add --detach RUN_DIR/redteam/repro-tree HEAD'
+# PR #439 r4655374724: a fresh worktree has none of WORKTREE's installed
+# dependencies, so valid claims read NOT_REPRODUCED there.
+require_text work-issue/SKILL.md 'Run INSTALL_CMD in `RUN_DIR/redteam/repro-tree` before dispatching the reproducer, and nothing where INSTALL_CMD is `absent`, because dependencies are tree-local and Step 1 installed them in the work tree only.'
 # Step 8's repair and push items run only where there is a repair and where
 # there is something to push; a queue-only entry goes straight to its replies.
 require_text work-issue/SKILL.md "Where the newest triage round has a repair report, red-team it"
