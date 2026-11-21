@@ -636,8 +636,9 @@ check_record_supersedes() {
 check_record_id() {
   local file="$1" block="$2" id base
   id="$(printf '%s\n' "$block" | yq -r '.id // ""' 2>/dev/null || true)"
-  # The shipped templates are linted in place and carry `{{nanoid}}`, which is
-  # no more an id than check_links' `{{` targets are links.
+  # The shipped templates carry `{{nanoid}}` and the suite lints them from a
+  # scratch scope. A placeholder is no more an id than check_links' `{{`
+  # targets are links.
   [[ "$id" == *'{{'* ]] && return 0
   if ! [[ "$id" =~ ^[A-Za-z0-9_-]{10}$ ]]; then
     fail record-id "\`id: $id\` is not ten characters from A-Za-z0-9_-"
