@@ -67,6 +67,7 @@ work-wave/
 │   └── merge-test.md           # the scratch-tree merge test, its four trigger points, and why a linked worktree
 └── scripts/
     ├── check-footprints.py     # proves every lane's footprint disjoint and lists the pairs to answer for coupling
+    ├── merge-test.py           # runs the merge test's seven steps in one call and writes the record and baseline.txt
     ├── wave-state.py           # probe reads WAVE_DIR and git into JSON, phase answers which step to resume at
     ├── resume_checks.py        # vendored from work-issue: replays the write order against wave-state.py
     └── wave-order.json         # the order the wave writes its artifacts, and where each crash must resume
