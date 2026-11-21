@@ -219,7 +219,7 @@ Then list accepted records nobody has confirmed lately:
 bash <skill-path>/scripts/stale-records.sh <scope-root>
 ```
 
-The lint also fails a record whose `id`, `memory_type` folder, or `source_refs` is wrong, and an `_inbox/` holding anything but `.gitkeep`. Check by hand the one thing it can't:
+The lint fails a record with a malformed `id`, a `memory_type` that doesn't match its folder, or no `source_refs`, and it fails an `_inbox/` holding anything but `.gitkeep`. Check by hand the one thing it can't:
 
 - Every candidate flag in every groomed note has either been resolved to a wiki link OR retains its original prefix. No half-rewrites, no orphans.
 
