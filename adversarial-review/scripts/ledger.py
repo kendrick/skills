@@ -632,6 +632,13 @@ def cmd_import_findings(args):
         return 1
     for line in lines:
         append_line(line, args.ledger)
+    if not lines:
+        # A file with findings: [] is a finished review, and Step 1 never
+        # creates the ledger, so create it here for verifier-input and report
+        # to read. Append mode leaves an existing ledger untouched.
+        if os.path.dirname(args.ledger):
+            os.makedirs(os.path.dirname(args.ledger), exist_ok=True)
+        open(args.ledger, "a", encoding="utf-8").close()
     print(f"OK: imported {len(lines)} findings")
     return 0
 
@@ -706,6 +713,15 @@ def cmd_report(args):
             )
     listed = [r for r in rows if r["outcome"] == "LISTED"]
     for r in listed:
+        # derive() lets the latest verification win, so once a later
+        # NOT_REPRODUCED or UNVERIFIABLE supersedes a REPRODUCED event, that
+        # event's repro no longer counts as evidence.
+        if r["verification"] != "REPRODUCED":
+            problems.append(
+                f"{r['finding']['id']}: LISTED but its current verification is "
+                f"{r['verification']}, not REPRODUCED"
+            )
+            continue
         ev = reproduced.get(r["finding"]["id"])
         if not ev or not ev.get("repro_command") or not ev.get("observed_output"):
             problems.append(f"{r['finding']['id']}: LISTED with no REPRODUCED repro command and output")

@@ -1490,6 +1490,72 @@ ar_case_report_bad_scope() {
   done
 }
 
+# Every finder answering findings: [] is a finished review, so the import
+# still leaves a ledger the later steps can read, and never truncates one.
+ar_case_import_empty() {
+  local d="$tmp/ar385-empty" got
+  mkdir -p "$d/findings"
+  printf '{"territory": "money", "works": "sound", "findings": []}\n' >"$d/findings/round-1-money.json"
+  python3 - "$fixtures/scope-good.json" "$d/scope.json" <<'PY'
+import json, sys
+s = json.load(open(sys.argv[1]))
+s["territories"] = [t for t in s["territories"] if t["name"] == "money"]
+s["rounds"] = [{**s["rounds"][0], "territories": ["money"]}]
+json.dump(s, open(sys.argv[2], "w"))
+PY
+  set +e
+  python3 "$ledger_py" import-findings --ledger "$d/l.jsonl" --round 1 "$d/findings/round-1-money.json" >/dev/null 2>&1
+  got="import=$? "
+  got+="verifier=$(python3 "$ledger_py" verifier-input --ledger "$d/l.jsonl" --round 1 2>/dev/null | tr -d ' \n')/$? "
+  python3 "$ledger_py" validate --ledger "$d/l.jsonl" >/dev/null 2>&1
+  got+="validate=$? "
+  ar_report "$d" >/dev/null 2>&1
+  got+="report=$?"
+  set -e
+  [[ "$got" == "import=0 verifier=[]/0 validate=0 report=0" ]] || {
+    echo "an empty import must leave a ledger verifier-input, validate, and report can read: $got" >&2
+    exit 1
+  }
+  ar_findings "$d/f.json" ABC blocking
+  python3 "$ledger_py" import-findings --ledger "$d/l2.jsonl" --round 1 "$d/f.json" >/dev/null
+  cp "$d/l2.jsonl" "$d/before.jsonl"
+  printf '{"territory": "tenancy", "works": "sound", "findings": []}\n' >"$d/t.json"
+  python3 "$ledger_py" import-findings --ledger "$d/l2.jsonl" --round 1 "$d/t.json" >/dev/null
+  cmp -s "$d/l2.jsonl" "$d/before.jsonl" || {
+    echo "an empty import must not truncate or touch an existing ledger" >&2
+    exit 1
+  }
+}
+
+# A reproduction a later NOT_REPRODUCED refuted is not evidence, so report
+# refuses to copy it into the listed section.
+ar_case_report_listed_superseded() {
+  local d="$tmp/ar385-superseded" status err out
+  ar_report_run "$d"
+  python3 "$ledger_py" append-event --ledger "$d/l.jsonl" --finding-id F-r1-money-02 \
+    --disposition NOT_REPRODUCED --actor verifier-r2-money --counter-evidence 'passes on main' >/dev/null
+  set +e
+  out="$(ar_report "$d" 2>"$d/err")"
+  status=$?
+  set -e
+  err="$(cat "$d/err")"
+  [[ "$status" == "1" && "$(grep -c '^ledger: ' <<<"$err")" == "1" ]] && grep -Fq 'F-r1-money-02' <<<"$err" \
+    && ! grep -Fq 'pytest -k C' <<<"$out" || {
+    echo "report must refuse a LISTED finding whose latest verification is not REPRODUCED, got exit $status: $err" >&2
+    exit 1
+  }
+  # Re-reproduced afterwards, the newer repro is the one listed.
+  python3 "$ledger_py" append-event --ledger "$d/l.jsonl" --finding-id F-r1-money-02 \
+    --disposition REPRODUCED --actor verifier-r3-money --repro-command 'pytest -k C2' \
+    --observed-output 'E   new failure' >/dev/null
+  out="$(ar_report "$d" | sed -n '/^## Listed/,$p')"
+  grep -Fq '$ pytest -k C2' <<<"$out" && grep -Fq 'E   new failure' <<<"$out" \
+    && ! grep -Fq 'E   assert 1.01 == 1.00' <<<"$out" || {
+    echo "report must list the current REPRODUCED event's repro, got: $out" >&2
+    exit 1
+  }
+}
+
 ar_case_import_order
 ar_case_rank_falsifiers
 ar_case_import_twice
@@ -1502,5 +1568,7 @@ ar_case_exit_codes
 ar_case_docs_name_subcommands
 ar_case_import_every_problem
 ar_case_report_bad_scope
+ar_case_import_empty
+ar_case_report_listed_superseded
 
 echo "adversarial-review smoke: OK"
