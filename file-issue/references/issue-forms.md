@@ -8,8 +8,8 @@ Resolution order, first hit wins:
 
 1. `.github/ISSUE_TEMPLATE/*.yml` (or `.yaml`) in the target repo
 2. `.github/ISSUE_TEMPLATE/*.md` — legacy Markdown templates, same repo
-3. `ISSUE_TEMPLATE/` at the repo root
-4. The org-level `.github` repo — it supplies default community health files to every repo in the org that lacks its own
+3. `ISSUE_TEMPLATE/` at the repo root; only `.yml`, `.yaml`, and `.md` files count, so a `.gitkeep` is no template
+4. The org-level `.github` repo, same suffix rule — it supplies default community health files to every repo in the org that lacks its own
 
 `.github/ISSUE_TEMPLATE/config.yml` is not a template. It configures the chooser: `blank_issues_enabled` and `contact_links`. When `blank_issues_enabled: false`, the repo has decided every issue goes through a form — respect that and never fall back to the built-in templates.
 
