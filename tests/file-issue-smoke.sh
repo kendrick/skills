@@ -984,6 +984,14 @@ hv_commit "$d" alice init
 hv_run "$d" gh-empty > "$hv_tmp/cfgmdroot.json"
 require_json "$hv_tmp/cfgmdroot.json" 'd["template"]' '{"rung": "root", "files": ["ISSUE_TEMPLATE/config.md"]}'
 
+# A placeholder alone in a root ISSUE_TEMPLATE/ is not a template either.
+d="$(hv_repo rootkeep)"
+mkdir -p "$d/ISSUE_TEMPLATE"
+: > "$d/ISSUE_TEMPLATE/.gitkeep"
+hv_commit "$d" alice init
+hv_run "$d" gh-empty > "$hv_tmp/rootkeep.json"
+require_json "$hv_tmp/rootkeep.json" 'd["template"]' '{"rung": "builtin", "files": []}'
+
 # The org rung reads only .github/ISSUE_TEMPLATE in the owner's .github repo.
 # A gh that lists templates only at the org repo root must not make the org
 # rung a hit: GitHub does not serve that location.
@@ -1010,6 +1018,46 @@ SH
 chmod +x "$hv_tmp/gh-org/gh"
 hv_run "$d" gh-org > "$hv_tmp/orgroot.json"
 require_json "$hv_tmp/orgroot.json" 'd["template"]' '{"rung": "org", "files": [".github/ISSUE_TEMPLATE/bug.yml"]}'
+# A placeholder like .gitkeep in the org directory is not a template, so it
+# cannot suppress the built-in fallback.
+mkdir -p "$hv_tmp/gh-keep"
+printf '#!/bin/sh\necho '"'"'[{"name":".gitkeep","type":"file"}]'"'"'\n' > "$hv_tmp/gh-keep/gh"
+chmod +x "$hv_tmp/gh-keep/gh"
+hv_run "$d" gh-keep > "$hv_tmp/orgkeep.json"
+require_json "$hv_tmp/orgkeep.json" 'd["template"]' '{"rung": "builtin", "files": []}'
+
+# The tests/ rung lists runnable scripts by the scripts/ rule, so a Python
+# entry point or an executable under tests/ is a candidate, not only *.sh.
+d="$(hv_repo pytests)"
+mkdir -p "$d/tests"
+printf 'print("tests OK")\n' > "$d/tests/check.py"
+printf '#!/bin/sh\n' > "$d/tests/run"
+chmod +x "$d/tests/run"
+printf 'data\n' > "$d/tests/fixture.txt"
+hv_commit "$d" alice init
+hv_run "$d" gh-empty > "$hv_tmp/pytests.json"
+require_json "$hv_tmp/pytests.json" 'd["verification"]' '{"rung": "scripts", "candidates": ["tests/check.py", "tests/run"]}'
+
+# A run: block ends at the run key's own indentation, with or without a
+# leading list marker, so sibling keys never become commands.
+d="$(hv_repo wfrun)"
+mkdir -p "$d/.github/workflows"
+cat > "$d/.github/workflows/ci.yml" <<'YML'
+jobs:
+  t:
+    steps:
+      - run: |
+          python3 -m unittest
+        shell: bash
+        working-directory: sub
+      - name: second
+        run: |
+          make lint
+        shell: bash
+YML
+hv_commit "$d" alice init
+hv_run "$d" gh-empty > "$hv_tmp/wfrun.json"
+require_json "$hv_tmp/wfrun.json" 'd["verification"]' '{"rung": "workflows", "candidates": ["python3 -m unittest", "make lint"]}'
 
 # Criterion 6: Step 1 names the script and its done-when admits unchecked for
 # the org rung, so the template source can be named without a false absent.

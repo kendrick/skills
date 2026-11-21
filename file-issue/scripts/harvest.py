@@ -42,6 +42,7 @@ def git(*args):
 
 # Excluded by full filename: a template may legitimately be named config.md.
 CHOOSER_CONFIGS = ("config.yml", "config.yaml")
+TEMPLATE_SUFFIXES = (".yml", ".yaml", ".md")
 
 
 def files_in(root, directory, suffixes):
@@ -98,7 +99,8 @@ def org_templates(owner):
     found = [
         f"{path}/{e['name']}" for e in listing
         if isinstance(e, dict) and e.get("type") == "file"
-        and not re.match(r"config\.ya?ml$", e.get("name", ""))
+        and Path(e.get("name", "")).suffix in TEMPLATE_SUFFIXES
+        and e.get("name", "") not in CHOOSER_CONFIGS
     ] if isinstance(listing, list) else []
     return ("found", found) if found else ("absent", [])
 
@@ -111,11 +113,9 @@ def template(root, blank):
         found = files_in(root, directory, suffixes)
         if found:
             return {"rung": rung, "files": found}
-    d = root / "ISSUE_TEMPLATE"
-    if d.is_dir():
-        found = sorted(str(p.relative_to(root)) for p in d.iterdir() if p.is_file() and p.name not in CHOOSER_CONFIGS)
-        if found:
-            return {"rung": "root", "files": found}
+    found = files_in(root, "ISSUE_TEMPLATE", TEMPLATE_SUFFIXES)
+    if found:
+        return {"rung": "root", "files": found}
     status, found = org_templates(org_owner())
     if status == "found":
         return {"rung": "org", "files": found}
@@ -146,13 +146,13 @@ def manifest_candidates(root):
 
 def script_candidates(root):
     out = []
-    for p in sorted((root / "tests").glob("*.sh")) if (root / "tests").is_dir() else []:
-        if p.is_file():
-            out.append(str(p.relative_to(root)))
-    sd = root / "scripts"
-    for p in sorted(sd.iterdir()) if sd.is_dir() else []:
-        if p.is_file() and (p.suffix in SCRIPT_SUFFIXES or os.access(p, os.X_OK)):
-            out.append(str(p.relative_to(root)))
+    # One runnable rule for both directories: a Python or executable entry
+    # point under tests/ is as much a verification command as a .sh file.
+    for name in ("tests", "scripts"):
+        sd = root / name
+        for p in sorted(sd.iterdir()) if sd.is_dir() else []:
+            if p.is_file() and (p.suffix in SCRIPT_SUFFIXES or os.access(p, os.X_OK)):
+                out.append(str(p.relative_to(root)))
     return out
 
 
@@ -162,7 +162,9 @@ def workflow_runs(root):
         lines = p.read_text(errors="replace").splitlines()
         i = 0
         while i < len(lines):
-            m = re.match(r"^(\s*)(?:-\s+)?run:\s*(.*)$", lines[i])
+            # Group 1 spans the `- ` marker, so its length is the `run` key's own
+            # column; sibling keys (`shell:`) sit at that column and end the block.
+            m = re.match(r"^(\s*(?:-\s+)?)run:\s*(.*)$", lines[i])
             i += 1
             if not m:
                 continue

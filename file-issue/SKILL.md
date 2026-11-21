@@ -44,7 +44,7 @@ Harvest at the same time. The script covers the manifest, `.github/workflows/`, 
 | `.github/workflows/`, `CODEOWNERS` | repo complexity |
 | `git shortlog -sne --since='90 days ago'` | contributor count |
 
-The verification row is a ladder like the template one, first hit wins; `verification.candidates` lists everything on the winning rung, and choosing among them stays with you. A repo with no manifest still answers mechanically: shell scripts under `tests/` name the command (`bash tests/<component>-smoke.sh`, picking the script named for the component under change), and the steps a CI workflow runs name it where the scripts don't. `absent` is the answer only after every rung misses.
+The verification row is a ladder like the template one, first hit wins; `verification.candidates` lists everything on the winning rung, and choosing among them stays with you. A repo with no manifest still answers mechanically: runnable scripts under `tests/` (shell, Python, or executable) name the command (for a shell script, `bash tests/<component>-smoke.sh`, picking the script named for the component under change), and the steps a CI workflow runs name it where the scripts don't. `absent` is the answer only after every rung misses.
 
 **Done when:** the template source is named and every harvest row holds a concrete value or an explicit `absent`. The org rung may instead hold `unchecked`, which is not `absent`.
 
