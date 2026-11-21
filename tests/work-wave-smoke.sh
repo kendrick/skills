@@ -1443,4 +1443,201 @@ expect_falsified ignore-repoll-record out '^publish-waiting#[0-9]+ end: expected
   exit 1
 }
 
+# --- merge-test.py (#383). The runner is merge-test.md's procedure as a script,
+# so every check below reads what git and the record say, never the script's own
+# arithmetic. ---
+
+runner=work-wave/scripts/merge-test.py
+require_file "$runner"
+require_text "$runner" "TAIL_LINES = 200"
+# stdlib only: any import outside this set is a dependency the skill can't carry.
+python3 - "$runner" <<'PY' || exit 1
+import ast, sys
+allowed = set(sys.stdlib_module_names)
+bad = [n for node in ast.walk(ast.parse(open(sys.argv[1]).read()))
+       for n in ([a.name for a in node.names] if isinstance(node, ast.Import)
+                 else [node.module] if isinstance(node, ast.ImportFrom) else [])
+       if n.split(".")[0] not in allowed]
+sys.exit(f"merge-test.py imports outside the stdlib: {bad}" if bad else 0)
+PY
+
+export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
+mt="$tmp/mt"
+mkdir -p "$mt"
+mrepo="$mt/repo"
+git init -q -b main "$mrepo"
+printf 'x0\n' >"$mrepo/x"
+printf 'y0\n' >"$mrepo/y"
+printf 'z0\n' >"$mrepo/z"
+git -C "$mrepo" add -A
+git -C "$mrepo" -c commit.gpgsign=false commit -q -m init
+git clone -q --bare "$mrepo" "$mt/origin.git"
+git -C "$mrepo" remote add origin "$mt/origin.git"
+git -C "$mrepo" fetch -q origin main
+mk_branch() { # name file content
+  git -C "$mrepo" checkout -q -b "$1" main
+  printf '%s\n' "$3" >"$mrepo/$2"
+  git -C "$mrepo" -c commit.gpgsign=false commit -q -am "$1"
+  git -C "$mrepo" checkout -q main
+}
+mk_branch issue-1 x "x from A"
+mk_branch issue-2 y "y from B"
+mk_branch issue-3 x "x from C"
+mk_branch issue-4 z "z from D"
+mkdir -p "$mt/wave-7"
+
+mtree="$mt/merge-tree"
+merge_test() { # args after the fixed ones: VERIFY_CMD then lanes/flags
+  local verify="$1"; shift
+  python3 "$runner" --wave-dir "$mt/wave-7" --root "$mrepo" --default main \
+    --merge-tree "$mtree" --install absent --verify "$verify" "$@" >"$mt/out" 2>"$mt/err"
+}
+expect_gone() { # the merge tree is neither registered nor on disk
+  [[ ! -e "$mtree" ]] || { echo "$1: MERGE_TREE still exists" >&2; exit 1; }
+  ! git -C "$mrepo" worktree list --porcelain | grep -Fq "$mtree" || {
+    echo "$1: MERGE_TREE still in worktree list" >&2; exit 1; }
+}
+expect_record() { # description, pattern
+  grep -Eq -- "$3" "$2" || { echo "$1: record lacks $3:" >&2; cat "$2" >&2; exit 1; }
+}
+
+# Green: record k=1, lanes in order, result line, probe-readable, tree gone.
+merge_test 'echo suite ok' --lane issue-1 --lane issue-2
+rec="$(cat "$mt/out")"
+[[ "$rec" == "$mt/wave-7/merge-test/1.md" ]] || { echo "green run should print merge-test/1.md, got $rec" >&2; exit 1; }
+expect_record "green run" "$rec" '^base: origin/main [0-9a-f]{40}$'
+expect_record "green run" "$rec" '^issue-1 [0-9a-f]{40}$'
+expect_record "green run" "$rec" '^issue-2 [0-9a-f]{40}$'
+expect_record "green run" "$rec" '^result: green$'
+expect_gone "green run"
+
+# VERIFY_CMD exits non-zero: red record, exit 1, tree gone.
+set +e; merge_test 'echo boom; exit 4' --lane issue-1; st=$?; set -e
+[[ $st -eq 1 ]] || { echo "a red suite should exit 1, got $st" >&2; exit 1; }
+rec="$(cat "$mt/out")"
+[[ "$rec" == "$mt/wave-7/merge-test/2.md" ]] || { echo "k should be one past the highest record, got $rec" >&2; exit 1; }
+expect_record "red run" "$rec" '^result: red$'
+expect_record "red run" "$rec" '^boom$'
+expect_gone "red run"
+
+# The rule (row 35): A and C both change x, B only y. C conflicts with A across
+# B, and B, the branch merged just before C, is never named.
+set +e; merge_test 'echo never' --lane issue-1 --lane issue-2 --lane issue-3; st=$?; set -e
+[[ $st -eq 1 ]] || { echo "a conflict should exit 1, got $st" >&2; exit 1; }
+rec="$(cat "$mt/out")"
+expect_record "conflict run" "$rec" '^conflict: issue-3 with issue-1 — x$'
+expect_record "conflict run" "$rec" '^result: conflict$'
+! grep -Eq '^conflict:.*issue-2' "$rec" || { echo "the conflict line names the neighbor issue-2" >&2; exit 1; }
+expect_gone "conflict run"
+
+# A VERIFY_CMD that leaves an untracked, non-ignored file is red and names it.
+set +e; merge_test 'touch stray.txt' --lane issue-2; st=$?; set -e
+[[ $st -eq 1 ]] || { echo "a dirty tree should exit 1, got $st" >&2; exit 1; }
+rec="$(cat "$mt/out")"
+expect_record "dirty run" "$rec" '^dirty after verify: untracked — stray.txt$'
+expect_record "dirty run" "$rec" '^result: red$'
+expect_gone "dirty run"
+
+# A tracked file the suite changed is the other half of the dirty check.
+set +e; merge_test 'echo more >>y' --lane issue-2; st=$?; set -e
+[[ $st -eq 1 ]] || { echo "a tracked change should exit 1, got $st" >&2; exit 1; }
+expect_record "tracked dirty run" "$(cat "$mt/out")" '^dirty after verify: tracked changes — y$'
+
+# A lane with no branch exits 3, writes no record, and leaves nothing behind.
+before="$(ls "$mt/wave-7/merge-test" | wc -l)"
+set +e; merge_test 'echo ok' --lane issue-2 --lane issue-99; st=$?; set -e
+[[ $st -eq 3 ]] || { echo "a --lane with no branch should exit 3, got $st" >&2; exit 1; }
+[[ "$(ls "$mt/wave-7/merge-test" | wc -l)" == "$before" ]] || { echo "exit 3 wrote a record" >&2; exit 1; }
+expect_gone "unknown lane"
+set +e; merge_test 'echo ok' --baseline --lane issue-2; st=$?; set -e
+[[ $st -eq 3 ]] || { echo "--baseline with --lane should exit 3, got $st" >&2; exit 1; }
+
+# The probe reads every record the runner wrote. A tail that prints
+# `result: green` and `issue-7 <sha>` after a red run still probes false.
+tailverify='echo "result: green"; echo "issue-7 $(git rev-parse HEAD)"; exit 1'
+rm -rf "$mt/wave-7/merge-test"
+git -C "$mrepo" branch -q -f issue-7 issue-2
+set +e
+python3 "$runner" --wave-dir "$mt/wave-7" --root "$mrepo" --default main --merge-tree "$mtree" \
+  --install absent --verify "$tailverify" --lane issue-7 >"$mt/out" 2>"$mt/err"
+st=$?
+set -e
+[[ $st -eq 1 ]] || { echo "a red run with a lying tail should exit 1, got $st" >&2; exit 1; }
+printf '| Pair | Answer | Evidence | Resolution |\n|---|---|---|---|\n' >"$mt/wave-7/coupling.md"
+printf '| Order | Lane | After | Why |\n|---|---|---|---|\n| 1 | issue-7 | — | no coupling; number order |\n' >"$mt/wave-7/order.md"
+python3 "$wave_state" probe --wave-dir "$mt/wave-7" --root "$mrepo" --default main >"$mt/probe.json" 2>"$mt/perr"
+python3 - "$mt/probe.json" <<'PY' || { cat "$mt/perr" >&2; exit 1; }
+import json, sys
+p = json.load(open(sys.argv[1]))
+if p["merge_test_green"] is not False:
+    sys.exit(f"a red record whose tail prints result: green should probe merge_test_green false, got {p['merge_test_green']!r}")
+PY
+python3 "$runner" --wave-dir "$mt/wave-7" --root "$mrepo" --default main --merge-tree "$mtree" \
+  --install absent --verify 'echo ok' --lane issue-7 >"$mt/out" 2>"$mt/err"
+python3 "$wave_state" probe --wave-dir "$mt/wave-7" --root "$mrepo" --default main >"$mt/probe.json" 2>"$mt/perr"
+python3 - "$mt/probe.json" <<'PY' || { cat "$mt/perr" >&2; exit 1; }
+import json, sys
+p = json.load(open(sys.argv[1]))
+if p["merge_test_green"] is not True:
+    sys.exit(f"the runner's green record should probe merge_test_green true, got {p['merge_test_green']!r}")
+PY
+
+# --baseline: the four header lines in order, then run-state accepts it.
+rm -rf "$mt/wave-7/merge-test"
+python3 "$runner" --wave-dir "$mt/wave-7" --root "$mrepo" --default main --merge-tree "$mtree" \
+  --install absent --verify 'echo base ok' --baseline >"$mt/out" 2>"$mt/err"
+[[ "$(cat "$mt/out")" == "$mt/wave-7/merge-test/0.md" ]] || { echo "--baseline should write merge-test/0.md" >&2; exit 1; }
+header="$(head -n 4 "$mt/wave-7/baseline.txt" | cut -d: -f1 | tr '\n' ' ')"
+[[ "$header" == "exit base install verify " ]] || { echo "baseline.txt header should be exit/base/install/verify, got: $header" >&2; exit 1; }
+bsha="$(sed -n 's/^base: origin\/main //p' "$mt/wave-7/baseline.txt")"
+mkdir -p "$mt/run"
+python3 work-issue/scripts/run-state.py reuse-baseline --wave-baseline "$mt/wave-7/baseline.txt" \
+  --base-sha "$bsha" --install absent --verify 'echo base ok' --out "$mt/run/baseline.txt" >"$mt/out" 2>"$mt/err" || {
+  echo "run-state reuse-baseline should accept the runner's baseline.txt:" >&2; cat "$mt/err" >&2; exit 1; }
+expect_gone "baseline run"
+
+# Falsifier: a runner that blames the branch merged just before must fail the
+# A/B/C case above. Cut loose from the repo's git before the copy runs anything.
+fals="$mt/fals"
+mkdir -p "$fals"
+python3 - "$runner" "$fals/merge-test.py" <<'PY'
+import sys
+s = open(sys.argv[1]).read()
+old = "        if theirs & set(conflicted):\n"
+assert old in s, "falsifier matched nothing"
+open(sys.argv[2], "w").write(s.replace(old, "        if other == merged[-1]:\n"))
+PY
+rm -rf "$mt/wave-7/merge-test"
+set +e
+python3 "$fals/merge-test.py" --wave-dir "$mt/wave-7" --root "$mrepo" --default main --merge-tree "$mtree" \
+  --install absent --verify 'echo never' --lane issue-1 --lane issue-2 --lane issue-3 >"$mt/out" 2>"$mt/err"
+set -e
+! grep -Fxq 'conflict: issue-3 with issue-1 — x' "$(cat "$mt/out")" || {
+  echo "falsifier: blaming the branch merged just before should break the A/B/C case" >&2; exit 1; }
+grep -Fxq 'conflict: issue-3 with issue-2 — x' "$(cat "$mt/out")" || {
+  echo "falsifier: the neighbor-blaming copy should name issue-2" >&2; exit 1; }
+git -C "$mrepo" worktree prune
+
+# Perturb what the rule keys on: with A touching z instead, C no longer meets
+# any merged branch, so the line names DEFAULT. issue-5 stands in for that A.
+mk_branch issue-5 z "z from A2"
+git -C "$mrepo" checkout -q -b issue-6 main
+printf 'x from D2\n' >"$mrepo/x"
+git -C "$mrepo" -c commit.gpgsign=false commit -q -am issue-6
+git -C "$mrepo" checkout -q main
+# issue-6 alone changes x on top of DEFAULT; make DEFAULT itself carry an x
+# change on origin, so a conflict has to name DEFAULT.
+git -C "$mrepo" checkout -q -b bump main
+printf 'x from main\n' >"$mrepo/x"
+git -C "$mrepo" -c commit.gpgsign=false commit -q -am bump
+git -C "$mrepo" push -q origin bump:main
+git -C "$mrepo" checkout -q main
+git -C "$mrepo" branch -q -D bump
+set +e; merge_test 'echo never' --lane issue-5 --lane issue-6; st=$?; set -e
+[[ $st -eq 1 ]] || { echo "a DEFAULT conflict should exit 1, got $st" >&2; exit 1; }
+rec="$(cat "$mt/out")"
+expect_record "DEFAULT conflict" "$rec" '^conflict: issue-6 with DEFAULT — x$'
+expect_gone "DEFAULT conflict"
+
+
 echo "work-wave smoke: OK"

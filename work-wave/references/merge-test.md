@@ -17,6 +17,23 @@ Both alternatives are trapped by #109's reproducer, filed on PR #121's deferred-
 
 `git worktree add --detach` dodges both. The tree it makes has its own gitdir and index under `<COMMON>/worktrees/`, so nothing staged inside it touches ROOT's index, and it carries its own `.git` file, so `repo_root_for` sees a real root and runs its checks against it.
 
+## The runner
+
+`scripts/merge-test.py` runs the Procedure below in one call, and this file is its spec:
+
+```
+python3 SKILL_DIR/scripts/merge-test.py --wave-dir WAVE_DIR --root ROOT --default DEFAULT --merge-tree MERGE_TREE --install INSTALL_CMD --verify VERIFY_CMD [--lane issue-N ...] [--baseline]
+```
+
+- `--lane` repeats in merge order, and the caller picks the set for its trigger. A `--lane` with no `issue-N` branch exits 3.
+- `--baseline` takes no `--lane` and writes `merge-test/0.md` and `baseline.txt`. Otherwise k is one past the highest record, and the script prints the record's path.
+- `absent` for either command runs nothing for it.
+- Exit 0 on `result: green`. Exit 1 on `red` or `conflict`, with the record written. Exit 3 on usage or a git failure before any merge, with nothing written under `merge-test/`.
+- It keeps the last 200 lines of the suite's output as the tail.
+- Teardown runs on every route out, an interrupt included.
+
+VERIFY_CMD's whole run blocks the call, about 20 minutes here, so run it as a background command. Reading a red result, writing `facts/wave.md`, and deciding to stop stay with you.
+
 ## Procedure
 
 1. **Clear the ground.** MERGE_TREE must not already exist. If it does, `git worktree remove --force MERGE_TREE`, then `git worktree prune`.
