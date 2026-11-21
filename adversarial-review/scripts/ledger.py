@@ -12,6 +12,11 @@
         --observed-output 'E assert 10.01 == 10.00'
     scripts/ledger.py state --ledger RUN/ledger.jsonl [--round N]
     scripts/ledger.py validate --ledger RUN/ledger.jsonl
+    scripts/ledger.py import-findings --ledger RUN/ledger.jsonl --round 1 \\
+        RUN/findings/round-1-money.json
+    scripts/ledger.py verifier-input --ledger RUN/ledger.jsonl --round 1 [--territory money]
+    scripts/ledger.py report --ledger RUN/ledger.jsonl --scope RUN/scope.json \\
+        --findings-dir RUN/findings
 
 A finding carries no disposition field. Its state is derived from the events
 appended after it: no events means UNVERIFIED, otherwise the latest event in
@@ -29,7 +34,11 @@ nothing is a worse outcome than a tolerated bad line.
 
 Exit codes: 0 success; 1 invalid input, unknown finding id, or a corrupt line
 where reading matters — stderr names it as `ledger: <detail>`, ledger untouched.
-Argparse supplies 2 for a mistyped flag.
+Argparse supplies 2 for a mistyped flag. The three later subcommands,
+import-findings, verifier-input, and report, follow the validator convention
+instead: 1 for a semantic failure with one `ledger:` line per problem, 3 for a
+usage error or input that can't be read. The first four keep 2 because
+#385 left them and their output unchanged; work-issue calls only `state`.
 
 Stdlib only, so the skill stays copy-in portable.
 """
@@ -37,6 +46,7 @@ import argparse
 import datetime
 import json
 import os
+import re
 import sys
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -505,6 +515,323 @@ def cmd_validate(args):
     return 0
 
 
+# The five keys a verifier may see, selected by name rather than by deleting
+# proposed_fix from a full record, so a field added to the finding schema
+# later can't reach the verifier by default.
+VERIFIER_KEYS = ("id", "file", "quoted_evidence", "claim", "proposed_repro")
+
+# Step 3 saves the finder's fenced message verbatim, so stripping the fence by
+# hand first would be the tidying Step 3 forbids.
+FENCE = re.compile(r"^```json[ \t]*\n(.*?)^```[ \t]*$", re.MULTILINE | re.DOTALL)
+
+
+class Unreadable(Exception):
+    """Input that can't be read or parsed; main() exits 3 on it."""
+
+
+def load_findings_file(path):
+    try:
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+    except OSError as e:
+        raise Unreadable(f"{path}: {e}")
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    blocks = FENCE.findall(text)
+    if len(blocks) != 1:
+        raise Unreadable(
+            f"{path}: not bare JSON, and holds {len(blocks)} fenced json blocks, not 1"
+        )
+    try:
+        return json.loads(blocks[0])
+    except json.JSONDecodeError as e:
+        raise Unreadable(f"{path}: fenced json block is not valid JSON: {e}")
+
+
+def finding_problems(line, schema):
+    """Return one (json_path, reason) for each wrong field in one finding line.
+    schema_violation returns only the first, for validate's per-line report."""
+    problems = [(k, "required field missing") for k in schema["required"] if k not in line]
+    extra = sorted(set(line) - set(schema["properties"]))
+    if extra:
+        problems.append(("$", f"additional properties not allowed: {extra}"))
+    for key, subschema in schema["properties"].items():
+        if key in line:
+            violation = schema_violation(line[key], subschema, key)
+            if violation:
+                problems.append(violation)
+    return problems
+
+
+def require_readable(path):
+    try:
+        with open(path, encoding="utf-8"):
+            pass
+    except OSError as e:
+        raise Unreadable(f"{path}: {e}")
+
+
+def cmd_import_findings(args):
+    doc = load_findings_file(args.file)
+    if not isinstance(doc, dict):
+        sys.stderr.write(f"ledger: {args.file}: expected a JSON object\n")
+        return 1
+    territory = doc.get("territory")
+    findings = doc.get("findings")
+    problems = []
+    if not isinstance(territory, str) or not territory:
+        problems.append(f"{args.file}: territory: required string missing")
+    if not isinstance(findings, list):
+        problems.append(f"{args.file}: findings: required array missing")
+    if problems:
+        for p in problems:
+            sys.stderr.write(f"ledger: {p}\n")
+        return 1
+
+    schema = load_schema(FINDING_SCHEMA)
+    lines = []
+    for pos, finding in enumerate(findings, start=1):
+        if not isinstance(finding, dict):
+            problems.append(f"findings[{pos - 1}]: expected an object")
+            continue
+        # The array position is the rank, so it is the id: an importer that
+        # sorted first (by severity, say) would silently reorder Step 5's work.
+        line = {
+            **finding,
+            "record": "finding",
+            "id": f"F-r{args.round}-{territory}-{pos:02d}",
+            "round": args.round,
+            "territory": territory,
+        }
+        for key in ("record", "id", "round", "territory"):
+            if key in finding:
+                problems.append(f"findings[{pos - 1}]: {key}: assigned by import, not by the finder")
+        for json_path, reason in finding_problems(line, schema):
+            problems.append(f"findings[{pos - 1}]: {json_path}: {reason}")
+        lines.append(line)
+
+    existing = set()
+    if os.path.exists(args.ledger):
+        require_readable(args.ledger)
+        existing = {
+            obj.get("id")
+            for _, obj in read_lines(args.ledger, strict=False)
+            if obj.get("record") == "finding"
+        }
+    for line in lines:
+        if line["id"] in existing:
+            problems.append(f"{line['id']}: already in the ledger")
+
+    # All or nothing: a half-imported file leaves ids a rerun would collide
+    # with, and no way to tell which findings the verifier never saw.
+    if problems:
+        for p in problems:
+            sys.stderr.write(f"ledger: {p}\n")
+        return 1
+    for line in lines:
+        append_line(line, args.ledger)
+    if not lines:
+        # A file with findings: [] is a finished review, and Step 1 never
+        # creates the ledger, so create it here for verifier-input and report
+        # to read. Append mode leaves an existing ledger untouched.
+        if os.path.dirname(args.ledger):
+            os.makedirs(os.path.dirname(args.ledger), exist_ok=True)
+        open(args.ledger, "a", encoding="utf-8").close()
+    print(f"OK: imported {len(lines)} findings")
+    return 0
+
+
+def cmd_verifier_input(args):
+    require_readable(args.ledger)
+    out = []
+    problems = []
+    for r in derive(args.ledger):
+        f = r["finding"]
+        if f.get("round") != args.round:
+            continue
+        if args.territory is not None and f.get("territory") != args.territory:
+            continue
+        missing = [k for k in VERIFIER_KEYS if k not in f]
+        if missing:
+            problems.append(f"{f.get('id')}: missing {', '.join(missing)}")
+            continue
+        out.append({k: f[k] for k in VERIFIER_KEYS})
+    if problems:
+        for p in problems:
+            sys.stderr.write(f"ledger: {p}\n")
+        return 1
+    print(json.dumps(out, indent=2))
+    return 0
+
+
+ARTIFACT_COUNTS = {
+    "TEST_WRITTEN": "Tests written",
+    "ISSUE_FILED": "Issues filed",
+    "QUESTION_FILED": "Questions filed",
+}
+
+
+def cmd_report(args):
+    try:
+        with open(args.scope, encoding="utf-8") as f:
+            scope = json.load(f)
+    except OSError as e:
+        raise Unreadable(f"{args.scope}: {e}")
+    except json.JSONDecodeError as e:
+        raise Unreadable(f"{args.scope}: not valid JSON: {e}")
+    # A wrong shape is unreadable input, like a file that isn't JSON, because
+    # check-territories validate owns scope.json's semantics and this script only reads it.
+    if not isinstance(scope, dict):
+        raise Unreadable(f"{args.scope}: expected a JSON object")
+    if not isinstance(scope.get("territories", []), list) or not all(
+        isinstance(t, dict) and isinstance(t.get("name"), str)
+        for t in scope.get("territories", [])
+    ):
+        raise Unreadable(f"{args.scope}: territories: expected a list of objects with a name")
+    if not isinstance(scope.get("rounds", []), list) or not all(
+        isinstance(r, dict) and isinstance(r.get("territories"), list)
+        for r in scope.get("rounds", [])
+    ):
+        raise Unreadable(f"{args.scope}: rounds: expected a list of objects with a territories list")
+    if not os.path.isdir(args.findings_dir):
+        raise Unreadable(f"{args.findings_dir}: not a directory")
+    require_readable(args.ledger)
+
+    rows = derive(args.ledger)
+    # derive() keeps only the latest disposition, and the listed section needs
+    # the REPRODUCED event's own command and output.
+    reproduced = {}
+    # A test, issue, or question stays written after a later outcome such as
+    # ESCALATED at --max-rounds, so the ARTIFACT_COUNTS lines read every event
+    # rather than derive()'s latest outcome.
+    artifacts = set()
+    for _, obj in read_lines(args.ledger, strict=True):
+        if obj.get("record") == "event" and obj.get("disposition") == "REPRODUCED":
+            reproduced[obj.get("finding_id")] = obj
+        if obj.get("record") == "event" and obj.get("disposition") in ARTIFACT_COUNTS:
+            artifacts.add((obj.get("finding_id"), obj.get("disposition")))
+
+    problems = []
+    territories = [t["name"] for t in scope.get("territories", [])]
+    rounds = scope.get("rounds") or []
+    if not rounds:
+        problems.append(f"{args.scope}: rounds: no round recorded")
+    for r in rows:
+        if r["finding"].get("territory") not in territories:
+            problems.append(
+                f"{r['finding'].get('id')}: territory {r['finding'].get('territory')!r} "
+                f"is not in {args.scope}, so the report would drop it"
+            )
+    listed = [r for r in rows if r["outcome"] == "LISTED"]
+    for r in listed:
+        # derive() lets the latest verification win, so once a later
+        # NOT_REPRODUCED or UNVERIFIABLE supersedes a REPRODUCED event, that
+        # event's repro no longer counts as evidence.
+        if r["verification"] != "REPRODUCED":
+            problems.append(
+                f"{r['finding']['id']}: LISTED but its current verification is "
+                f"{r['verification']}, not REPRODUCED"
+            )
+            continue
+        ev = reproduced.get(r["finding"]["id"])
+        if not ev or not ev.get("repro_command") or not ev.get("observed_output"):
+            problems.append(f"{r['finding']['id']}: LISTED with no REPRODUCED repro command and output")
+    if problems:
+        for p in problems:
+            sys.stderr.write(f"ledger: {p}\n")
+        return 1
+
+    out = []
+    for name in territories:
+        # A territory is judged on the latest round that fanned out to it. A
+        # missing findings file is the only failure mark on disk: Step 3's
+        # "marked failed" lives in the agent's context, not in a file.
+        latest = None
+        for rnd in rounds:
+            if name in rnd["territories"]:
+                latest = rnd.get("round")
+        doc = None
+        if latest is not None:
+            path = os.path.join(args.findings_dir, f"round-{latest}-{name}.json")
+            if os.path.exists(path):
+                doc = load_findings_file(path)
+        out.append(f"## {name}")
+        out.append("")
+        if doc is None:
+            out.append("**Verdict:** UNREVIEWED")
+            out.append("")
+            if latest is None:
+                out.append("No round fanned out to this territory, so no finder ever reviewed it.")
+            else:
+                out.append(f"No findings file for round {latest}: this territory's finder never reported.")
+        else:
+            out.append("**Verdict:** (write this territory's verdict)")
+            out.append("")
+            works = doc.get("works") if isinstance(doc, dict) else None
+            out.append(f"**Works:** {works or '(no works line)'}")
+        out.append("")
+        group = [r for r in rows if r["finding"].get("territory") == name]
+        # Silent first: a silent defect reads as a working run to whoever
+        # meets it. A missing failure_mode sorts as silent, the stricter read.
+        group.sort(key=lambda r: r["finding"].get("failure_mode", "silent") != "silent")
+        if not group:
+            out.append("No findings.")
+        for r in group:
+            f = r["finding"]
+            out.append(
+                f"- `{f['id']}` {f.get('failure_mode', 'silent')}, "
+                f"{f.get('claimed_severity')}: {r['verification']} → "
+                f"{r['outcome'] or '(no outcome)'}. {f.get('claim')}"
+            )
+        out.append("")
+
+    def count(pred):
+        return sum(1 for r in rows if pred(r))
+
+    out.append("## Run")
+    out.append("")
+    out.append(f"- Rounds taken: {len(rounds)}")
+    for rnd in rounds:
+        n = rnd.get("round")
+        out.append(f"- Round {n} findings: {count(lambda r: r['finding'].get('round') == n)}")
+    for v in ("REPRODUCED", "NOT_REPRODUCED", "UNVERIFIABLE", "UNVERIFIED"):
+        out.append(f"- {v}: {count(lambda r: r['verification'] == v)}")
+    for d, label in ARTIFACT_COUNTS.items():
+        out.append(f"- {label}: {count(lambda r: (r['finding']['id'], d) in artifacts)}")
+    for label, d in (
+        ("Listed", "LISTED"),
+        ("Escalated", "ESCALATED"),
+        ("Closed", "CLOSED"),
+    ):
+        out.append(f"- {label}: {count(lambda r: r['outcome'] == d)}")
+    out.append("")
+
+    out.append("## Listed")
+    out.append("")
+    if not listed:
+        out.append("None.")
+    for r in listed:
+        f = r["finding"]
+        ev = reproduced[f["id"]]
+        reach = (
+            f" Reachability: {f.get('reachability')}."
+            if f.get("claimed_severity") == "blocking"
+            else ""
+        )
+        out.append(f"- `{f['id']}`: {f.get('claim')}{reach}")
+        out.append("")
+        out.append("  ```")
+        out.append(f"  $ {ev['repro_command']}")
+        for text in ev["observed_output"].splitlines():
+            out.append(f"  {text}")
+        out.append("  ```")
+        out.append("")
+    print("\n".join(out).rstrip("\n"))
+    return 0
+
+
 def parse_args(argv=None):
     ap = argparse.ArgumentParser(description="Append to and read the finding ledger.")
     sub = ap.add_subparsers(dest="command", required=True)
@@ -567,12 +894,47 @@ def parse_args(argv=None):
     v.add_argument("--ledger", required=True, metavar="PATH")
     v.set_defaults(func=cmd_validate)
 
+    i = sub.add_parser("import-findings", help="append one findings file, in rank order")
+    i.add_argument("--ledger", required=True, metavar="PATH")
+    i.add_argument("--round", required=True, type=int)
+    i.add_argument("file", metavar="FILE")
+    i.set_defaults(func=cmd_import_findings)
+
+    vi = sub.add_parser("verifier-input", help="the five keys a verifier may see")
+    vi.add_argument("--ledger", required=True, metavar="PATH")
+    vi.add_argument("--round", required=True, type=int)
+    vi.add_argument("--territory", default=None)
+    vi.set_defaults(func=cmd_verifier_input)
+
+    r = sub.add_parser("report", help="Step 8's report skeleton")
+    r.add_argument("--ledger", required=True, metavar="PATH")
+    r.add_argument("--scope", required=True, metavar="PATH")
+    r.add_argument("--findings-dir", required=True, metavar="DIR")
+    r.set_defaults(func=cmd_report)
+
     return ap.parse_args(argv)
 
 
+VALIDATOR_COMMANDS = ("import-findings", "verifier-input", "report")
+
+
 def main(argv=None):
-    args = parse_args(argv)
-    return args.func(args)
+    argv = sys.argv[1:] if argv is None else argv
+    validator = bool(argv) and argv[0] in VALIDATOR_COMMANDS
+    try:
+        args = parse_args(argv)
+    except SystemExit as e:
+        # Only the later subcommands move argparse's 2 to 3. The first four
+        # keep 2, which existing callers such as work-issue's
+        # `ledger.py state` already handle.
+        if validator and e.code == 2:
+            raise SystemExit(3)
+        raise
+    try:
+        return args.func(args)
+    except Unreadable as e:
+        sys.stderr.write(f"ledger: {e}\n")
+        return 3
 
 
 if __name__ == "__main__":

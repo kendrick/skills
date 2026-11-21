@@ -77,17 +77,16 @@ Save each finder's returned JSON verbatim to `RUN_DIR/findings/round-<N>-<territ
 
 ## Step 4 — Ledger
 
-Append every finding, in the order its finder ranked it:
+Import each territory's findings file with one call:
 
 ```
-adversarial-review/scripts/ledger.py append-finding --ledger RUN_DIR/ledger.jsonl \
-    --id F-r<round>-<territory>-<NN> --round <N> --territory <name> ... \
-    --claimed-severity <s> --reachability <r> --failure-mode <m>
+adversarial-review/scripts/ledger.py import-findings --ledger RUN_DIR/ledger.jsonl \
+    --round <N> RUN_DIR/findings/round-<N>-<territory>.json
 ```
 
-Copy `claimed_severity`, `reachability`, and `failure_mode` from the finder's JSON exactly as it wrote them. All three are bound before verification, and Step 6 routes on them.
+The script reads the file Step 3 saved, bare JSON or one fenced `json` block, validates every finding against the finding schema, and appends them in the finder's order with ids `F-r<N>-<territory>-<NN>`, where `NN` is the finding's position in the `findings` array, so the id carries the rank. `claimed_severity`, `reachability`, and `failure_mode` land exactly as the finder wrote them, bound before verification, and Step 6 routes on them. An invalid finding, or an id already in the ledger, exits 1 with nothing from that file appended: fix the cause and import the file again, whole. Import a file whose `findings` array is empty too: the call creates the ledger when it is absent, and Steps 5 and 8 read it. Hand-typed `append-finding` calls stay available for a finding that arrives outside a findings file.
 
-This step is transcription. Two territories reporting the same underlying bug is information about the bug, not duplication to clean up; re-ranking across territories reintroduces the single ordering the per-territory verdicts exist to avoid. Dedupe, re-rank, and synthesis all belong after verification, if anywhere.
+Two territories reporting the same underlying bug is information about the bug, not duplication to clean up; re-ranking across territories reintroduces the single ordering the per-territory verdicts exist to avoid. Dedupe, re-rank, and synthesis all belong after verification, if anywhere.
 
 Findings carry no disposition field. A finding's state is derived from the events appended after it, which is what keeps the ledger append-only in fact rather than only in intent, and preserves when each state landed and who landed it.
 
@@ -95,7 +94,14 @@ Findings carry no disposition field. A finding's state is derived from the event
 
 ## Step 5 — Verification Gate
 
-Read [references/verifier-prompt.md](references/verifier-prompt.md). Dispatch fresh verifier subagents that receive only `id`, `file`, `quoted_evidence`, `claim`, and `proposed_repro`—never the finder's reasoning, and never `proposed_fix`, which carries that reasoning in another form. Their stance is refutation: the claim is what they are trying to break.
+Read [references/verifier-prompt.md](references/verifier-prompt.md). Dispatch fresh verifier subagents that receive only `id`, `file`, `quoted_evidence`, `claim`, and `proposed_repro`—never the finder's reasoning, and never `proposed_fix`, which carries that reasoning in another form. Their stance is refutation: the claim is what they are trying to break. Build each verifier's findings from the ledger:
+
+```
+adversarial-review/scripts/ledger.py verifier-input --ledger RUN_DIR/ledger.jsonl \
+    --round <N> [--territory <name>]
+```
+
+It prints the JSON array with those five keys selected by name, and its output goes into the prompt verbatim.
 
 Record each returned event with `ledger.py append-event`, with `--actor verifier-r<round>-<territory>`. The script enforces the evidence rules, so a REPRODUCED event without its command and actual output is refused at the append.
 
@@ -165,6 +171,15 @@ Its last line is `loop: stop` or `loop: continue`, and its `blocking (REPRODUCED
 Report per territory. There is deliberately no single cross-territory verdict: one axis passing must never mask another failing, and a combined verdict is exactly the artifact that lets it.
 
 For each territory give its verdict, its findings with terminal dispositions grouped by `failure_mode` with `silent` first, and the one line its finder wrote about what works. Silent findings lead because a silent defect reads as a working run to whoever meets it, and this report is the one place it announces itself. A territory whose finder failed carries the verdict UNREVIEWED—nobody managed to look, which must never read like somebody looked and found nothing. Then the run-level facts: rounds taken, what each round's fixes introduced, tests written, issues filed, questions filed. Then every `LISTED` finding, each with its id, its claim, its reachability when it is a blocker, and the repro command with its observed output, in a section a wrapping skill can copy into a pull-request body.
+
+Start from the skeleton the ledger builds:
+
+```
+adversarial-review/scripts/ledger.py report --ledger RUN_DIR/ledger.jsonl \
+    --scope RUN_DIR/scope.json --findings-dir RUN_DIR/findings
+```
+
+It prints a section per territory with its `works` line and its findings, `silent` before `loud`, the run-level counts, and the listed section with each repro command and its observed output. A territory with no findings file for the latest round that fanned out to it prints `UNREVIEWED`, since a missing file is the one failure mark on disk; an empty `findings` array reports as zero findings. Write each territory's verdict where the skeleton leaves a placeholder, and the run's narrative, including what each round's fixes introduced, around it. Keep the skeleton's order and contents as printed. When `report` exits 1 naming a `LISTED` finding whose current verification is not `REPRODUCED`, route that finding again in Step 6 by its current verification, then rerun the report.
 
 Surface any `calibration:` line `ledger.py state` produced. A territory whose findings were mostly UNVERIFIABLE is telling you its hunt items generate untestable claims—worth fixing in the trigger table before the next run, and deliberately not a trigger for re-fanning-out, since termination has to stay mechanical.
 

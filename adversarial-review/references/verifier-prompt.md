@@ -89,7 +89,7 @@ why null is the right answer where nothing was observed.
 
 ## Placeholder
 
-- `{{LEDGER_RECORDS}}` — a JSON array of the findings to check, each carrying `id`, `file`, `quoted_evidence`, `claim`, and `proposed_repro`. Build it by selecting those five keys explicitly. Selecting explicitly rather than deleting `proposed_fix` from a full record means a later field added to the finding schema cannot leak into the verifier by default.
+- `{{LEDGER_RECORDS}}` — a JSON array of the findings to check, each carrying `id`, `file`, `quoted_evidence`, `claim`, and `proposed_repro`. Paste the output of `ledger.py verifier-input --ledger RUN_DIR/ledger.jsonl --round <N>`, with `--territory <name>` for one territory's batch, verbatim. The script selects those five keys by name. Selecting by name rather than deleting `proposed_fix` from a full record means a later field added to the finding schema cannot leak into the verifier by default. At Depth 2, give each verifier one object from that array.
 
 ## Recording the result
 

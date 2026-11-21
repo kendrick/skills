@@ -175,7 +175,9 @@ require_text adversarial-review/SKILL.md "| REPRODUCED + blocking + \`specific_e
 require_text adversarial-review/SKILL.md "| REPRODUCED + blocking + \`specific_environment\` or \`hand_edited_input\` + \`silent\` | Escalate it: name the finding in \`RUN_DIR/escalation.md\`"
 refute_text adversarial-review/SKILL.md "| REPRODUCED + blocking | Write a failing test"
 require_text adversarial-review/SKILL.md "REPRODUCED + blocking routes to escalation instead, whatever its reachability"
-require_text adversarial-review/SKILL.md "--claimed-severity <s> --reachability <r> --failure-mode <m>"
+# Step 4 imports the finder's file whole, so all three routing fields reach the
+# ledger as the finder bound them; the step has to keep saying so.
+require_text adversarial-review/SKILL.md "\`claimed_severity\`, \`reachability\`, and \`failure_mode\` land exactly as the finder wrote them"
 # Step 7 counts reachable blockers alone, matching ledger.py state; Step 8
 # puts silent findings first, since a silent defect reads as a working run.
 require_text adversarial-review/SKILL.md "and whose \`reachability\` is \`normal_use\` or \`unknown\`, in the territories it re-reviewed"
@@ -1168,5 +1170,432 @@ set -e
   echo "lines usage errors must exit 3: --only 9 got $lines_unknown_row_status, a missing --table got $lines_missing_table_status" >&2
   exit 1
 }
+
+# --- #385: import-findings, verifier-input, report. Each case is a function
+# so it can run alone against an older ledger.py and be seen to fail there. ---
+
+# Three findings, A and B blocking and C advisory, so an importer that sorted
+# by severity would move A once A turns advisory. $2 reorders them; $3 edits A.
+ar_findings() {
+  python3 - "$@" <<'PY'
+import json, sys
+out, order, a_sev = sys.argv[1], sys.argv[2], sys.argv[3]
+def f(claim, sev, mode):
+    return {"file": "src/billing/invoice.py", "quoted_evidence": "total += round(x, 2)",
+            "claim": claim, "proposed_fix": "fix " + claim, "proposed_repro": "pytest -k " + claim,
+            "claimed_severity": sev, "reachability": "normal_use", "failure_mode": mode}
+by = {"A": f("A", a_sev, "loud"), "B": f("B", "blocking", "silent"), "C": f("C", "advisory", "loud")}
+doc = {"territory": "money", "works": "tax lookup is sound", "findings": [by[k] for k in order]}
+# Fenced, the way Step 3 saves the finder's message verbatim.
+open(out, "w").write("```json\n" + json.dumps(doc, indent=2) + "\n```\n")
+PY
+}
+
+# Prints each finding line's id and claim, in ledger order.
+ar_ids() {
+  python3 -c 'import json,sys; [print(o["id"], o["claim"]) for o in map(json.loads, open(sys.argv[1])) if o["record"] == "finding"]' "$1"
+}
+
+ar_case_import_order() {
+  local d="$tmp/ar385-order" out
+  mkdir -p "$d"
+  ar_findings "$d/f.json" ABC blocking
+  python3 "$ledger_py" import-findings --ledger "$d/l.jsonl" --round 1 "$d/f.json" >/dev/null
+  out="$(ar_ids "$d/l.jsonl" | tr '\n' ';')"
+  [[ "$out" == "F-r1-money-01 A;F-r1-money-02 B;F-r1-money-03 C;" ]] || {
+    echo "import-findings must assign -01..-03 in file order, got: $out" >&2
+    exit 1
+  }
+  python3 "$ledger_py" validate --ledger "$d/l.jsonl" >/dev/null || {
+    echo "an imported ledger must validate" >&2
+    exit 1
+  }
+  out="$(python3 "$ledger_py" state --ledger "$d/l.jsonl" | grep -c '^F-r1-money-0[123] .* UNVERIFIED ')"
+  [[ "$out" == "3" ]] || {
+    echo "state must show all three imported findings UNVERIFIED, got $out" >&2
+    exit 1
+  }
+}
+
+# Rank becomes id: swapping two findings swaps their ids, and changing A's
+# severity leaves A at -01.
+ar_case_rank_falsifiers() {
+  local d="$tmp/ar385-rank" out
+  mkdir -p "$d"
+  ar_findings "$d/swap.json" BAC blocking
+  python3 "$ledger_py" import-findings --ledger "$d/swap.jsonl" --round 1 "$d/swap.json" >/dev/null
+  out="$(ar_ids "$d/swap.jsonl" | head -2 | tr '\n' ';')"
+  [[ "$out" == "F-r1-money-01 B;F-r1-money-02 A;" ]] || {
+    echo "swapping the first two findings must swap their ids, got: $out" >&2
+    exit 1
+  }
+  ar_findings "$d/sev.json" ABC advisory
+  python3 "$ledger_py" import-findings --ledger "$d/sev.jsonl" --round 1 "$d/sev.json" >/dev/null
+  out="$(ar_ids "$d/sev.jsonl" | head -1)"
+  [[ "$out" == "F-r1-money-01 A" ]] || {
+    echo "a severity change must not move a finding's id, got: $out" >&2
+    exit 1
+  }
+}
+
+ar_case_import_twice() {
+  local d="$tmp/ar385-twice" status
+  mkdir -p "$d"
+  ar_findings "$d/f.json" ABC blocking
+  python3 "$ledger_py" import-findings --ledger "$d/l.jsonl" --round 1 "$d/f.json" >/dev/null
+  cp "$d/l.jsonl" "$d/before.jsonl"
+  set +e
+  python3 "$ledger_py" import-findings --ledger "$d/l.jsonl" --round 1 "$d/f.json" >/dev/null 2>&1
+  status=$?
+  set -e
+  [[ "$status" == "1" ]] && cmp -s "$d/l.jsonl" "$d/before.jsonl" || {
+    echo "a second import of one file must exit 1 and leave the ledger unchanged, got exit $status" >&2
+    exit 1
+  }
+}
+
+ar_case_import_invalid() {
+  local d="$tmp/ar385-invalid" status err
+  mkdir -p "$d"
+  ar_findings "$d/other.json" ABC blocking
+  python3 "$ledger_py" import-findings --ledger "$d/l.jsonl" --round 1 "$d/other.json" >/dev/null
+  cp "$d/l.jsonl" "$d/before.jsonl"
+  ar_findings "$d/f.json" ABC blocking
+  python3 - "$d/f.json" <<'PY'
+import json, sys
+text = open(sys.argv[1]).read().split("\n", 1)[1].rsplit("```", 1)[0]
+doc = json.loads(text)
+doc["territory"] = "tenancy"
+del doc["findings"][1]["failure_mode"]
+open(sys.argv[1], "w").write(json.dumps(doc))
+PY
+  set +e
+  err="$(python3 "$ledger_py" import-findings --ledger "$d/l.jsonl" --round 1 "$d/f.json" 2>&1 >/dev/null)"
+  status=$?
+  set -e
+  [[ "$status" == "1" ]] && grep -q '^ledger: .*failure_mode' <<<"$err" && cmp -s "$d/l.jsonl" "$d/before.jsonl" || {
+    echo "a finding missing failure_mode must exit 1 with a ledger: line and append nothing, got exit $status: $err" >&2
+    exit 1
+  }
+}
+
+# Key-set equality, not the absence of one named key: a field added to the
+# finding schema later has to fail this too.
+ar_case_verifier_input() {
+  local d="$tmp/ar385-verifier"
+  mkdir -p "$d"
+  ar_findings "$d/f.json" ABC blocking
+  python3 "$ledger_py" import-findings --ledger "$d/l.jsonl" --round 1 "$d/f.json" >/dev/null
+  python3 "$ledger_py" verifier-input --ledger "$d/l.jsonl" --round 1 >"$d/out.json"
+  python3 - "$d/out.json" <<'PY' || exit 1
+import json, sys
+want = {"id", "file", "quoted_evidence", "claim", "proposed_repro"}
+items = json.load(open(sys.argv[1]))
+bad = [sorted(set(o)) for o in items if set(o) != want]
+if len(items) != 3 or bad:
+    sys.exit(f"verifier-input must print 3 objects keyed exactly {sorted(want)}, got {len(items)}, bad: {bad}")
+PY
+}
+
+# One scope with money and tenancy in round 1. money has loud, silent, loud
+# findings in that file order, and one advisory LISTED after REPRODUCED.
+ar_report_run() {
+  local d="$1"
+  mkdir -p "$d/findings"
+  python3 - "$fixtures/scope-good.json" "$d/scope.json" <<'PY'
+import json, sys
+s = json.load(open(sys.argv[1]))
+s["territories"] = [t for t in s["territories"] if t["name"] != "tests"]
+s["rounds"][0]["territories"] = ["money", "tenancy"]
+json.dump(s, open(sys.argv[2], "w"))
+PY
+  ar_findings "$d/findings/round-1-money.json" ACB blocking
+  printf '{"territory": "tenancy", "works": "tenant scoping holds", "findings": []}\n' \
+    >"$d/findings/round-1-tenancy.json"
+  python3 "$ledger_py" import-findings --ledger "$d/l.jsonl" --round 1 \
+    "$d/findings/round-1-money.json" >/dev/null
+  python3 "$ledger_py" append-event --ledger "$d/l.jsonl" --finding-id F-r1-money-02 \
+    --disposition REPRODUCED --actor verifier-r1-money --repro-command 'pytest -k C' \
+    --observed-output 'E   assert 1.01 == 1.00' >/dev/null
+  python3 "$ledger_py" append-event --ledger "$d/l.jsonl" --finding-id F-r1-money-02 \
+    --disposition LISTED --actor orchestrator --reason 'listed in PR Left Out' >/dev/null
+}
+
+ar_report() {
+  python3 "$ledger_py" report --ledger "$1/l.jsonl" --scope "$1/scope.json" --findings-dir "$1/findings"
+}
+
+ar_case_report_silent_first() {
+  local d="$tmp/ar385-silent"
+  ar_report_run "$d"
+  ar_report "$d" >"$d/report.md"
+  python3 - "$d/report.md" <<'PY' || exit 1
+import sys
+section, modes = None, {}
+for line in open(sys.argv[1]):
+    if line.startswith("## "):
+        section = line[3:].strip()
+    elif line.startswith("- `F-") and section:
+        modes.setdefault(section, []).append(line.split()[2].rstrip(","))
+money = modes.get("money", [])
+if sorted(money) != ["loud", "loud", "silent"] or any(
+    m == "silent" and "loud" in modes[s][:i] for s in modes for i, m in enumerate(modes[s])
+):
+    sys.exit(f"report must put every silent finding before every loud one per territory, got {modes}")
+PY
+}
+
+ar_case_report_unreviewed() {
+  local d="$tmp/ar385-unreviewed" section
+  ar_report_run "$d"
+  section="$(ar_report "$d" | sed -n '/^## tenancy/,/^## /p')"
+  grep -Fq "UNREVIEWED" <<<"$section" && {
+    echo "an empty findings array is a real answer, not UNREVIEWED: $section" >&2
+    exit 1
+  }
+  grep -Fq "No findings." <<<"$section" || {
+    echo "a territory with an empty findings array must report zero findings: $section" >&2
+    exit 1
+  }
+  rm "$d/findings/round-1-tenancy.json"
+  section="$(ar_report "$d" | sed -n '/^## tenancy/,/^## /p')"
+  grep -Fq "**Verdict:** UNREVIEWED" <<<"$section" || {
+    echo "a territory with no findings file must report UNREVIEWED: $section" >&2
+    exit 1
+  }
+  # A territory no round lists has no round number to name; "round None"
+  # leaked through before.
+  python3 - "$d/scope.json" <<'PY2'
+import json, sys
+p = sys.argv[1]
+s = json.load(open(p))
+for r in s["rounds"]:
+    r["territories"] = [t for t in r["territories"] if t != "tenancy"]
+json.dump(s, open(p, "w"))
+PY2
+  section="$(ar_report "$d" | sed -n '/^## tenancy/,/^## /p')"
+  grep -Fq "**Verdict:** UNREVIEWED" <<<"$section" && grep -Fq "No round fanned out" <<<"$section" \
+    && ! grep -Fq "round None" <<<"$section" || {
+    echo "a territory no round lists must report UNREVIEWED without naming round None: $section" >&2
+    exit 1
+  }
+}
+
+ar_case_report_listed() {
+  local d="$tmp/ar385-listed" section
+  ar_report_run "$d"
+  section="$(ar_report "$d" | sed -n '/^## Listed/,$p')"
+  grep -Fq 'F-r1-money-02' <<<"$section" && grep -Fq '$ pytest -k C' <<<"$section" \
+    && grep -Fq 'E   assert 1.01 == 1.00' <<<"$section" || {
+    echo "a LISTED finding must appear in the listed section with its repro command and output: $section" >&2
+    exit 1
+  }
+}
+
+# 0 success, 1 semantic with one stderr line per problem, 3 usage or
+# unreadable input. The first four subcommands keep argparse's 2.
+ar_case_exit_codes() {
+  local d="$tmp/ar385-exit" got err
+  ar_report_run "$d"
+  ar_findings "$d/two-bad.json" ABC blocking
+  python3 - "$d/two-bad.json" <<'PY'
+import json, sys
+text = open(sys.argv[1]).read().split("\n", 1)[1].rsplit("```", 1)[0]
+doc = json.loads(text)
+del doc["findings"][0]["claim"]
+doc["findings"][2]["reachability"] = "sometimes"
+open(sys.argv[1], "w").write(json.dumps(doc))
+PY
+  printf '%s\n' '{"record": "finding", "id": "F-r1-money-09", "round": 1, "territory": "nowhere", "file": "x", "quoted_evidence": "y", "claim": "z", "proposed_fix": "f", "claimed_severity": "advisory", "reachability": "unknown", "failure_mode": "loud"}' \
+    >"$d/hand.jsonl"
+  set +e
+  got=""
+  err="$(python3 "$ledger_py" import-findings --ledger "$d/new.jsonl" --round 1 "$d/two-bad.json" 2>&1 >/dev/null)"
+  got+="import-semantic=$?/$(grep -c '^ledger: ' <<<"$err") "
+  python3 "$ledger_py" import-findings --ledger "$d/new.jsonl" --round 1 "$d/missing.json" >/dev/null 2>&1
+  got+="import-unreadable=$? "
+  python3 "$ledger_py" import-findings --ledger "$d/new.jsonl" "$d/two-bad.json" >/dev/null 2>&1
+  got+="import-usage=$? "
+  err="$(python3 "$ledger_py" verifier-input --ledger "$d/hand.jsonl" --round 1 2>&1 >/dev/null)"
+  got+="verifier-semantic=$?/$(grep -c '^ledger: ' <<<"$err") "
+  python3 "$ledger_py" verifier-input --ledger "$d/missing.jsonl" --round 1 >/dev/null 2>&1
+  got+="verifier-unreadable=$? "
+  python3 "$ledger_py" verifier-input --ledger "$d/l.jsonl" >/dev/null 2>&1
+  got+="verifier-usage=$? "
+  ar_report "$d" >/dev/null 2>&1
+  got+="report-ok=$? "
+  cat "$d/hand.jsonl" >>"$d/l.jsonl"
+  err="$(ar_report "$d" 2>&1 >/dev/null)"
+  got+="report-semantic=$?/$(grep -c '^ledger: ' <<<"$err") "
+  python3 "$ledger_py" report --ledger "$d/l.jsonl" --scope "$d/missing.json" --findings-dir "$d/findings" >/dev/null 2>&1
+  got+="report-unreadable=$? "
+  python3 "$ledger_py" report --ledger "$d/l.jsonl" --scope "$d/scope.json" >/dev/null 2>&1
+  got+="report-usage=$? "
+  python3 "$ledger_py" state --ledger "$d/l.jsonl" --bogus >/dev/null 2>&1
+  got+="state-usage=$?"
+  set -e
+  [[ "$got" == "import-semantic=1/2 import-unreadable=3 import-usage=3 verifier-semantic=1/1 verifier-unreadable=3 verifier-usage=3 report-ok=0 report-semantic=1/1 report-unreadable=3 report-usage=3 state-usage=2" ]] || {
+    echo "new subcommands must exit 0/1/3 with one stderr line per problem, and state keeps 2: $got" >&2
+    exit 1
+  }
+}
+
+ar_case_docs_name_subcommands() {
+  local cmd
+  for cmd in import-findings verifier-input report; do
+    require_text adversarial-review/SKILL.md "ledger.py $cmd"
+  done
+  require_text adversarial-review/references/verifier-prompt.md "ledger.py verifier-input"
+}
+
+# One finding with two problems gets two stderr lines, not only its first.
+ar_case_import_every_problem() {
+  local d="$tmp/ar385-every" status err
+  mkdir -p "$d"
+  ar_findings "$d/f.json" ABC blocking
+  python3 - "$d/f.json" <<'PY'
+import json, sys
+text = open(sys.argv[1]).read().split("\n", 1)[1].rsplit("```", 1)[0]
+doc = json.loads(text)
+del doc["findings"][0]["claim"]
+doc["findings"][0]["reachability"] = "sometimes"
+open(sys.argv[1], "w").write(json.dumps(doc))
+PY
+  set +e
+  err="$(python3 "$ledger_py" import-findings --ledger "$d/l.jsonl" --round 1 "$d/f.json" 2>&1 >/dev/null)"
+  status=$?
+  set -e
+  [[ "$status" == "1" && "$(grep -c '^ledger: findings\[0\]' <<<"$err")" == "2" ]] \
+    && grep -q 'claim' <<<"$err" && grep -q 'reachability' <<<"$err" || {
+    echo "a finding with two problems must print one ledger: line for each, got exit $status: $err" >&2
+    exit 1
+  }
+}
+
+# A scope.json that parses but has the wrong shape is unreadable input: exit 3
+# with a ledger: line, never a traceback.
+ar_case_report_bad_scope() {
+  local d="$tmp/ar385-badscope" status err shape
+  ar_report_run "$d"
+  for shape in '[]' '{"territories": [{"name": "money"}], "rounds": [1]}' '{"territories": "money", "rounds": []}'; do
+    printf '%s\n' "$shape" >"$d/scope.json"
+    set +e
+    err="$(ar_report "$d" 2>&1 >/dev/null)"
+    status=$?
+    set -e
+    [[ "$status" == "3" ]] && grep -q '^ledger: ' <<<"$err" && ! grep -q 'Traceback' <<<"$err" || {
+      echo "report on scope.json $shape must exit 3 with a ledger: line, got exit $status: $err" >&2
+      exit 1
+    }
+  done
+}
+
+# Every finder answering findings: [] is a finished review, so the import
+# still leaves a ledger the later steps can read, and never truncates one.
+ar_case_import_empty() {
+  local d="$tmp/ar385-empty" got
+  mkdir -p "$d/findings"
+  printf '{"territory": "money", "works": "sound", "findings": []}\n' >"$d/findings/round-1-money.json"
+  python3 - "$fixtures/scope-good.json" "$d/scope.json" <<'PY'
+import json, sys
+s = json.load(open(sys.argv[1]))
+s["territories"] = [t for t in s["territories"] if t["name"] == "money"]
+s["rounds"] = [{**s["rounds"][0], "territories": ["money"]}]
+json.dump(s, open(sys.argv[2], "w"))
+PY
+  set +e
+  python3 "$ledger_py" import-findings --ledger "$d/l.jsonl" --round 1 "$d/findings/round-1-money.json" >/dev/null 2>&1
+  got="import=$? "
+  got+="verifier=$(python3 "$ledger_py" verifier-input --ledger "$d/l.jsonl" --round 1 2>/dev/null | tr -d ' \n')/$? "
+  python3 "$ledger_py" validate --ledger "$d/l.jsonl" >/dev/null 2>&1
+  got+="validate=$? "
+  ar_report "$d" >/dev/null 2>&1
+  got+="report=$?"
+  set -e
+  [[ "$got" == "import=0 verifier=[]/0 validate=0 report=0" ]] || {
+    echo "an empty import must leave a ledger verifier-input, validate, and report can read: $got" >&2
+    exit 1
+  }
+  ar_findings "$d/f.json" ABC blocking
+  python3 "$ledger_py" import-findings --ledger "$d/l2.jsonl" --round 1 "$d/f.json" >/dev/null
+  cp "$d/l2.jsonl" "$d/before.jsonl"
+  printf '{"territory": "tenancy", "works": "sound", "findings": []}\n' >"$d/t.json"
+  python3 "$ledger_py" import-findings --ledger "$d/l2.jsonl" --round 1 "$d/t.json" >/dev/null
+  cmp -s "$d/l2.jsonl" "$d/before.jsonl" || {
+    echo "an empty import must not truncate or touch an existing ledger" >&2
+    exit 1
+  }
+}
+
+# A reproduction a later NOT_REPRODUCED refuted is not evidence, so report
+# refuses to copy it into the listed section.
+ar_case_report_listed_superseded() {
+  local d="$tmp/ar385-superseded" status err out
+  ar_report_run "$d"
+  python3 "$ledger_py" append-event --ledger "$d/l.jsonl" --finding-id F-r1-money-02 \
+    --disposition NOT_REPRODUCED --actor verifier-r2-money --counter-evidence 'passes on main' >/dev/null
+  set +e
+  out="$(ar_report "$d" 2>"$d/err")"
+  status=$?
+  set -e
+  err="$(cat "$d/err")"
+  [[ "$status" == "1" && "$(grep -c '^ledger: ' <<<"$err")" == "1" ]] && grep -Fq 'F-r1-money-02' <<<"$err" \
+    && ! grep -Fq 'pytest -k C' <<<"$out" || {
+    echo "report must refuse a LISTED finding whose latest verification is not REPRODUCED, got exit $status: $err" >&2
+    exit 1
+  }
+  # Re-reproduced afterwards, the newer repro is the one listed.
+  python3 "$ledger_py" append-event --ledger "$d/l.jsonl" --finding-id F-r1-money-02 \
+    --disposition REPRODUCED --actor verifier-r3-money --repro-command 'pytest -k C2' \
+    --observed-output 'E   new failure' >/dev/null
+  out="$(ar_report "$d" | sed -n '/^## Listed/,$p')"
+  grep -Fq '$ pytest -k C2' <<<"$out" && grep -Fq 'E   new failure' <<<"$out" \
+    && ! grep -Fq 'E   assert 1.01 == 1.00' <<<"$out" || {
+    echo "report must list the current REPRODUCED event's repro, got: $out" >&2
+    exit 1
+  }
+}
+
+# Tests written, issues filed, and questions filed count artifacts, so a
+# later ESCALATED must not erase the TEST_WRITTEN or QUESTION_FILED before it.
+ar_case_report_artifact_counts() {
+  local d="$tmp/ar385-artifacts" run
+  ar_report_run "$d"
+  python3 "$ledger_py" append-event --ledger "$d/l.jsonl" --finding-id F-r1-money-01 \
+    --disposition REPRODUCED --actor verifier-r1-money --repro-command 'pytest -k A' \
+    --observed-output 'E   A' >/dev/null
+  python3 "$ledger_py" append-event --ledger "$d/l.jsonl" --finding-id F-r1-money-01 \
+    --disposition TEST_WRITTEN --actor orchestrator --artifact tests/test_a.py >/dev/null
+  python3 "$ledger_py" append-event --ledger "$d/l.jsonl" --finding-id F-r1-money-01 \
+    --disposition ESCALATED --actor orchestrator --reason 'max rounds' >/dev/null
+  python3 "$ledger_py" append-event --ledger "$d/l.jsonl" --finding-id F-r1-money-03 \
+    --disposition REPRODUCED --actor verifier-r1-money --repro-command 'pytest -k B' \
+    --observed-output 'E   B' >/dev/null
+  python3 "$ledger_py" append-event --ledger "$d/l.jsonl" --finding-id F-r1-money-03 \
+    --disposition QUESTION_FILED --actor orchestrator --artifact 'https://example.test/q/1' >/dev/null
+  python3 "$ledger_py" append-event --ledger "$d/l.jsonl" --finding-id F-r1-money-03 \
+    --disposition ESCALATED --actor orchestrator --reason 'max rounds' >/dev/null
+  run="$(ar_report "$d" | sed -n '/^## Run/,/^## Listed/p' | grep -E '^- (Tests written|Questions filed|Escalated):' | tr '\n' ';')"
+  [[ "$run" == "- Tests written: 1;- Questions filed: 1;- Escalated: 2;" ]] || {
+    echo "artifact counts must survive a later ESCALATED while Escalated counts current outcomes, got: $run" >&2
+    exit 1
+  }
+}
+
+ar_case_import_order
+ar_case_rank_falsifiers
+ar_case_import_twice
+ar_case_import_invalid
+ar_case_verifier_input
+ar_case_report_silent_first
+ar_case_report_unreviewed
+ar_case_report_listed
+ar_case_exit_codes
+ar_case_docs_name_subcommands
+ar_case_import_every_problem
+ar_case_report_bad_scope
+ar_case_import_empty
+ar_case_report_listed_superseded
+ar_case_report_artifact_counts
 
 echo "adversarial-review smoke: OK"
