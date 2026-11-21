@@ -2193,6 +2193,33 @@ def g_review_over_budget(ctx):
         raise ProbeError("; ".join(e.problems))
 
 
+def _base_diff_triggers(ctx, base_file):
+    """The diff from the SHA in `base_file` to HEAD hits trigger row 1, 2, or
+    4. A base no longer an ancestor of HEAD is false, since a rebase orphans it
+    and a diff from it reads upstream lines as the repair's (#137). A diff or
+    matcher failure is null, never a quiet false."""
+    base = chomp(read_text(base_file))
+    if ctx.git("merge-base", "--is-ancestor", base, "HEAD").returncode == 1:
+        return False
+    diff = ctx.git("diff", f"{base}..HEAD")
+    if diff.returncode != 0:
+        raise ProbeError(git_failure(("diff",), diff))
+    if not MATCH_TRIGGERS.is_file():
+        raise ProbeError(f"no matcher at {MATCH_TRIGGERS}")
+    matched = subprocess.run(
+        [sys.executable, str(MATCH_TRIGGERS), "rows", "--only", "1,2,4"],
+        input=chomp(diff.stdout) + "\n",
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="surrogateescape",
+        timeout=GIT_TIMEOUT,
+    )
+    if matched.returncode != 0:
+        raise ProbeError(f"match-triggers.py: exit {matched.returncode}")
+    return bool(chomp(matched.stdout))
+
+
 @gatherer("repair_diff_triggers")
 def g_repair_diff_triggers(ctx):
     """The repair's own diff, from the `repair-base-<k>` SHA Step 7 recorded to
@@ -2207,26 +2234,7 @@ def g_repair_diff_triggers(ctx):
     base_file = ctx.path("redteam", f"repair-base-{newest[0] if newest else ''}")
     if not base_file.is_file():
         return False
-    base = chomp(read_text(base_file))
-    if ctx.git("merge-base", "--is-ancestor", base, "HEAD").returncode == 1:
-        return False
-    diff = ctx.git("diff", f"{base}..HEAD")
-    if diff.returncode != 0:
-        raise ProbeError(git_failure(("diff",), diff))
-    if not MATCH_TRIGGERS.is_file():
-        raise ProbeError(f"no matcher at {MATCH_TRIGGERS}")
-    matched = subprocess.run(
-        [sys.executable, str(MATCH_TRIGGERS), "rows", "--only", "1,2,4"],
-        input=chomp(diff.stdout) + "\n",
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="surrogateescape",
-        timeout=GIT_TIMEOUT,
-    )
-    if matched.returncode != 0:
-        raise ProbeError(f"match-triggers.py: exit {matched.returncode}")
-    return bool(chomp(matched.stdout))
+    return _base_diff_triggers(ctx, base_file)
 
 
 @gatherer("redteam_repair_diff_triggers")
@@ -2236,8 +2244,11 @@ def g_redteam_repair_diff_triggers(ctx):
     4, and neither `trigger-redteam-repair-<k>.txt` reads `fired: no` nor
     `ar-state-redteam-repair-<k>.txt` holds `UNVERIFIED: 0`. A `fired: no`
     settles it as `repair_ar_settled` does, else a repair whose lines all read
-    `mentions` resumes at row 20 forever. No base, or a base a rebase
-    orphaned, is false; a diff or matcher failure is null (#362)."""
+    `mentions` resumes at row 20 forever. The settled check folds in here,
+    where Step 8 keeps `repair_ar_settled` apart, because Step 8's severity
+    condition can fire with no trigger line and Step 4 has no such condition,
+    so row 20 needs one field. No base, or a base a rebase orphaned, is false;
+    a diff or matcher failure is null (#362)."""
     bases = [
         (_round_number(p.name), p)
         for p in ctx.path("redteam").glob("redteam-repair-base-*")
@@ -2251,26 +2262,7 @@ def g_redteam_repair_diff_triggers(ctx):
     state = read_or_none(ctx.path("redteam", f"ar-state-redteam-repair-{k}.txt"))
     if state is not None and "UNVERIFIED: 0" in state:
         return False
-    base = chomp(read_text(base_file))
-    if ctx.git("merge-base", "--is-ancestor", base, "HEAD").returncode == 1:
-        return False
-    diff = ctx.git("diff", f"{base}..HEAD")
-    if diff.returncode != 0:
-        raise ProbeError(git_failure(("diff",), diff))
-    if not MATCH_TRIGGERS.is_file():
-        raise ProbeError(f"no matcher at {MATCH_TRIGGERS}")
-    matched = subprocess.run(
-        [sys.executable, str(MATCH_TRIGGERS), "rows", "--only", "1,2,4"],
-        input=chomp(diff.stdout) + "\n",
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="surrogateescape",
-        timeout=GIT_TIMEOUT,
-    )
-    if matched.returncode != 0:
-        raise ProbeError(f"match-triggers.py: exit {matched.returncode}")
-    return bool(chomp(matched.stdout))
+    return _base_diff_triggers(ctx, base_file)
 
 
 @gatherer("adopted")

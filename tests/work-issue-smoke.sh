@@ -1020,8 +1020,8 @@ awk -v h="$stops_header" '
   on { exit }
 ' work-issue/SKILL.md > "$tmp/stops.txt"
 stops_rows="$(wc -l < "$tmp/stops.txt" | tr -d ' ')"
-[[ "$stops_rows" -eq 37 ]] || {
-  echo "Where a Run Stops lists $stops_rows stops, expected 37" >&2
+[[ "$stops_rows" -eq 38 ]] || {
+  echo "Where a Run Stops lists $stops_rows stops, expected 38" >&2
   exit 1
 }
 while IFS= read -r row; do
@@ -3708,19 +3708,19 @@ probe_git "$rr_repo" commit -q -m docs
 expect_field "with a repair diff hitting no trigger row" redteam_repair_diff_triggers false "$rr_run" "$rr_repo"
 # #362 falsifier (b): the build review fired and settled, and the repair has no
 # row 1, 2 or 4 line, so nothing re-fires.
-printf 'fired: yes\n' >"$rr_run/trigger.txt"
+printf 'fired: yes\n' >"$rr_run/redteam/trigger.txt"
 printf '.adversarial-review/runs/1\nblocking (REPRODUCED): 0 UNVERIFIED: 0\n' >"$rr_run/redteam/ar-state.txt"
 expect_field "with a fired, settled build review and a repair lacking a trigger line" redteam_repair_diff_triggers false "$rr_run" "$rr_repo"
-rm "$rr_run/trigger.txt" "$rr_run/redteam/ar-state.txt"
+rm "$rr_run/redteam/trigger.txt" "$rr_run/redteam/ar-state.txt"
 printf 'if user.is_admin:\n    alpha = 2\n' >"$rr_repo/a.py"
 probe_git "$rr_repo" commit -q -am repair
 expect_field "with a repair diff hitting the authz row" redteam_repair_diff_triggers true "$rr_run" "$rr_repo"
 # #362 falsifier (a): a confirmed row-2 line re-fires even where the build
 # review fired and settled, since it covered the HEAD before this repair.
-printf 'fired: yes\n' >"$rr_run/trigger.txt"
+printf 'fired: yes\n' >"$rr_run/redteam/trigger.txt"
 printf '.adversarial-review/runs/1\nblocking (REPRODUCED): 0 UNVERIFIED: 0\n' >"$rr_run/redteam/ar-state.txt"
 expect_field "with a fired, settled build review and a repair hitting the authz row" redteam_repair_diff_triggers true "$rr_run" "$rr_repo"
-rm "$rr_run/trigger.txt" "$rr_run/redteam/ar-state.txt"
+rm "$rr_run/redteam/trigger.txt" "$rr_run/redteam/ar-state.txt"
 printf 'fired: no\n' >"$rr_run/redteam/trigger-redteam-repair-1.txt"
 expect_field "with the re-fire's trigger reading fired: no" redteam_repair_diff_triggers false "$rr_run" "$rr_repo"
 printf 'fired: yes\n' >"$rr_run/redteam/trigger-redteam-repair-1.txt"
