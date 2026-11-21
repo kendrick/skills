@@ -969,6 +969,33 @@ hv_run "$d" gh-empty > "$hv_tmp/rootcfg.json"
 require_json "$hv_tmp/rootcfg.json" 'd["template"]["rung"]' '"builtin"'
 require_json "$hv_tmp/rootcfg.json" 'd["template"]["files"]' '[]'
 
+# The org rung reads only .github/ISSUE_TEMPLATE in the owner's .github repo.
+# A gh that lists templates only at the org repo root must not make the org
+# rung a hit: GitHub does not serve that location.
+mkdir -p "$hv_tmp/gh-root"
+cat > "$hv_tmp/gh-root/gh" <<'SH'
+#!/bin/sh
+case "$*" in
+  *contents/.github/ISSUE_TEMPLATE) echo "gh: Not Found (HTTP 404)" >&2; exit 1 ;;
+  *contents/ISSUE_TEMPLATE) echo '[{"name":"bug.md","type":"file"}]' ;;
+  *) exit 1 ;;
+esac
+SH
+chmod +x "$hv_tmp/gh-root/gh"
+d="$(hv_repo orgroot)"
+hv_commit "$d" alice init
+hv_run "$d" gh-root > "$hv_tmp/orgroot.json"
+require_json "$hv_tmp/orgroot.json" 'd["template"]["rung"]' '"builtin"'
+# And a listing at the documented path is a hit, with config.yml excluded.
+mkdir -p "$hv_tmp/gh-org"
+cat > "$hv_tmp/gh-org/gh" <<'SH'
+#!/bin/sh
+echo '[{"name":"bug.yml","type":"file"},{"name":"config.yml","type":"file"}]'
+SH
+chmod +x "$hv_tmp/gh-org/gh"
+hv_run "$d" gh-org > "$hv_tmp/orgroot.json"
+require_json "$hv_tmp/orgroot.json" 'd["template"]' '{"rung": "org", "files": [".github/ISSUE_TEMPLATE/bug.yml"]}'
+
 # Criterion 6: Step 1 names the script and its done-when admits unchecked for
 # the org rung, so the template source can be named without a false absent.
 require_text file-issue/SKILL.md "Run \`python3 scripts/harvest.py\` from inside the target repo"

@@ -72,36 +72,31 @@ def org_templates(owner):
     """Return ('found', [names]), ('absent', []), or ('unchecked', [])."""
     if owner is None:
         return "unchecked", []
-    found, unchecked = [], False
-    # GitHub reads default templates from the org's .github repo in either
-    # location, mirroring the two local rungs.
-    for path in (".github/ISSUE_TEMPLATE", "ISSUE_TEMPLATE"):
-        try:
-            r = subprocess.run(
-                ["gh", "api", f"repos/{owner}/.github/contents/{path}"],
-                capture_output=True, text=True, timeout=GH_TIMEOUT,
-            )
-        except (OSError, subprocess.TimeoutExpired):
-            return "unchecked", []
-        if r.returncode != 0:
-            # A 404 means the owner has no such repo or directory: looked, found nothing.
-            if "404" not in r.stderr and "Not Found" not in r.stderr:
-                unchecked = True
-            continue
-        try:
-            listing = json.loads(r.stdout)
-        except ValueError:
-            unchecked = True
-            continue
-        if isinstance(listing, list):
-            found += [
-                f"{path}/{e['name']}" for e in listing
-                if isinstance(e, dict) and e.get("type") == "file"
-                and not re.match(r"config\.ya?ml$", e.get("name", ""))
-            ]
-    if found:
-        return "found", found
-    return ("unchecked" if unchecked else "absent"), []
+    # GitHub's docs keep default issue templates in .github/ISSUE_TEMPLATE of
+    # the org's .github repo; the repo-root ISSUE_TEMPLATE/ location is not served.
+    path = ".github/ISSUE_TEMPLATE"
+    try:
+        r = subprocess.run(
+            ["gh", "api", f"repos/{owner}/.github/contents/{path}"],
+            capture_output=True, text=True, timeout=GH_TIMEOUT,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return "unchecked", []
+    if r.returncode != 0:
+        # A 404 means the owner has no such repo or directory: looked, found nothing.
+        if "404" in r.stderr or "Not Found" in r.stderr:
+            return "absent", []
+        return "unchecked", []
+    try:
+        listing = json.loads(r.stdout)
+    except ValueError:
+        return "unchecked", []
+    found = [
+        f"{path}/{e['name']}" for e in listing
+        if isinstance(e, dict) and e.get("type") == "file"
+        and not re.match(r"config\.ya?ml$", e.get("name", ""))
+    ] if isinstance(listing, list) else []
+    return ("found", found) if found else ("absent", [])
 
 
 def template(root, blank):
