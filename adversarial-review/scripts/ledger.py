@@ -666,6 +666,13 @@ def cmd_verifier_input(args):
     return 0
 
 
+ARTIFACT_COUNTS = {
+    "TEST_WRITTEN": "Tests written",
+    "ISSUE_FILED": "Issues filed",
+    "QUESTION_FILED": "Questions filed",
+}
+
+
 def cmd_report(args):
     try:
         with open(args.scope, encoding="utf-8") as f:
@@ -696,9 +703,15 @@ def cmd_report(args):
     # derive() keeps only the latest disposition, and the listed section needs
     # the REPRODUCED event's own command and output.
     reproduced = {}
+    # A test, issue, or question stays written after a later outcome such as
+    # ESCALATED at --max-rounds, so the ARTIFACT_COUNTS lines read every event
+    # rather than derive()'s latest outcome.
+    artifacts = set()
     for _, obj in read_lines(args.ledger, strict=True):
         if obj.get("record") == "event" and obj.get("disposition") == "REPRODUCED":
             reproduced[obj.get("finding_id")] = obj
+        if obj.get("record") == "event" and obj.get("disposition") in ARTIFACT_COUNTS:
+            artifacts.add((obj.get("finding_id"), obj.get("disposition")))
 
     problems = []
     territories = [t["name"] for t in scope.get("territories", [])]
@@ -785,10 +798,9 @@ def cmd_report(args):
         out.append(f"- Round {n} findings: {count(lambda r: r['finding'].get('round') == n)}")
     for v in ("REPRODUCED", "NOT_REPRODUCED", "UNVERIFIABLE", "UNVERIFIED"):
         out.append(f"- {v}: {count(lambda r: r['verification'] == v)}")
+    for d, label in ARTIFACT_COUNTS.items():
+        out.append(f"- {label}: {count(lambda r: (r['finding']['id'], d) in artifacts)}")
     for label, d in (
-        ("Tests written", "TEST_WRITTEN"),
-        ("Issues filed", "ISSUE_FILED"),
-        ("Questions filed", "QUESTION_FILED"),
         ("Listed", "LISTED"),
         ("Escalated", "ESCALATED"),
         ("Closed", "CLOSED"),

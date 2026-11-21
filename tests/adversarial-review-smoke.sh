@@ -1556,6 +1556,32 @@ ar_case_report_listed_superseded() {
   }
 }
 
+# Tests written, issues filed, and questions filed count artifacts, so a
+# later ESCALATED must not erase the TEST_WRITTEN or QUESTION_FILED before it.
+ar_case_report_artifact_counts() {
+  local d="$tmp/ar385-artifacts" run
+  ar_report_run "$d"
+  python3 "$ledger_py" append-event --ledger "$d/l.jsonl" --finding-id F-r1-money-01 \
+    --disposition REPRODUCED --actor verifier-r1-money --repro-command 'pytest -k A' \
+    --observed-output 'E   A' >/dev/null
+  python3 "$ledger_py" append-event --ledger "$d/l.jsonl" --finding-id F-r1-money-01 \
+    --disposition TEST_WRITTEN --actor orchestrator --artifact tests/test_a.py >/dev/null
+  python3 "$ledger_py" append-event --ledger "$d/l.jsonl" --finding-id F-r1-money-01 \
+    --disposition ESCALATED --actor orchestrator --reason 'max rounds' >/dev/null
+  python3 "$ledger_py" append-event --ledger "$d/l.jsonl" --finding-id F-r1-money-03 \
+    --disposition REPRODUCED --actor verifier-r1-money --repro-command 'pytest -k B' \
+    --observed-output 'E   B' >/dev/null
+  python3 "$ledger_py" append-event --ledger "$d/l.jsonl" --finding-id F-r1-money-03 \
+    --disposition QUESTION_FILED --actor orchestrator --artifact 'https://example.test/q/1' >/dev/null
+  python3 "$ledger_py" append-event --ledger "$d/l.jsonl" --finding-id F-r1-money-03 \
+    --disposition ESCALATED --actor orchestrator --reason 'max rounds' >/dev/null
+  run="$(ar_report "$d" | sed -n '/^## Run/,/^## Listed/p' | grep -E '^- (Tests written|Questions filed|Escalated):' | tr '\n' ';')"
+  [[ "$run" == "- Tests written: 1;- Questions filed: 1;- Escalated: 2;" ]] || {
+    echo "artifact counts must survive a later ESCALATED while Escalated counts current outcomes, got: $run" >&2
+    exit 1
+  }
+}
+
 ar_case_import_order
 ar_case_rank_falsifiers
 ar_case_import_twice
@@ -1570,5 +1596,6 @@ ar_case_import_every_problem
 ar_case_report_bad_scope
 ar_case_import_empty
 ar_case_report_listed_superseded
+ar_case_report_artifact_counts
 
 echo "adversarial-review smoke: OK"
