@@ -5555,11 +5555,123 @@ cmp -s "$tmp/crash-shipped.out" "$tmp/crash-fixture.out" \
 # CHECKS SUBCOMMAND MODEL OUT. No subshell body: a backgrounded `( )` adds a
 # second shell between the job and python, and the trap's `pkill -P` below
 # then kills that shell and leaves python running.
+#
+# #433: liveness runs 13+ minutes and its answer turns only on the checks
+# script, the run-state.py beside it, the model file and the interpreter, so
+# each result is cached under that content key in the git common dir, which
+# every worktree shares. Bytes, not names or mtimes: a branch switch rewrites
+# mtimes without changing an answer, and a fixture model rebuilt by this
+# script has to miss when the script changes what it builds. An entry is
+# written only after python exits on its own, so a run the trap kills leaves
+# none. WORK_ISSUE_FULL_CHECKS=1 skips the read and still writes.
+logic_cache="$(cd "$(git rev-parse --git-common-dir)" && pwd)/work-issue-smoke-cache"
+logic_key() {
+  python3 - "$@" <<'PY'
+import hashlib, os, platform, sys
+checks, subcommand, model = sys.argv[1:4]
+digest = hashlib.sha256()
+parts = [("subcommand", subcommand.encode()), ("python", platform.python_version().encode())]
+parts += [(label, open(path, "rb").read()) for label, path in
+          (("checks", checks), ("run-state", os.path.join(os.path.dirname(checks), "run-state.py")), ("model", model))]
+for label, data in parts:
+    digest.update(label.encode() + b"\0" + data + b"\0")
+print(digest.hexdigest())
+PY
+}
 logic_run() {
-  local status=0
+  local status=0 key entry stage
+  key="$(logic_key "$1" "$2" "$3")"
+  entry="$logic_cache/$key"
+  if [[ "${WORK_ISSUE_FULL_CHECKS:-}" != 1 && -f "$entry/status" && -f "$entry/out" && -f "$entry/err" ]]; then
+    cp "$entry/out" "$4.out"; cp "$entry/err" "$4.err"; cp "$entry/status" "$4.status"
+    echo "work-issue smoke: cached $2 $(basename "$3") ${key:0:12}"
+    return 0
+  fi
   python3 "$1" "$2" --model "$3" >"$4.out" 2>"$4.err" || status=$?
   echo "$status" >"$4.status"
+  # 128+ means a signal ended python: the trap's pkill reaps it, the job
+  # carries on for a moment, and the result must not be cached as an answer.
+  if ((status >= 128)); then return 0; fi
+  # Stage beside the entry and rename, so a reader never sees half of one.
+  mkdir -p "$logic_cache"
+  stage="$(mktemp -d "$logic_cache/.stage.XXXXXX")"
+  cp "$4.out" "$stage/out"; cp "$4.err" "$stage/err"; cp "$4.status" "$stage/status"
+  rm -rf "$entry"
+  mv "$stage" "$entry"
 }
+# #433's cache case, on a stub checks script in a scratch repo so the real
+# search never runs. Each keyed input is tested the way the falsifier needs:
+# plant a wrong status under the unedited key, edit one byte, and require a
+# miss with the real status. A key that left the input out would hit and
+# print the planted one. Restoring the byte has to bring the planted entry
+# back, or the plant never reached the read path and the miss proves nothing.
+cc="$tmp/cache-case"
+mkdir -p "$cc/work-issue/scripts" "$cc/cache-home"
+git init -q "$cc/cache-home"
+cat >"$cc/work-issue/scripts/checks.py" <<'PY'
+import os, sys, time
+open(os.environ["STUB_LOG"], "a").write(sys.argv[1] + "\n")
+time.sleep(float(os.environ.get("STUB_SLEEP", "0")))
+print("stub ran", sys.argv[1])
+sys.exit(1 if "FAIL" in open(sys.argv[3]).read() else 0)
+PY
+echo 'state v1' >"$cc/work-issue/scripts/run-state.py"
+echo '{"model": 1}' >"$cc/model.json"
+echo 'skill v1' >"$cc/SKILL.md"
+export STUB_LOG="$cc/runs.log"
+: >"$STUB_LOG"
+cc_fail() { echo "#433: $*" >&2; exit 1; }
+cc_cache="$(git -C "$cc/cache-home" rev-parse --path-format=absolute --git-common-dir)/work-issue-smoke-cache"
+cc_run() { # tag; leaves the call's stdout in $cc/$tag.say
+  WORK_ISSUE_FULL_CHECKS="${cc_full:-}" logic_cache="$cc_cache" logic_run "$cc/work-issue/scripts/checks.py" liveness "$cc/model.json" "$cc/$1" >"$cc/$1.say"
+}
+cc_runs() { wc -l <"$STUB_LOG" | tr -d ' '; }
+cc_key() { logic_key "$cc/work-issue/scripts/checks.py" liveness "$cc/model.json"; }
+cc_entry() { echo "$cc_cache/$(cc_key)"; }
+cc_run cold
+[[ "$(cc_runs)" == 1 && "$(cat "$cc/cold.status")" == 0 && ! -s "$cc/cold.say" ]] \
+  || cc_fail "a cold run should start the checks once and print no hit line, got $(cc_runs) runs: $(cat "$cc/cold.say")"
+cc_run warm
+grep -Eq "^work-issue smoke: cached liveness model.json $(cc_key | cut -c1-12)$" "$cc/warm.say" && [[ "$(cc_runs)" == 1 ]] \
+  && grep -Fqx 'stub ran liveness' "$cc/warm.out" \
+  || cc_fail "an unchanged warm run should print a hit line and start nothing, got $(cc_runs) runs: $(cat "$cc/warm.say")"
+echo 'skill v2, uncommitted' >"$cc/SKILL.md"
+cc_run unkeyed
+grep -Fq 'cached liveness' "$cc/unkeyed.say" && [[ "$(cc_runs)" == 1 ]] \
+  || cc_fail "editing a file outside the key should still hit, got $(cc_runs) runs"
+for input in work-issue/scripts/checks.py work-issue/scripts/run-state.py model.json; do
+  cp "$cc/$input" "$cc/$input.orig"
+  echo 9 >"$(cc_entry)/status"
+  before="$(cc_runs)"
+  printf ' ' >>"$cc/$input"
+  cc_run edited
+  [[ "$(cc_runs)" == $((before + 1)) && "$(cat "$cc/edited.status")" == 0 && ! -s "$cc/edited.say" ]] \
+    || cc_fail "a one-byte edit to $input should miss and report the real status 0, got status $(cat "$cc/edited.status") and: $(cat "$cc/edited.say")"
+  cp "$cc/$input.orig" "$cc/$input"
+  cc_run restored
+  [[ "$(cat "$cc/restored.status")" == 9 ]] && grep -Fq cached "$cc/restored.say" \
+    || cc_fail "restoring $input should hit the planted entry, so the plant reached the read path"
+  echo 0 >"$(cc_entry)/status"
+done
+before="$(cc_runs)"
+echo 9 >"$(cc_entry)/status"
+cc_full=1 cc_run full
+[[ "$(cc_runs)" == $((before + 1)) && "$(cat "$cc/full.status")" == 0 && ! -s "$cc/full.say" && "$(cat "$(cc_entry)/status")" == 0 ]] \
+  || cc_fail "WORK_ISSUE_FULL_CHECKS=1 should run in full over a warm entry and rewrite it"
+echo '{"model": "FAIL"}' >"$cc/model.json"
+before="$(cc_runs)"
+bash -c "$(declare -f logic_key logic_run cc_run); logic_cache='$cc/kill-cache'; cc=$cc; STUB_SLEEP=30 logic_run '$cc/work-issue/scripts/checks.py' liveness '$cc/model.json' '$cc/killed'" 2>/dev/null &
+cc_pid=$!
+until [[ "$(cc_runs)" == $((before + 1)) ]]; do sleep 0.1; done
+# Reap python alone and let the job run on, as the EXIT trap's pkill -P does
+# before it kills the job: the job must not cache what a signal ended.
+pkill -P "$cc_pid" || true
+wait "$cc_pid" 2>/dev/null || true
+[[ -z "$(ls -A "$cc/kill-cache" 2>/dev/null)" ]] \
+  || cc_fail "a killed run left a cache entry: $(ls -A "$cc/kill-cache")"
+cc_run afterkill
+[[ "$(cc_runs)" == $((before + 2)) && "$(cat "$cc/afterkill.status")" == 1 ]] \
+  || cc_fail "the run after a killed one should miss and report the real status 1"
 # Falsifier 3: with Step 3's effect a no-op, a run sent to Step 3 comes back
 # to it, and liveness has to say so.
 python3 - "$crash_model" "$tmp/live-step3-noop.json" <<'PY'
