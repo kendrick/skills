@@ -37,6 +37,7 @@
   "repair_ar_settled": false,
   "review_over_budget": false,
   "repair_diff_triggers": false,
+  "redteam_repair_diff_triggers": false,
   "adopted": false,
   "queue_unfiled_rows": null
 }

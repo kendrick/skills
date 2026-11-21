@@ -182,6 +182,7 @@ PROBE_FIELDS = (
     ("repair_ar_settled", "bool", ()),
     ("review_over_budget", "bool", ()),
     ("repair_diff_triggers", "bool", ()),
+    ("redteam_repair_diff_triggers", "bool", ()),
     ("adopted", "bool", ()),
     ("queue_unfiled_rows", "int", ()),
 )
@@ -946,7 +947,7 @@ def budget_stop(row):
 
     The probe carries only the verdict, so the reason names the command that
     prints both totals rather than the totals themselves. Only row 16 offers
-    deferral: rows 10 and 11 stop before any triage round exists, and row 17's
+    deferral: rows 10, 11, and 20 stop before any triage round exists, and row 17's
     round is already repaired, so neither has an unrepaired row to defer (#240)."""
     defer = (
         ", or defer the newest round's in-scope rows not yet queued"
@@ -975,7 +976,7 @@ def null_fields(probe):
     """The fields `phase_of`'s generic null check stops on, in table order.
 
     A module-level function so `resume_checks.py invariants` and `liveness`
-    can stub it out: it reads all 40 fields, and their search splits on every
+    can stub it out: it reads all 41 fields, and their search splits on every
     field `phase_of` tests."""
     return [
         name
@@ -1030,7 +1031,7 @@ def phase_of(probe):
     max_review_rounds = count(probe, "max_review_rounds")
     # #230: with the review loop on, no round is capped and the budget stop ends repair.
     at_review_cap = triage_rounds > 0 and triage_rounds >= max_review_rounds and not flag(probe, "review_loop")
-    # Rows 10, 11, 16, and row 17's re-fire leg each start another review
+    # Rows 10, 11, 20, 16, and row 17's re-fire leg each start another review
     # cycle, and only those are gated. Rows past them publish, reply to, or
     # report on work already done, and stopping there would strand it. On
     # cambium #23/#26, about 50 min of build drew about 5 h of review.
@@ -1178,6 +1179,26 @@ def phase_of(probe):
             if over_budget:
                 return budget_stop(11)
             return "4", "row 11: trigger.txt says fired and adversarial-review has not finished"
+        # #362: Step 4 runs the build review while round 1's reproducer runs, so
+        # that review covers the HEAD before any red-team repair. Pre-PR only:
+        # after a triage round, a diff from an old red-team base reads the
+        # triage repair's lines as this repair's.
+        if (
+            redteam_clean
+            and trigger != "absent"
+            and triage_rounds == 0
+            and flag(probe, "redteam_repair_diff_triggers")
+        ):
+            if over_budget:
+                return budget_stop(20)
+            return (
+                "4",
+                "row 20: red-team is clean over a red-team repair whose own diff from "
+                "redteam-repair-base-<k> hits a money, authz, or schema trigger row, and "
+                "its re-fire has not settled; resume at Step 4 item 4's repair re-fire, "
+                "from the matcher where trigger-redteam-repair-<k>.txt is absent, else "
+                "at the adversarial-review invocation",
+            )
         if flag(probe, "conflict") or flag(probe, "rebase_in_progress"):
             return "5", "row 12: a rebase conflict is in progress; resume at Step 5 item 1"
         # A review repair committed at Step 7 is also "ahead of origin" with a clean
@@ -2185,6 +2206,50 @@ def g_repair_diff_triggers(ctx):
     newest = newest_round_by_k(ctx.path("triage"))
     base_file = ctx.path("redteam", f"repair-base-{newest[0] if newest else ''}")
     if not base_file.is_file():
+        return False
+    base = chomp(read_text(base_file))
+    if ctx.git("merge-base", "--is-ancestor", base, "HEAD").returncode == 1:
+        return False
+    diff = ctx.git("diff", f"{base}..HEAD")
+    if diff.returncode != 0:
+        raise ProbeError(git_failure(("diff",), diff))
+    if not MATCH_TRIGGERS.is_file():
+        raise ProbeError(f"no matcher at {MATCH_TRIGGERS}")
+    matched = subprocess.run(
+        [sys.executable, str(MATCH_TRIGGERS), "rows", "--only", "1,2,4"],
+        input=chomp(diff.stdout) + "\n",
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="surrogateescape",
+        timeout=GIT_TIMEOUT,
+    )
+    if matched.returncode != 0:
+        raise ProbeError(f"match-triggers.py: exit {matched.returncode}")
+    return bool(chomp(matched.stdout))
+
+
+@gatherer("redteam_repair_diff_triggers")
+def g_redteam_repair_diff_triggers(ctx):
+    """Step 4's re-fire over a red-team repair is pending: the newest
+    `redteam-repair-base-<k>` by k, diffed to HEAD, hits trigger row 1, 2, or
+    4, and neither `trigger-redteam-repair-<k>.txt` reads `fired: no` nor
+    `ar-state-redteam-repair-<k>.txt` holds `UNVERIFIED: 0`. A `fired: no`
+    settles it as `repair_ar_settled` does, else a repair whose lines all read
+    `mentions` resumes at row 20 forever. No base, or a base a rebase
+    orphaned, is false; a diff or matcher failure is null (#362)."""
+    bases = [
+        (_round_number(p.name), p)
+        for p in ctx.path("redteam").glob("redteam-repair-base-*")
+        if re.fullmatch(r"redteam-repair-base-[0-9]+", p.name) and p.is_file()
+    ]
+    if not bases:
+        return False
+    k, base_file = max(bases, key=lambda b: b[0])
+    if first_line(ctx.path("redteam", f"trigger-redteam-repair-{k}.txt")) == "fired: no":
+        return False
+    state = read_or_none(ctx.path("redteam", f"ar-state-redteam-repair-{k}.txt"))
+    if state is not None and "UNVERIFIED: 0" in state:
         return False
     base = chomp(read_text(base_file))
     if ctx.git("merge-base", "--is-ancestor", base, "HEAD").returncode == 1:

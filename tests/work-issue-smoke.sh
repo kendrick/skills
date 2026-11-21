@@ -3689,6 +3689,35 @@ probe_git "$dt_repo" checkout -q issue-1
 probe_git "$dt_repo" rebase -q main
 expect_field "after a rebase orphans the base" repair_diff_triggers false "$dt_run" "$dt_repo"
 
+# redteam_repair_diff_triggers (#362) reads a Step 4 red-team repair's own
+# diff from the newest redteam-repair-base-<k>, since the overlapped build
+# review covered the HEAD before that repair.
+rr_repo="$tmp/probe-rr-repo"
+rr_run="$tmp/probe-rr-run"
+mkdir -p "$rr_run/redteam"
+git init -q -b main "$rr_repo"
+printf 'alpha = 1\n' >"$rr_repo/a.py"
+probe_git "$rr_repo" add a.py
+probe_git "$rr_repo" commit -q -m base
+probe_git "$rr_repo" checkout -q -b issue-1
+expect_field "with no redteam-repair-base file" redteam_repair_diff_triggers false "$rr_run" "$rr_repo"
+probe_git "$rr_repo" rev-parse HEAD >"$rr_run/redteam/redteam-repair-base-1"
+printf 'Run the tests before you push.\n' >"$rr_repo/README.md"
+probe_git "$rr_repo" add README.md
+probe_git "$rr_repo" commit -q -m docs
+expect_field "with a repair diff hitting no trigger row" redteam_repair_diff_triggers false "$rr_run" "$rr_repo"
+printf 'if user.is_admin:\n    alpha = 2\n' >"$rr_repo/a.py"
+probe_git "$rr_repo" commit -q -am repair
+expect_field "with a repair diff hitting the authz row" redteam_repair_diff_triggers true "$rr_run" "$rr_repo"
+printf 'fired: no\n' >"$rr_run/redteam/trigger-redteam-repair-1.txt"
+expect_field "with the re-fire's trigger reading fired: no" redteam_repair_diff_triggers false "$rr_run" "$rr_repo"
+printf 'fired: yes\n' >"$rr_run/redteam/trigger-redteam-repair-1.txt"
+printf '.adversarial-review/runs/2\nblocking (REPRODUCED): 0 UNVERIFIED: 0\n' >"$rr_run/redteam/ar-state-redteam-repair-1.txt"
+expect_field "with the re-fire's review settled" redteam_repair_diff_triggers false "$rr_run" "$rr_repo"
+rm "$rr_run/redteam/ar-state-redteam-repair-1.txt"
+printf 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n' >"$rr_run/redteam/redteam-repair-base-1"
+expect_field "with a base SHA that does not resolve" redteam_repair_diff_triggers null "$rr_run" "$rr_repo"
+
 # TREE is the worktree holding issue-1. A local issue-1 that no worktree has
 # checked out has no TREE: ROOT's HEAD is some other branch, and reading it
 # counted a committed, reported task as unreported and sent row 7 to redo it
@@ -5477,7 +5506,7 @@ crash_run "$tmp/crash-row/$crash_checks" "$tmp/crash-row/adopted.json" "$tmp/cra
 crash_run "$tmp/crash-fixture/$crash_checks" "$tmp/crash-fixture/$crash_model" "$tmp/crash-fixture" &
 wait
 [[ "$(cat "$tmp/crash-shipped.status")" == "0" ]] \
-  && [[ "$(cat "$tmp/crash-shipped.out")" == "rows covered: 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19" ]] || {
+  && [[ "$(cat "$tmp/crash-shipped.out")" == "rows covered: 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20" ]] || {
   echo "#147: crash-points on the shipped model should exit 0 with every row covered, got $(cat "$tmp/crash-shipped.status"):" >&2
   cat "$tmp/crash-shipped.out" "$tmp/crash-shipped.err" >&2
   exit 1
