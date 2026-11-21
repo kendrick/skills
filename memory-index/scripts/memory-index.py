@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Register a memory scope's folders with qmd as collections, and refresh the index.
 
-Exit codes: 0 pass, 1 a qmd command failed, 2 usage error (argparse's own
-code), 3 not a memory scope or qmd not on PATH. refresh --if-changed always
-exits 0.
+Exit codes: 0 pass, 1 a step failed (a qmd command, or the stamp write
+that follows them; the latter prints FAILED: write <path>), 2 usage error
+(argparse's own code), 3 not a memory scope or qmd not on PATH.
+refresh --if-changed always exits 0.
 
 Collections key on folders and the script never opens a record file under
 _memory/<type>/. Frontmatter can drift from the folder a record sits in, and

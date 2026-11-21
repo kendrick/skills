@@ -639,7 +639,23 @@ wait
 wait_unlocked "case 23 simultaneous calls"
 count_is 1 update "case 23 simultaneous calls"
 
+# Case 24: plain refresh, unlike the hook, reports a stamp write failure: the
+# index is fresh but the stamp isn't, so it fails loudly with the path it
+# couldn't write.
+: >"$tmp/a-file"
+: >"$log"
+set +e
+err="$(XDG_STATE_HOME="$tmp/a-file" QMD_COLLECTIONS="$cols" QMD_LOG="$log" PATH="$shim_path" python3 "$script" refresh 2>&1 >/dev/null)"
+rc=$?
+set -e
+expect_rc 1 "$rc" "case 24 refresh with unwritable state dir"
+grep -Eq '^FAILED: write ' <<<"$err" || {
+  echo "case 24: missing FAILED: write line; got: $err" >&2
+  exit 1
+}
+
 require_text memory-index/SKILL.md 'python3 SCRIPT refresh --if-changed'
+require_text memory-index/SKILL.md 'FAILED: write <path>'
 require_text memory-index/SKILL.md '`refresh --if-changed` is the hook mode. It prints nothing on stdout and exits 0 in every case.'
 require_text memory-index/SKILL.md 'python3 <absolute path to scripts/memory-index.py> refresh --if-changed'
 require_text memory-index/SKILL.md 'or when a matching file was added, renamed, moved, or deleted since then'
