@@ -4755,6 +4755,24 @@ require_line "$p6_out" "v1 files: 1" "a v1 record with every new defect"
 for p6_name in record-id record-type record-source-refs; do
   refute_failure "$p6_out" "$p6_name"
 done
+# Journal entries under entries/ get id, source_refs, and a Journal-only type
+# (widened past #384's Non-Goal on PR #435's review). A well-formed one passes.
+p6_j="$p6_dir/j"
+mkdir -p "$p6_j/entries" "$p6_j/_inbox"
+p6_je() { # id memory_type source_refs
+  printf -- '---\nschema: 2\nid: %s\nmemory_type: %s\ntitle: A pattern\nstatus: current\ndate: 2025-12-09\nlast_confirmed: 2025-12-09\nsource_refs: %s\napplies_to: []\nthemes: []\nrelated: []\n---\n\n# A pattern\n\nBody.\n' "$1" "$2" "$3"
+}
+p6_je Jn1GoodEnt Journal '[a/b::ZGulgExW0q]' >"$p6_j/entries/2025-12-09-good-Jn1GoodEnt.md"
+p6_out="$(run_lint_drained "$p6_j")"
+require_line "$p6_out" "failures: 0" "a well-formed journal entry"
+p6_je bad Journal '[a/b::ZGulgExW0q]' >"$p6_j/entries/2025-12-09-badid-Jn2BadId02.md"
+p6_je Jn3NoRefs3 Journal '[]' >"$p6_j/entries/2025-12-09-norefs-Jn3NoRefs3.md"
+p6_je Jn4WrongTy Decision '[a/b::ZGulgExW0q]' >"$p6_j/entries/2025-12-09-wrongtype-Jn4WrongTy.md"
+p6_out="$(run_lint "$p6_j")"
+require_failure "$p6_out" "record-id:"
+require_failure "$p6_out" "record-source-refs:"
+require_failure "$p6_out" 'record-type: `memory_type: Decision` is not `Journal`'
+require_line "$p6_out" "failures: 3" "three malformed journal entries, one defect each"
 rm -rf "$p6_dir"
 
 # Phase 6 hands the id, type, source_refs, and inbox checks to the script and

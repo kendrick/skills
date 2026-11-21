@@ -656,14 +656,30 @@ check_record_source_refs() {
   fi
 }
 
-# Every schema: 1 file is a record. A schema: 2 file is one only under `_memory/`,
-# where notes (which also carry schema: 2) never live. v1 files never reach here.
+# A journal entry is no kit type and no `_memory/` folder holds it, so it gets its
+# own type check: `Journal`, and nothing else, under `entries/` (#384, widened on
+# PR #435's review once phase 6 stopped checking these by hand).
+check_journal_type() {
+  local type
+  type="$(printf '%s\n' "$1" | yq -r '.memory_type // ""' 2>/dev/null || true)"
+  [[ "$type" == Journal ]] || fail record-type "\`memory_type: $type\` is not \`Journal\`, which is what \`entries/\` holds"
+}
+
+# Every schema: 1 file is a record. A schema: 2 file is one under `_memory/` or
+# `entries/`, where notes (which also carry schema: 2) never live. v1 files never
+# reach here.
 check_record() {
-  local file="$1" schema end block
+  local file="$1" schema end block journal=0
   schema="$(frontmatter_schema_value "$file")"
   case "$schema" in
     1) ;;
-    2) [[ "$file" == "$scope"/_memory/*/* ]] || return 0 ;;
+    2)
+      if [[ "$file" == "$scope"/entries/* ]]; then
+        journal=1
+      else
+        [[ "$file" == "$scope"/_memory/*/* ]] || return 0
+      fi
+      ;;
     *) return 0 ;;
   esac
   end="$(frontmatter_end "$file")"
@@ -671,7 +687,11 @@ check_record() {
   block="$(sed -n "2,$((end - 1))p" "$file")"
   check_record_id "$file" "$block"
   # schema: 1 records get record-type from check_ltm_record, bank folders and all.
-  [[ "$schema" == 2 ]] && check_record_type "$file" "$block" 2
+  if [[ "$journal" -eq 1 ]]; then
+    check_journal_type "$block"
+  elif [[ "$schema" == 2 ]]; then
+    check_record_type "$file" "$block" 2
+  fi
   check_record_source_refs "$block"
 }
 
