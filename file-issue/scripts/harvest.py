@@ -62,7 +62,12 @@ def blank_issues_enabled(root):
         p = root / ".github" / "ISSUE_TEMPLATE" / name
         if p.is_file():
             # GitHub parses config.yml as YAML 1.1 (Ruby's Psych), where yes/no/on/off are booleans too.
-            m = re.search(r"^blank_issues_enabled:\s*(true|false|yes|no|on|off)[ \t]*(?:#.*)?\r?$", p.read_text(errors="replace"), re.M | re.I)
+            text = p.read_text(errors="replace")
+            # The key counts at the file's own top-level indent, so an indented
+            # mapping reads and a key nested under a list item does not.
+            first = next((l for l in text.splitlines() if l.strip() and not l.lstrip().startswith("#") and l.strip() != "---"), "")
+            indent = len(first) - len(first.lstrip(" "))
+            m = re.search(rf"^ {{{indent}}}blank_issues_enabled:\s*(true|false|yes|no|on|off)[ \t]*(?:#.*)?\r?$", text, re.M | re.I)
             if m:
                 return m.group(1).lower() in ("true", "yes", "on")
     return None
@@ -137,7 +142,13 @@ def manifest_candidates(root):
             out.append("package.json")
     mk = root / "Makefile"
     if mk.is_file():
-        targets = re.findall(r"^([A-Za-z0-9_][A-Za-z0-9_./-]*)\s*:(?!=)", mk.read_text(errors="replace"), re.M)
+        # `[^:=]` keeps `VAR := x` and `A = b:c` out; `(?![:=])` rejects `::=`
+        # while still accepting a `name::` double-colon rule.
+        rules = re.findall(r"^([^\s#:=][^:=\n]*?)::?(?![:=])", mk.read_text(errors="replace"), re.M)
+        targets = [
+            t for rule in rules for t in rule.split()
+            if re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_./-]*", t)  # drops .PHONY, %.o, $(VAR)
+        ]
         out += [f"Makefile:{t}" for t in dict.fromkeys(targets)]
     # A metadata-only pyproject.toml names no test command, so counting it would
     # stop the ladder before tests/ is read. Cargo always has `cargo test`.

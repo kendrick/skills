@@ -1063,6 +1063,27 @@ hv_commit "$d" alice init
 hv_run "$d" gh-empty > "$hv_tmp/pytests.json"
 require_json "$hv_tmp/pytests.json" 'd["verification"]' '{"rung": "scripts", "candidates": ["tests/check.py", "tests/run"]}'
 
+# blank_issues_enabled is read at the config's own top-level indentation, so a
+# uniformly indented file counts and a key nested under a list item does not.
+d="$(hv_repo cfgindent)"
+mkdir -p "$d/.github/ISSUE_TEMPLATE"
+printf -- '---\n# chooser\n  blank_issues_enabled: false\n  contact_links: []\n' > "$d/.github/ISSUE_TEMPLATE/config.yml"
+hv_commit "$d" alice init
+hv_run "$d" gh-empty > "$hv_tmp/cfgindent.json"
+require_json "$hv_tmp/cfgindent.json" 'd["template"]["rung"]' '"none"'
+require_json "$hv_tmp/cfgindent.json" 'd["blank_issues_enabled"]' 'false'
+printf 'contact_links:\n  - name: x\n    blank_issues_enabled: false\n' > "$d/.github/ISSUE_TEMPLATE/config.yml"
+hv_run "$d" gh-empty > "$hv_tmp/cfgindent.json"
+require_json "$hv_tmp/cfgindent.json" '"blank_issues_enabled" in d' 'false'
+
+# Every literal target before a rule's colon is listed; special targets,
+# pattern rules, and variable assignments contribute nothing.
+d="$(hv_repo makemulti)"
+printf '.PHONY: test\nVAR := x\nOTHER ::= y\n%%.o: %%.c\n\techo\ntest check:\n\techo\nlint:: deps\n\techo\n' > "$d/Makefile"
+hv_commit "$d" alice init
+hv_run "$d" gh-empty > "$hv_tmp/makemulti.json"
+require_json "$hv_tmp/makemulti.json" 'd["verification"]' '{"rung": "manifest", "candidates": ["Makefile:test", "Makefile:check", "Makefile:lint"]}'
+
 # pyproject.toml counts as a manifest hit only when it configures a test
 # runner; a metadata-only one falls through to tests/. Cargo.toml always
 # counts, since `cargo test` is built in.
