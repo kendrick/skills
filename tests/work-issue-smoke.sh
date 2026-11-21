@@ -3706,9 +3706,21 @@ printf 'Run the tests before you push.\n' >"$rr_repo/README.md"
 probe_git "$rr_repo" add README.md
 probe_git "$rr_repo" commit -q -m docs
 expect_field "with a repair diff hitting no trigger row" redteam_repair_diff_triggers false "$rr_run" "$rr_repo"
+# #362 falsifier (b): the build review fired and settled, and the repair has no
+# row 1, 2 or 4 line, so nothing re-fires.
+printf 'fired: yes\n' >"$rr_run/trigger.txt"
+printf '.adversarial-review/runs/1\nblocking (REPRODUCED): 0 UNVERIFIED: 0\n' >"$rr_run/redteam/ar-state.txt"
+expect_field "with a fired, settled build review and a repair lacking a trigger line" redteam_repair_diff_triggers false "$rr_run" "$rr_repo"
+rm "$rr_run/trigger.txt" "$rr_run/redteam/ar-state.txt"
 printf 'if user.is_admin:\n    alpha = 2\n' >"$rr_repo/a.py"
 probe_git "$rr_repo" commit -q -am repair
 expect_field "with a repair diff hitting the authz row" redteam_repair_diff_triggers true "$rr_run" "$rr_repo"
+# #362 falsifier (a): a confirmed row-2 line re-fires even where the build
+# review fired and settled, since it covered the HEAD before this repair.
+printf 'fired: yes\n' >"$rr_run/trigger.txt"
+printf '.adversarial-review/runs/1\nblocking (REPRODUCED): 0 UNVERIFIED: 0\n' >"$rr_run/redteam/ar-state.txt"
+expect_field "with a fired, settled build review and a repair hitting the authz row" redteam_repair_diff_triggers true "$rr_run" "$rr_repo"
+rm "$rr_run/trigger.txt" "$rr_run/redteam/ar-state.txt"
 printf 'fired: no\n' >"$rr_run/redteam/trigger-redteam-repair-1.txt"
 expect_field "with the re-fire's trigger reading fired: no" redteam_repair_diff_triggers false "$rr_run" "$rr_repo"
 printf 'fired: yes\n' >"$rr_run/redteam/trigger-redteam-repair-1.txt"
@@ -3860,6 +3872,12 @@ require_text work-issue/references/redteam.md "\`claim\`, \`path\`, \`command\`,
 # Step 4's repairs and Step 7's carry different names, or a build repair
 # reads as the repair for triage round 1 and Step 7 is skipped.
 require_text work-issue/SKILL.md "lands at \`RUN_DIR/reports/redteam-repair-<k>.json\`"
+# #362: Step 4 overlaps the reproducer with item 7's review, which is safe only
+# while nothing routes before both return and the repair re-fires over the
+# repair's own diff. Each sentence is the guard for one half of that risk.
+require_text work-issue/SKILL.md "Route nothing, and run none of items 3 through 6, until both the reproducer's verdicts and the review, or a \`trigger.txt\` reading \`fired: no\`, have returned"
+require_text work-issue/SKILL.md "The review re-fires exactly when a line reads \`implements\`, whether or not item 7's review fired."
+require_text work-issue/SKILL.md 'git worktree add --detach RUN_DIR/redteam/repro-tree HEAD'
 # Step 8's repair and push items run only where there is a repair and where
 # there is something to push; a queue-only entry goes straight to its replies.
 require_text work-issue/SKILL.md "Where the newest triage round has a repair report, red-team it"
