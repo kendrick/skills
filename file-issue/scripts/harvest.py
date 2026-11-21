@@ -157,6 +157,27 @@ def script_candidates(root):
     return out
 
 
+QUOTED_SCALAR = {
+    # Closing quote ends the scalar: `''` is an escaped quote in single quotes,
+    # and a backslash escapes the next character in double quotes.
+    "'": re.compile(r"'((?:[^']|'')*)'"),
+    '"': re.compile(r'"((?:[^"\\]|\\.)*)"'),
+}
+
+
+def run_value(value):
+    """Return a one-line `run:` value as the shell will see it, or "" if nothing runs."""
+    # Unquote only when a YAML quoted scalar spans the value, trailing comment
+    # aside; in a plain scalar a leading or trailing quote belongs to the shell.
+    m = QUOTED_SCALAR[value[0]].match(value) if value[:1] in QUOTED_SCALAR else None
+    if m and re.fullmatch(r"\s*(?:#.*)?", value[m.end():]):
+        if value[0] == "'":
+            return m.group(1).replace("''", "'").strip()
+        return re.sub(r'\\(["\\])', r"\1", m.group(1)).strip()
+    # In a plain scalar, whitespace then # starts a YAML comment, not the command.
+    return re.sub(r"\s+#.*$", "", value)
+
+
 def workflow_runs(root):
     out = []
     for p in workflow_files(root):
@@ -178,7 +199,9 @@ def workflow_runs(root):
                     i += 1
                 out += block
             elif rest:
-                out.append(rest.strip("'\""))
+                command = run_value(rest)
+                if command:
+                    out.append(command)
     return list(dict.fromkeys(out))
 
 

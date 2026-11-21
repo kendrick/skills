@@ -1063,6 +1063,29 @@ hv_commit "$d" alice init
 hv_run "$d" gh-empty > "$hv_tmp/pytests.json"
 require_json "$hv_tmp/pytests.json" 'd["verification"]' '{"rung": "scripts", "candidates": ["tests/check.py", "tests/run"]}'
 
+# A one-line run: loses quotes only when the whole scalar is a YAML quoted
+# scalar; shell quotes inside an unquoted scalar belong to the command.
+d="$(hv_repo wfquote)"
+mkdir -p "$d/.github/workflows"
+cat > "$d/.github/workflows/ci.yml" <<'YML'
+jobs:
+  t:
+    steps:
+      - run: python3 -c 'print("tests OK")'
+      - run: "make test"
+      - run: 'it''s'
+      - run: make lint # style only
+      - run: "make build" # quoted, then commented
+      - run: ''
+      - run: ""
+YML
+hv_commit "$d" alice init
+hv_run "$d" gh-empty > "$hv_tmp/wfquote.json"
+require_json "$hv_tmp/wfquote.json" 'd["verification"]["candidates"]' '["python3 -c '"'"'print(\"tests OK\")'"'"'", "make test", "it'"'"'s", "make lint", "make build"]'
+first="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["verification"]["candidates"][0])' "$hv_tmp/wfquote.json")"
+rc=0; bash -n -c "$first" > /dev/null 2>&1 || rc=$?
+expect_rc 0 "$rc" "harvested quoted run: command parses under bash -n"
+
 # A run: block ends at the run key's own indentation, with or without a
 # leading list marker, so sibling keys never become commands.
 d="$(hv_repo wfrun)"
