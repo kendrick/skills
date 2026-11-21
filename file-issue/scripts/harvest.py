@@ -139,9 +139,15 @@ def manifest_candidates(root):
     if mk.is_file():
         targets = re.findall(r"^([A-Za-z0-9_][A-Za-z0-9_./-]*)\s*:(?!=)", mk.read_text(errors="replace"), re.M)
         out += [f"Makefile:{t}" for t in dict.fromkeys(targets)]
-    for name in ("pyproject.toml", "Cargo.toml"):
-        if (root / name).is_file():
-            out.append(name)
+    # A metadata-only pyproject.toml names no test command, so counting it would
+    # stop the ladder before tests/ is read. Cargo always has `cargo test`.
+    py = root / "pyproject.toml"
+    if py.is_file() and re.search(
+        r"^\s*\[tool\.(?:pytest|tox|nox|hatch\.envs|poe\.tasks)[.\]]", py.read_text(errors="replace"), re.M
+    ):
+        out.append("pyproject.toml")
+    if (root / "Cargo.toml").is_file():
+        out.append("Cargo.toml")
     return out
 
 

@@ -1063,6 +1063,29 @@ hv_commit "$d" alice init
 hv_run "$d" gh-empty > "$hv_tmp/pytests.json"
 require_json "$hv_tmp/pytests.json" 'd["verification"]' '{"rung": "scripts", "candidates": ["tests/check.py", "tests/run"]}'
 
+# pyproject.toml counts as a manifest hit only when it configures a test
+# runner; a metadata-only one falls through to tests/. Cargo.toml always
+# counts, since `cargo test` is built in.
+d="$(hv_repo pymeta)"
+mkdir -p "$d/tests"
+printf '[project]\nname = "x"\n' > "$d/pyproject.toml"
+printf '#!/bin/sh\n' > "$d/tests/check.sh"
+hv_commit "$d" alice init
+hv_run "$d" gh-empty > "$hv_tmp/pymeta.json"
+require_json "$hv_tmp/pymeta.json" 'd["verification"]' '{"rung": "scripts", "candidates": ["tests/check.sh"]}'
+printf '[project]\nname = "x"\n\n[tool.pytest.ini_options]\naddopts = "-q"\n' > "$d/pyproject.toml"
+hv_run "$d" gh-empty > "$hv_tmp/pymeta.json"
+require_json "$hv_tmp/pymeta.json" 'd["verification"]' '{"rung": "manifest", "candidates": ["pyproject.toml"]}'
+# A table whose name only starts like a runner's is not that runner's.
+printf '[tool.setuptools]\nzip-safe = false\n\n[tool.pytest-foo]\nx = 1\n' > "$d/pyproject.toml"
+hv_run "$d" gh-empty > "$hv_tmp/pymeta.json"
+require_json "$hv_tmp/pymeta.json" 'd["verification"]' '{"rung": "scripts", "candidates": ["tests/check.sh"]}'
+d="$(hv_repo cargo)"
+printf '[package]\nname = "x"\n' > "$d/Cargo.toml"
+hv_commit "$d" alice init
+hv_run "$d" gh-empty > "$hv_tmp/cargo.json"
+require_json "$hv_tmp/cargo.json" 'd["verification"]' '{"rung": "manifest", "candidates": ["Cargo.toml"]}'
+
 # A one-line run: loses quotes only when the whole scalar is a YAML quoted
 # scalar; shell quotes inside an unquoted scalar belong to the command.
 d="$(hv_repo wfquote)"

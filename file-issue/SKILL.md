@@ -40,7 +40,7 @@ Harvest at the same time. The script covers the manifest, `.github/workflows/`, 
 | --- | --- |
 | `gh issue list --limit 10 --state all` | label taxonomy, title prefixes, task-list use, whether issues get assigned to agents |
 | `AGENTS.md`, `CLAUDE.md`, `.github/copilot-instructions.md` | build, test, and convention commands |
-| Manifest scripts (`package.json`, `Makefile`, `pyproject.toml`, `Cargo.toml`); no manifest → runnable scripts under `tests/` or `scripts/`, then the commands `.github/workflows/` runs, then `absent` | the exact verification command |
+| Manifest scripts (`package.json`, `Makefile`, `pyproject.toml` when it configures a test runner, `Cargo.toml`); no manifest → runnable scripts under `tests/` or `scripts/`, then the commands `.github/workflows/` runs, then `absent` | the exact verification command |
 | `.github/workflows/`, `CODEOWNERS` | repo complexity |
 | `git shortlog -sne --since='90 days ago'` | contributor count |
 
