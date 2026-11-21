@@ -74,7 +74,7 @@ Tree: {{TREE}} — name it by absolute path in every command; your shell's
 working directory resets between calls.
 
 Fixed point: BASE_SHA = {{BASE_SHA}}. Current head: {{HEAD}}.
-Repair base: REPAIR_BASE = {{REPAIR_BASE}}, or `none` in a build round. In a repair round,
+Repair base: REPAIR_BASE = {{REPAIR_BASE}} (`none` in a build round). In a repair round,
 judge a `left` reason about the change or the repair, and a claim about the repair
 itself, against `git diff REPAIR_BASE..HEAD`. With `none`, judge against
 `git diff BASE_SHA..HEAD`. A `left` reason that cites text you were not given,
