@@ -12,7 +12,7 @@ So the gates here are content gates. Can a stranger run the reproduction on a cl
 
 ## How It Works
 
-It reads the repo before it asks you anything. If `.github/ISSUE_TEMPLATE/` has a form, that form wins: the skill fills its declared fields and invents nothing alongside them. It also samples recent issues for label taxonomy and title conventions, and pulls the build and test commands out of your manifest, which is how the agent-readiness check gets answered without spending a question on it.
+It reads the repo before it asks you anything, with one script call (`harvest.py`) for the parts that are plain file and git reads. If `.github/ISSUE_TEMPLATE/` has a form, that form wins: the skill fills its declared fields and invents nothing alongside them. It also samples recent issues for label taxonomy and title conventions, and pulls the build and test commands out of your manifest, which is how the agent-readiness check gets answered without spending a question on it.
 
 Then it picks an interrogation depth, arithmetically, and tells you which one:
 
@@ -66,6 +66,7 @@ file-issue/
 │   ├── issue-forms.md    # issue-form YAML schema and gh mechanics
 │   └── evidence-map.md   # every gate traced to its claim and evidence tier
 └── scripts/
+    ├── harvest.py        # Step 1's repo reads as JSON: template rung, verification candidates, CODEOWNERS, workflows, contributors
     └── link-issues.py    # resolves Parent and Blocked by entries and sets them as native links
 ```
 
