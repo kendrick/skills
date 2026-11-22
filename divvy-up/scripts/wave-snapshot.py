@@ -176,6 +176,16 @@ def cmd_changed(args):
     return 0
 
 
+def symlinked_parent(root, path):
+    """Return the first parent of path, from the repo root down, that is a symlink."""
+    parts = path.split("/")[:-1]
+    for i in range(1, len(parts) + 1):
+        component = "/".join(parts[:i])
+        if os.path.islink(os.path.join(root, component)):
+            return component
+    return None
+
+
 def cmd_revert(args):
     base, manifest, links = load_snapshot(args.snapshot)
     cw = load_check_waves()
@@ -194,7 +204,15 @@ def cmd_revert(args):
         if args.task not in cw.owners_of(path, in_wave):
             continue
         full = os.path.join(root, path)
+        # A worker may have swapped a parent directory for a symlink, so a
+        # restore or delete through it would land in a peer's file or outside
+        # the repo. The tracked branch skips this check: git checkout replaces
+        # the link with a real directory and never writes through it.
+        parent = symlinked_parent(root, path)
         if path in manifest:
+            if parent:
+                problems.append(f"{path}: parent {parent} is a symlink; not followed, so it cannot be restored")
+                continue
             # Restored from the blob, not the work tree: the worker may have
             # overwritten or deleted the only other copy.
             proc = run("git cat-file -p", manifest[path], cwd=root)
@@ -208,9 +226,10 @@ def cmd_revert(args):
                 continue
             try:
                 os.makedirs(os.path.dirname(full), exist_ok=True)
-                # A worker may have swapped the file for a symlink; open() would
-                # follow it and overwrite the link's target, maybe a peer's file.
-                if os.path.islink(full) or (path in links and os.path.lexists(full)):
+                # Always a fresh file: open() would follow a symlink into its
+                # target, and would write into a hard link's shared inode,
+                # either of which may be a peer's file.
+                if os.path.lexists(full):
                     os.remove(full)
                 if path in links:
                     os.symlink(os.fsdecode(proc.stdout), full)
@@ -233,6 +252,9 @@ def cmd_revert(args):
                 err = proc.stderr.decode(errors="replace").strip().splitlines()
                 problems.append(f"{path}: git checkout failed: {err[-1] if err else 'exit ' + str(proc.returncode)}")
                 continue
+        elif parent:
+            problems.append(f"{path}: parent {parent} is a symlink; not followed, so it cannot be deleted")
+            continue
         elif os.path.lexists(full):
             try:
                 os.remove(full)

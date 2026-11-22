@@ -1151,6 +1151,8 @@ require_text divvy-up/SKILL.md "[scripts/wave-snapshot.py](scripts/wave-snapshot
 require_text divvy-up/SKILL.md "The script hashes with \`--no-filters\`, so a clean filter or an eol rule cannot normalize the recorded bytes"
 require_text divvy-up/SKILL.md "An untracked symlink is recorded by its link text, the way git stores one"
 require_text divvy-up/SKILL.md "applying by hand the per-path case \`revert\` applies"
+require_text divvy-up/SKILL.md "never writes through a symlink or a hard link into a peer's file"
+require_text divvy-up/SKILL.md "whose parent directory is now a symlink"
 require_text divvy-up/README.md "wave-snapshot.py        # records a wave's base and manifest"
 require_text _maintenance/divvy-up/RATIONALE.md "run through \`scripts/wave-snapshot.py\`"
 require_text _maintenance/divvy-up/RATIONALE.md "The scope stops at #344's boundary"
@@ -1614,6 +1616,66 @@ snap_case_restore_dir() {
   }
 }
 
+# Tasks that own a directory each, for the cases where a worker reaches a
+# peer's file through a hard link or a symlinked parent.
+snap_dir_plan="$ws/dir-plan.md"
+cat > "$snap_dir_plan" <<'PLAN'
+## Waves
+
+| Wave | Task | Files owned | Model | Done when | Constraints |
+| --- | --- | --- | --- | --- | --- |
+| 1 | a | a/ | haiku | done | |
+| 1 | b | b/ | haiku | done | |
+PLAN
+
+# PR #454 review r4657915382: open(full, "wb") wrote into the existing inode,
+# so a manifest file hard-linked to a peer's file restored into the peer's.
+snap_case_restore_hardlink() {
+  local r="$ws/hardlink"
+  snap_repo "$r"
+  mkdir "$r/a" "$r/b"
+  echo "a bytes" > "$r/a/f"
+  echo "b bytes" > "$r/b/g"
+  (cd "$r" && python3 "$snap" record --out "$ws/hardlink.json")
+  ln -f "$r/b/g" "$r/a/f"
+  (cd "$r" && python3 "$snap" revert "$ws/hardlink.json" --plan "$snap_dir_plan" --wave 1 --task a >/dev/null) || {
+    echo "wave-snapshot: revert over a hard-linked manifest file must exit 0" >&2
+    exit 1
+  }
+  [[ "$(cat "$r/b/g")" == "b bytes" ]] || {
+    echo "wave-snapshot: revert wrote through a/f's hard link into task b's b/g" >&2
+    exit 1
+  }
+  [[ "$(cat "$r/a/f")" == "a bytes" ]] || {
+    echo "wave-snapshot: revert must restore a/f's recorded bytes" >&2
+    exit 1
+  }
+}
+
+# PR #454 review r4657915385: makedirs accepted a parent swapped for a symlink,
+# so the restore wrote through it into a peer's file.
+snap_case_restore_symlinked_parent() {
+  local r="$ws/symlinked-parent"
+  snap_repo "$r"
+  mkdir "$r/a" "$r/b"
+  echo "a bytes" > "$r/a/f"
+  echo "b bytes" > "$r/b/f"
+  (cd "$r" && python3 "$snap" record --out "$ws/symlinked-parent.json")
+  rm "$r/a/f"
+  rmdir "$r/a"
+  ln -s b "$r/a"
+  local s=0
+  (cd "$r" && python3 "$snap" revert "$ws/symlinked-parent.json" --plan "$snap_dir_plan" --wave 1 --task a) >/dev/null 2>"$ws/symlinked-parent.err" || s=$?
+  [[ "$s" == 1 ]] && grep -q '^wave-snapshot: a/f: parent a is a symlink' "$ws/symlinked-parent.err" && ! grep -q Traceback "$ws/symlinked-parent.err" || {
+    echo "wave-snapshot: a manifest path under a symlinked parent must exit 1 naming parent a, got exit $s: $(cat "$ws/symlinked-parent.err")" >&2
+    exit 1
+  }
+  [[ "$(cat "$r/b/f")" == "b bytes" ]] || {
+    echo "wave-snapshot: revert wrote through symlinked parent a into task b's b/f" >&2
+    exit 1
+  }
+}
+
 # Red-team on PR #454: `git checkout <WAVE_BASE> -- t.txt` deleted a directory
 # a worker left at the tracked path, and every file in it.
 snap_case_tracked_dir() {
@@ -1703,6 +1765,8 @@ snap_case_link_kept
 snap_case_link_restored
 snap_case_restore_readonly
 snap_case_restore_dir
+snap_case_restore_hardlink
+snap_case_restore_symlinked_parent
 snap_case_tracked_dir
 snap_case_tracked_checkout_fails
 snap_case_readlink_mutation
