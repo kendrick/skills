@@ -133,11 +133,13 @@ A commit object rather than a status snapshot, because status text cannot see a 
 
 Three checks with a format pass between the first two, then a route.
 
-1. **Ownership.** Work out what this wave wrote, then pipe those paths through the plan:
+1. **Ownership.** Work out what this wave wrote into a file in PROMPT_DIR, then feed those paths through the plan:
 
    ```
-   python3 <skill-dir>/scripts/wave-snapshot.py changed PROMPT_DIR/wave-N.json | divvy-up/scripts/check-waves.py owners <PLAN> --wave N
+   python3 <skill-dir>/scripts/wave-snapshot.py changed PROMPT_DIR/wave-N.json > PROMPT_DIR/wave-N.changed && divvy-up/scripts/check-waves.py owners <PLAN> --wave N < PROMPT_DIR/wave-N.changed
    ```
+
+   A non-zero exit from that line fails the ownership check, whichever command set it. Keep the `&&` and the file rather than a pipe: `owners` exits 0 on empty input, so a `changed` that failed on an unreadable snapshot or a git error would pass the gate unseen in any shell without `pipefail`.
 
    `changed` derives the paths against WAVE_BASE, not against the working tree as a whole, and the same way whether or not COMMIT is set: every tracked path whose bytes differ from WAVE_BASE, plus every untracked path whose blob differs from the wave's manifest, is missing from it, or has since disappeared. It keys on content, so a rewrite that leaves the status line and the name unchanged still lists, and a `touch` that leaves the bytes alone does not. Reading the whole dirty tree instead fails wave 2 for every path wave 1 legitimately owned. Take any other read of what the wave changed from `git diff --stat HEAD` plus the untracked paths the manifest comparison above finds, rather than `git status`, because a worker's scratch copy that reached the shared index leaves staged noise that `git status` reports as uncommitted work, while `git diff --stat HEAD` reads the working tree and skips new files.
 

@@ -1141,7 +1141,8 @@ snap="$repo_root/divvy-up/scripts/wave-snapshot.py"
 # Steps 5 and 6 call the script for every part of the procedure, so a step
 # that drifts back to hand-typed git loses one of these.
 require_text divvy-up/SKILL.md "wave-snapshot.py record --out PROMPT_DIR/wave-N.json"
-require_text divvy-up/SKILL.md "wave-snapshot.py changed PROMPT_DIR/wave-N.json | divvy-up/scripts/check-waves.py owners <PLAN> --wave N"
+require_text divvy-up/SKILL.md "wave-snapshot.py changed PROMPT_DIR/wave-N.json > PROMPT_DIR/wave-N.changed && divvy-up/scripts/check-waves.py owners <PLAN> --wave N < PROMPT_DIR/wave-N.changed"
+require_text divvy-up/SKILL.md "\`owners\` exits 0 on empty input, so a \`changed\` that failed"
 require_text divvy-up/SKILL.md "run \`changed\` before the pass and again after it, and keep the lines new in the second run"
 require_text divvy-up/SKILL.md "wave-snapshot.py revert PROMPT_DIR/wave-N.json --plan <PLAN> --wave N --task <LABEL>"
 require_text divvy-up/SKILL.md "again with \`wave-snapshot.py record\` into a new file in PROMPT_DIR"
@@ -1409,6 +1410,46 @@ snap_case_no_w_mutation() {
   fi
 }
 
+# PR #454 review: `owners` exits 0 on empty input, so a `changed` that fails
+# upstream of a pipe passes the gate in any shell without pipefail. Runs Step
+# 6's own command line, lifted from SKILL.md, under plain `sh`.
+snap_case_gate_propagates() {
+  local r="$ws/gate" pd="$ws/gate-prompt"
+  snap_repo "$r"
+  mkdir -p "$pd"
+  local line
+  line="$(grep -F 'wave-snapshot.py changed PROMPT_DIR/wave-N.json' divvy-up/SKILL.md | grep -F 'check-waves.py owners' | sed 's/^ *//')"
+  [[ -n "$line" ]] || {
+    echo "wave-snapshot: Step 6's ownership command line is missing from SKILL.md" >&2
+    exit 1
+  }
+  line="${line//python3 <skill-dir>\/scripts\//python3 $repo_root/divvy-up/scripts/}"
+  line="${line//divvy-up\/scripts\/check-waves.py/python3 $repo_root/divvy-up/scripts/check-waves.py}"
+  line="${line//PROMPT_DIR/$pd}"
+  line="${line//<PLAN>/$snap_plan}"
+  line="${line//wave-N/wave-1}"
+  line="${line//--wave N/--wave 1}"
+  # Unreadable snapshot: the gate line must fail.
+  echo "not json" > "$pd/wave-1.json"
+  if (cd "$r" && sh -c "$line") >/dev/null 2>&1; then
+    echo "wave-snapshot: Step 6's ownership line exited 0 on an unreadable snapshot: $line" >&2
+    exit 1
+  fi
+  # Control: the pipe shape it replaced passes the same input, or this case
+  # tests nothing.
+  if ! (cd "$r" && sh -c "python3 $snap changed $pd/wave-1.json | python3 $repo_root/divvy-up/scripts/check-waves.py owners $snap_plan --wave 1") >/dev/null 2>&1; then
+    echo "wave-snapshot: the piped ownership line should exit 0 on an unreadable snapshot; the control no longer reproduces" >&2
+    exit 1
+  fi
+  # A real snapshot and an owned write still pass and name the owner.
+  (cd "$r" && python3 "$snap" record --out "$pd/wave-1.json")
+  echo "b edit" > "$r/peer.txt"
+  [[ "$(cd "$r" && sh -c "$line")" == "b" ]] || {
+    echo "wave-snapshot: Step 6's ownership line must pass a wave whose writes are owned" >&2
+    exit 1
+  }
+}
+
 snap_case_clean_base
 snap_case_dirty_base
 snap_case_decision_12
@@ -1420,6 +1461,7 @@ snap_case_decision_29
 snap_case_in_tree_out
 snap_case_bad_snapshot
 snap_case_no_w_mutation
+snap_case_gate_propagates
 # --- end wave-snapshot cases ---
 
 echo "divvy-up smoke: OK"

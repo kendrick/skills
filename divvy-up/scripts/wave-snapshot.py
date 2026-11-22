@@ -3,7 +3,8 @@
 
     divvy-up/scripts/wave-snapshot.py record --out PROMPT_DIR/wave-N.json
     divvy-up/scripts/wave-snapshot.py changed PROMPT_DIR/wave-N.json \\
-        | divvy-up/scripts/check-waves.py owners PLAN.md --wave N
+        > PROMPT_DIR/wave-N.changed && divvy-up/scripts/check-waves.py \\
+        owners PLAN.md --wave N < PROMPT_DIR/wave-N.changed
     divvy-up/scripts/wave-snapshot.py revert PROMPT_DIR/wave-N.json \\
         --plan PLAN.md --wave N --task LABEL
 
