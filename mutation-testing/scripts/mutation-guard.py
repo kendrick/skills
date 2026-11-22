@@ -18,7 +18,8 @@ run's own mutation (rows 16, 18, 20).
             `git ls-files --others --exclude-standard`) to stdout, one per
             line, relative to the caller's cwd so they feed `backup`. An
             ignored --guard exits 1 before FILE is written (row 28).
-  backup    copies each PATH to D/<repo-relative path>, mode kept. Refuses,
+  backup    copies each PATH to D/<repo-relative path>, mode kept, replacing
+            any backup already there. Refuses,
             copying nothing, a PATH that is not a regular file (rows 30, 35)
             or a D inside the repository (row 12).
   prove     exits 1 for a PATH whose bytes match its backup (row 20).
@@ -171,6 +172,10 @@ def cmd_backup(args, top):
         return problems
     for path, bak in planned:
         os.makedirs(os.path.dirname(bak), exist_ok=True)
+        # copy2 keeps a read-only mode on the backup, and the next mutation's
+        # backup would then fail to open it for writing. Replace, don't rewrite.
+        if os.path.lexists(bak):
+            os.unlink(bak)
         shutil.copy2(path, bak)
     return []
 

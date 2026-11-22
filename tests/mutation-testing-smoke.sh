@@ -770,8 +770,40 @@ case_snapshot_from_subdir() {
   }
 }
 
+# copy2 keeps a read-only mode on the backup, so the second mutation of the
+# same guard (Step 2 writes two) could not replace it. Root ignores the bit,
+# so the case proves nothing there.
+case_backup_read_only_twice() {
+  [[ $EUID -eq 0 ]] && return 0
+  new_repo
+  echo base >"$repo/guard.py"
+  chmod 444 "$repo/guard.py"
+  commit_all
+  rm "$repo/guard.py"; echo "base + guard" >"$repo/guard.py"; chmod 444 "$repo/guard.py"
+  snap="$bak.snapshot"
+  scratch_dirs+=("$snap")
+  run_guard snapshot --out "$snap"
+  expect_rc 0 "snapshot of a read-only guard"
+  run_guard backup --dir "$bak" guard.py
+  expect_rc 0 "first backup of a read-only guard"
+  rm "$repo/guard.py"; echo mutated >"$repo/guard.py"; chmod 444 "$repo/guard.py"
+  run_guard prove --dir "$bak" guard.py
+  expect_rc 0 "prove on a read-only guard"
+  run_guard restore --dir "$bak" guard.py
+  expect_rc 0 "restore of a read-only guard"
+  run_guard backup --dir "$bak" guard.py
+  expect_rc 0 "second backup of a read-only guard"
+  [[ "$(cat "$bak/guard.py")" == "base + guard" ]] || {
+    echo "mutation-guard: second backup does not hold the restored bytes" >&2
+    exit 1
+  }
+  run_guard check --dir "$bak" --snapshot "$snap" guard.py
+  expect_rc 0 "check after the second backup of a read-only guard"
+}
+
 case_usage_exits_3
 case_snapshot_lists_non_ascii
 case_snapshot_from_subdir
+case_backup_read_only_twice
 
 echo "mutation-testing smoke: OK"
