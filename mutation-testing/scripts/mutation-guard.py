@@ -19,9 +19,9 @@ run's own mutation (rows 16, 18, 20).
             line, relative to the caller's cwd so they feed `backup`. An
             ignored --guard exits 1 before FILE is written (row 28).
   backup    copies each PATH to D/<repo-relative path>, mode kept, replacing
-            any backup already there. Refuses,
-            copying nothing, a PATH that is not a regular file (rows 30, 35)
-            or a D inside the repository (row 12).
+            any backup already there. Refuses, copying nothing, a PATH that
+            is not a regular file (rows 30, 35), a PATH whose directory the
+            caller cannot write, or a D inside the repository (row 12).
   prove     exits 1 for a PATH whose bytes match its backup (row 20).
   restore   unlinks each PATH, copies its backup back, and sets the backup's
             mode, since a copy onto an existing file keeps the destination's
@@ -165,6 +165,11 @@ def cmd_backup(args, top):
             problems.append(f"{path}: is a symlink; no mutation was written through it")
         elif not stat.S_ISREG(st.st_mode):
             problems.append(f"{path}: not a regular file")
+        elif not os.access(os.path.dirname(os.path.abspath(path)), os.W_OK):
+            # restore unlinks before copying back (row 22's mode fix), which
+            # needs a writable directory, so refuse before the mutation lands
+            # rather than leave it on a file nothing can put back (row 39).
+            problems.append(f"{path}: its directory is not writable, so restore could not put it back")
         else:
             planned.append((path, os.path.join(args.dir, rel)))
     # Every refusal lands before the first copy, so --dir stays untouched.

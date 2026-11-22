@@ -61,7 +61,7 @@ Reach for the plausible version rather than an arbitrary break, because an arbit
 
 Per mutation, in this order. The steps are named rather than numbered, because their numbers have shifted twice and every cross-reference to a number went stale silently.
 
-**Refuse** — any path that is not a regular file, before anything is copied. `mutation-guard.py backup` runs this refusal first and exits 1, copying nothing to BACKUP_DIR, on any path that fails it. A symlink stops the run, naming the path and saying no mutation was written through it.
+**Refuse** — any path that is not a regular file, or that sits in a directory you cannot write, before anything is copied. `mutation-guard.py backup` runs this refusal first and exits 1, copying nothing to BACKUP_DIR, on any path that fails it. A symlink stops the run, naming the path and saying no mutation was written through it. So does a path whose directory you cannot write: restore removes the path before copying the backup back, and in that directory the removal fails and leaves the mutation on disk.
 
 A symlink cannot be handled safely here, and both obvious handlings are worse than refusing. Backing up the link (`cp -P`) captures none of the bytes a mutation writes, because writing through a link lands on the target: the target is never backed up, the restore puts the link back, and every check passes while the mutation stays on disk. Backing up the target instead (`cp` without `-P`) loses the link, so the restore writes a regular file where the link was, and again every check passes. Both were measured, one after the other, each as the repair for the one before. Row 28 settled the principle for ignored files and it holds here: stop rather than measure what the run cannot put back.
 

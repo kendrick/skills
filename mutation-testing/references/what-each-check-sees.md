@@ -10,7 +10,7 @@ Step 3 makes four comparisons: the **proof** that a mutation landed, the **conte
 - **Contents** and **mode** — `check`, bytes and permission bits against the backup, path by path.
 - **Collateral** — `check`, the current `git status --porcelain -uall` against the file `snapshot` wrote, byte for byte.
 
-Two subcommands refuse the rows with no safe handling instead of comparing them: `backup` exits 1 on a symlink, and `snapshot --guard` exits 1 on an ignored file.
+Two subcommands refuse the rows with no safe handling instead of comparing them: `backup` exits 1 on a symlink or on a file in a directory the caller cannot write, and `snapshot --guard` exits 1 on an ignored file.
 
 The column that matters most is the last one. This skill runs on a tree carrying the user's uncommitted work, so any comparison against git's index or HEAD cannot tell that work from the run's own mutation.
 
@@ -24,10 +24,11 @@ The column that matters most is the last one. This skill runs on a tree carrying
 | Ignored file | sees it | sees it | sees it | **blind**: status never reports it. Out of DIFF for this reason |
 | Symlink | **errors**: a relative link in the backup dangles there | **blind**: follows both sides, compares the target | **blind**: compares the link's mode, not the target's | **blind** where the target was already modified | 
 | A symlink's target, written through the link | **blind**: the proof compares the link | **blind**: the target is not a backed-up path | **blind**: same | **blind** where the target was already ` M` |
+| Regular file in a directory the caller cannot write | sees it | sees it | sees it | as for its tracked or untracked row. Every column works, and `restore` does not: it removes the path before copying back, the removal fails, and the mutation stays on disk |
 | Directory | n/a | n/a | n/a | sees a wholly-untracked one as one entry, not per file |
 | A path no mutation touched | n/a | **blind**: nothing compares it | n/a | sees it, which is the only reason this check exists |
 
-Two rows carry no safe handling and are refused rather than measured: **symlinks** and **ignored files**. Every attempt to handle the symlink row produced a defect worse than the one before it, which is recorded in ledger rows 30 and 35.
+Three rows carry no safe handling and are refused rather than measured: **symlinks**, **ignored files**, and **files in a directory the caller cannot write**. Every attempt to handle the symlink row produced a defect worse than the one before it, which is recorded in ledger rows 30 and 35.
 
 ## How to use it when changing a check
 

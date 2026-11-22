@@ -801,9 +801,29 @@ case_backup_read_only_twice() {
   expect_rc 0 "check after the second backup of a read-only guard"
 }
 
+# restore unlinks the path before copying back, which needs a writable
+# directory; without the refusal, backup and prove pass and the restore leaves
+# the mutation on disk. Root ignores directory modes, so skip there.
+case_backup_refuses_unwritable_dir() {
+  [[ $EUID -eq 0 ]] && return 0
+  new_repo
+  mkdir "$repo/src"
+  echo base >"$repo/src/guard.py"
+  commit_all
+  echo "base + guard" >"$repo/src/guard.py"
+  chmod 555 "$repo/src"
+  run_guard backup --dir "$bak" src/guard.py
+  chmod 755 "$repo/src"
+  expect_rc 1 "backup of a file in an unwritable directory"
+  expect_err "src/guard.py: its directory is not writable" "backup of a file in an unwritable directory"
+  expect_empty_dir "$bak" "backup of a file in an unwritable directory"
+}
+
 case_usage_exits_3
 case_snapshot_lists_non_ascii
 case_snapshot_from_subdir
+
 case_backup_read_only_twice
+case_backup_refuses_unwritable_dir
 
 echo "mutation-testing smoke: OK"
