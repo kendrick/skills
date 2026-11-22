@@ -422,7 +422,10 @@ require_text mutation-testing/README.md "The only safe fan-out is a worktree per
 
 require_text mutation-testing/README.md "compared against the backup taken outside the repo, in contents and in mode"
 require_text mutation-testing/README.md "An equivalent mutant is reported unresolved, not as a defect."
-require_text mutation-testing/README.md "a \`cmp\` against the backup, a mode comparison, and a \`git status --porcelain -uall\` comparison"
+# The README's script paragraph has to keep the judgment steps out of the
+# script, or it reads as license to automate choosing a mutation (row 8).
+require_text mutation-testing/README.md "Choosing a mutation, reading a verdict, and ruling on an equivalent mutant stay with the agent"
+require_text mutation-testing/README.md "mutation-guard.py   # snapshot, backup, prove, restore, check"
 
 # Scenario 4 could not fail as first written, twice over: a collateral file in a
 # sibling directory is never reached, and an untracked one under the restored
@@ -451,5 +454,249 @@ require_text mutation-testing/README.md "the $scenario_word live scenarios"
 
 require_text _maintenance/mutation-testing/EVALS.md "**Scenarios are unrun until somebody runs them.**"
 require_text _maintenance/mutation-testing/EVALS.md "cannot be pinned by grep"
+
+# --- mutation-guard.py, run for real. Every case below is one of the ten [E]
+# rows that came from hand-built restore commands, rebuilt as a scratch repo so
+# a regression in the script turns the suite red rather than reading as prose
+# that still says the right thing. ---
+
+guard="$repo_root/mutation-testing/scripts/mutation-guard.py"
+scratch_dirs=()
+cleanup() { [[ ${#scratch_dirs[@]} -eq 0 ]] || rm -rf "${scratch_dirs[@]}"; }
+trap cleanup EXIT
+
+# A repo with a local identity, so the cases run on a machine with no global
+# git config. The backup dir is a second mktemp, outside the repo, per row 12.
+new_repo() {
+  repo="$(mktemp -d)"
+  bak="$(mktemp -d)"
+  scratch_dirs+=("$repo" "$bak")
+  git -C "$repo" init -q
+  git -C "$repo" config user.name smoke
+  git -C "$repo" config user.email smoke@example.invalid
+}
+
+commit_all() { git -C "$repo" add -A && git -C "$repo" commit -qm base; }
+
+# Runs the guard from inside the repo, capturing rc and stderr without
+# tripping set -e.
+run_guard() {
+  local err
+  err="$(mktemp)"
+  scratch_dirs+=("$err")
+  rc=0
+  (cd "$repo" && python3 "$guard" "$@") >/dev/null 2>"$err" || rc=$?
+  guard_err="$(cat "$err")"
+}
+
+expect_rc() {
+  [[ "$rc" == "$1" ]] || {
+    echo "mutation-guard: $2: expected exit $1, got $rc; stderr: $guard_err" >&2
+    exit 1
+  }
+}
+
+expect_err() {
+  grep -Fq -- "$1" <<<"$guard_err" || {
+    echo "mutation-guard: $2: stderr lacks '$1'; stderr: $guard_err" >&2
+    exit 1
+  }
+}
+
+expect_empty_dir() {
+  [[ -z "$(find "$1" -mindepth 1 -print -quit)" ]] || {
+    echo "mutation-guard: $2: wrote into --dir on a refusal: $(find "$1" -mindepth 1)" >&2
+    exit 1
+  }
+}
+
+require_file "$guard"
+[[ -x "$guard" ]] || { echo "mutation-guard.py is not executable" >&2; exit 1; }
+
+# Rows 30 and 35: a symlink is refused, and the refusal copies nothing, even
+# when the link is one path among several.
+case_backup_refuses_symlink() {
+  new_repo
+  echo target >"$repo/target.py"
+  ln -s target.py "$repo/link.py"
+  commit_all
+  run_guard backup --dir "$bak" link.py
+  expect_rc 1 "backup of a symlink"
+  expect_err "link.py" "backup of a symlink"
+  expect_empty_dir "$bak" "backup of a symlink"
+  run_guard backup --dir "$bak" target.py link.py
+  expect_rc 1 "backup of a regular file beside a symlink"
+  expect_empty_dir "$bak" "backup of a regular file beside a symlink"
+}
+
+# Row 12: a backup inside the repo is untracked and halts every valid run. The
+# physical path catches macOS's /var -> /private/var hiding an inside --dir.
+case_backup_refuses_dir_in_repo() {
+  new_repo
+  echo a >"$repo/a.py"
+  commit_all
+  run_guard backup --dir "$(cd "$repo" && pwd -P)/bak" a.py
+  expect_rc 1 "backup with --dir inside the repo"
+  [[ ! -e "$repo/bak" ]] || { echo "mutation-guard: backup created --dir inside the repo" >&2; exit 1; }
+}
+
+# Row 22: basename-flattened backups collided and restored one file's bytes
+# into the other path.
+case_backup_mirrors_paths() {
+  new_repo
+  mkdir -p "$repo/app" "$repo/lib"
+  echo app-base >"$repo/app/storage.py"
+  echo lib-base >"$repo/lib/storage.py"
+  commit_all
+  echo app-guard >"$repo/app/storage.py"
+  echo lib-guard >"$repo/lib/storage.py"
+  run_guard backup --dir "$bak" app/storage.py lib/storage.py
+  expect_rc 0 "backup of two same-basename paths"
+  [[ "$(cat "$bak/app/storage.py")" == app-guard && "$(cat "$bak/lib/storage.py")" == lib-guard ]] || {
+    echo "mutation-guard: app/storage.py and lib/storage.py did not back up to two files" >&2
+    exit 1
+  }
+  echo mutated >"$repo/app/storage.py"
+  echo mutated >"$repo/lib/storage.py"
+  run_guard restore --dir "$bak" app/storage.py lib/storage.py
+  expect_rc 0 "restore of two same-basename paths"
+  [[ "$(cat "$repo/app/storage.py")" == app-guard && "$(cat "$repo/lib/storage.py")" == lib-guard ]] || {
+    echo "mutation-guard: restore did not return each storage.py its own bytes" >&2
+    exit 1
+  }
+}
+
+# Row 20: the user's own uncommitted guard makes git diff non-empty, so only
+# the backup can say whether the mutation landed.
+case_prove_against_backup() {
+  new_repo
+  echo base >"$repo/guard.py"
+  commit_all
+  echo "base + guard" >"$repo/guard.py"
+  run_guard backup --dir "$bak" guard.py
+  expect_rc 0 "backup before prove"
+  [[ -n "$(git -C "$repo" diff -- guard.py)" ]] || { echo "mutation-guard: prove fixture has an empty git diff" >&2; exit 1; }
+  run_guard prove --dir "$bak" guard.py
+  expect_rc 1 "prove of an edit that never applied"
+  expect_err "guard.py" "prove of an edit that never applied"
+  echo mutated >"$repo/guard.py"
+  run_guard prove --dir "$bak" guard.py
+  expect_rc 0 "prove of an applied edit"
+}
+
+# The Rule's falsifier, both perturbations. A tracked executable carrying the
+# user's uncommitted change, backed up, mutated, restored.
+falsifier_setup() {
+  new_repo
+  printf '#!/bin/sh\necho base\n' >"$repo/tool.sh"
+  chmod 755 "$repo/tool.sh"
+  commit_all
+  printf '#!/bin/sh\necho guard\n' >"$repo/tool.sh"
+  snap="$bak.snapshot"
+  scratch_dirs+=("$snap")
+  run_guard snapshot --out "$snap"
+  expect_rc 0 "falsifier snapshot"
+  run_guard backup --dir "$bak" tool.sh
+  expect_rc 0 "falsifier backup"
+  printf '#!/bin/sh\necho mutated\n' >"$repo/tool.sh"
+  run_guard restore --dir "$bak" tool.sh
+  expect_rc 0 "falsifier restore"
+  run_guard check --dir "$bak" --snapshot "$snap" tool.sh
+  expect_rc 0 "check after a correct restore"
+}
+
+# Perturb what the rule keys on. Row 18: bytes and status both still match, so
+# only the mode comparison sees it.
+case_falsifier_mode() {
+  falsifier_setup
+  chmod -x "$repo/tool.sh"
+  run_guard check --dir "$bak" --snapshot "$snap" tool.sh
+  expect_rc 1 "check after chmod -x"
+  expect_err "tool.sh: mode" "check after chmod -x"
+}
+
+# Perturb the nearest wrong key: restored from HEAD, the mode matches HEAD and
+# a check against HEAD passes. The bytes line is what must fire.
+case_falsifier_head() {
+  falsifier_setup
+  git -C "$repo" show HEAD:tool.sh >"$repo/tool.sh"
+  run_guard check --dir "$bak" --snapshot "$snap" tool.sh
+  expect_rc 1 "check after a restore from HEAD"
+  expect_err "tool.sh: bytes" "check after a restore from HEAD"
+}
+
+# Row 26: without -uall a wholly-untracked directory is one `?? newdir/` line,
+# and a file deleted inside it leaves the snapshot byte-identical.
+case_check_untracked_dir() {
+  new_repo
+  echo a >"$repo/a.py"
+  commit_all
+  mkdir "$repo/newdir"
+  echo x >"$repo/newdir/a.py"
+  echo y >"$repo/newdir/b.py"
+  snap="$bak.snapshot"
+  scratch_dirs+=("$snap")
+  run_guard snapshot --out "$snap"
+  expect_rc 0 "snapshot with an untracked directory"
+  run_guard backup --dir "$bak" a.py
+  rm "$repo/newdir/a.py"
+  run_guard check --dir "$bak" --snapshot "$snap" a.py
+  expect_rc 1 "check after a deletion inside an untracked directory"
+  expect_err "newdir/a.py" "check after a deletion inside an untracked directory"
+}
+
+# Row 28: an ignored guard cannot be verified back, and refusing it leaves no
+# snapshot behind to be mistaken for a valid BASELINE.
+case_snapshot_guard_ignored() {
+  new_repo
+  echo "build/" >"$repo/.gitignore"
+  mkdir "$repo/build"
+  echo g >"$repo/build/gen.py"
+  echo a >"$repo/a.py"
+  commit_all
+  snap="$bak.snapshot"
+  scratch_dirs+=("$snap")
+  run_guard snapshot --out "$snap" --guard build/gen.py
+  expect_rc 1 "snapshot --guard on an ignored path"
+  expect_err "build/gen.py" "snapshot --guard on an ignored path"
+  [[ ! -e "$snap" ]] || { echo "mutation-guard: snapshot wrote --out despite an ignored guard" >&2; exit 1; }
+  run_guard snapshot --out "$snap" --guard a.py
+  expect_rc 0 "snapshot --guard on a tracked path"
+}
+
+# The validator convention: a usage error or unreadable input exits 3, never
+# argparse's 2, and never 1, which would read as a measured failure.
+case_usage_exits_3() {
+  new_repo
+  echo a >"$repo/a.py"
+  commit_all
+  run_guard backup a.py
+  expect_rc 3 "backup without --dir"
+  run_guard restore --dir "$bak" a.py
+  expect_rc 3 "restore with no backup to read"
+}
+
+# Step 3 keeps its named items (row 36), and each runs through the script. A
+# step that drops its call goes back to a hand-built command, the layer the ten
+# defect rows came from.
+require_text mutation-testing/SKILL.md "\`mutation-guard.py backup\` runs this refusal first"
+require_text mutation-testing/SKILL.md "\`mutation-guard.py backup --dir BACKUP_DIR <path>...\`"
+require_text mutation-testing/SKILL.md "\`mutation-guard.py prove --dir BACKUP_DIR <path>...\`"
+require_text mutation-testing/SKILL.md "\`mutation-guard.py restore --dir BACKUP_DIR <path>...\`"
+require_text mutation-testing/SKILL.md "\`mutation-guard.py check --dir BACKUP_DIR --snapshot SNAPSHOT <path>...\`"
+require_text mutation-testing/SKILL.md "\`mutation-guard.py snapshot --out SNAPSHOT --guard <file>\`"
+require_text mutation-testing/SKILL.md "**Back up** — copy each path"
+require_text mutation-testing/SKILL.md "**Prove** — apply the edit"
+require_text mutation-testing/SKILL.md "**Check** — verify the restore two ways"
+
+case_backup_refuses_symlink
+case_backup_refuses_dir_in_repo
+case_backup_mirrors_paths
+case_prove_against_backup
+case_falsifier_mode
+case_falsifier_head
+case_check_untracked_dir
+case_snapshot_guard_ignored
+case_usage_exits_3
 
 echo "mutation-testing smoke: OK"

@@ -4,11 +4,19 @@ Read this before changing anything in Step 3, and check the change against every
 
 Step 3 makes four comparisons: the **proof** that a mutation landed, the **contents** check, the **mode** check, and the **collateral** check. Each is blind to something, and the blind spots are the whole reason there are four. Most of this skill's defects were a change to one comparison made without asking what the others could still see — so the table is here to be read as a table, not as prose.
 
+`mutation-testing/scripts/mutation-guard.py` runs every comparison, one subcommand per column, and a change to a comparison is a change to that subcommand:
+
+- **Proof** — `prove`, bytes against the backup.
+- **Contents** and **mode** — `check`, bytes and permission bits against the backup, path by path.
+- **Collateral** — `check`, the current `git status --porcelain -uall` against the file `snapshot` wrote, byte for byte.
+
+Two subcommands refuse the rows with no safe handling instead of comparing them: `backup` exits 1 on a symlink, and `snapshot --guard` exits 1 on an ignored file.
+
 The column that matters most is the last one. This skill runs on a tree carrying the user's uncommitted work, so any comparison against git's index or HEAD cannot tell that work from the run's own mutation.
 
 ## The table
 
-| Path kind | Proof (`cmp` vs backup) | Contents (`cmp` vs backup) | Mode (vs backup) | Collateral (`status --porcelain -uall` vs snapshot) |
+| Path kind | Proof (`prove`: bytes vs backup) | Contents (`check`: bytes vs backup) | Mode (`check`: vs backup) | Collateral (`check`: `status --porcelain -uall` vs snapshot) |
 |---|---|---|---|---|
 | Regular file, tracked, unmodified before the run | sees it | sees it | sees it | sees it: status goes from absent to ` M` |
 | Regular file, tracked, **already modified** before the run | sees it | sees it | sees it | **blind**: reads ` M path` before and after, whatever the contents |

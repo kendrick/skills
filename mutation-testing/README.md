@@ -40,7 +40,7 @@ git clone git@github.com:kendrick/skills.git
 cp -R skills/mutation-testing ~/.claude/skills/mutation-testing
 ```
 
-Needs a git repo and a test suite you can run from one command. No Python, and no script to install. Every step is judgment, your runner, or `git`.
+Needs a git repo, a test suite you can run from one command, and Python 3 for `scripts/mutation-guard.py`, which uses the standard library only and installs with the skill.
 
 ## Use
 
@@ -64,11 +64,13 @@ It asks for your test command when the project's config does not name one, and i
 mutation-testing/
 ├── SKILL.md      # the skill: name the guards, write both mutations, run, re-measure, report
 ├── README.md     # this file
-└── references/
-    └── what-each-check-sees.md   # what each restore check sees, per kind of path
+├── references/
+│   └── what-each-check-sees.md   # what each restore check sees, per kind of path
+└── scripts/
+    └── mutation-guard.py   # snapshot, backup, prove, restore, check
 ```
 
-There is no `scripts/`, because choosing a mutation is judgment, the suite is your own command, and restoring is a copy-back checked by a `cmp` against the backup, a mode comparison, and a `git status --porcelain -uall` comparison against the snapshot. The one reference file is a table of what each of those checks can and cannot see, per kind of path, which exists because almost every bug found in this skill was a change to one check made without asking what the others still covered.
+`mutation-guard.py` runs every step that can lose your uncommitted work: the snapshot, the backup, the proof that a mutation landed, the restore, and the check that the restore put everything back. Ten measured defects in the ledger came from hand-built versions of those steps, among them a backup that collided on basenames and a restore that dropped the executable bit and still passed, so the script runs each one as a single fixed comparison. Choosing a mutation, reading a verdict, and ruling on an equivalent mutant stay with the agent, because those are judgment. The one reference file is a table of what each of the script's comparisons can and cannot see, per kind of path, which exists because almost every bug found in this skill was a change to one check made without asking what the others still covered.
 
 ## Gotchas
 
