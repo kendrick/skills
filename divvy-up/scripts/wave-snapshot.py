@@ -121,7 +121,9 @@ def cmd_record(args):
     # Empty on a clean tree, which is the HEAD fallback.
     base = git("git stash create", cwd=root).decode().strip() or git("git rev-parse HEAD", cwd=root).decode().strip()
     paths = untracked(root)
-    manifest = hashes(root, "git hash-object -w", paths)
+    # --no-filters: a clean filter or eol rule would store normalized bytes,
+    # and revert would restore those instead of what the file held.
+    manifest = hashes(root, "git hash-object -w --no-filters", paths)
     try:
         with open(args.out, "w", encoding="utf-8") as f:
             json.dump({"wave_base": base, "untracked": manifest}, f, indent=2, sort_keys=True)
@@ -134,7 +136,7 @@ def cmd_record(args):
 def changed_paths(root, base, manifest):
     paths = set(split_z(git("git diff --name-only --no-renames -z", base, "--", cwd=root)))
     now = untracked(root)
-    current = hashes(root, "git hash-object", now)
+    current = hashes(root, "git hash-object --no-filters", now)
     paths.update(p for p in now if manifest.get(p) != current[p])
     # Gone from the untracked set: deleted, or staged into the index.
     paths.update(p for p in manifest if p not in current)
@@ -174,6 +176,10 @@ def cmd_revert(args):
                 problems.append(f"{path}: manifest blob {manifest[path]} is missing; its bytes cannot be restored")
                 continue
             os.makedirs(os.path.dirname(full), exist_ok=True)
+            # A worker may have swapped the file for a symlink; open() would
+            # follow it and overwrite the link's target, maybe a peer's file.
+            if os.path.islink(full):
+                os.remove(full)
             with open(full, "wb") as f:
                 f.write(proc.stdout)
         elif run("git cat-file -e", f"{base}:{path}", cwd=root).returncode == 0:

@@ -1148,6 +1148,7 @@ require_text divvy-up/SKILL.md "A non-zero exit from either \`changed\` run stop
 require_text divvy-up/SKILL.md "wave-snapshot.py revert PROMPT_DIR/wave-N.json --plan <PLAN> --wave N --task <LABEL>"
 require_text divvy-up/SKILL.md "again with \`wave-snapshot.py record\` into a new file in PROMPT_DIR"
 require_text divvy-up/SKILL.md "[scripts/wave-snapshot.py](scripts/wave-snapshot.py)"
+require_text divvy-up/SKILL.md "The script hashes with \`--no-filters\`, so a clean filter or an eol rule cannot normalize the recorded bytes"
 require_text divvy-up/SKILL.md "applying by hand the per-path case \`revert\` applies"
 require_text divvy-up/README.md "wave-snapshot.py        # records a wave's base and manifest"
 require_text _maintenance/divvy-up/RATIONALE.md "run through \`scripts/wave-snapshot.py\`"
@@ -1456,6 +1457,63 @@ snap_case_gate_propagates() {
     echo "wave-snapshot: Step 6's ownership line must name the owner b, got: $out" >&2
     exit 1
   }
+  # An unowned write must fail the line, or an edit that swallows owners'
+  # status (a trailing `| tee`, say) passes every wave.
+  echo "nobody's" > "$r/fmt.txt"
+  if (cd "$r" && sh -c "$line") >/dev/null 2>&1; then
+    echo "wave-snapshot: Step 6's ownership line must exit non-zero on a write no task owns: $line" >&2
+    exit 1
+  fi
+}
+
+# PR #454 review: a task that swaps a manifest file for a symlink to a peer's
+# file must not turn the restore into a write through the link.
+snap_case_symlink_restore() {
+  local r="$ws/symlink"
+  snap_repo "$r"
+  echo "snapshot bytes" > "$r/m.txt"
+  cp "$r/m.txt" "$ws/symlink-m.orig"
+  cp "$r/peer.txt" "$ws/symlink-peer.orig"
+  (cd "$r" && python3 "$snap" record --out "$ws/symlink.json")
+  rm "$r/m.txt"
+  ln -s peer.txt "$r/m.txt"
+  (cd "$r" && python3 "$snap" revert "$ws/symlink.json" --plan "$snap_plan" --wave 1 --task a >/dev/null) || {
+    echo "wave-snapshot: revert over a symlinked manifest file must exit 0" >&2
+    exit 1
+  }
+  [[ -f "$r/m.txt" && ! -L "$r/m.txt" ]] && cmp -s "$r/m.txt" "$ws/symlink-m.orig" || {
+    echo "wave-snapshot: revert must restore m.txt as a regular file holding its recorded bytes" >&2
+    exit 1
+  }
+  cmp -s "$r/peer.txt" "$ws/symlink-peer.orig" || {
+    echo "wave-snapshot: revert wrote through m.txt's symlink into task b's peer.txt" >&2
+    exit 1
+  }
+}
+
+# PR #454 review: a clean filter or eol conversion makes hash-object store
+# normalized bytes, so a CRLF file came back as LF and a CRLF-to-LF rewrite
+# never showed in changed.
+snap_case_eol_filters() {
+  local r="$ws/eol"
+  snap_repo "$r"
+  printf '*.txt text eol=crlf\n' > "$r/.gitattributes"
+  git -C "$r" add .gitattributes
+  git -C "$r" commit -qm attrs
+  printf 'original\r\n' > "$r/m.txt"
+  cp "$r/m.txt" "$ws/eol-m.orig"
+  (cd "$r" && python3 "$snap" record --out "$ws/eol.json")
+  printf 'original\n' > "$r/m.txt"
+  [[ "$(cd "$r" && python3 "$snap" changed "$ws/eol.json")" == "m.txt" ]] || {
+    echo "wave-snapshot: a CRLF-to-LF rewrite of an untracked file must appear in changed" >&2
+    exit 1
+  }
+  echo "clobbered" > "$r/m.txt"
+  (cd "$r" && python3 "$snap" revert "$ws/eol.json" --plan "$snap_plan" --wave 1 --task a >/dev/null)
+  cmp -s "$r/m.txt" "$ws/eol-m.orig" || {
+    echo "wave-snapshot: revert under eol=crlf must restore m.txt byte for byte" >&2
+    exit 1
+  }
 }
 
 snap_case_clean_base
@@ -1470,6 +1528,8 @@ snap_case_in_tree_out
 snap_case_bad_snapshot
 snap_case_no_w_mutation
 snap_case_gate_propagates
+snap_case_symlink_restore
+snap_case_eol_filters
 # --- end wave-snapshot cases ---
 
 echo "divvy-up smoke: OK"
