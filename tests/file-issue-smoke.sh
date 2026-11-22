@@ -1281,6 +1281,17 @@ run_cp 1 "edit inside a fence nested in a list item" --before "$cp_tmp/nested.md
 require_text "$cp_tmp/err" "missing fenced block: \`\`\`sh ... echo first"
 require_count "$cp_tmp/err" "missing" 1
 run_cp 0 "nested fence kept, item text reworded" --before "$cp_tmp/nested.md" --after "$cp_tmp/nested-reworded.md"
+# A fence can open on the marker line itself. Its closer sits at the item's
+# content indent and must close it, not open a second fence.
+for f in '~~~' '```'; do
+  printf 'Run these:\n\n1. %ssh\n   echo first\n   echo second\n   %s\n' "$f" "$f" > "$cp_tmp/marker.md"
+  printf 'Run these:\n\n1. %ssh\n   echo first echo second\n   %s\n' "$f" "$f" > "$cp_tmp/marker-joined.md"
+  printf 'Run all of these:\n\n1. %ssh\n   echo first\n   echo second\n   %s\n' "$f" "$f" > "$cp_tmp/marker-reworded.md"
+  run_cp 1 "edit inside a $f fence opened on a list marker" --before "$cp_tmp/marker.md" --after "$cp_tmp/marker-joined.md"
+  require_text "$cp_tmp/err" "missing fenced block: 1. ${f}sh ... echo first"
+  require_count "$cp_tmp/err" "missing" 1
+  run_cp 0 "$f fence on a list marker kept, prose reworded" --before "$cp_tmp/marker.md" --after "$cp_tmp/marker-reworded.md"
+done
 
 # Balanced parentheses belong to the URL, so a changed path after them
 # reports the whole URL. The `)` closing a link or a parenthetical does not,
@@ -1293,6 +1304,20 @@ require_count "$cp_tmp/err" "missing" 1
 printf 'See [x](https://example.com/a) and (see https://example.com/b).\n' > "$cp_tmp/link.md"
 printf 'See https://example.com/a and https://example.com/b.\n' > "$cp_tmp/link-after.md"
 run_cp 0 "link and parenthetical URLs kept" --before "$cp_tmp/link.md" --after "$cp_tmp/link-after.md"
+# A bracketed IPv6 host is part of the URL, so a changed path or a deleted
+# URL reports the whole thing.
+printf 'See http://[::1]:8080/required.\n' > "$cp_tmp/ipv6.md"
+printf 'See http://[::1]:8080/different.\n' > "$cp_tmp/ipv6-after.md"
+run_cp 1 "changed path after an IPv6 host" --before "$cp_tmp/ipv6.md" --after "$cp_tmp/ipv6-after.md"
+require_text "$cp_tmp/err" "missing URL: http://[::1]:8080/required"
+require_count "$cp_tmp/err" "missing" 1
+printf 'See it.\n' > "$cp_tmp/ipv6-dropped.md"
+run_cp 1 "deleted IPv6 URL" --before "$cp_tmp/ipv6.md" --after "$cp_tmp/ipv6-dropped.md"
+require_text "$cp_tmp/err" "missing URL: http://[::1]:8080/required"
+# A `]` past the host is Markdown's, so unwrapping `[url]` passes.
+printf 'See [https://example.com/a].\n' > "$cp_tmp/bracketed.md"
+printf 'See https://example.com/a.\n' > "$cp_tmp/bracketed-after.md"
+run_cp 0 "bracketed URL unwrapped" --before "$cp_tmp/bracketed.md" --after "$cp_tmp/bracketed-after.md"
 
 # Usage: a missing flag, one title flag alone, and an unreadable body all
 # exit 3. Argparse alone would exit 2, and AGENTS.md reserves 3 for usage.

@@ -12,12 +12,13 @@ Each item below that is present in --before and missing from --after gets one
 stderr line naming its kind and quoting it. Additions are never reported.
 
   fenced code blocks   whole, fence lines included, byte for byte; a fence
-                       indented under a list item counts too
+                       indented under a list item, or opening on the
+                       item's marker line, counts too
   inline code spans    counted, so a span written twice and kept once reports;
                        a span may wrap onto the next line of its paragraph,
                        and its line break compares as a space
   URLs                 counted, with one level of balanced parentheses in
-                       the path
+                       the path and a bracketed IPv6 host kept whole
   issue references     `#N` and `owner/repo#N`, counted; a `#` inside a URL
                        or a heading marker is not a reference
   headings             level and text, ATX or Setext (`===` under a
@@ -66,7 +67,10 @@ CHECKBOX_RE = re.compile(r"^\s*[-*+] \[ \]")
 SPAN_RE = re.compile(r"(?<!`)(`+)(?!`)(.+?)(?<!`)\1(?!`)", re.S)
 # One level of balanced parentheses stays in the URL, so `a(b)/c` compares
 # whole, while the `)` closing a Markdown link or a parenthetical stays out.
-URL_RE = re.compile(r"https?://(?:[^\s<>()\[\]`\"']|\([^\s<>()\[\]`\"']*\))+")
+URL_TAIL = r"(?:[^\s<>()\[\]`\"']|\([^\s<>()\[\]`\"']*\))"
+# Brackets count only as an IPv6 host right after `scheme://` and any
+# userinfo; elsewhere they belong to Markdown, as in `[text](url)`.
+URL_RE = re.compile(rf"https?://(?:(?:[^\s<>()\[\]`\"'/?#@]*@)?\[[0-9A-Za-z:.%_-]+\]{URL_TAIL}*|{URL_TAIL}+)")
 REF_RE = re.compile(r"(?<![\w./&#-])((?:[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9._-]+)?#\d+)(?!\w)")
 
 
@@ -129,7 +133,16 @@ def split_fences(text):
             # Five or more spaces after the marker start an indented code
             # block, and the content indent is one past the marker.
             gap = len(item.group(2))
-            items.append(len(item.group(1)) + (gap if 1 <= gap <= 4 else 1))
+            content = len(item.group(1)) + (gap if 1 <= gap <= 4 else 1)
+            items.append(content)
+            # `1. ~~~sh` opens a fence at the item's content indent, so its
+            # closer, indented to match, must not read as a new opener.
+            m = FENCE_OPEN_RE.match(line[content:])
+            if m and not m.group(1):
+                marker = m.group(2)
+                current = {"char": marker[0], "len": len(marker), "base": content, "lines": [line]}
+                prose.append("")
+                continue
         prose.append(line.rstrip("\n"))
     if current is not None:
         # CommonMark runs an unclosed fence to the end of the document.
