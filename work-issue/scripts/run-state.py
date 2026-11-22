@@ -60,8 +60,9 @@ both recorded commands match the lane's exactly. It exits 1 with one
 `run-state: reuse-baseline:` line per mismatch or missing or malformed header
 line, and leaves --out unwritten. It never calls `gh` or git.
 
-`verify-cmd` prints the first backticked span on the plan's first line that
-starts with `- Verify with:`, which is the command the lane gates on. It keys
+`verify-cmd` prints the first backticked span on the plan's first bullet line
+that opens with `Verify with` (bold and the colon optional), which is the
+command the lane gates on. It keys
 on the plan alone and never reads a wave baseline, so a wave whose VERIFY_CMD
 grows from A+B to A+B+C leaves a lane's gate where it was. It exits 1 with one
 `run-state: verify-cmd:` stderr line when the plan has no such line or the line
@@ -3071,7 +3072,7 @@ def cmd_verify_cmd(args):
     the wave's baseline cannot move it.
 
     Exits 0 with the command, 1 with one stderr line where the plan has no
-    `- Verify with:` line or the first such line has no backticked span, and 3
+    `Verify with` bullet line or the first such line has no backticked span, and 3
     on an unreadable plan.
     """
     try:
@@ -3081,7 +3082,8 @@ def cmd_verify_cmd(args):
         sys.stderr.write(f"run-state: verify-cmd: {args.plan}: {e.strerror or e}\n")
         return 3
     for line in text.splitlines():
-        if not line.startswith("- Verify with:"):
+        # Plans spell the line `- Verify with:`, `- **Verify with:**`, and `- Verify with` with no colon.
+        if not re.match(r"\s*[-*]\s+\**Verify with\**:?\**(?=\s)", line):
             continue
         m = re.search(r"`([^`]+)`", line)
         if m:

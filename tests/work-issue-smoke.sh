@@ -5003,11 +5003,38 @@ printf -- '- Verify with: bash tests/a.sh\n- Other: `x`\n' >"$vc_dir/plan.md"
 vc_case "$vc_dir/plan.md"
 [[ "$vc_status" == "1" && ! -s "$vc_dir/out" && "$(wc -l <"$vc_dir/err" | tr -d ' ')" == "1" ]] || vc_fail "a Verify with line with no backticks should exit 1 with one stderr line"
 
-# 6. An unreadable plan is exit 3, which Step 1 reads as a usage fault rather than a fallback.
+# 5b. Bold and colon-less spellings match too; a plan with the bold form would
+# otherwise fall back to the harvest, which is the full chain.
+printf -- '- **Verify with:** `bash tests/a.sh`\n' >"$vc_dir/plan.md"
+vc_case "$vc_dir/plan.md"
+[[ "$vc_status" == "0" && "$(cat "$vc_dir/out")" == "bash tests/a.sh" ]] || vc_fail "the bold spelling should print its command"
+printf -- '- Verify with `bash tests/a.sh`\n' >"$vc_dir/plan.md"
+vc_case "$vc_dir/plan.md"
+[[ "$vc_status" == "0" && "$(cat "$vc_dir/out")" == "bash tests/a.sh" ]] || vc_fail "the colon-less spelling should print its command"
+
+# 5c. The wave side of the falsifier: verify-cmd has no way to be handed the
+# wave's baseline, so a mutant that reads its verify: line must add an
+# argument, and this case and the --help check turn red. A plan with no line
+# stays exit 1 even beside a wave baseline that has one.
+printf '# Plan\n' >"$vc_dir/plan.md"
+set +e
+python3 "$run_state" verify-cmd --plan "$vc_dir/plan.md" --wave-baseline "$vc_dir/wave.txt" >"$vc_dir/out" 2>"$vc_dir/err"
+vc_status=$?
+set -e
+[[ "$vc_status" != "0" && ! -s "$vc_dir/out" ]] || vc_fail "verify-cmd should refuse a --wave-baseline argument"
+if python3 "$run_state" verify-cmd --help | grep -Eiq 'wave|baseline'; then
+  vc_fail "verify-cmd --help should name only --plan"
+fi
+
+# 6. An unreadable plan is exit 3; SKILL.md has Step 1 stop the run on it.
 vc_case "$vc_dir/missing.md"
 [[ "$vc_status" == "3" && ! -s "$vc_dir/out" ]] || vc_fail "a missing plan should exit 3"
 
 require_text work-issue/SKILL.md "run-state.py verify-cmd --plan"
+require_text work-issue/SKILL.md "where that exits 3, the plan is unreadable, so stop the run quoting the script's stderr"
+require_text work-issue/SKILL.md "and never widens it to match the handed file"
+require_text work-wave/SKILL.md "gates on its own plan's command at Step 1, Step 3, and every repair re-gate, while every merge test runs the full VERIFY_CMD"
+require_text _maintenance/work-wave/RATIONALE.md "A lane gates on its own plan's \`- Verify with:\` command while every merge test runs the full VERIFY_CMD"
 require_text _maintenance/work-issue/RATIONALE.md "A lane gates on its own plan's \`- Verify with:\` command"
 
 # --- #133: merge-verdicts.py ---
