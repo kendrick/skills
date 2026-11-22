@@ -5679,11 +5679,13 @@ cc_full=1 cc_run full
 [[ "$(cc_runs)" == $((before + 1)) && "$(cat "$cc/full.status")" == 0 && ! -s "$cc/full.say" && "$(cat "$(cc_entry)/status")" == 0 ]] \
   || cc_fail "WORK_ISSUE_FULL_CHECKS=1 should run in full over a warm entry and rewrite it"
 # A read that fails after the existence checks pass, as when another suite
-# deletes the entry mid-copy, has to count as a miss. An unreadable file fails
-# the copy the same way, and the rewritten entry has to hit afterwards.
+# deletes the entry mid-copy, has to count as a miss. A shadowed cp fails the
+# copy of the entry's err file for any uid, which a chmod would not do as root,
+# and the rewritten entry has to hit afterwards.
 before="$(cc_runs)"
-chmod 000 "$(cc_entry)/err"
+cp() { [[ "$1" == "$cc_cache"/*/err ]] && return 1; command cp "$@"; }
 cc_run unreadable
+unset -f cp
 [[ "$(cc_runs)" == $((before + 1)) && "$(cat "$cc/unreadable.status")" == 0 && ! -s "$cc/unreadable.say" ]] \
   || cc_fail "an entry whose copy fails should count as a miss and report the real status 0"
 cc_run reread
