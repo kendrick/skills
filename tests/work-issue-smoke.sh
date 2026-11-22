@@ -5567,12 +5567,21 @@ cmp -s "$tmp/crash-shipped.out" "$tmp/crash-fixture.out" \
 logic_cache="$(cd "$(git rev-parse --git-common-dir)" && pwd)/work-issue-smoke-cache"
 logic_key() {
   python3 - "$@" <<'PY'
-import hashlib, os, platform, sys
+import hashlib, os, subprocess, sys
 checks, subcommand, model = sys.argv[1:4]
+here = os.path.dirname(checks)
+# run-state.py's probe shells out to adversarial-review's match-triggers.py,
+# found at ../../adversarial-review from the script's own directory, and that
+# script reads trigger-table.md. Either can change an answer, so both are keyed.
+sibling = os.path.join(here, "..", "..", "adversarial-review")
+interpreter = subprocess.run([sys.executable, "--version"], capture_output=True, text=True).stdout
 digest = hashlib.sha256()
-parts = [("subcommand", subcommand.encode()), ("python", platform.python_version().encode())]
+parts = [("subcommand", subcommand.encode()), ("python", interpreter.encode())]
 parts += [(label, open(path, "rb").read()) for label, path in
-          (("checks", checks), ("run-state", os.path.join(os.path.dirname(checks), "run-state.py")), ("model", model))]
+          (("checks", checks), ("run-state", os.path.join(here, "run-state.py")),
+           ("match-triggers", os.path.join(sibling, "scripts", "match-triggers.py")),
+           ("trigger-table", os.path.join(sibling, "references", "trigger-table.md")),
+           ("model", model))]
 for label, data in parts:
     digest.update(label.encode() + b"\0" + data + b"\0")
 print(digest.hexdigest())
@@ -5596,8 +5605,11 @@ logic_run() {
   mkdir -p "$logic_cache"
   stage="$(mktemp -d "$logic_cache/.stage.XXXXXX")"
   cp "$4.out" "$stage/out"; cp "$4.err" "$stage/err"; cp "$4.status" "$stage/status"
-  rm -rf "$entry"
-  mv "$stage" "$entry"
+  # Replace in place only under full checks. On a plain miss, a racing writer
+  # that got here first keeps its entry: mv onto an existing directory would
+  # nest the stage inside it.
+  if [[ "${WORK_ISSUE_FULL_CHECKS:-}" == 1 ]]; then rm -rf "$entry"; fi
+  if [[ -e "$entry" ]]; then rm -rf "$stage"; else mv "$stage" "$entry" 2>/dev/null || rm -rf "$stage"; fi
 }
 # #433's cache case, on a stub checks script in a scratch repo so the real
 # search never runs. Each keyed input is tested the way the falsifier needs:
@@ -5606,7 +5618,7 @@ logic_run() {
 # print the planted one. Restoring the byte has to bring the planted entry
 # back, or the plant never reached the read path and the miss proves nothing.
 cc="$tmp/cache-case"
-mkdir -p "$cc/work-issue/scripts" "$cc/cache-home"
+mkdir -p "$cc/work-issue/scripts" "$cc/adversarial-review/scripts" "$cc/adversarial-review/references" "$cc/cache-home"
 git init -q "$cc/cache-home"
 cat >"$cc/work-issue/scripts/checks.py" <<'PY'
 import os, sys, time
@@ -5616,6 +5628,8 @@ print("stub ran", sys.argv[1])
 sys.exit(1 if "FAIL" in open(sys.argv[3]).read() else 0)
 PY
 echo 'state v1' >"$cc/work-issue/scripts/run-state.py"
+echo 'match v1' >"$cc/adversarial-review/scripts/match-triggers.py"
+echo 'table v1' >"$cc/adversarial-review/references/trigger-table.md"
 echo '{"model": 1}' >"$cc/model.json"
 echo 'skill v1' >"$cc/SKILL.md"
 export STUB_LOG="$cc/runs.log"
@@ -5623,7 +5637,7 @@ export STUB_LOG="$cc/runs.log"
 cc_fail() { echo "#433: $*" >&2; exit 1; }
 cc_cache="$(git -C "$cc/cache-home" rev-parse --path-format=absolute --git-common-dir)/work-issue-smoke-cache"
 cc_run() { # tag; leaves the call's stdout in $cc/$tag.say
-  WORK_ISSUE_FULL_CHECKS="${cc_full:-}" logic_cache="$cc_cache" logic_run "$cc/work-issue/scripts/checks.py" liveness "$cc/model.json" "$cc/$1" >"$cc/$1.say"
+  WORK_ISSUE_FULL_CHECKS="${cc_full:-}" logic_cache="${cc_use:-$cc_cache}" logic_run "$cc/work-issue/scripts/checks.py" liveness "$cc/model.json" "$cc/$1" >"$cc/$1.say"
 }
 cc_runs() { wc -l <"$STUB_LOG" | tr -d ' '; }
 cc_key() { logic_key "$cc/work-issue/scripts/checks.py" liveness "$cc/model.json"; }
@@ -5639,7 +5653,7 @@ echo 'skill v2, uncommitted' >"$cc/SKILL.md"
 cc_run unkeyed
 grep -Fq 'cached liveness' "$cc/unkeyed.say" && [[ "$(cc_runs)" == 1 ]] \
   || cc_fail "editing a file outside the key should still hit, got $(cc_runs) runs"
-for input in work-issue/scripts/checks.py work-issue/scripts/run-state.py model.json; do
+for input in work-issue/scripts/checks.py work-issue/scripts/run-state.py adversarial-review/scripts/match-triggers.py adversarial-review/references/trigger-table.md model.json; do
   cp "$cc/$input" "$cc/$input.orig"
   echo 9 >"$(cc_entry)/status"
   before="$(cc_runs)"
@@ -5669,9 +5683,10 @@ pkill -P "$cc_pid" || true
 wait "$cc_pid" 2>/dev/null || true
 [[ -z "$(ls -A "$cc/kill-cache" 2>/dev/null)" ]] \
   || cc_fail "a killed run left a cache entry: $(ls -A "$cc/kill-cache")"
-cc_run afterkill
-[[ "$(cc_runs)" == $((before + 2)) && "$(cat "$cc/afterkill.status")" == 1 ]] \
-  || cc_fail "the run after a killed one should miss and report the real status 1"
+# Same cache and same key as the killed run, so an entry it left would hit here.
+cc_use="$cc/kill-cache" cc_run afterkill
+[[ "$(cc_runs)" == $((before + 2)) && "$(cat "$cc/afterkill.status")" == 1 && ! -s "$cc/afterkill.say" ]] \
+  || cc_fail "the run after a killed one should miss in the killed run's cache and report the real status 1"
 # Falsifier 3: with Step 3's effect a no-op, a run sent to Step 3 comes back
 # to it, and liveness has to say so.
 python3 - "$crash_model" "$tmp/live-step3-noop.json" <<'PY'
