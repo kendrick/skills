@@ -12,7 +12,9 @@ Each item below that is present in --before and missing from --after gets one
 stderr line naming its kind and quoting it. Additions are never reported.
 
   fenced code blocks   whole, fence lines included, byte for byte
-  inline code spans    counted, so a span written twice and kept once reports
+  inline code spans    counted, so a span written twice and kept once reports;
+                       a span may wrap onto the next line of its paragraph,
+                       and its line break compares as a space
   URLs                 counted
   issue references     `#N` and `owner/repo#N`, counted; a `#` inside a URL
                        or a heading marker is not a reference
@@ -50,12 +52,15 @@ FENCE_CLOSE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})[ \t]*$")
 HEADING_RE = re.compile(r"^ {0,3}(#{1,6})(?:[ \t]+(.*?))?(?:[ \t]+#+)?[ \t]*$")
 SETEXT_RE = re.compile(r"^ {0,3}(=+|-+)[ \t]*$")
 # A list item's text is not a paragraph, so `- [ ] x` over `---` is a list
-# then a thematic break, never a Setext heading.
+# followed by a thematic break, never a Setext heading.
 LIST_ITEM_RE = re.compile(r"^\s*(?:[-*+]|\d{1,9}[.)])(?:[ \t]|$)")
+# A quote line is not a paragraph either, so `> x` over `---` is a quote
+# followed by a thematic break.
+QUOTE_RE = re.compile(r"^ {0,3}>")
 CHECKBOX_RE = re.compile(r"^\s*[-*+] \[ \]")
 # A backtick run closes only on a run of the same length (CommonMark), which
 # is how `` `cmd` `` keeps its inner backticks.
-SPAN_RE = re.compile(r"(?<!`)(`+)(?!`)(.+?)(?<!`)\1(?!`)")
+SPAN_RE = re.compile(r"(?<!`)(`+)(?!`)(.+?)(?<!`)\1(?!`)", re.S)
 URL_RE = re.compile(r"https?://[^\s<>()\[\]`\"']+")
 REF_RE = re.compile(r"(?<![\w./&#-])((?:[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9._-]+)?#\d+)(?!\w)")
 
@@ -87,8 +92,9 @@ def split_fences(text):
             if m:
                 marker = m.group(1)
                 current = {"char": marker[0], "len": len(marker), "lines": [line]}
-                # A blank stand-in ends the paragraph above, so the line
-                # before a fence never pairs with a `---` after it.
+                # A fence leaves a blank line in prose, which ends the
+                # paragraph above it, so the line before a fence never
+                # pairs with a `---` after it.
                 prose.append("")
             else:
                 prose.append(line.rstrip("\n"))
@@ -107,25 +113,40 @@ def split_fences(text):
 def extract(text):
     fences, prose = split_fences(text)
     spans, urls, refs, headings, boxes = [], [], [], [], 0
-    paragraph = []
-    for line in prose:
+    paragraph, container, block = [], False, []
+    for line in prose + [""]:
         h = HEADING_RE.match(line)
         if h:
             headings.append(f"{h.group(1)} {(h.group(2) or '').strip()}".rstrip())
         s = SETEXT_RE.match(line)
+        item = LIST_ITEM_RE.match(line)
+        breaks = s or h or not line.strip()
+        if breaks or item:
+            # A span can wrap within a paragraph or list item but not past
+            # its end. A fence leaves a blank line in prose, so no span
+            # crosses a fence either.
+            spans += [re.sub(r"[ \t]*\n[ \t]*", " ", m.group(0)) for m in SPAN_RE.finditer("\n".join(block))]
+            block = []
+        if not breaks:
+            block.append(line)
+        elif h:
+            spans += [m.group(0) for m in SPAN_RE.finditer(line)]
         if s:
             # With no paragraph above, `---` is a thematic break.
             if paragraph:
                 level = "#" if s.group(1)[0] == "=" else "##"
                 headings.append(f"{level} {' '.join(x.strip() for x in paragraph)}")
-            paragraph = []
-        elif not line.strip() or h or LIST_ITEM_RE.match(line):
-            paragraph = []
-        else:
+            paragraph, container = [], False
+        elif not line.strip() or h:
+            paragraph, container = [], False
+        elif item or QUOTE_RE.match(line):
+            # Until a blank line, the lines under a list item or quote
+            # continue it lazily, so a `---` under them is a thematic break.
+            paragraph, container = [], True
+        elif not container:
             paragraph.append(line)
         if CHECKBOX_RE.match(line):
             boxes += 1
-        spans += [m.group(0) for m in SPAN_RE.finditer(line)]
         found = [u.rstrip(".,;:!?") for u in URL_RE.findall(line)]
         urls += found
         # Blank out URLs first so a `pull/9#12` fragment never reads as a ref.

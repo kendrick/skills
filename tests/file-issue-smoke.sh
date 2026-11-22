@@ -1223,8 +1223,8 @@ require_text "$cp_tmp/err" "missing or reordered heading: "
 { cat "$cp_before"; printf '\n## Notes\n\nAdded.\n'; } > "$cp_tmp/added.md"
 run_cp 0 "added heading" --before "$cp_before" --after "$cp_tmp/added.md"
 # Setext headings count too, at the level ATX would give them. A `---`
-# after a blank line, under a list item, or under a fence is a thematic
-# break, so dropping those breaks loses no heading.
+# after a blank line, under a list item, or right after a fence is a
+# thematic break, so dropping those breaks loses no heading.
 printf 'Problem\n=======\n\nText.\n\nSteps\n-----\n\nMore.\n' > "$cp_tmp/setext.md"
 printf 'Issue\n=====\n\nText.\n\nSteps\n-----\n\nMore.\n' > "$cp_tmp/setext-after.md"
 run_cp 1 "renamed Setext heading" --before "$cp_tmp/setext.md" --after "$cp_tmp/setext-after.md"
@@ -1236,6 +1236,20 @@ printf 'Intro.\n\n---\n\n- [ ] one\n---\n\nRun this:\n```\ncode\n```\n---\n' > "
 printf 'Intro.\n\n- [ ] one\n\nRun this:\n```\ncode\n```\n' > "$cp_tmp/breaks-after.md"
 run_cp 0 "thematic breaks kept identical" --before "$cp_tmp/breaks.md" --after "$cp_tmp/breaks.md"
 run_cp 0 "thematic breaks dropped" --before "$cp_tmp/breaks.md" --after "$cp_tmp/breaks-after.md"
+# A `---` under a quote, or under an unindented line that continues a list
+# item, is a thematic break too, so rewording either line passes.
+printf '> quote\n---\n\n- [ ] one\ncontinued\n---\n' > "$cp_tmp/quote.md"
+printf '> reworded quote\n---\n\n- [ ] one\ncarried on\n---\n' > "$cp_tmp/quote-after.md"
+run_cp 0 "reworded quote and lazy line over thematic breaks" --before "$cp_tmp/quote.md" --after "$cp_tmp/quote-after.md"
+# A span can wrap within its paragraph. Dropping a wrapped span reports it
+# once, quoted with a space for the line break; rewrapping it passes.
+printf 'Run `make\ntest` now.\n' > "$cp_tmp/wrapped.md"
+printf 'Run now.\n' > "$cp_tmp/wrapped-dropped.md"
+printf 'Run `make test`\nnow.\n' > "$cp_tmp/wrapped-rewrapped.md"
+run_cp 1 "dropped wrapped span" --before "$cp_tmp/wrapped.md" --after "$cp_tmp/wrapped-dropped.md"
+require_text "$cp_tmp/err" 'missing inline code: `make test`'
+require_count "$cp_tmp/err" "missing" 1
+run_cp 0 "rewrapped span" --before "$cp_tmp/wrapped.md" --after "$cp_tmp/wrapped-rewrapped.md"
 
 # A `#` in a heading marker, a URL fragment, or an `&#56;` entity is not a
 # reference. Spans, URLs, and references are counted, so losing one of two
