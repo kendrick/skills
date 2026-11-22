@@ -1953,6 +1953,7 @@ require_text "$skill" "work-wave/scripts/check-worktrees.py --root ROOT --lane i
 require_text "$skill" "is exempt when the tree at its WORKTREE holds its own \`issue-N\`, checked out or mid-rebase"
 refute_text "$skill" "is exempt when its WORKTREE is registered in \`git worktree list --porcelain\` on its own \`issue-N\` branch"
 require_text "$skill" "line per hit on stderr"
+require_text "$skill" "A held lane gets neither flag, since the script exits 3 on a \`--started\` with no \`--lane\`."
 require_text work-wave/README.md "check-worktrees.py"
 require_text "$ledger" "| 64 | \`check-worktrees.py\` runs Step 3's collision check"
 require_text "$ledger" "when the tree at its WORKTREE holds \`issue-N\`, checked out or mid-rebase of it"
