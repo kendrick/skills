@@ -39,6 +39,7 @@ require_file divvy-up/SKILL.md
 require_file divvy-up/README.md
 require_file divvy-up/references/worker-prompt.md
 require_file divvy-up/scripts/check-waves.py
+require_file divvy-up/scripts/wave-snapshot.py
 require_file _maintenance/divvy-up/RATIONALE.md
 require_file _maintenance/divvy-up/EVALS.md
 require_file tests/fixtures/divvy-up/waves-good.md
@@ -362,7 +363,7 @@ require_text divvy-up/SKILL.md "commit or stash first"
 require_text divvy-up/README.md "clean tree before it dispatches"
 
 # A status snapshot cannot see a second write that leaves the same status line.
-require_text divvy-up/SKILL.md "git stash create"
+require_text divvy-up/scripts/wave-snapshot.py "git stash create"
 require_text divvy-up/SKILL.md "status text cannot see a second write"
 refute_text divvy-up/SKILL.md "otherwise a snapshot of \`git status"
 
@@ -392,7 +393,7 @@ require_text divvy-up/SKILL.md "Write the table to a temporary file"
 refute_text divvy-up/SKILL.md "pipe the same text through"
 
 # Untracked baseline is content, not names: the tracked-half defect again.
-require_text divvy-up/SKILL.md "git hash-object"
+require_text divvy-up/scripts/wave-snapshot.py "git hash-object"
 
 # `fable` is the top rung and has no escalation target.
 require_text divvy-up/SKILL.md "Failed on \`fable\`"
@@ -506,8 +507,9 @@ require_text divvy-up/SKILL.md "no worker has committed anything"
 
 # `git hash-object` without -w prints a hash and stores nothing, so the manifest
 # could name a file it had no bytes to restore.
-require_text divvy-up/SKILL.md "git hash-object -w"
-require_text divvy-up/SKILL.md "git cat-file -p"
+require_text divvy-up/scripts/wave-snapshot.py "git hash-object -w"
+require_text divvy-up/scripts/wave-snapshot.py "git cat-file -p"
+require_text divvy-up/SKILL.md "\`-w\` is what makes the manifest more than a detector"
 refute_text divvy-up/SKILL.md "with its \`git hash-object\`."
 
 # An entry naming an existing directory without its trailing slash owns nothing
@@ -1129,5 +1131,295 @@ cmp -s "$rt/api-full.md" "$fixtures/render-api-expected.md" || {
   diff "$rt/api-full.md" "$fixtures/render-api-expected.md" >&2 || true
   exit 1
 }
+
+# --- wave-snapshot cases (#395) ---
+# Step 5's snapshot and Step 6's derivation and revert used to be git the
+# orchestrator typed by hand, pinned only by their wording. These run the
+# script on throwaway repos, so an edit that keeps the strings and breaks the
+# steps between them fails here.
+snap="$repo_root/divvy-up/scripts/wave-snapshot.py"
+# Steps 5 and 6 call the script for every part of the procedure, so a step
+# that drifts back to hand-typed git loses one of these.
+require_text divvy-up/SKILL.md "wave-snapshot.py record --out PROMPT_DIR/wave-N.json"
+require_text divvy-up/SKILL.md "wave-snapshot.py changed PROMPT_DIR/wave-N.json | divvy-up/scripts/check-waves.py owners <PLAN> --wave N"
+require_text divvy-up/SKILL.md "run \`changed\` before the pass and again after it, and keep the lines new in the second run"
+require_text divvy-up/SKILL.md "wave-snapshot.py revert PROMPT_DIR/wave-N.json --plan <PLAN> --wave N --task <LABEL>"
+require_text divvy-up/SKILL.md "again with \`wave-snapshot.py record\` into a new file in PROMPT_DIR"
+require_text divvy-up/SKILL.md "[scripts/wave-snapshot.py](scripts/wave-snapshot.py)"
+require_text divvy-up/SKILL.md "applying by hand the per-path case \`revert\` applies"
+require_text divvy-up/README.md "wave-snapshot.py        # records a wave's base and manifest"
+require_text _maintenance/divvy-up/RATIONALE.md "run through \`scripts/wave-snapshot.py\`"
+require_text _maintenance/divvy-up/RATIONALE.md "The scope stops at #344's boundary"
+ws="$tmp/wave-snapshot"
+mkdir -p "$ws"
+
+# A fresh repo with identity and signing set locally, because `git stash
+# create` writes a commit and the script runs plain `git`.
+snap_repo() {
+  local r="$1"
+  git init -q "$r"
+  git -C "$r" config user.name divvy-smoke
+  git -C "$r" config user.email divvy-smoke@example.invalid
+  git -C "$r" config commit.gpgsign false
+  local f
+  for f in t.txt peer.txt fmt.txt; do echo "$f base" > "$r/$f"; done
+  git -C "$r" add t.txt peer.txt fmt.txt
+  git -C "$r" commit -qm base
+}
+
+snap_plan="$ws/plan.md"
+cat > "$snap_plan" <<'PLAN'
+## Waves
+
+| Wave | Task | Files owned | Model | Done when | Constraints |
+| --- | --- | --- | --- | --- | --- |
+| 1 | a | m.txt, t.txt, made.txt | haiku | done | |
+| 1 | b | peer.txt, peer-new.txt | haiku | done | |
+PLAN
+
+snap_case_clean_base() {
+  local r="$ws/clean"
+  snap_repo "$r"
+  (cd "$r" && python3 "$snap" record --out "$ws/clean.json") || {
+    echo "wave-snapshot: record on a clean tree must exit 0" >&2
+    exit 1
+  }
+  local base
+  base="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["wave_base"])' "$ws/clean.json")"
+  [[ "$base" == "$(git -C "$r" rev-parse HEAD)" ]] || {
+    echo "wave-snapshot: on a clean tree WAVE_BASE must be HEAD, got: $base" >&2
+    exit 1
+  }
+}
+
+snap_case_dirty_base() {
+  local r="$ws/dirty"
+  snap_repo "$r"
+  # A stash entry already on the list, so an accidental `stash push` shows.
+  echo stashed > "$r/t.txt"
+  git -C "$r" stash push -q -m pre-existing
+  echo "dirty bytes" > "$r/t.txt"
+  echo "untracked bytes" > "$r/u.txt"
+  local status_before stash_before
+  status_before="$(git -C "$r" status --porcelain)"
+  stash_before="$(git -C "$r" stash list)"
+  (cd "$r" && python3 "$snap" record --out "$ws/dirty.json") || {
+    echo "wave-snapshot: record on a dirty tree must exit 0" >&2
+    exit 1
+  }
+  [[ "$(git -C "$r" status --porcelain)" == "$status_before" ]] || {
+    echo "wave-snapshot: record changed git status --porcelain" >&2
+    exit 1
+  }
+  [[ "$(git -C "$r" stash list)" == "$stash_before" ]] || {
+    echo "wave-snapshot: record changed git stash list" >&2
+    exit 1
+  }
+  local base blob
+  base="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["wave_base"])' "$ws/dirty.json")"
+  [[ "$base" != "$(git -C "$r" rev-parse HEAD)" && "$(git -C "$r" cat-file -t "$base")" == commit ]] || {
+    echo "wave-snapshot: on a dirty tree WAVE_BASE must be a stash-create commit, not HEAD, got: $base" >&2
+    exit 1
+  }
+  [[ "$(git -C "$r" show "$base:t.txt")" == "dirty bytes" ]] || {
+    echo "wave-snapshot: the dirty-tree WAVE_BASE must hold the working tree's tracked bytes" >&2
+    exit 1
+  }
+  blob="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["untracked"]["u.txt"])' "$ws/dirty.json")"
+  [[ "$(git -C "$r" cat-file -p "$blob")" == "untracked bytes" ]] || {
+    echo "wave-snapshot: the manifest must map u.txt to a stored blob of its bytes" >&2
+    exit 1
+  }
+}
+
+# Decision 12: wave 1 leaves t.txt at ` M`, a wave-2 worker rewrites it, and
+# the status line never moves.
+snap_case_decision_12() {
+  local r="$ws/d12"
+  snap_repo "$r"
+  echo "wave 1" > "$r/t.txt"
+  (cd "$r" && python3 "$snap" record --out "$ws/d12.json")
+  [[ -z "$(cd "$r" && python3 "$snap" changed "$ws/d12.json")" ]] || {
+    echo "wave-snapshot: changed must be empty right after record" >&2
+    exit 1
+  }
+  local status_before
+  status_before="$(git -C "$r" status --porcelain)"
+  echo "wave 2" > "$r/t.txt"
+  [[ "$(git -C "$r" status --porcelain)" == "$status_before" ]] || {
+    echo "wave-snapshot: decision 12 setup must leave the status line unchanged" >&2
+    exit 1
+  }
+  [[ "$(cd "$r" && python3 "$snap" changed "$ws/d12.json")" == "t.txt" ]] || {
+    echo "wave-snapshot: decision 12: a ' M' file rewritten in wave 2 must appear in changed" >&2
+    exit 1
+  }
+}
+
+# Decision 15 and the falsifier's first perturbation: same `?? new.txt` line,
+# same name, different bytes.
+snap_case_decision_15() {
+  local r="$ws/d15"
+  snap_repo "$r"
+  echo "wave 1" > "$r/new.txt"
+  (cd "$r" && python3 "$snap" record --out "$ws/d15.json")
+  [[ -z "$(cd "$r" && python3 "$snap" changed "$ws/d15.json")" ]] || {
+    echo "wave-snapshot: decision 15: an untracked file left untouched must not appear in changed" >&2
+    exit 1
+  }
+  local status_before
+  status_before="$(git -C "$r" status --porcelain)"
+  echo "wave 2" > "$r/new.txt"
+  [[ "$(git -C "$r" status --porcelain)" == "$status_before" ]] || {
+    echo "wave-snapshot: decision 15 setup must leave the ?? line unchanged" >&2
+    exit 1
+  }
+  [[ "$(cd "$r" && python3 "$snap" changed "$ws/d15.json")" == "new.txt" ]] || {
+    echo "wave-snapshot: decision 15: an untracked file rewritten in wave 2 must appear in changed" >&2
+    exit 1
+  }
+}
+
+# The falsifier's second perturbation: a new mtime with the same bytes.
+snap_case_touch() {
+  local r="$ws/touch"
+  snap_repo "$r"
+  (cd "$r" && python3 "$snap" record --out "$ws/touch.json")
+  touch -t 203001010000 "$r/t.txt"
+  [[ -z "$(cd "$r" && python3 "$snap" changed "$ws/touch.json")" ]] || {
+    echo "wave-snapshot: a touched tracked file with unchanged bytes must not appear in changed" >&2
+    exit 1
+  }
+}
+
+# Decision 21: the manifest restores bytes a worker overwrote or deleted.
+# Takes the script so the -w mutation below can run it against a copy;
+# returns non-zero rather than exiting, so that case can assert the failure.
+snap_revert_restores() {
+  local script="$1" r="$2"
+  snap_repo "$r"
+  echo "manifest bytes $r" > "$r/m.txt"
+  cp "$r/m.txt" "$r.orig"
+  (cd "$r" && python3 "$script" record --out "$r.json") || return 1
+  echo "clobbered" > "$r/m.txt"
+  (cd "$r" && python3 "$script" revert "$r.json" --plan "$snap_plan" --wave 1 --task a) >/dev/null 2>&1 || return 1
+  cmp -s "$r/m.txt" "$r.orig" || return 1
+  rm "$r/m.txt"
+  (cd "$r" && python3 "$script" revert "$r.json" --plan "$snap_plan" --wave 1 --task a) >/dev/null 2>&1 || return 1
+  cmp -s "$r/m.txt" "$r.orig" || return 1
+}
+
+snap_case_decision_21() {
+  snap_revert_restores "$snap" "$ws/d21" || {
+    echo "wave-snapshot: decision 21: revert must restore an overwritten and a deleted manifest file byte for byte" >&2
+    exit 1
+  }
+}
+
+# revert takes only task a's paths: its created file goes, its tracked edit
+# goes back, and task b's edits stay byte for byte.
+snap_case_revert_scope() {
+  local r="$ws/scope"
+  snap_repo "$r"
+  (cd "$r" && python3 "$snap" record --out "$ws/scope.json")
+  echo "a edit" > "$r/t.txt"
+  echo "a made" > "$r/made.txt"
+  echo "b edit" > "$r/peer.txt"
+  echo "b made" > "$r/peer-new.txt"
+  cp "$r/peer.txt" "$ws/scope-peer.orig"
+  cp "$r/peer-new.txt" "$ws/scope-peer-new.orig"
+  (cd "$r" && python3 "$snap" revert "$ws/scope.json" --plan "$snap_plan" --wave 1 --task a >/dev/null) || {
+    echo "wave-snapshot: revert --task a must exit 0" >&2
+    exit 1
+  }
+  [[ ! -e "$r/made.txt" ]] || {
+    echo "wave-snapshot: revert must delete an untracked file the task created" >&2
+    exit 1
+  }
+  [[ "$(cat "$r/t.txt")" == "t.txt base" ]] || {
+    echo "wave-snapshot: revert must restore a tracked file the task changed" >&2
+    exit 1
+  }
+  cmp -s "$r/peer.txt" "$ws/scope-peer.orig" && cmp -s "$r/peer-new.txt" "$ws/scope-peer-new.orig" || {
+    echo "wave-snapshot: revert --task a must leave task b's paths untouched" >&2
+    exit 1
+  }
+}
+
+# Decision 29: a format-pass write outside every task, then a fresh record,
+# leaves the retry's derivation holding only what the retry wrote.
+snap_case_decision_29() {
+  local r="$ws/d29"
+  snap_repo "$r"
+  (cd "$r" && python3 "$snap" record --out "$ws/d29-1.json")
+  echo "a try 1" > "$r/t.txt"
+  (cd "$r" && python3 "$snap" revert "$ws/d29-1.json" --plan "$snap_plan" --wave 1 --task a >/dev/null)
+  echo "formatted" > "$r/fmt.txt"
+  (cd "$r" && python3 "$snap" record --out "$ws/d29-2.json")
+  echo "a try 2" > "$r/made.txt"
+  local got
+  got="$(cd "$r" && python3 "$snap" changed "$ws/d29-2.json")"
+  [[ "$got" == "made.txt" ]] || {
+    echo "wave-snapshot: decision 29: changed after a fresh record must list only the retry's write, got: $got" >&2
+    exit 1
+  }
+}
+
+snap_case_in_tree_out() {
+  local r="$ws/intree"
+  snap_repo "$r"
+  local s=0
+  (cd "$r" && python3 "$snap" record --out "$r/snap.json") 2>/dev/null || s=$?
+  [[ "$s" == 1 ]] || {
+    echo "wave-snapshot: record --out inside the work tree must exit 1, got $s" >&2
+    exit 1
+  }
+  [[ ! -e "$r/snap.json" && -z "$(git -C "$r" status --porcelain)" ]] || {
+    echo "wave-snapshot: a refused record --out must write nothing" >&2
+    exit 1
+  }
+}
+
+snap_case_bad_snapshot() {
+  local r="$ws/bad"
+  snap_repo "$r"
+  echo "not json" > "$ws/bad.json"
+  local s=0
+  (cd "$r" && python3 "$snap" changed "$ws/bad.json") 2>/dev/null || s=$?
+  [[ "$s" == 3 ]] || {
+    echo "wave-snapshot: an unreadable snapshot file must exit 3, got $s" >&2
+    exit 1
+  }
+}
+
+# Dropping -w leaves a manifest of hashes with no bytes behind them, so the
+# decision 21 revert has to fail against a copy of the script without it.
+snap_case_no_w_mutation() {
+  local mut="$ws/mut"
+  mkdir -p "$mut"
+  cp "$repo_root/divvy-up/scripts/check-waves.py" "$mut/"
+  sed 's/hash-object -w/hash-object/g' "$repo_root/divvy-up/scripts/wave-snapshot.py" > "$mut/wave-snapshot.py"
+  ! grep -Fq -- "hash-object -w" "$mut/wave-snapshot.py" && grep -Fq -- "hash-object" "$mut/wave-snapshot.py" || {
+    echo "wave-snapshot: the -w mutation did not apply to the scratch copy" >&2
+    exit 1
+  }
+  if snap_revert_restores "$mut/wave-snapshot.py" "$ws/mut-repo"; then
+    echo "wave-snapshot: the decision 21 revert passed with -w dropped, so it no longer tests -w" >&2
+    exit 1
+  fi
+}
+
+snap_case_clean_base
+snap_case_dirty_base
+snap_case_decision_12
+snap_case_decision_15
+snap_case_touch
+snap_case_decision_21
+snap_case_revert_scope
+snap_case_decision_29
+snap_case_in_tree_out
+snap_case_bad_snapshot
+snap_case_no_w_mutation
+# --- end wave-snapshot cases ---
 
 echo "divvy-up smoke: OK"

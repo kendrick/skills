@@ -70,7 +70,8 @@ divvy-up/
 │   └── worker-prompt.md        # the worker template and the JSON contract every worker returns
 └── scripts/
     ├── check-waves.py          # proves the waves disjoint; attributes what a wave wrote
-    └── render-prompt.py        # fills a task's worker prompt into a file the dispatch points at
+    ├── render-prompt.py        # fills a task's worker prompt into a file the dispatch points at
+    └── wave-snapshot.py        # records a wave's base and manifest, lists what it changed, reverts one task
 ```
 
 ## Gotchas
