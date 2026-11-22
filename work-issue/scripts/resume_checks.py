@@ -1188,16 +1188,26 @@ def same(a, b):
     return a is b or (type(a) is type(b) and a == b)
 
 
+# `invariants` builds a fresh non-null domains dict for every search leaf, and
+# holding a cache for each one took its run from 43 MB to 614 MB peak RSS. A
+# run asks about one domains object at a time, so the newest few are enough.
+PER_DOMAINS_KEPT = 4
 _PER_DOMAINS = {}
 
 
 def per_domains(domains, kind, build):
-    """`build(domains)`, worked out once per domains object. Kept with
-    `domains` itself so a reused id never hands back another model's answer."""
-    found = _PER_DOMAINS.get((id(domains), kind))
-    if found is None or found[0] is not domains:
-        found = _PER_DOMAINS[(id(domains), kind)] = (domains, build(domains))
-    return found[1]
+    """`build(domains)`, worked out once per domains object while that object
+    is among the PER_DOMAINS_KEPT newest it has seen. Each entry holds
+    `domains` itself, so a reused id never hands back another model's answer."""
+    entry = _PER_DOMAINS.get(id(domains))
+    if entry is None or entry[0] is not domains:
+        if len(_PER_DOMAINS) >= PER_DOMAINS_KEPT:
+            del _PER_DOMAINS[next(iter(_PER_DOMAINS))]
+        entry = _PER_DOMAINS[id(domains)] = (domains, {})
+    found = entry[1].get(kind)
+    if found is None:
+        found = entry[1][kind] = build(domains)
+    return found
 
 
 def full_comps(domains):
