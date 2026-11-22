@@ -6067,5 +6067,25 @@ for n in range(600):
     got, want = rc.split((names, rows)), peel((names, rows))
     assert got == want, (names, sorted(rows), got, want)
 PY
+# per_domains keeps caches for only PER_DOMAINS_KEPT domains objects.
+# invariants builds a fresh domains dict per search leaf, and an unbounded
+# cache took its peak RSS from 43 MB to 614 MB. RSS varies by platform, so
+# this pins the bound itself.
+python3 - "$crash_checks" <<'PY' || { echo "#436: per_domains no longer caps its cache at PER_DOMAINS_KEPT" >&2; exit 1; }
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("resume_checks", sys.argv[1])
+rc = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(rc)
+kept = rc.PER_DOMAINS_KEPT
+made = [{"f": (False, True), "n": (i,)} for i in range(3 * kept)]
+firsts = []
+for domains in made:
+    firsts.append(rc.full_comps(domains))
+    assert len(rc._PER_DOMAINS) <= kept, len(rc._PER_DOMAINS)
+# The newest PER_DOMAINS_KEPT are still held, so each hands back its own cache.
+for domains, first in list(zip(made, firsts))[-kept:]:
+    assert rc.full_comps(domains) is first
+assert len(rc._PER_DOMAINS) == kept, len(rc._PER_DOMAINS)
+PY
 
 echo "work-issue smoke: OK"
