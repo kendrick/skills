@@ -1445,8 +1445,15 @@ snap_case_gate_propagates() {
   # A real snapshot and an owned write still pass and name the owner.
   (cd "$r" && python3 "$snap" record --out "$pd/wave-1.json")
   echo "b edit" > "$r/peer.txt"
-  [[ "$(cd "$r" && sh -c "$line")" == "b" ]] || {
-    echo "wave-snapshot: Step 6's ownership line must pass a wave whose writes are owned" >&2
+  # Status and output checked apart: a line that prints `b` and then exits
+  # non-zero rejects every valid wave, and a string compare alone misses it.
+  local out
+  out="$(cd "$r" && sh -c "$line")" || {
+    echo "wave-snapshot: Step 6's ownership line must exit 0 on a wave whose writes are owned: $line" >&2
+    exit 1
+  }
+  [[ "$out" == "b" ]] || {
+    echo "wave-snapshot: Step 6's ownership line must name the owner b, got: $out" >&2
     exit 1
   }
 }
