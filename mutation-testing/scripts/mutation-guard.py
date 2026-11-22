@@ -5,7 +5,7 @@
     mutation-guard.py backup   --dir D PATH...
     mutation-guard.py prove    --dir D PATH...
     mutation-guard.py restore  --dir D PATH...
-    mutation-guard.py check    --dir D --snapshot FILE [PATH]...
+    mutation-guard.py check    --dir D --snapshot FILE PATH...
 
 Each subcommand runs one fixed comparison and offers no alternative, because
 three times an alternative offered beside a check was weaker and became the
@@ -238,7 +238,8 @@ def main(argv=None):
     p = sub.add_parser("check")
     p.add_argument("--dir", required=True, metavar="D")
     p.add_argument("--snapshot", required=True, metavar="FILE")
-    p.add_argument("paths", nargs="*", metavar="PATH")
+    # Without a PATH, check is status-only: the weaker comparison row 21 cuts.
+    p.add_argument("paths", nargs="+", metavar="PATH")
     args = ap.parse_args(argv)
 
     handlers = {

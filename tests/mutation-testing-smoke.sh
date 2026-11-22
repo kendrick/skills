@@ -674,6 +674,14 @@ case_usage_exits_3() {
   expect_rc 3 "backup without --dir"
   run_guard restore --dir "$bak" a.py
   expect_rc 3 "restore with no backup to read"
+  # A check with no PATH compares status alone and clears row 18's chmod -x
+  # restore, so a missing PATH is a usage error rather than a lighter mode.
+  snap="$bak.snapshot"
+  scratch_dirs+=("$snap")
+  run_guard snapshot --out "$snap"
+  expect_rc 0 "snapshot before a PATH-less check"
+  run_guard check --dir "$bak" --snapshot "$snap"
+  expect_rc 3 "check with no PATH"
 }
 
 # Step 3 keeps its named items (row 36), and each runs through the script. A
