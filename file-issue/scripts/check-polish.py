@@ -50,7 +50,9 @@ import re
 import sys
 from collections import Counter
 
-FENCE_OPEN_RE = re.compile(r"^( *)(`{3,}|~{3,})")
+# A backtick fence's info string can't hold a backtick (CommonMark), so
+# `- ```x``` is the flag` is a list item with a span, not a fence opener.
+FENCE_OPEN_RE = re.compile(r"^( *)(`{3,}(?!.*`)|~{3,})")
 FENCE_CLOSE_RE = re.compile(r"^( *)(`{3,}|~{3,})[ \t]*$")
 HEADING_RE = re.compile(r"^ {0,3}(#{1,6})(?:[ \t]+(.*?))?(?:[ \t]+#+)?[ \t]*$")
 SETEXT_RE = re.compile(r"^ {0,3}(=+|-+)[ \t]*$")

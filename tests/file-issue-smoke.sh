@@ -1293,6 +1293,12 @@ for f in '~~~' '```'; do
   run_cp 0 "$f fence on a list marker kept, prose reworded" --before "$cp_tmp/marker.md" --after "$cp_tmp/marker-reworded.md"
 done
 
+# A backtick run with another backtick later on its line is an inline span,
+# never a fence opener, so rewording the prose after it passes.
+printf -- '- ```x``` is the flag\n' > "$cp_tmp/span-item.md"
+printf -- '- ```x``` is the option\n' > "$cp_tmp/span-item-after.md"
+run_cp 0 "list item opening with a triple-backtick span" --before "$cp_tmp/span-item.md" --after "$cp_tmp/span-item-after.md"
+
 # Balanced parentheses belong to the URL, so a changed path after them
 # reports the whole URL. The `)` closing a link or a parenthetical does not,
 # so unwrapping both into bare URLs passes.
