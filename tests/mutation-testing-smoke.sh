@@ -858,6 +858,21 @@ case_restore_unreadable_backup_unlinks_nothing() {
   }
 }
 
+# A mutation in place lands on every name of a hard-linked file, and restore
+# puts back only the named path; with the alias already ` M`, every check
+# passes while the alias keeps the mutation.
+case_backup_refuses_hard_link() {
+  new_repo
+  echo base >"$repo/guard.py"
+  ln "$repo/guard.py" "$repo/alias.py"
+  commit_all
+  echo "user guard" >"$repo/guard.py"
+  run_guard backup --dir "$bak" guard.py
+  expect_rc 1 "backup of a hard-linked file"
+  expect_err "guard.py: has 2 hard links" "backup of a hard-linked file"
+  expect_empty_dir "$bak" "backup of a hard-linked file"
+}
+
 case_usage_exits_3
 case_snapshot_lists_non_ascii
 case_snapshot_from_subdir
@@ -866,5 +881,6 @@ case_backup_read_only_twice
 case_backup_refuses_unwritable_dir
 case_backup_refuses_owner_unreadable
 case_restore_unreadable_backup_unlinks_nothing
+case_backup_refuses_hard_link
 
 echo "mutation-testing smoke: OK"

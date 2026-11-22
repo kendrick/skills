@@ -10,7 +10,7 @@ Step 3 makes four comparisons: the **proof** that a mutation landed, the **conte
 - **Contents** and **mode** — `check`, bytes and permission bits against the backup, path by path.
 - **Collateral** — `check`, the current `git status --porcelain -uall` against the file `snapshot` wrote, byte for byte.
 
-Two subcommands refuse the rows with no safe handling instead of comparing them: `backup` exits 1 on a symlink, on a file in a directory the caller cannot write, or on a file whose mode has no owner-read bit, and `snapshot --guard` exits 1 on an ignored file.
+Two subcommands refuse the rows with no safe handling instead of comparing them: `backup` exits 1 on a symlink, on a file in a directory the caller cannot write, on a file whose mode has no owner-read bit, or on a file with more than one hard link, and `snapshot --guard` exits 1 on an ignored file.
 
 The column that matters most is the last one. This skill runs on a tree carrying the user's uncommitted work, so any comparison against git's index or HEAD cannot tell that work from the run's own mutation.
 
@@ -26,10 +26,11 @@ The column that matters most is the last one. This skill runs on a tree carrying
 | A symlink's target, written through the link | **blind**: the proof compares the link | **blind**: the target is not a backed-up path | **blind**: same | **blind** where the target was already ` M` |
 | Regular file in a directory the caller cannot write | sees it | sees it | sees it | as for its tracked or untracked row. Every column works, and `restore` does not: it removes the path before copying back, the removal fails, and the mutation stays on disk |
 | Regular file with no owner-read bit | **errors**: the backup keeps the mode and the caller cannot read it | **errors**: same | sees it | as for its tracked or untracked row. `restore` checks every backup is readable before it removes any path |
+| Regular file with another hard link | sees it | sees it | sees it | **blind** where the alias was already ` M`: the mutation lands on both names and `restore` puts back only the named one |
 | Directory | n/a | n/a | n/a | sees a wholly-untracked one as one entry, not per file |
 | A path no mutation touched | n/a | **blind**: nothing compares it | n/a | sees it, which is the only reason this check exists |
 
-Four rows carry no safe handling and are refused rather than measured: **symlinks**, **ignored files**, **files in a directory the caller cannot write**, and **files with no owner-read bit**. Every attempt to handle the symlink row produced a defect worse than the one before it, which is recorded in ledger rows 30 and 35.
+Five rows carry no safe handling and are refused rather than measured: **symlinks**, **ignored files**, **files in a directory the caller cannot write**, **files with no owner-read bit**, and **files with another hard link**. Every attempt to handle the symlink row produced a defect worse than the one before it, which is recorded in ledger rows 30 and 35.
 
 ## How to use it when changing a check
 

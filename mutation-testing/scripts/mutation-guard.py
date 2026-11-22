@@ -22,7 +22,8 @@ run's own mutation (rows 16, 18, 20).
             any backup already there. Refuses, copying nothing, a PATH that
             is not a regular file (rows 30, 35), a PATH whose directory the
             caller cannot write (row 39), a PATH its owner cannot read
-            (row 40), or a D inside the repository (row 12).
+            (row 40), a PATH with more than one hard link (row 41), or a D
+            inside the repository (row 12).
   prove     exits 1 for a PATH whose bytes match its backup (row 20).
   restore   unlinks each PATH, copies its backup back, and sets the backup's
             mode, since a copy onto an existing file keeps the destination's
@@ -184,6 +185,11 @@ def cmd_backup(args, top):
             # copy2 gives the caller-owned backup this same mode, so the
             # caller could not read the backup back to prove or restore (row 40).
             problems.append(f"{path}: its mode has no owner-read bit, so its backup would be unreadable")
+        elif st.st_nlink > 1:
+            # A mutation in place writes every name of the inode, and restore's
+            # unlink-and-copy puts back only this one, so the alias keeps the
+            # mutation while every check passes (row 41).
+            problems.append(f"{path}: has {st.st_nlink} hard links, so restore could not put back the other names")
         else:
             planned.append((path, os.path.join(args.dir, rel)))
     # Every refusal lands before the first copy, so --dir stays untouched.
