@@ -6014,6 +6014,10 @@ require_text work-issue/references/worker-prompt.md "In a repair round it judges
 # emptied. Its pinned output came from resume_checks.py as it stood before
 # #436. Pooling past the limit, or checking the limit only once a group is
 # pooled, prints a different probe on the 4 row 10 cycle.
+# #447: split-once pooling was cut because deferring the split moves where
+# the MERGE_ROWS cutoff lands (Deliberately Not Built, RATIONALE.md).
+refute_text work-issue/scripts/resume_checks.py "split once"
+refute_text work-issue/scripts/resume_checks.py "split-once"
 merge_dir=tests/fixtures/work-issue/liveness
 logic_run "$crash_checks" liveness "$merge_dir/merge-limit.json" "$tmp/live-merge"
 [[ "$(cat "$tmp/live-merge.status")" == "1" ]] \
