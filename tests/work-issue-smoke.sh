@@ -4947,6 +4947,102 @@ require_text work-issue/SKILL.md "\`--wave-baseline\` refuses the run the same w
 require_text work-issue/SKILL.md "Any other exit status means print the script's stderr once"
 require_text _maintenance/work-issue/RATIONALE.md "Step 1 copies a \`--wave-baseline\` file into \`baseline.txt\` instead of running VERIFY_CMD when BASE_SHA and both commands match"
 
+# --- #434: verify-cmd ---
+# A lane gates on its own plan's `- Verify with:` command. The wave's VERIFY_CMD
+# chains every lane's suites, so keying on it made each lane run suites its
+# diff never touched. The answer must move with the plan and ignore the wave.
+vc_plan() {
+  printf '# Plan\n\n## Global Constraints\n\n- Own only: a.sh\n%s\n- Other: `not this`\n' "$1"
+}
+vc_case() {
+  set +e
+  python3 "$run_state" verify-cmd --plan "$1" >"$vc_dir/out" 2>"$vc_dir/err"
+  vc_status=$?
+  set -e
+}
+vc_fail() {
+  echo "#434: $1, got status $vc_status: $(cat "$vc_dir/out" "$vc_dir/err")" >&2
+  exit 1
+}
+vc_dir="$(mktemp -d "$tmp/vc.XXXXXX")"
+
+# 1. The first backticked span on the Verify with line is the command, and a
+# later span on the same line or another line is not.
+vc_plan '- Verify with: `bash tests/a.sh`, run through `slot.sh`.' >"$vc_dir/plan.md"
+vc_case "$vc_dir/plan.md"
+[[ "$vc_status" == "0" && "$(cat "$vc_dir/out")" == "bash tests/a.sh" ]] || vc_fail "plan A should print its command"
+
+# 2. Falsifier, plan side: editing the plan's line from A to B changes the output.
+vc_plan '- Verify with: `bash tests/b.sh`, run through `slot.sh`.' >"$vc_dir/plan.md"
+vc_case "$vc_dir/plan.md"
+[[ "$vc_status" == "0" && "$(cat "$vc_dir/out")" == "bash tests/b.sh" ]] || vc_fail "plan B should print its command"
+
+# 3. Falsifier, wave side: the wave baseline's verify: line moves A+B to A+B+C
+# while the plan keeps A. verify-cmd reads only the plan, and reuse-baseline
+# declines in both cases without erroring, so the lane runs its own suite A.
+vc_plan '- Verify with: `bash tests/a.sh`' >"$vc_dir/plan.md"
+for wave_verify in 'bash tests/a.sh && bash tests/b.sh' 'bash tests/a.sh && bash tests/b.sh && bash tests/c.sh'; do
+  printf 'exit: 0\nbase: origin/main %s\ninstall: npm ci\nverify: %s\nok 1\n' "$rb_sha" "$wave_verify" >"$vc_dir/wave.txt"
+  vc_case "$vc_dir/plan.md"
+  [[ "$vc_status" == "0" && "$(cat "$vc_dir/out")" == "bash tests/a.sh" ]] || vc_fail "wave verify '$wave_verify' should leave the lane's command at A"
+  set +e
+  python3 "$run_state" reuse-baseline --wave-baseline "$vc_dir/wave.txt" --base-sha "$rb_sha" \
+    --install "npm ci" --verify "$(cat "$vc_dir/out")" --out "$vc_dir/baseline.txt" >/dev/null 2>"$vc_dir/err"
+  vc_status=$?
+  set -e
+  [[ "$vc_status" == "1" && ! -e "$vc_dir/baseline.txt" ]] || vc_fail "a lane whose command is a subset of the wave's should decline reuse with exit 1"
+done
+
+# 4. No Verify with line: exit 1, one stderr line, nothing on stdout.
+printf '# Plan\n\n- Own only: a.sh\n' >"$vc_dir/plan.md"
+vc_case "$vc_dir/plan.md"
+[[ "$vc_status" == "1" && ! -s "$vc_dir/out" && "$(wc -l <"$vc_dir/err" | tr -d ' ')" == "1" ]] || vc_fail "a plan with no Verify with line should exit 1 with one stderr line"
+
+# 5. A Verify with line with no backticked span: same.
+printf -- '- Verify with: bash tests/a.sh\n- Other: `x`\n' >"$vc_dir/plan.md"
+vc_case "$vc_dir/plan.md"
+[[ "$vc_status" == "1" && ! -s "$vc_dir/out" && "$(wc -l <"$vc_dir/err" | tr -d ' ')" == "1" ]] || vc_fail "a Verify with line with no backticks should exit 1 with one stderr line"
+
+# 5b. Bold and colon-less spellings match too; a plan with the bold form would
+# otherwise fall back to the harvest, which is the full chain.
+printf -- '- **Verify with:** `bash tests/a.sh`\n' >"$vc_dir/plan.md"
+vc_case "$vc_dir/plan.md"
+[[ "$vc_status" == "0" && "$(cat "$vc_dir/out")" == "bash tests/a.sh" ]] || vc_fail "the bold spelling should print its command"
+printf -- '- Verify with `bash tests/a.sh`\n' >"$vc_dir/plan.md"
+vc_case "$vc_dir/plan.md"
+[[ "$vc_status" == "0" && "$(cat "$vc_dir/out")" == "bash tests/a.sh" ]] || vc_fail "the colon-less spelling should print its command"
+
+# 5c. The wave side of the falsifier: verify-cmd has no way to be handed the
+# wave's baseline, so a mutant that reads its verify: line must add an
+# argument, and this case and the --help check turn red. A plan with no line
+# stays exit 1 even beside a wave baseline that has one.
+printf '# Plan\n' >"$vc_dir/plan.md"
+set +e
+python3 "$run_state" verify-cmd --plan "$vc_dir/plan.md" --wave-baseline "$vc_dir/wave.txt" >"$vc_dir/out" 2>"$vc_dir/err"
+vc_status=$?
+set -e
+[[ "$vc_status" != "0" && ! -s "$vc_dir/out" ]] || vc_fail "verify-cmd should refuse a --wave-baseline argument"
+if python3 "$run_state" verify-cmd --help | grep -Eiq 'wave|baseline'; then
+  vc_fail "verify-cmd --help should name only --plan"
+fi
+
+# 6. An unreadable plan is exit 3; SKILL.md has Step 1 stop the run on it.
+vc_case "$vc_dir/missing.md"
+[[ "$vc_status" == "3" && ! -s "$vc_dir/out" ]] || vc_fail "a missing plan should exit 3"
+
+require_text work-issue/SKILL.md "run-state.py verify-cmd --plan"
+require_text work-issue/SKILL.md "where that exits 3, the plan is unreadable, so stop the run quoting the script's stderr"
+require_text work-issue/SKILL.md "an adopted run has no plan, so it never calls \`verify-cmd\` and harvests"
+require_text work-issue/SKILL.md "Name VERIFY_CMD to \`divvy-up\` as the verify command, so its Step 3 skips its own repo-disk resolution and its Step 6 gate runs it."
+require_text work-issue/SKILL.md "name VERIFY_CMD to it again as the verify command at every wave it continues."
+require_text work-issue/SKILL.md "with \`--verify-cmd\` set to VERIFY_CMD."
+require_text work-issue/SKILL.md "The gate runs the VERIFY_CMD Step 1 resolved and never a wider one."
+require_text divvy-up/SKILL.md "a command the wrapper named is that resolution."
+require_text work-issue/SKILL.md "and never widens it to match the handed file"
+require_text work-wave/SKILL.md "gates on its own plan's command at Step 1, Step 3, and every repair re-gate, while every merge test runs the full VERIFY_CMD"
+require_text _maintenance/work-wave/RATIONALE.md "A lane gates on its own plan's \`- Verify with:\` command while every merge test runs the full VERIFY_CMD"
+require_text _maintenance/work-issue/RATIONALE.md "A lane gates on its own plan's \`- Verify with:\` command"
+
 # --- #133: merge-verdicts.py ---
 # The script builds round-<k>.json from per-claim verdict lines and names the
 # claims no line covers. It decides which claims the subagent re-runs, so each

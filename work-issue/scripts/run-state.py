@@ -8,6 +8,7 @@
     work-issue/scripts/run-state.py commit-style --run-dir DIR
     work-issue/scripts/run-state.py adopt M --pr-json FILE --bundle FILE --run-dir DIR --root ROOT --default DEFAULT --invoker LOGIN [--max-review-rounds R] [--dry-run]
     work-issue/scripts/run-state.py reuse-baseline --wave-baseline PATH --base-sha SHA --install CMD --verify CMD --out PATH
+    work-issue/scripts/run-state.py verify-cmd --plan PATH
 
 Neither `review` nor `phase` is a gate. `review` answers `findings`, `cleared`, or
 `pending` on its first stdout line, then lists every item that bore on the
@@ -59,11 +60,19 @@ both recorded commands match the lane's exactly. It exits 1 with one
 `run-state: reuse-baseline:` line per mismatch or missing or malformed header
 line, and leaves --out unwritten. It never calls `gh` or git.
 
-Exit codes: 0 with an answer on stdout; 1 only from `adopt` and
-`reuse-baseline`, as above; 3 usage, a `gh` failure, an unwritable `--save`
+`verify-cmd` prints the first backticked span on the plan's first bullet line
+that opens with `Verify with` (bold and the colon optional), which is the
+command the lane gates on. It keys
+on the plan alone and never reads a wave baseline, so a wave whose VERIFY_CMD
+grows from A+B to A+B+C leaves a lane's gate where it was. It exits 1 with one
+`run-state: verify-cmd:` stderr line when the plan has no such line or the line
+has no backticked span, and Step 1 falls back to the harvested VERIFY_CMD.
+
+Exit codes: 0 with an answer on stdout; 1 only from `adopt`, `reuse-baseline`
+and `verify-cmd`, as above; 3 usage, a `gh` failure, an unwritable `--save`
 path, a `reuse-baseline` --out with no directory, or input this script cannot
 read (an unparseable bundle, a bundle missing a top-level key, a probe missing
-a field, a wave baseline that cannot be read). Argparse supplies 2 for a
+a field, a wave baseline or plan that cannot be read). Argparse supplies 2 for a
 mistyped flag, except under `probe` and `adopt`, where it is 3 too,
 because the issue that asked for `probe` asked for the validator convention.
 
@@ -3053,6 +3062,39 @@ def cmd_reuse_baseline(args):
     return 0
 
 
+def cmd_verify_cmd(args):
+    """Print the command the plan's `- Verify with:` line names.
+
+    A lane gates on its own plan's suites. The wave's VERIFY_CMD chains every
+    lane's suites (#434: seven suites, about 29 minutes, where one lane's plan
+    named a 207 s suite), so keying the gate on it made each lane pay for suites
+    its diff never touched. The answer comes from the plan alone, so a change to
+    the wave's baseline cannot move it.
+
+    Exits 0 with the command, 1 with one stderr line where the plan has no
+    `Verify with` bullet line or the first such line has no backticked span, and 3
+    on an unreadable plan.
+    """
+    try:
+        with open(args.plan, "rb") as f:
+            text = f.read().decode("utf-8", "replace")
+    except OSError as e:
+        sys.stderr.write(f"run-state: verify-cmd: {args.plan}: {e.strerror or e}\n")
+        return 3
+    for line in text.splitlines():
+        # Plans spell the line `- Verify with:`, `- **Verify with:**`, and `- Verify with` with no colon.
+        if not re.match(r"\s*[-*]\s+\**Verify with\**:?\**(?=\s)", line):
+            continue
+        m = re.search(r"`([^`]+)`", line)
+        if m:
+            print(m.group(1))
+            return 0
+        sys.stderr.write(f"run-state: verify-cmd: {args.plan}: the Verify with line has no backticked command\n")
+        return 1
+    sys.stderr.write(f"run-state: verify-cmd: {args.plan}: no '- Verify with:' line\n")
+    return 1
+
+
 def parse_args(argv=None):
     ap = argparse.ArgumentParser(
         description="Read a PR's review state, or map a resume probe to a phase."
@@ -3098,6 +3140,10 @@ def parse_args(argv=None):
     rb.add_argument("--verify", metavar="CMD", required=True, help="the resolved VERIFY_CMD")
     rb.add_argument("--out", metavar="PATH", required=True, help="RUN_DIR/baseline.txt; written only on a match")
     rb.set_defaults(func=cmd_reuse_baseline)
+
+    vc = sub.add_parser("verify-cmd", help="print the command the plan's '- Verify with:' line names")
+    vc.add_argument("--plan", metavar="PATH", required=True, help="the issue's plan file")
+    vc.set_defaults(func=cmd_verify_cmd)
 
     g = sub.add_parser("probe", help="gather the resume probe that phase reads")
     g.add_argument("--run-dir", metavar="DIR", required=True, help="RUN_DIR; read, never created")
