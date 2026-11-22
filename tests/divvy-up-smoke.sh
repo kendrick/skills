@@ -1144,6 +1144,7 @@ require_text divvy-up/SKILL.md "wave-snapshot.py record --out PROMPT_DIR/wave-N.
 require_text divvy-up/SKILL.md "wave-snapshot.py changed PROMPT_DIR/wave-N.json > PROMPT_DIR/wave-N.changed && divvy-up/scripts/check-waves.py owners <PLAN> --wave N < PROMPT_DIR/wave-N.changed"
 require_text divvy-up/SKILL.md "\`owners\` exits 0 on empty input, so a \`changed\` that failed"
 require_text divvy-up/SKILL.md "run \`changed\` before the pass and again after it, and keep the lines new in the second run"
+require_text divvy-up/SKILL.md "A non-zero exit from either \`changed\` run stops the run the way a format-command error naming no derived path stops it"
 require_text divvy-up/SKILL.md "wave-snapshot.py revert PROMPT_DIR/wave-N.json --plan <PLAN> --wave N --task <LABEL>"
 require_text divvy-up/SKILL.md "again with \`wave-snapshot.py record\` into a new file in PROMPT_DIR"
 require_text divvy-up/SKILL.md "[scripts/wave-snapshot.py](scripts/wave-snapshot.py)"
