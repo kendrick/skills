@@ -247,7 +247,10 @@ def cmd_revert(args):
                 continue
             # run(), not git(): git() exits mid-loop and drops the problems
             # already collected.
-            proc = run("git checkout", base, "--", path, cwd=root)
+            # --literal-pathspecs: check-waves allows brackets in an owned path
+            # (app/[slug]/page.tsx), and as a pathspec `a[1].txt` also matches a
+            # peer's `a1.txt` (review r4658035135).
+            proc = run("git --literal-pathspecs checkout", base, "--", path, cwd=root)
             if proc.returncode != 0:
                 err = proc.stderr.decode(errors="replace").strip().splitlines()
                 problems.append(f"{path}: git checkout failed: {err[-1] if err else 'exit ' + str(proc.returncode)}")

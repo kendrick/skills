@@ -1153,6 +1153,8 @@ require_text divvy-up/SKILL.md "An untracked symlink is recorded by its link tex
 require_text divvy-up/SKILL.md "applying by hand the per-path case \`revert\` applies"
 require_text divvy-up/SKILL.md "never writes through a symlink or a hard link into a peer's file"
 require_text divvy-up/SKILL.md "whose parent directory is now a symlink"
+require_text divvy-up/SKILL.md "a tracked path goes back with \`git --literal-pathspecs checkout <WAVE_BASE> -- <path>\`"
+require_text divvy-up/scripts/wave-snapshot.py 'run("git --literal-pathspecs checkout", base, "--", path, cwd=root)'
 require_text divvy-up/README.md "wave-snapshot.py        # records a wave's base and manifest"
 require_text _maintenance/divvy-up/RATIONALE.md "run through \`scripts/wave-snapshot.py\`"
 require_text _maintenance/divvy-up/RATIONALE.md "The scope stops at #344's boundary"
@@ -1676,6 +1678,35 @@ snap_case_restore_symlinked_parent() {
   }
 }
 
+# PR #454 review r4658035135: `git checkout <base> -- a[1].txt` read the owned
+# path as a glob and also reset peer-owned a1.txt.
+snap_case_tracked_bracket_path() {
+  local r="$ws/bracket"
+  snap_repo "$r"
+  echo "base a[1]" > "$r/a[1].txt"
+  echo "base a1" > "$r/a1.txt"
+  git -C "$r" add -- 'a[1].txt' a1.txt
+  git -C "$r" commit -q -m brackets
+  local plan="$ws/bracket-plan.md"
+  printf '## Waves\n\n| Wave | Task | Files owned | Model | Done when | Constraints |\n| --- | --- | --- | --- | --- | --- |\n| 1 | a | a[1].txt | haiku | done | |\n| 1 | b | a1.txt | haiku | done | |\n' > "$plan"
+  (cd "$r" && python3 "$snap" record --out "$ws/bracket.json")
+  echo "edited a[1]" > "$r/a[1].txt"
+  echo "edited a1" > "$r/a1.txt"
+  local out
+  out="$(cd "$r" && python3 "$snap" revert "$ws/bracket.json" --plan "$plan" --wave 1 --task a)" || {
+    echo "wave-snapshot: revert of a bracketed tracked path must exit 0" >&2
+    exit 1
+  }
+  [[ "$out" == "a[1].txt" && "$(cat "$r/a[1].txt")" == "base a[1]" ]] || {
+    echo "wave-snapshot: revert must restore a[1].txt alone, got: $out" >&2
+    exit 1
+  }
+  [[ "$(cat "$r/a1.txt")" == "edited a1" ]] || {
+    echo "wave-snapshot: revert --task a read a[1].txt as a glob and reset task b's a1.txt" >&2
+    exit 1
+  }
+}
+
 # Red-team on PR #454: `git checkout <WAVE_BASE> -- t.txt` deleted a directory
 # a worker left at the tracked path, and every file in it.
 snap_case_tracked_dir() {
@@ -1767,6 +1798,7 @@ snap_case_restore_readonly
 snap_case_restore_dir
 snap_case_restore_hardlink
 snap_case_restore_symlinked_parent
+snap_case_tracked_bracket_path
 snap_case_tracked_dir
 snap_case_tracked_checkout_fails
 snap_case_readlink_mutation
