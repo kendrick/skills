@@ -6006,4 +6006,23 @@ require_text work-issue/references/redteam.md "A reason about the change is judg
 require_text work-issue/references/redteam.md "Where REPAIR_BASE is given above and the claim is about the repair itself (\"the repair\", \"only this line changed\"), the range is \`REPAIR_BASE..HEAD\`"
 require_text work-issue/references/worker-prompt.md "In a repair round it judges a reason or claim about the repair against \`git diff REPAIR_BASE..HEAD\`, so cite that range, not the whole branch."
 
+# --- liveness pooling at MERGE_ROWS ---
+# #436: a pool group stops taking merges at the move whose pooled rows would
+# pass MERGE_ROWS, and starts a new group there. No other model here reaches
+# that limit in seconds, and merge-limit.json reaches it four times. It's
+# write-order.json with every step but 4 made terminal and Step 4's effect
+# emptied. Its pinned output came from resume_checks.py as it stood before
+# #436. Pooling past the limit, or checking the limit only once a group is
+# pooled, prints a different probe on the 4 row 10 cycle.
+merge_dir=tests/fixtures/work-issue/liveness
+logic_run "$crash_checks" liveness "$merge_dir/merge-limit.json" "$tmp/live-merge"
+[[ "$(cat "$tmp/live-merge.status")" == "1" ]] \
+  && cmp -s "$tmp/live-merge.out" "$merge_dir/merge-limit.out" \
+  && cmp -s "$tmp/live-merge.err" "$merge_dir/merge-limit.err" || {
+  echo "#436: liveness on merge-limit.json should exit 1 with the pinned output, got $(cat "$tmp/live-merge.status"):" >&2
+  diff "$merge_dir/merge-limit.out" "$tmp/live-merge.out" >&2 || true
+  diff "$merge_dir/merge-limit.err" "$tmp/live-merge.err" >&2 || true
+  exit 1
+}
+
 echo "work-issue smoke: OK"
