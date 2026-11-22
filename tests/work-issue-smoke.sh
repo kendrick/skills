@@ -1020,8 +1020,8 @@ awk -v h="$stops_header" '
   on { exit }
 ' work-issue/SKILL.md > "$tmp/stops.txt"
 stops_rows="$(wc -l < "$tmp/stops.txt" | tr -d ' ')"
-[[ "$stops_rows" -eq 37 ]] || {
-  echo "Where a Run Stops lists $stops_rows stops, expected 37" >&2
+[[ "$stops_rows" -eq 38 ]] || {
+  echo "Where a Run Stops lists $stops_rows stops, expected 38" >&2
   exit 1
 }
 while IFS= read -r row; do
@@ -3689,6 +3689,47 @@ probe_git "$dt_repo" checkout -q issue-1
 probe_git "$dt_repo" rebase -q main
 expect_field "after a rebase orphans the base" repair_diff_triggers false "$dt_run" "$dt_repo"
 
+# redteam_repair_diff_triggers (#362) reads a Step 4 red-team repair's own
+# diff from the newest redteam-repair-base-<k>, since the overlapped build
+# review covered the HEAD before that repair.
+rr_repo="$tmp/probe-rr-repo"
+rr_run="$tmp/probe-rr-run"
+mkdir -p "$rr_run/redteam"
+git init -q -b main "$rr_repo"
+printf 'alpha = 1\n' >"$rr_repo/a.py"
+probe_git "$rr_repo" add a.py
+probe_git "$rr_repo" commit -q -m base
+probe_git "$rr_repo" checkout -q -b issue-1
+expect_field "with no redteam-repair-base file" redteam_repair_diff_triggers false "$rr_run" "$rr_repo"
+probe_git "$rr_repo" rev-parse HEAD >"$rr_run/redteam/redteam-repair-base-1"
+printf 'Run the tests before you push.\n' >"$rr_repo/README.md"
+probe_git "$rr_repo" add README.md
+probe_git "$rr_repo" commit -q -m docs
+expect_field "with a repair diff hitting no trigger row" redteam_repair_diff_triggers false "$rr_run" "$rr_repo"
+# #362 falsifier (b): the build review fired and settled, and the repair has no
+# row 1, 2 or 4 line, so nothing re-fires.
+printf 'fired: yes\n' >"$rr_run/redteam/trigger.txt"
+printf '.adversarial-review/runs/1\nblocking (REPRODUCED): 0 UNVERIFIED: 0\n' >"$rr_run/redteam/ar-state.txt"
+expect_field "with a fired, settled build review and a repair lacking a trigger line" redteam_repair_diff_triggers false "$rr_run" "$rr_repo"
+rm "$rr_run/redteam/trigger.txt" "$rr_run/redteam/ar-state.txt"
+printf 'if user.is_admin:\n    alpha = 2\n' >"$rr_repo/a.py"
+probe_git "$rr_repo" commit -q -am repair
+expect_field "with a repair diff hitting the authz row" redteam_repair_diff_triggers true "$rr_run" "$rr_repo"
+# #362 falsifier (a): a confirmed row-2 line re-fires even where the build
+# review fired and settled, since it covered the HEAD before this repair.
+printf 'fired: yes\n' >"$rr_run/redteam/trigger.txt"
+printf '.adversarial-review/runs/1\nblocking (REPRODUCED): 0 UNVERIFIED: 0\n' >"$rr_run/redteam/ar-state.txt"
+expect_field "with a fired, settled build review and a repair hitting the authz row" redteam_repair_diff_triggers true "$rr_run" "$rr_repo"
+rm "$rr_run/redteam/trigger.txt" "$rr_run/redteam/ar-state.txt"
+printf 'fired: no\n' >"$rr_run/redteam/trigger-redteam-repair-1.txt"
+expect_field "with the re-fire's trigger reading fired: no" redteam_repair_diff_triggers false "$rr_run" "$rr_repo"
+printf 'fired: yes\n' >"$rr_run/redteam/trigger-redteam-repair-1.txt"
+printf '.adversarial-review/runs/2\nblocking (REPRODUCED): 0 UNVERIFIED: 0\n' >"$rr_run/redteam/ar-state-redteam-repair-1.txt"
+expect_field "with the re-fire's review settled" redteam_repair_diff_triggers false "$rr_run" "$rr_repo"
+rm "$rr_run/redteam/ar-state-redteam-repair-1.txt"
+printf 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n' >"$rr_run/redteam/redteam-repair-base-1"
+expect_field "with a base SHA that does not resolve" redteam_repair_diff_triggers null "$rr_run" "$rr_repo"
+
 # TREE is the worktree holding issue-1. A local issue-1 that no worktree has
 # checked out has no TREE: ROOT's HEAD is some other branch, and reading it
 # counted a committed, reported task as unreported and sent row 7 to redo it
@@ -3831,6 +3872,15 @@ require_text work-issue/references/redteam.md "\`claim\`, \`path\`, \`command\`,
 # Step 4's repairs and Step 7's carry different names, or a build repair
 # reads as the repair for triage round 1 and Step 7 is skipped.
 require_text work-issue/SKILL.md "lands at \`RUN_DIR/reports/redteam-repair-<k>.json\`"
+# #362: Step 4 overlaps the reproducer with item 7's review, which is safe only
+# while nothing routes before both return and the repair re-fires over the
+# repair's own diff. Each sentence is the guard for one half of that risk.
+require_text work-issue/SKILL.md "Route nothing, and run none of items 3 through 6, until both the reproducer's verdicts and the review, or a \`trigger.txt\` reading \`fired: no\`, have returned"
+require_text work-issue/SKILL.md "The review re-fires exactly when a line reads \`implements\`, whether or not item 7's review fired."
+require_text work-issue/SKILL.md 'git worktree add --detach RUN_DIR/redteam/repro-tree HEAD'
+# PR #439 r4655374724: a fresh worktree has none of WORKTREE's installed
+# dependencies, so valid claims read NOT_REPRODUCED there.
+require_text work-issue/SKILL.md 'Run INSTALL_CMD in `RUN_DIR/redteam/repro-tree` before dispatching the reproducer, and nothing where INSTALL_CMD is `absent`, because dependencies are tree-local and Step 1 installed them in the work tree only.'
 # Step 8's repair and push items run only where there is a repair and where
 # there is something to push; a queue-only entry goes straight to its replies.
 require_text work-issue/SKILL.md "Where the newest triage round has a repair report, red-team it"
@@ -5477,7 +5527,7 @@ crash_run "$tmp/crash-row/$crash_checks" "$tmp/crash-row/adopted.json" "$tmp/cra
 crash_run "$tmp/crash-fixture/$crash_checks" "$tmp/crash-fixture/$crash_model" "$tmp/crash-fixture" &
 wait
 [[ "$(cat "$tmp/crash-shipped.status")" == "0" ]] \
-  && [[ "$(cat "$tmp/crash-shipped.out")" == "rows covered: 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19" ]] || {
+  && [[ "$(cat "$tmp/crash-shipped.out")" == "rows covered: 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20" ]] || {
   echo "#147: crash-points on the shipped model should exit 0 with every row covered, got $(cat "$tmp/crash-shipped.status"):" >&2
   cat "$tmp/crash-shipped.out" "$tmp/crash-shipped.err" >&2
   exit 1
