@@ -1149,6 +1149,7 @@ require_text divvy-up/SKILL.md "wave-snapshot.py revert PROMPT_DIR/wave-N.json -
 require_text divvy-up/SKILL.md "again with \`wave-snapshot.py record\` into a new file in PROMPT_DIR"
 require_text divvy-up/SKILL.md "[scripts/wave-snapshot.py](scripts/wave-snapshot.py)"
 require_text divvy-up/SKILL.md "The script hashes with \`--no-filters\`, so a clean filter or an eol rule cannot normalize the recorded bytes"
+require_text divvy-up/SKILL.md "An untracked symlink is recorded by its link text, the way git stores one"
 require_text divvy-up/SKILL.md "applying by hand the per-path case \`revert\` applies"
 require_text divvy-up/README.md "wave-snapshot.py        # records a wave's base and manifest"
 require_text _maintenance/divvy-up/RATIONALE.md "run through \`scripts/wave-snapshot.py\`"
@@ -1503,6 +1504,12 @@ snap_case_eol_filters() {
   printf 'original\r\n' > "$r/m.txt"
   cp "$r/m.txt" "$ws/eol-m.orig"
   (cd "$r" && python3 "$snap" record --out "$ws/eol.json")
+  # Unchanged right after record, or a filtered comparison hash (LF) against
+  # the unfiltered stored one (CRLF) flags every untouched CRLF file.
+  [[ -z "$(cd "$r" && python3 "$snap" changed "$ws/eol.json")" ]] || {
+    echo "wave-snapshot: an untouched CRLF file under eol=crlf must not appear in changed" >&2
+    exit 1
+  }
   printf 'original\n' > "$r/m.txt"
   [[ "$(cd "$r" && python3 "$snap" changed "$ws/eol.json")" == "m.txt" ]] || {
     echo "wave-snapshot: a CRLF-to-LF rewrite of an untracked file must appear in changed" >&2
@@ -1512,6 +1519,48 @@ snap_case_eol_filters() {
   (cd "$r" && python3 "$snap" revert "$ws/eol.json" --plan "$snap_plan" --wave 1 --task a >/dev/null)
   cmp -s "$r/m.txt" "$ws/eol-m.orig" || {
     echo "wave-snapshot: revert under eol=crlf must restore m.txt byte for byte" >&2
+    exit 1
+  }
+}
+
+# PR #454 review: an untracked symlink in the snapshot is a link, not its
+# target's bytes. A peer rewriting the target leaves the link unchanged, and
+# reverting the link's owner keeps it a link.
+snap_case_link_kept() {
+  local r="$ws/link-kept"
+  snap_repo "$r"
+  ln -s peer.txt "$r/m.txt"
+  (cd "$r" && python3 "$snap" record --out "$ws/link-kept.json")
+  echo "b edit" > "$r/peer.txt"
+  local got
+  got="$(cd "$r" && python3 "$snap" changed "$ws/link-kept.json")"
+  [[ "$got" == "peer.txt" ]] || {
+    echo "wave-snapshot: a peer rewriting a link's target must not list the link, got: $got" >&2
+    exit 1
+  }
+  (cd "$r" && python3 "$snap" revert "$ws/link-kept.json" --plan "$snap_plan" --wave 1 --task a >/dev/null)
+  [[ -L "$r/m.txt" && "$(readlink "$r/m.txt")" == "peer.txt" && "$(cat "$r/peer.txt")" == "b edit" ]] || {
+    echo "wave-snapshot: revert of the link's owner must leave m.txt a symlink to peer.txt and peer.txt as task b left it" >&2
+    exit 1
+  }
+}
+
+# A recorded link a worker swapped for a regular file comes back as the link,
+# even when the file holds exactly the link text.
+snap_case_link_restored() {
+  local r="$ws/link-restored"
+  snap_repo "$r"
+  ln -s peer.txt "$r/m.txt"
+  (cd "$r" && python3 "$snap" record --out "$ws/link-restored.json")
+  rm "$r/m.txt"
+  printf 'peer.txt' > "$r/m.txt"
+  [[ "$(cd "$r" && python3 "$snap" changed "$ws/link-restored.json")" == "m.txt" ]] || {
+    echo "wave-snapshot: a link replaced by a regular file must appear in changed" >&2
+    exit 1
+  }
+  (cd "$r" && python3 "$snap" revert "$ws/link-restored.json" --plan "$snap_plan" --wave 1 --task a >/dev/null)
+  [[ -L "$r/m.txt" && "$(readlink "$r/m.txt")" == "peer.txt" ]] || {
+    echo "wave-snapshot: revert must restore a recorded link as a symlink to peer.txt" >&2
     exit 1
   }
 }
@@ -1530,6 +1579,8 @@ snap_case_no_w_mutation
 snap_case_gate_propagates
 snap_case_symlink_restore
 snap_case_eol_filters
+snap_case_link_kept
+snap_case_link_restored
 # --- end wave-snapshot cases ---
 
 echo "divvy-up smoke: OK"

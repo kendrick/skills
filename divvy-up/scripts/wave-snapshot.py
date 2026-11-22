@@ -12,8 +12,10 @@ The orchestrator used to type this git by hand every wave, and the suite only
 pinned its wording, so an edit or a run-time slip that compared the manifest by
 name or dropped `-w` passed every check until a revert had no bytes to restore.
 
-The snapshot file is JSON: `wave_base`, a commit, and `untracked`, a map of
-each untracked path to its blob. Every path is repo-relative and every git
+The snapshot file is JSON: `wave_base`, a commit; `untracked`, a map of each
+untracked path to its blob; and `links`, the untracked paths that are symlinks.
+A link's blob holds its link text, as git stores one, because hash-object on
+the path follows the link to its target. Every path is repo-relative and every git
 command runs at the top level, because `git diff --name-only` prints
 root-relative paths while `git ls-files` prints cwd-relative ones, and
 `check-waves.py owners` matches root-relative entries.
@@ -54,17 +56,17 @@ def fail(code, msg):
     raise SystemExit(code)
 
 
-def run(cmd, *args, cwd=None):
+def run(cmd, *args, cwd=None, input=None):
     """Run `cmd`, a literal git command line, plus args; return the process."""
     argv = cmd.split() + list(args)
     if cwd:
         argv[1:1] = ["-C", cwd]
-    return subprocess.run(argv, capture_output=True)
+    return subprocess.run(argv, capture_output=True, input=input)
 
 
-def git(cmd, *args, cwd=None):
+def git(cmd, *args, cwd=None, input=None):
     """Like run, but exit 1 on failure and return stdout bytes."""
-    proc = run(cmd, *args, cwd=cwd)
+    proc = run(cmd, *args, cwd=cwd, input=input)
     if proc.returncode != 0:
         err = proc.stderr.decode(errors="replace").strip().splitlines()
         fail(1, f"{cmd} failed: {err[-1] if err else 'exit ' + str(proc.returncode)}")
@@ -83,12 +85,28 @@ def untracked(root):
     return split_z(git("git ls-files -z --others --exclude-standard", cwd=root))
 
 
+def links_of(root, paths):
+    return {p for p in paths if os.path.islink(os.path.join(root, p))}
+
+
 def hashes(root, cmd, paths):
+    # A symlink hashes as its link text, the way git stores one: hash-object
+    # on the path follows the link, so a peer rewriting the target would read
+    # as a change to the link, and revert would replace the link with a file.
+    links = links_of(root, paths)
+    files = [p for p in paths if p not in links]
     # Chunked so a large untracked set stays under the argv limit.
     out = []
-    for i in range(0, len(paths), 500):
-        out += git(cmd, "--", *paths[i : i + 500], cwd=root).decode().split()
-    return dict(zip(paths, out))
+    for i in range(0, len(files), 500):
+        out += git(cmd, "--", *files[i : i + 500], cwd=root).decode().split()
+    blobs = dict(zip(files, out))
+    for p in links:
+        try:
+            text = os.fsencode(os.readlink(os.path.join(root, p)))
+        except OSError as e:
+            fail(1, f"{p}: cannot read the symlink: {e}")
+        blobs[p] = git(cmd + " --stdin", cwd=root, input=text).decode().strip()
+    return blobs
 
 
 def load_check_waves():
@@ -105,12 +123,17 @@ def load_snapshot(path):
     try:
         with open(path, encoding="utf-8") as f:
             snap = json.load(f)
-        base, manifest = snap["wave_base"], snap["untracked"]
-    except (OSError, ValueError, KeyError, TypeError) as e:
+        base, manifest, links = snap["wave_base"], snap["untracked"], snap.get("links", [])
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
         fail(3, f"{path}: unreadable snapshot: {e}")
-    if not isinstance(base, str) or not isinstance(manifest, dict):
-        fail(3, f"{path}: unreadable snapshot: wave_base or untracked has the wrong type")
-    return base, manifest
+    if (
+        not isinstance(base, str)
+        or not isinstance(manifest, dict)
+        or not isinstance(links, list)
+        or not all(isinstance(p, str) for p in links)
+    ):
+        fail(3, f"{path}: unreadable snapshot: wave_base, untracked, or links has the wrong type")
+    return base, manifest, set(links)
 
 
 def cmd_record(args):
@@ -126,32 +149,35 @@ def cmd_record(args):
     manifest = hashes(root, "git hash-object -w --no-filters", paths)
     try:
         with open(args.out, "w", encoding="utf-8") as f:
-            json.dump({"wave_base": base, "untracked": manifest}, f, indent=2, sort_keys=True)
+            snap = {"wave_base": base, "untracked": manifest, "links": sorted(links_of(root, paths))}
+            json.dump(snap, f, indent=2, sort_keys=True)
             f.write("\n")
     except OSError as e:
         fail(3, f"--out {args.out}: {e}")
     return 0
 
 
-def changed_paths(root, base, manifest):
+def changed_paths(root, base, manifest, links):
     paths = set(split_z(git("git diff --name-only --no-renames -z", base, "--", cwd=root)))
     now = untracked(root)
     current = hashes(root, "git hash-object --no-filters", now)
-    paths.update(p for p in now if manifest.get(p) != current[p])
+    now_links = links_of(root, now)
+    # Type counts too: a link swapped for a file holding its link text hashes the same.
+    paths.update(p for p in now if manifest.get(p) != current[p] or (p in links) != (p in now_links))
     # Gone from the untracked set: deleted, or staged into the index.
     paths.update(p for p in manifest if p not in current)
     return sorted(paths)
 
 
 def cmd_changed(args):
-    base, manifest = load_snapshot(args.snapshot)
-    for p in changed_paths(top_level(), base, manifest):
+    base, manifest, links = load_snapshot(args.snapshot)
+    for p in changed_paths(top_level(), base, manifest, links):
         print(p)
     return 0
 
 
 def cmd_revert(args):
-    base, manifest = load_snapshot(args.snapshot)
+    base, manifest, links = load_snapshot(args.snapshot)
     cw = load_check_waves()
     rows, problems = cw.read_rows(cw.load_plan(args.plan, args.plan))
     for problem in problems:
@@ -164,7 +190,7 @@ def cmd_revert(args):
 
     root = top_level()
     problems = []
-    for path in changed_paths(root, base, manifest):
+    for path in changed_paths(root, base, manifest, links):
         if args.task not in cw.owners_of(path, in_wave):
             continue
         full = os.path.join(root, path)
@@ -178,10 +204,17 @@ def cmd_revert(args):
             os.makedirs(os.path.dirname(full), exist_ok=True)
             # A worker may have swapped the file for a symlink; open() would
             # follow it and overwrite the link's target, maybe a peer's file.
-            if os.path.islink(full):
+            if os.path.islink(full) or (path in links and os.path.lexists(full)):
                 os.remove(full)
-            with open(full, "wb") as f:
-                f.write(proc.stdout)
+            if path in links:
+                try:
+                    os.symlink(os.fsdecode(proc.stdout), full)
+                except OSError as e:
+                    problems.append(f"{path}: cannot restore the symlink: {e}")
+                    continue
+            else:
+                with open(full, "wb") as f:
+                    f.write(proc.stdout)
         elif run("git cat-file -e", f"{base}:{path}", cwd=root).returncode == 0:
             git("git checkout", base, "--", path, cwd=root)
         elif os.path.lexists(full):
