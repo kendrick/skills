@@ -28,8 +28,8 @@ usage: dispose-source.sh raw <scope-root> <inbox-file> --id <id> [--text <file>]
            collapse-vtt.sh, and a .pdf, .docx, or .pptx needs --text, the
            text another skill extracted from it.
   dispose  check the note's raw_file is raw/<its id>.md and that sidecar is
-           non-empty, then delete a text source, or move a binary one to
-           notes/attachments/ and print its source_file line.
+           a non-empty regular file, then delete a text source, or move a
+           binary one to notes/attachments/ and print its source_file line.
 
   Paths are absolute, or relative to <scope-root>.
 USAGE
@@ -180,16 +180,24 @@ do_dispose() {
     echo "note is not directly in $scope/notes/: $note" >&2
     exit 1
   fi
+  local sidecar
   if [[ -z "$note_id" ]]; then
     echo "note has no id: $note" >&2
     bad=1
+  elif [[ ! "$note_id" =~ ^[A-Za-z0-9_-]+$ ]]; then
+    # raw's alphabet, so id: ../other can't walk the sidecar path out of raw/.
+    echo "note's id is not a nanoid: $note_id: $note" >&2
+    bad=1
   else
+    sidecar="$note_dir/raw/$note_id.md"
     if [[ "$raw_file" != "raw/$note_id.md" ]]; then
       echo "note's raw_file is '$raw_file', want raw/$note_id.md: $note" >&2
       bad=1
     fi
-    if [[ ! -s "$note_dir/raw/$note_id.md" ]]; then
-      echo "sidecar is missing or empty: $note_dir/raw/$note_id.md" >&2
+    # -s alone passes a directory, and a symlink borrows a file raw never
+    # wrote for this note, so only a regular non-empty file counts.
+    if [[ -L "$sidecar" || ! -f "$sidecar" || ! -s "$sidecar" ]]; then
+      echo "sidecar is missing, empty, or not a regular file: $sidecar" >&2
       bad=1
     fi
   fi

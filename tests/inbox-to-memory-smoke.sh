@@ -4981,6 +4981,38 @@ rc=0
 bash "$ds" dispose "$s" _inbox/a.md --note "notes/sub/${ds_note#notes/}" >/dev/null 2>&1 || rc=$?
 [[ "$rc" == 1 && -f "$s/_inbox/a.md" ]] || ds_fail "dispose accepted a note outside <scope-root>/notes/ (exit $rc)"
 
+# -s passes a directory, which has a nonzero size, and a symlink points at a
+# file raw never wrote for this note, so neither counts as the sidecar.
+s="$(ds_scope dirsidecar)"
+printf 'words\n' >"$s/_inbox/a.md"
+rm "$s/notes/raw/Kp3vR8sNq2.md"
+mkdir "$s/notes/raw/Kp3vR8sNq2.md"
+rc=0
+err="$(bash "$ds" dispose "$s" _inbox/a.md --note "$ds_note" 2>&1 >/dev/null)" || rc=$?
+[[ "$rc" == 1 && -f "$s/_inbox/a.md" ]] || ds_fail "dispose accepted a directory as the sidecar (exit $rc)"
+grep -Fq 'not a regular file: ' <<<"$err" || ds_fail "dispose's directory-sidecar refusal said: $err"
+s="$(ds_scope linksidecar)"
+printf 'words\n' >"$s/_inbox/a.md"
+mv "$s/notes/raw/Kp3vR8sNq2.md" "$ds_tmp/elsewhere.md"
+ln -s "$ds_tmp/elsewhere.md" "$s/notes/raw/Kp3vR8sNq2.md"
+rc=0
+err="$(bash "$ds" dispose "$s" _inbox/a.md --note "$ds_note" 2>&1 >/dev/null)" || rc=$?
+[[ "$rc" == 1 && -f "$s/_inbox/a.md" ]] || ds_fail "dispose accepted a symlink as the sidecar (exit $rc)"
+grep -Fq 'not a regular file: ' <<<"$err" || ds_fail "dispose's symlinked-sidecar refusal said: $err"
+
+# id and raw_file can agree on ../other and resolve to notes/other.md, so the
+# id gets raw's alphabet before any path is built from it.
+s="$(ds_scope dotdotid)"
+printf 'words\n' >"$s/_inbox/a.md"
+printf 'some other note\n' >"$s/notes/other.md"
+sed -e 's|^id: Kp3vR8sNq2$|id: ../other|' -e 's|^raw_file: raw/Kp3vR8sNq2.md$|raw_file: raw/../other.md|' \
+  "$s/$ds_note" >"$s/notes/2026-07-09-dotdot.md"
+grep -qx 'raw_file: raw/../other.md' "$s/notes/2026-07-09-dotdot.md" || ds_fail "dotdot-id fixture lost its raw_file line"
+rc=0
+err="$(bash "$ds" dispose "$s" _inbox/a.md --note notes/2026-07-09-dotdot.md 2>&1 >/dev/null)" || rc=$?
+[[ "$rc" == 1 && -f "$s/_inbox/a.md" ]] || ds_fail "dispose accepted id ../other (exit $rc)"
+grep -Fq "note's id is not a nanoid: ../other" <<<"$err" || ds_fail "dispose's bad-id refusal said: $err"
+
 s="$(ds_scope move)"
 printf 'only deck\n' >"$s/_inbox/deck.pdf"
 out="$(bash "$ds" dispose "$s" _inbox/deck.pdf --note "$ds_note" 2>/dev/null)" || ds_fail "dispose refused to move a binary source"
