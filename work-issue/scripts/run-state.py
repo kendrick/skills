@@ -1090,6 +1090,30 @@ def phase_of(probe):
             "origin/<DEFAULT> issue-<N> to it and re-invoke, else stop for whoever "
             "rebased the branch",
         )
+    # Row 21. herdr reads `done` once the worker ends its turn, which can be
+    # before a background suite finishes and the worker writes its report. On
+    # #379's lane in wave-378-379 row 7 would have reverted that finished,
+    # unreported edit. A listed agent may still hold the task, so the run
+    # checks the task's tree instead of reverting; only `absent` reaches row
+    # 7's revert. The branch, base_sha, and baseline legs keep this row off
+    # rows 5 and 6 and row 7's Step 1 leg. A commit on an unreported task's
+    # paths is row 7's stop, which never reverts, so this row leaves it there.
+    if (
+        herdr in ("idle", "done")
+        and branch_anywhere
+        and flag(probe, "has_waves")
+        and flag(probe, "base_sha")
+        and flag(probe, "baseline")
+        and wave_reports < wave_tasks
+        and count(probe, "self_reviews") == 0
+        and count(probe, "wave_unreported_committed") == 0
+    ):
+        return (
+            "wait",
+            f"row 21: the herdr agent is {herdr} and {wave_reports} of {wave_tasks} wave tasks "
+            "count as reported; check each unreported task in the lowest wave holding one "
+            "as row 21's Resume at cell says, and revert nothing",
+        )
     # Row 19. An adopted run has a branch and no plan, so row 6 would send it
     # to the plan gate on every resume. It never rebases, so a rebase in its
     # tree is someone else's, and rows 4 through 13 read a build and a publish

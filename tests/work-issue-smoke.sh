@@ -1020,8 +1020,8 @@ awk -v h="$stops_header" '
   on { exit }
 ' work-issue/SKILL.md > "$tmp/stops.txt"
 stops_rows="$(wc -l < "$tmp/stops.txt" | tr -d ' ')"
-[[ "$stops_rows" -eq 38 ]] || {
-  echo "Where a Run Stops lists $stops_rows stops, expected 38" >&2
+[[ "$stops_rows" -eq 39 ]] || {
+  echo "Where a Run Stops lists $stops_rows stops, expected 39" >&2
   exit 1
 }
 while IFS= read -r row; do
@@ -1863,7 +1863,7 @@ refute_text work-issue/scripts/run-state.py "codex-review-state"
 probes_dir=tests/fixtures/work-issue/probes
 declare -a probe_cases=(
   "row-01:done" "row-01-queued:stop" "row-02:wait" "row-03:stop" "row-04:0" "row-05:0" "row-05-gated:0" "row-06:0"
-  "row-07:2" "row-07-isolation-incomplete:1" "row-07-committed-unreported:stop" "row-08:3" "row-09:3" "row-10:4" "row-11:4" "row-11-trigger-unrecorded:4" "row-12:5" "row-13:5"
+  "row-07:2" "row-07-isolation-incomplete:1" "row-07-committed-unreported:stop" "row-07-committed-unreported-herdr:stop" "row-07-herdr-absent:2" "row-21:wait" "row-08:3" "row-09:3" "row-10:4" "row-11:4" "row-11-trigger-unrecorded:4" "row-12:5" "row-13:5"
   "row-14:6" "row-15:6" "row-16:7" "row-17:8" "row-17-queued:8" "row-17-postpush:8"
   "row-10-repair-unverified:4" "row-10-repair-needed:4" "row-10-failed-twice:stop" "row-13-prepr-repair-clean:5" "row-16-earlier-queued:8" "row-17-review-repair-unpushed:8" "row-17-deferred-owed:8" "row-17-worker-queue:8" "row-18-answered:done" "row-18:done"
   "row-17-repair-advisory-only:8" "row-17-repair-blocking:8" "row-17-repair-blocking-settled:8" "row-17-repair-diff-trigger:8"
@@ -5623,7 +5623,7 @@ crash_run "$tmp/crash-row/$crash_checks" "$tmp/crash-row/adopted.json" "$tmp/cra
 crash_run "$tmp/crash-fixture/$crash_checks" "$tmp/crash-fixture/$crash_model" "$tmp/crash-fixture" &
 wait
 [[ "$(cat "$tmp/crash-shipped.status")" == "0" ]] \
-  && [[ "$(cat "$tmp/crash-shipped.out")" == "rows covered: 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20" ]] || {
+  && [[ "$(cat "$tmp/crash-shipped.out")" == "rows covered: 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21" ]] || {
   echo "#147: crash-points on the shipped model should exit 0 with every row covered, got $(cat "$tmp/crash-shipped.status"):" >&2
   cat "$tmp/crash-shipped.out" "$tmp/crash-shipped.err" >&2
   exit 1
