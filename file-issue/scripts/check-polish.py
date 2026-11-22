@@ -11,11 +11,12 @@ command dropped in the rewrite ships an issue that no longer passes gate 6.
 Each item below that is present in --before and missing from --after gets one
 stderr line naming its kind and quoting it. Additions are never reported.
 
-  fenced code blocks   whole, fence lines included, byte for byte
+  fenced code blocks   whole, fence lines included, byte for byte; a fence
+                       indented under a list item counts too
   inline code spans    counted, so a span written twice and kept once reports;
                        a span may wrap onto the next line of its paragraph,
                        and its line break compares as a space
-  URLs                 counted
+  URLs                 counted, with balanced parentheses in the path
   issue references     `#N` and `owner/repo#N`, counted; a `#` inside a URL
                        or a heading marker is not a reference
   headings             level and text, ATX or Setext (`===` under a
@@ -47,13 +48,14 @@ import re
 import sys
 from collections import Counter
 
-FENCE_OPEN_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
-FENCE_CLOSE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})[ \t]*$")
+FENCE_OPEN_RE = re.compile(r"^( *)(`{3,}|~{3,})")
+FENCE_CLOSE_RE = re.compile(r"^( *)(`{3,}|~{3,})[ \t]*$")
 HEADING_RE = re.compile(r"^ {0,3}(#{1,6})(?:[ \t]+(.*?))?(?:[ \t]+#+)?[ \t]*$")
 SETEXT_RE = re.compile(r"^ {0,3}(=+|-+)[ \t]*$")
 # A list item's text is not a paragraph, so `- [ ] x` over `---` is a list
 # followed by a thematic break, never a Setext heading.
 LIST_ITEM_RE = re.compile(r"^\s*(?:[-*+]|\d{1,9}[.)])(?:[ \t]|$)")
+ITEM_CONTENT_RE = re.compile(r"^( *(?:[-*+]|\d{1,9}[.)]))( +|$)")
 # A quote line is not a paragraph either, so `> x` over `---` is a quote
 # followed by a thematic break.
 QUOTE_RE = re.compile(r"^ {0,3}>")
@@ -61,7 +63,9 @@ CHECKBOX_RE = re.compile(r"^\s*[-*+] \[ \]")
 # A backtick run closes only on a run of the same length (CommonMark), which
 # is how `` `cmd` `` keeps its inner backticks.
 SPAN_RE = re.compile(r"(?<!`)(`+)(?!`)(.+?)(?<!`)\1(?!`)", re.S)
-URL_RE = re.compile(r"https?://[^\s<>()\[\]`\"']+")
+# Balanced parentheses stay in the URL, so `a(b)/c` compares whole, while
+# the `)` closing a Markdown link or a parenthetical stays out.
+URL_RE = re.compile(r"https?://(?:[^\s<>()\[\]`\"']|\([^\s<>()\[\]`\"']*\))+")
 REF_RE = re.compile(r"(?<![\w./&#-])((?:[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9._-]+)?#\d+)(?!\w)")
 
 
@@ -86,24 +90,46 @@ def split_fences(text):
     """Return (fenced blocks, every line outside them)."""
     fences, prose = [], []
     current = None
+    # Content indents of the list items still open. A fence may sit up to 3
+    # spaces past the deepest one, or past column 0 with none open
+    # (CommonMark), so a fence four spaces in under `1. ` is a fence and one
+    # four spaces in outside any list is an indented code block. A non-blank
+    # line indented less than an item's content closes that item.
+    items = []
     for line in text.splitlines(keepends=True):
-        if current is None:
-            m = FENCE_OPEN_RE.match(line)
-            if m:
-                marker = m.group(1)
-                current = {"char": marker[0], "len": len(marker), "lines": [line]}
-                # A fence leaves a blank line in prose, which ends the
-                # paragraph above it, so the line before a fence never
-                # pairs with a `---` after it.
-                prose.append("")
+        indent = len(line) - len(line.lstrip(" "))
+        if current is not None:
+            if line.strip() and indent < current["base"]:
+                # The list item holding the fence ended, and the fence with it.
+                fences.append(current["lines"])
+                current = None
             else:
-                prose.append(line.rstrip("\n"))
+                current["lines"].append(line)
+                close = FENCE_CLOSE_RE.match(line)
+                if (close and close.group(2)[0] == current["char"] and len(close.group(2)) >= current["len"]
+                        and indent - current["base"] <= 3):
+                    fences.append(current["lines"])
+                    current = None
+                continue
+        if line.strip():
+            items = [c for c in items if c <= indent]
+        m = FENCE_OPEN_RE.match(line)
+        base = max([0] + items)
+        if m and indent - base <= 3:
+            marker = m.group(2)
+            current = {"char": marker[0], "len": len(marker), "base": base, "lines": [line]}
+            # A fence leaves a blank line in prose, which ends the
+            # paragraph above it, so the line before a fence never
+            # pairs with a `---` after it.
+            prose.append("")
             continue
-        current["lines"].append(line)
-        close = FENCE_CLOSE_RE.match(line)
-        if close and close.group(1)[0] == current["char"] and len(close.group(1)) >= current["len"]:
-            fences.append(current["lines"])
-            current = None
+        item = ITEM_CONTENT_RE.match(line)
+        if item:
+            # Five or more spaces after the marker start an indented code
+            # block, and the content indent is one past the marker.
+            gap = len(item.group(2))
+            items.append(len(item.group(1)) + (gap if 1 <= gap <= 4 else 1))
+        prose.append(line.rstrip("\n"))
     if current is not None:
         # CommonMark runs an unclosed fence to the end of the document.
         fences.append(current["lines"])

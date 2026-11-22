@@ -1272,6 +1272,28 @@ run_cp 1 "edit inside an unclosed fence" --before "$cp_tmp/open.md" --after "$cp
 require_text "$cp_tmp/err" "missing fenced block: \`\`\` ... make test"
 require_count "$cp_tmp/err" "missing" 1
 
+# A fence four spaces in under `1. ` belongs to the list item, so joining its
+# two commands reports the block. Rewording only the item's text passes.
+printf '1. Run:\n\n    ```sh\n    echo first\n    echo second\n    ```\n' > "$cp_tmp/nested.md"
+printf '1. Run:\n\n    ```sh\n    echo first echo second\n    ```\n' > "$cp_tmp/nested-joined.md"
+printf '1. Run these:\n\n    ```sh\n    echo first\n    echo second\n    ```\n' > "$cp_tmp/nested-reworded.md"
+run_cp 1 "edit inside a fence nested in a list item" --before "$cp_tmp/nested.md" --after "$cp_tmp/nested-joined.md"
+require_text "$cp_tmp/err" "missing fenced block: \`\`\`sh ... echo first"
+require_count "$cp_tmp/err" "missing" 1
+run_cp 0 "nested fence kept, item text reworded" --before "$cp_tmp/nested.md" --after "$cp_tmp/nested-reworded.md"
+
+# Balanced parentheses belong to the URL, so a changed path after them
+# reports the whole URL. The `)` closing a link or a parenthetical does not,
+# so unwrapping both into bare URLs passes.
+printf 'See https://example.com/a(b)/required.\n' > "$cp_tmp/paren.md"
+printf 'See https://example.com/a(b)/different.\n' > "$cp_tmp/paren-after.md"
+run_cp 1 "changed path after a parenthesized URL segment" --before "$cp_tmp/paren.md" --after "$cp_tmp/paren-after.md"
+require_text "$cp_tmp/err" "missing URL: https://example.com/a(b)/required"
+require_count "$cp_tmp/err" "missing" 1
+printf 'See [x](https://example.com/a) and (see https://example.com/b).\n' > "$cp_tmp/link.md"
+printf 'See https://example.com/a and https://example.com/b.\n' > "$cp_tmp/link-after.md"
+run_cp 0 "link and parenthetical URLs kept" --before "$cp_tmp/link.md" --after "$cp_tmp/link-after.md"
+
 # Usage: a missing flag, one title flag alone, and an unreadable body all
 # exit 3. Argparse alone would exit 2, and AGENTS.md reserves 3 for usage.
 run_cp 3 "missing --before" --after "$cp_before"
