@@ -1184,4 +1184,184 @@ require_text file-issue/SKILL.md "Run \`python3 scripts/harvest.py\` from inside
 require_text file-issue/SKILL.md "The org rung may instead hold \`unchecked\`, which is not \`absent\`."
 require_text file-issue/README.md "harvest.py"
 
+# check-polish.py (#393): Step 7 kept the pre-polish body but never compared
+# it, so a dropped command or criterion shipped past a gate 6 that had passed
+# on the old body. Each fixture under polish/ is before.md with one edit.
+cp_script=file-issue/scripts/check-polish.py
+cp_fx=tests/fixtures/file-issue/polish
+cp_tmp="$(mktemp -d)"
+trap 'rm -rf "$link_tmp" "$hv_tmp" "$cp_tmp"' EXIT
+run_cp() {
+  local want="$1" what="$2"
+  shift 2
+  rc=0; python3 "$cp_script" "$@" 2> "$cp_tmp/err" || rc=$?
+  expect_rc "$want" "$rc" "check-polish: $what"
+}
+cp_before="$cp_fx/before.md"
+
+# Criterion 1: identical bodies.
+run_cp 0 "identical bodies" --before "$cp_before" --after "$cp_before"
+[[ ! -s "$cp_tmp/err" ]] || { echo "check-polish printed on identical bodies" >&2; exit 1; }
+# Criterion 2: a reword that keeps the span passes; dropping it reports it.
+run_cp 0 "reworded sentence that keeps its span" --before "$cp_before" --after "$cp_fx/reworded.md"
+run_cp 1 "dropped inline span" --before "$cp_before" --after "$cp_fx/dropped-span.md"
+require_text "$cp_tmp/err" 'missing inline code: `bash tests/file-issue-smoke.sh`'
+# Criterion 3: one byte inside a fence, reported once, as a fence.
+run_cp 1 "one-character fence edit" --before "$cp_before" --after "$cp_fx/fence-edit.md"
+require_text "$cp_tmp/err" "missing fenced block: "
+require_count "$cp_tmp/err" "missing" 1
+# Criterion 4: a criterion folded into its neighbor keeps every span and
+# still drops a box.
+run_cp 1 "checklist item folded into another" --before "$cp_before" --after "$cp_fx/folded.md"
+require_text "$cp_tmp/err" "missing checklist items: 2"
+require_count "$cp_tmp/err" "missing" 1
+# Criterion 5: rename and reorder; an added heading is not a loss.
+run_cp 1 "renamed heading" --before "$cp_before" --after "$cp_fx/renamed-heading.md"
+require_text "$cp_tmp/err" "missing or reordered heading: ## Acceptance Criteria"
+run_cp 1 "reordered headings" --before "$cp_before" --after "$cp_fx/reordered-heading.md"
+require_text "$cp_tmp/err" "missing or reordered heading: "
+{ cat "$cp_before"; printf '\n## Notes\n\nAdded.\n'; } > "$cp_tmp/added.md"
+run_cp 0 "added heading" --before "$cp_before" --after "$cp_tmp/added.md"
+# Setext headings count too, at the level ATX would give them. A `---`
+# after a blank line, under a list item, or right after a fence is a
+# thematic break, so dropping those breaks loses no heading.
+printf 'Problem\n=======\n\nText.\n\nSteps\n-----\n\nMore.\n' > "$cp_tmp/setext.md"
+printf 'Issue\n=====\n\nText.\n\nSteps\n-----\n\nMore.\n' > "$cp_tmp/setext-after.md"
+run_cp 1 "renamed Setext heading" --before "$cp_tmp/setext.md" --after "$cp_tmp/setext-after.md"
+require_text "$cp_tmp/err" "missing or reordered heading: # Problem"
+require_count "$cp_tmp/err" "missing" 1
+printf '# Problem\n\nText.\n\n## Steps\n\nMore.\n' > "$cp_tmp/setext-atx.md"
+run_cp 0 "Setext heading respelled as ATX" --before "$cp_tmp/setext.md" --after "$cp_tmp/setext-atx.md"
+printf 'Intro.\n\n---\n\n- [ ] one\n---\n\nRun this:\n```\ncode\n```\n---\n' > "$cp_tmp/breaks.md"
+printf 'Intro.\n\n- [ ] one\n\nRun this:\n```\ncode\n```\n' > "$cp_tmp/breaks-after.md"
+run_cp 0 "thematic breaks kept identical" --before "$cp_tmp/breaks.md" --after "$cp_tmp/breaks.md"
+run_cp 0 "thematic breaks dropped" --before "$cp_tmp/breaks.md" --after "$cp_tmp/breaks-after.md"
+# A `---` under a quote, or under an unindented line that continues a list
+# item, is a thematic break too, so rewording either line passes.
+printf '> quote\n---\n\n- [ ] one\ncontinued\n---\n' > "$cp_tmp/quote.md"
+printf '> reworded quote\n---\n\n- [ ] one\ncarried on\n---\n' > "$cp_tmp/quote-after.md"
+run_cp 0 "reworded quote and lazy line over thematic breaks" --before "$cp_tmp/quote.md" --after "$cp_tmp/quote-after.md"
+# A span can wrap within its paragraph. Dropping a wrapped span reports it
+# once, quoted with a space for the line break; rewrapping it passes.
+printf 'Run `make\ntest` now.\n' > "$cp_tmp/wrapped.md"
+printf 'Run now.\n' > "$cp_tmp/wrapped-dropped.md"
+printf 'Run `make test`\nnow.\n' > "$cp_tmp/wrapped-rewrapped.md"
+run_cp 1 "dropped wrapped span" --before "$cp_tmp/wrapped.md" --after "$cp_tmp/wrapped-dropped.md"
+require_text "$cp_tmp/err" 'missing inline code: `make test`'
+require_count "$cp_tmp/err" "missing" 1
+run_cp 0 "rewrapped span" --before "$cp_tmp/wrapped.md" --after "$cp_tmp/wrapped-rewrapped.md"
+
+# A `#` in a heading marker, a URL fragment, or an `&#56;` entity is not a
+# reference. Spans, URLs, and references are counted, so losing one of two
+# copies reports. The dropped URL carries a digit fragment, so a script that
+# stops blanking URLs reports a phantom #34.
+printf '## Step 7\n\nSee https://github.com/o/r/pull/9#12, https://example.com/a?tab=#34, #12, and o/r#5, and write &#56; for 8.\n\nRun `make` then `make`.\n' > "$cp_tmp/refs.md"
+printf '## Step 7\n\nSee https://github.com/o/r/pull/9#12.\n\nRun `make`.\n' > "$cp_tmp/refs-after.md"
+run_cp 1 "dropped references, a URL, and a repeated span" --before "$cp_tmp/refs.md" --after "$cp_tmp/refs-after.md"
+require_text "$cp_tmp/err" "missing URL: https://example.com/a?tab=#34"
+require_text "$cp_tmp/err" "missing issue reference: #12"
+require_text "$cp_tmp/err" "missing issue reference: o/r#5"
+require_text "$cp_tmp/err" 'missing inline code: `make`'
+require_count "$cp_tmp/err" "missing" 4
+
+# CommonMark runs an unclosed fence to the end of the body, so an edit inside
+# one still reports.
+printf 'Intro.\n\n```\nmake test\n' > "$cp_tmp/open.md"
+printf 'Intro.\n\n```\nmake tests\n' > "$cp_tmp/open-after.md"
+run_cp 1 "edit inside an unclosed fence" --before "$cp_tmp/open.md" --after "$cp_tmp/open-after.md"
+require_text "$cp_tmp/err" "missing fenced block: \`\`\` ... make test"
+require_count "$cp_tmp/err" "missing" 1
+
+# A fence four spaces in under `1. ` belongs to the list item, so joining its
+# two commands reports the block. Rewording only the item's text passes.
+printf '1. Run:\n\n    ```sh\n    echo first\n    echo second\n    ```\n' > "$cp_tmp/nested.md"
+printf '1. Run:\n\n    ```sh\n    echo first echo second\n    ```\n' > "$cp_tmp/nested-joined.md"
+printf '1. Run these:\n\n    ```sh\n    echo first\n    echo second\n    ```\n' > "$cp_tmp/nested-reworded.md"
+run_cp 1 "edit inside a fence nested in a list item" --before "$cp_tmp/nested.md" --after "$cp_tmp/nested-joined.md"
+require_text "$cp_tmp/err" "missing fenced block: \`\`\`sh ... echo first"
+require_count "$cp_tmp/err" "missing" 1
+run_cp 0 "nested fence kept, item text reworded" --before "$cp_tmp/nested.md" --after "$cp_tmp/nested-reworded.md"
+# A fence can open on the marker line itself. Its closer sits at the item's
+# content indent and must close it, not open a second fence.
+for f in '~~~' '```'; do
+  printf 'Run these:\n\n1. %ssh\n   echo first\n   echo second\n   %s\n' "$f" "$f" > "$cp_tmp/marker.md"
+  printf 'Run these:\n\n1. %ssh\n   echo first echo second\n   %s\n' "$f" "$f" > "$cp_tmp/marker-joined.md"
+  printf 'Run all of these:\n\n1. %ssh\n   echo first\n   echo second\n   %s\n' "$f" "$f" > "$cp_tmp/marker-reworded.md"
+  run_cp 1 "edit inside a $f fence opened on a list marker" --before "$cp_tmp/marker.md" --after "$cp_tmp/marker-joined.md"
+  require_text "$cp_tmp/err" "missing fenced block: 1. ${f}sh ... echo first"
+  require_count "$cp_tmp/err" "missing" 1
+  run_cp 0 "$f fence on a list marker kept, prose reworded" --before "$cp_tmp/marker.md" --after "$cp_tmp/marker-reworded.md"
+done
+
+# A backtick run with another backtick later on its line is an inline span,
+# never a fence opener, so rewording the prose after it passes.
+printf -- '- ```x``` is the flag\n' > "$cp_tmp/span-item.md"
+printf -- '- ```x``` is the option\n' > "$cp_tmp/span-item-after.md"
+run_cp 0 "list item opening with a triple-backtick span" --before "$cp_tmp/span-item.md" --after "$cp_tmp/span-item-after.md"
+
+# Balanced parentheses belong to the URL, so a changed path after them
+# reports the whole URL. The `)` closing a link or a parenthetical does not,
+# so unwrapping both into bare URLs passes.
+printf 'See https://example.com/a(b)/required.\n' > "$cp_tmp/paren.md"
+printf 'See https://example.com/a(b)/different.\n' > "$cp_tmp/paren-after.md"
+run_cp 1 "changed path after a parenthesized URL segment" --before "$cp_tmp/paren.md" --after "$cp_tmp/paren-after.md"
+require_text "$cp_tmp/err" "missing URL: https://example.com/a(b)/required"
+require_count "$cp_tmp/err" "missing" 1
+printf 'See [x](https://example.com/a) and (see https://example.com/b).\n' > "$cp_tmp/link.md"
+printf 'See https://example.com/a and https://example.com/b.\n' > "$cp_tmp/link-after.md"
+run_cp 0 "link and parenthetical URLs kept" --before "$cp_tmp/link.md" --after "$cp_tmp/link-after.md"
+# A bracketed IPv6 host is part of the URL, so a changed path or a deleted
+# URL reports the whole thing.
+printf 'See http://[::1]:8080/required.\n' > "$cp_tmp/ipv6.md"
+printf 'See http://[::1]:8080/different.\n' > "$cp_tmp/ipv6-after.md"
+run_cp 1 "changed path after an IPv6 host" --before "$cp_tmp/ipv6.md" --after "$cp_tmp/ipv6-after.md"
+require_text "$cp_tmp/err" "missing URL: http://[::1]:8080/required"
+require_count "$cp_tmp/err" "missing" 1
+printf 'See it.\n' > "$cp_tmp/ipv6-dropped.md"
+run_cp 1 "deleted IPv6 URL" --before "$cp_tmp/ipv6.md" --after "$cp_tmp/ipv6-dropped.md"
+require_text "$cp_tmp/err" "missing URL: http://[::1]:8080/required"
+# A `]` past the host is Markdown's, so unwrapping `[url]` passes.
+printf 'See [https://example.com/a].\n' > "$cp_tmp/bracketed.md"
+printf 'See https://example.com/a.\n' > "$cp_tmp/bracketed-after.md"
+run_cp 0 "bracketed URL unwrapped" --before "$cp_tmp/bracketed.md" --after "$cp_tmp/bracketed-after.md"
+
+# Usage: a missing flag, one title flag alone, and an unreadable body all
+# exit 3. Argparse alone would exit 2, and AGENTS.md reserves 3 for usage.
+run_cp 3 "missing --before" --after "$cp_before"
+run_cp 3 "one title flag alone" --before "$cp_before" --after "$cp_before" --before-title "file-issue: x"
+run_cp 3 "unreadable body" --before "$cp_tmp/nope.md" --after "$cp_before"
+
+# Criterion 6: the issue's falsifier. Perturbing the prefix fails; a reword
+# after the prefix passes, which a whole-title check would fail.
+cp_title='file-issue: strip writes None'
+run_cp 1 "title prefix perturbed" --before "$cp_before" --after "$cp_before" --before-title "$cp_title" --after-title 'file issue: strip writes None'
+require_text "$cp_tmp/err" 'missing title prefix: "file-issue: "'
+run_cp 0 "title reworded after its prefix" --before "$cp_before" --after "$cp_before" --before-title "$cp_title" --after-title 'file-issue: strip still writes None'
+run_cp 0 "title with no prefix" --before "$cp_before" --after "$cp_before" --before-title 'strip writes None' --after-title 'Strip still writes None'
+
+# Each falsifier case has to fail a mutant keyed on the wrong thing, or it
+# pins nothing: a whole-title comparison fails the reword case, and a script
+# with no title check passes the perturbed prefix.
+cp_line='        if prefix is not None and not after_title.startswith(prefix):'
+for mutant in whole none; do
+  python3 - "$cp_script" "$cp_tmp/$mutant.py" "$cp_line" "$mutant" <<'PY'
+import sys
+src = open(sys.argv[1], encoding="utf-8").read()
+assert src.count(sys.argv[3] + "\n") == 1, "the title-prefix check moved; update this mutant"
+new = "        if before_title != after_title:" if sys.argv[4] == "whole" else "        if False:"
+open(sys.argv[2], "w", encoding="utf-8").write(src.replace(sys.argv[3], new, 1))
+PY
+done
+rc=0; python3 "$cp_tmp/whole.py" --before "$cp_before" --after "$cp_before" --before-title "$cp_title" --after-title 'file-issue: strip still writes None' 2> /dev/null || rc=$?
+expect_rc 1 "$rc" "whole-title mutant on the reworded title"
+rc=0; python3 "$cp_tmp/none.py" --before "$cp_before" --after "$cp_before" --before-title "$cp_title" --after-title 'file issue: strip writes None' 2> /dev/null || rc=$?
+expect_rc 0 "$rc" "no-title-check mutant on the perturbed prefix"
+
+# Criterion 7: Step 7 runs the script and its done-when needs exit 0.
+require_text file-issue/SKILL.md "python3 <skill-path>/scripts/check-polish.py --before <before.md> --after <after.md>"
+require_text file-issue/SKILL.md "\`check-polish.py\` exits 0"
+require_text file-issue/SKILL.md "Restore the original wording of each item it reports"
+require_text file-issue/README.md "check-polish.py"
+require_text _maintenance/file-issue/RATIONALE.md "up to and including its first \`: \`"
+
 echo "file-issue smoke: OK"
