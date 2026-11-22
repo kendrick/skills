@@ -5588,13 +5588,18 @@ print(digest.hexdigest())
 PY
 }
 logic_run() {
-  local status=0 key entry stage
+  local status=0 key entry stage stale=0
   key="$(logic_key "$1" "$2" "$3")"
   entry="$logic_cache/$key"
   if [[ "${WORK_ISSUE_FULL_CHECKS:-}" != 1 && -f "$entry/status" && -f "$entry/out" && -f "$entry/err" ]]; then
-    cp "$entry/out" "$4.out"; cp "$entry/err" "$4.err"; cp "$entry/status" "$4.status"
-    echo "work-issue smoke: cached $2 $(basename "$3") ${key:0:12}"
-    return 0
+    # A full-checks suite in another worktree can delete this entry between
+    # the checks above and these copies. A failed copy is a miss, never a suite
+    # failure: the run below rewrites all three files.
+    if cp "$entry/out" "$4.out" 2>/dev/null && cp "$entry/err" "$4.err" 2>/dev/null && cp "$entry/status" "$4.status" 2>/dev/null; then
+      echo "work-issue smoke: cached $2 $(basename "$3") ${key:0:12}"
+      return 0
+    fi
+    stale=1
   fi
   python3 "$1" "$2" --model "$3" >"$4.out" 2>"$4.err" || status=$?
   echo "$status" >"$4.status"
@@ -5605,10 +5610,11 @@ logic_run() {
   mkdir -p "$logic_cache"
   stage="$(mktemp -d "$logic_cache/.stage.XXXXXX")"
   cp "$4.out" "$stage/out"; cp "$4.err" "$stage/err"; cp "$4.status" "$stage/status"
-  # Replace in place only under full checks. On a plain miss, a racing writer
-  # that got here first keeps its entry: mv onto an existing directory would
-  # nest the stage inside it.
-  if [[ "${WORK_ISSUE_FULL_CHECKS:-}" == 1 ]]; then rm -rf "$entry"; fi
+  # Replace in place only under full checks or after a failed read, where the
+  # entry is useless anyway. On a plain miss, a racing writer that got here
+  # first keeps its entry: mv onto an existing directory would nest the stage
+  # inside it.
+  if [[ "${WORK_ISSUE_FULL_CHECKS:-}" == 1 || $stale == 1 ]]; then rm -rf "$entry"; fi
   if [[ -e "$entry" ]]; then rm -rf "$stage"; else mv "$stage" "$entry" 2>/dev/null || rm -rf "$stage"; fi
 }
 # #433's cache case, on a stub checks script in a scratch repo so the real
@@ -5672,6 +5678,17 @@ echo 9 >"$(cc_entry)/status"
 cc_full=1 cc_run full
 [[ "$(cc_runs)" == $((before + 1)) && "$(cat "$cc/full.status")" == 0 && ! -s "$cc/full.say" && "$(cat "$(cc_entry)/status")" == 0 ]] \
   || cc_fail "WORK_ISSUE_FULL_CHECKS=1 should run in full over a warm entry and rewrite it"
+# A read that fails after the existence checks pass, as when another suite
+# deletes the entry mid-copy, has to count as a miss. An unreadable file fails
+# the copy the same way, and the rewritten entry has to hit afterwards.
+before="$(cc_runs)"
+chmod 000 "$(cc_entry)/err"
+cc_run unreadable
+[[ "$(cc_runs)" == $((before + 1)) && "$(cat "$cc/unreadable.status")" == 0 && ! -s "$cc/unreadable.say" ]] \
+  || cc_fail "an entry whose copy fails should count as a miss and report the real status 0"
+cc_run reread
+[[ "$(cc_runs)" == $((before + 1)) ]] && grep -Fq cached "$cc/reread.say" \
+  || cc_fail "the entry rewritten after a failed read should hit"
 echo '{"model": "FAIL"}' >"$cc/model.json"
 before="$(cc_runs)"
 bash -c "$(declare -f logic_key logic_run cc_run); logic_cache='$cc/kill-cache'; cc=$cc; STUB_SLEEP=30 logic_run '$cc/work-issue/scripts/checks.py' liveness '$cc/model.json' '$cc/killed'" 2>/dev/null &
