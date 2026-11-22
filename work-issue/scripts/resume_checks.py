@@ -1351,26 +1351,26 @@ def union(a, b):
 # component `keep` splits was split moments before. In the first 60 s of a
 # shipped-model liveness run, 1 call in 3,400 brought a new one. The cap
 # counts rows held, since one entry can carry MERGE_ROWS of them.
-SPLITS = {}
 SPLIT_ROWS = 1 << 20
-_split_rows = 0
 
 
 def split_seen(comp, domains):
-    """`split(comp)`, from SPLITS when that component was split before.
+    """`split(comp)`, from a memo kept per domains object when that component
+    was split before.
 
     A dict key matches by `==`, so a component holding a field whose values
-    can be equal across types, as True and 1 are, is always split afresh."""
-    global _split_rows
+    can be equal across types, as True and 1 are, is always split afresh, and
+    two models never share a memo."""
     if not loose_fields(domains).isdisjoint(comp[0]):
         return split(comp)
-    parts = SPLITS.get(comp)
+    memo = per_domains(domains, "splits", lambda d: {"parts": {}, "rows": 0})
+    parts = memo["parts"].get(comp)
     if parts is None:
-        if _split_rows > SPLIT_ROWS:
-            SPLITS.clear()
-            _split_rows = 0
-        parts = SPLITS[comp] = split(comp)
-        _split_rows += len(comp[1])
+        if memo["rows"] > SPLIT_ROWS:
+            memo["parts"].clear()
+            memo["rows"] = 0
+        parts = memo["parts"][comp] = split(comp)
+        memo["rows"] += len(comp[1])
     return parts
 
 
@@ -1648,14 +1648,14 @@ def narrow(store, rules, fields, phase):
         return [x for x in (atom[0], atom[2]["field"] if isinstance(atom[2], dict) else None) if x not in (None, "phase")]
 
     def supported(rule, fixed):
-        if any(can(a, False, fixed) for a in rule[0]):
+        if any(can(a, False, fixed) for a in rule["if"]):
             return True
-        return all(can(a, True, fixed) for a in rule[1])
+        return all(can(a, True, fixed) for a in rule["then"])
 
     # Built once per call, since `can` runs for every value tried.
     tests = [
         (
-            ([atom_test(a, phase) for a in rule["if"]], [atom_test(a, phase) for a in rule["then"]]),
+            {"if": [atom_test(a, phase) for a in rule["if"]], "then": [atom_test(a, phase) for a in rule["then"]]},
             {x for a in rule["if"] + rule["then"] for x in fields_of(a)},
         )
         for rule in rules

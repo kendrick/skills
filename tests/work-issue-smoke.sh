@@ -6024,5 +6024,48 @@ logic_run "$crash_checks" liveness "$merge_dir/merge-limit.json" "$tmp/live-merg
   diff "$merge_dir/merge-limit.err" "$tmp/live-merge.err" >&2 || true
   exit 1
 }
+# `split` finds every independent field in one pass, where it once peeled
+# one off and rescanned. Four models' output is too thin a check on that
+# shortcut, so this runs the peel loop beside it on seeded random components,
+# half of them built as products so that some fields come out independent.
+python3 - "$crash_checks" <<'PY' || { echo "#436: split no longer matches the peel-and-rescan loop" >&2; exit 1; }
+import importlib.util, itertools, random, sys
+spec = importlib.util.spec_from_file_location("resume_checks", sys.argv[1])
+rc = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(rc)
+
+def peel(comp):
+    names, rows = comp
+    parts = []
+    while len(names) > 1:
+        for i in range(len(names)):
+            mine = {r[i] for r in rows}
+            rest = {r[:i] + r[i + 1:] for r in rows}
+            if len(mine) * len(rest) == len(rows):
+                parts.append(((names[i],), frozenset((v,) for v in mine)))
+                names, rows = names[:i] + names[i + 1:], frozenset(rest)
+                break
+        else:
+            break
+    return parts + [(names, frozenset(rows))]
+
+rng = random.Random(436)
+for n in range(600):
+    width = rng.randint(1, 5)
+    names = tuple(f"f{i}" for i in range(width))
+    if n % 2:
+        blocks, at = [], 0
+        while at < width:
+            size = rng.randint(1, width - at)
+            space = list(itertools.product(range(3), repeat=size))
+            blocks.append(rng.sample(space, rng.randint(1, len(space))))
+            at += size
+        rows = frozenset(sum(combo, ()) for combo in itertools.product(*blocks))
+    else:
+        space = list(itertools.product(range(3), repeat=width))
+        rows = frozenset(rng.sample(space, rng.randint(0, len(space))))
+    got, want = rc.split((names, rows)), peel((names, rows))
+    assert got == want, (names, sorted(rows), got, want)
+PY
 
 echo "work-issue smoke: OK"
