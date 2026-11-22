@@ -744,7 +744,34 @@ case_snapshot_lists_non_ascii() {
   expect_rc 0 "backup of a non-ASCII path snapshot listed"
 }
 
+# snapshot's stdout is what the agent hands to backup, and backup reads PATH
+# from the caller's cwd. Root-relative output from a subdir named a file that
+# did not exist there, or a different one that did.
+case_snapshot_from_subdir() {
+  new_repo
+  mkdir -p "$repo/sub/sub"
+  echo base >"$repo/sub/guard.py"
+  echo decoy >"$repo/sub/sub/guard.py"
+  commit_all
+  echo "base + guard" >"$repo/sub/guard.py"
+  snap="$bak.snapshot"
+  scratch_dirs+=("$snap")
+  listed="$(cd "$repo/sub" && python3 "$guard" snapshot --out "$snap")"
+  [[ "$listed" == guard.py ]] || {
+    echo "mutation-guard: snapshot from sub/ printed '$listed', expected 'guard.py'" >&2
+    exit 1
+  }
+  rc=0 guard_err=""
+  (cd "$repo/sub" && python3 "$guard" backup --dir "$bak" $listed) || rc=$?
+  expect_rc 0 "backup of snapshot's output from sub/"
+  [[ "$(cat "$bak/sub/guard.py")" == "base + guard" && ! -e "$bak/sub/sub/guard.py" ]] || {
+    echo "mutation-guard: backup from sub/ did not land at BACKUP_DIR/sub/guard.py" >&2
+    exit 1
+  }
+}
+
 case_usage_exits_3
 case_snapshot_lists_non_ascii
+case_snapshot_from_subdir
 
 echo "mutation-testing smoke: OK"

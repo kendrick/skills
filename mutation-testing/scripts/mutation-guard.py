@@ -16,7 +16,8 @@ run's own mutation (rows 16, 18, 20).
   snapshot  writes `git status --porcelain -uall` to FILE verbatim and prints
             DIFF's working-tree paths (`git diff`, `git diff --cached`,
             `git ls-files --others --exclude-standard`) to stdout, one per
-            line. An ignored --guard exits 1 before FILE is written (row 28).
+            line, relative to the caller's cwd so they feed `backup`. An
+            ignored --guard exits 1 before FILE is written (row 28).
   backup    copies each PATH to D/<repo-relative path>, mode kept. Refuses,
             copying nothing, a PATH that is not a regular file (rows 30, 35)
             or a D inside the repository (row 12).
@@ -135,8 +136,12 @@ def cmd_snapshot(args, top):
     paths = dict.fromkeys(os.fsdecode(name) for name in raw.split(b"\0") if name)
     with open(args.out, "wb") as fh:
         fh.write(status)
+    # git names paths from the repo root; every other subcommand reads PATH
+    # from the caller's cwd, so print them that way or a run from a subdir
+    # backs up a missing file, or the wrong one.
+    cwd = os.path.realpath(os.getcwd())
     for path in paths:
-        print(path)
+        print(os.path.relpath(os.path.join(top, path), cwd))
     return []
 
 
