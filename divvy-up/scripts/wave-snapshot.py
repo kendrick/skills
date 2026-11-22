@@ -201,24 +201,33 @@ def cmd_revert(args):
             if proc.returncode != 0:
                 problems.append(f"{path}: manifest blob {manifest[path]} is missing; its bytes cannot be restored")
                 continue
-            os.makedirs(os.path.dirname(full), exist_ok=True)
-            # A worker may have swapped the file for a symlink; open() would
-            # follow it and overwrite the link's target, maybe a peer's file.
-            if os.path.islink(full) or (path in links and os.path.lexists(full)):
-                os.remove(full)
-            if path in links:
-                try:
+            # Never delete a directory a worker left here: it may hold files
+            # no snapshot recorded, so report it and leave it for the user.
+            if os.path.isdir(full) and not os.path.islink(full):
+                problems.append(f"{path}: a directory now sits here; not removed, so it cannot be restored")
+                continue
+            try:
+                os.makedirs(os.path.dirname(full), exist_ok=True)
+                # A worker may have swapped the file for a symlink; open() would
+                # follow it and overwrite the link's target, maybe a peer's file.
+                if os.path.islink(full) or (path in links and os.path.lexists(full)):
+                    os.remove(full)
+                if path in links:
                     os.symlink(os.fsdecode(proc.stdout), full)
-                except OSError as e:
-                    problems.append(f"{path}: cannot restore the symlink: {e}")
-                    continue
-            else:
-                with open(full, "wb") as f:
-                    f.write(proc.stdout)
+                else:
+                    with open(full, "wb") as f:
+                        f.write(proc.stdout)
+            except OSError as e:
+                problems.append(f"{path}: cannot restore it: {e}")
+                continue
         elif run("git cat-file -e", f"{base}:{path}", cwd=root).returncode == 0:
             git("git checkout", base, "--", path, cwd=root)
         elif os.path.lexists(full):
-            os.remove(full)
+            try:
+                os.remove(full)
+            except OSError as e:
+                problems.append(f"{path}: cannot delete it: {e}")
+                continue
         print(path)
     for problem in problems:
         sys.stderr.write(f"wave-snapshot: {problem}\n")

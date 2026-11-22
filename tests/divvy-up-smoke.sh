@@ -1565,6 +1565,55 @@ snap_case_link_restored() {
   }
 }
 
+# Red-team on PR #454: a restore that cannot write under a read-only parent
+# reports one line naming the path and exits 1, never a traceback. Covers a
+# link a worker re-pointed (the os.remove before the restore) and one it
+# deleted (the os.symlink).
+snap_case_restore_readonly() {
+  local r="$ws/readonly"
+  snap_repo "$r"
+  mkdir "$r/sub"
+  ln -s ../peer.txt "$r/sub/m.txt"
+  local plan="$ws/readonly-plan.md"
+  sed 's/| m.txt, t.txt, made.txt |/| sub\/, t.txt, made.txt |/' "$snap_plan" > "$plan"
+  (cd "$r" && python3 "$snap" record --out "$ws/readonly.json")
+  local how s
+  for how in repoint delete; do
+    rm "$r/sub/m.txt"
+    [[ "$how" == repoint ]] && ln -s ../t.txt "$r/sub/m.txt"
+    chmod 555 "$r/sub"
+    s=0
+    (cd "$r" && python3 "$snap" revert "$ws/readonly.json" --plan "$plan" --wave 1 --task a) >/dev/null 2>"$ws/readonly.err" || s=$?
+    chmod u+w "$r/sub"
+    [[ "$s" == 1 && "$(wc -l < "$ws/readonly.err" | tr -d ' ')" == 1 ]] && grep -q '^wave-snapshot: sub/m.txt: ' "$ws/readonly.err" || {
+      echo "wave-snapshot: a $how-then-read-only restore must exit 1 with one line naming sub/m.txt, got exit $s: $(cat "$ws/readonly.err")" >&2
+      exit 1
+    }
+    ln -sf ../peer.txt "$r/sub/m.txt"
+  done
+}
+
+# A recorded link a worker replaced with a directory is reported, not removed.
+snap_case_restore_dir() {
+  local r="$ws/restore-dir"
+  snap_repo "$r"
+  ln -s peer.txt "$r/m.txt"
+  (cd "$r" && python3 "$snap" record --out "$ws/restore-dir.json")
+  rm "$r/m.txt"
+  mkdir "$r/m.txt"
+  echo inner > "$r/m.txt/inner"
+  local s=0
+  (cd "$r" && python3 "$snap" revert "$ws/restore-dir.json" --plan "$snap_plan" --wave 1 --task a) >/dev/null 2>"$ws/restore-dir.err" || s=$?
+  [[ "$s" == 1 && "$(wc -l < "$ws/restore-dir.err" | tr -d ' ')" == 1 ]] && grep -q '^wave-snapshot: m.txt: ' "$ws/restore-dir.err" && ! grep -q Traceback "$ws/restore-dir.err" || {
+    echo "wave-snapshot: a directory at a recorded link path must exit 1 with one line naming m.txt, got exit $s: $(cat "$ws/restore-dir.err")" >&2
+    exit 1
+  }
+  [[ -d "$r/m.txt" && "$(cat "$r/m.txt/inner")" == inner ]] || {
+    echo "wave-snapshot: revert must leave a directory at a recorded link path untouched" >&2
+    exit 1
+  }
+}
+
 snap_case_clean_base
 snap_case_dirty_base
 snap_case_decision_12
@@ -1581,6 +1630,8 @@ snap_case_symlink_restore
 snap_case_eol_filters
 snap_case_link_kept
 snap_case_link_restored
+snap_case_restore_readonly
+snap_case_restore_dir
 # --- end wave-snapshot cases ---
 
 echo "divvy-up smoke: OK"
