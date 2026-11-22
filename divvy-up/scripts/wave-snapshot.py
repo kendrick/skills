@@ -221,7 +221,18 @@ def cmd_revert(args):
                 problems.append(f"{path}: cannot restore it: {e}")
                 continue
         elif run("git cat-file -e", f"{base}:{path}", cwd=root).returncode == 0:
-            git("git checkout", base, "--", path, cwd=root)
+            # Same rule as the manifest branch: checkout would delete the
+            # directory and every unrecorded file in it.
+            if os.path.isdir(full) and not os.path.islink(full):
+                problems.append(f"{path}: a directory now sits here; not removed, so it cannot be restored")
+                continue
+            # run(), not git(): git() exits mid-loop and drops the problems
+            # already collected.
+            proc = run("git checkout", base, "--", path, cwd=root)
+            if proc.returncode != 0:
+                err = proc.stderr.decode(errors="replace").strip().splitlines()
+                problems.append(f"{path}: git checkout failed: {err[-1] if err else 'exit ' + str(proc.returncode)}")
+                continue
         elif os.path.lexists(full):
             try:
                 os.remove(full)

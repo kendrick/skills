@@ -1614,6 +1614,77 @@ snap_case_restore_dir() {
   }
 }
 
+# Red-team on PR #454: `git checkout <WAVE_BASE> -- t.txt` deleted a directory
+# a worker left at the tracked path, and every file in it.
+snap_case_tracked_dir() {
+  local r="$ws/tracked-dir"
+  snap_repo "$r"
+  (cd "$r" && python3 "$snap" record --out "$ws/tracked-dir.json")
+  rm "$r/t.txt"
+  mkdir "$r/t.txt"
+  echo inner > "$r/t.txt/inner"
+  local s=0
+  (cd "$r" && python3 "$snap" revert "$ws/tracked-dir.json" --plan "$snap_plan" --wave 1 --task a) >/dev/null 2>"$ws/tracked-dir.err" || s=$?
+  [[ "$s" == 1 && "$(wc -l < "$ws/tracked-dir.err" | tr -d ' ')" == 1 ]] && grep -q '^wave-snapshot: t.txt: ' "$ws/tracked-dir.err" || {
+    echo "wave-snapshot: a directory at a tracked path must exit 1 with one line naming t.txt, got exit $s: $(cat "$ws/tracked-dir.err")" >&2
+    exit 1
+  }
+  [[ -d "$r/t.txt" && "$(cat "$r/t.txt/inner")" == inner ]] || {
+    echo "wave-snapshot: revert must leave a directory at a tracked path with its contents" >&2
+    exit 1
+  }
+}
+
+# Red-team on PR #454: a failed tracked checkout exited mid-loop through
+# git()'s fail(), so the m.txt problem collected before it never printed.
+snap_case_tracked_checkout_fails() {
+  local r="$ws/tracked-ro"
+  snap_repo "$r"
+  mkdir "$r/sub"
+  echo "x base" > "$r/sub/x.txt"
+  git -C "$r" add sub/x.txt
+  git -C "$r" commit -qm sub
+  ln -s peer.txt "$r/m.txt"
+  local plan="$ws/tracked-ro-plan.md"
+  sed 's/| m.txt, t.txt, made.txt |/| m.txt, sub\/x.txt, made.txt |/' "$snap_plan" > "$plan"
+  (cd "$r" && python3 "$snap" record --out "$ws/tracked-ro.json")
+  rm "$r/m.txt"
+  mkdir "$r/m.txt"
+  echo "x edit" > "$r/sub/x.txt"
+  chmod 555 "$r/sub"
+  local s=0
+  (cd "$r" && python3 "$snap" revert "$ws/tracked-ro.json" --plan "$plan" --wave 1 --task a) >/dev/null 2>"$ws/tracked-ro.err" || s=$?
+  chmod u+w "$r/sub"
+  [[ "$s" == 1 && "$(wc -l < "$ws/tracked-ro.err" | tr -d ' ')" == 2 ]] \
+    && grep -q '^wave-snapshot: m.txt: ' "$ws/tracked-ro.err" \
+    && grep -q '^wave-snapshot: sub/x.txt: ' "$ws/tracked-ro.err" \
+    && ! grep -q Traceback "$ws/tracked-ro.err" || {
+    echo "wave-snapshot: a failed tracked checkout beside a directory at m.txt must exit 1 with two lines, got exit $s: $(cat "$ws/tracked-ro.err")" >&2
+    exit 1
+  }
+}
+
+# hashes()'s readlink handler has no natural trigger between links_of and
+# readlink, so a scratch copy points readlink at a path that cannot exist.
+snap_case_readlink_mutation() {
+  local mut="$ws/mut-readlink" r="$ws/readlink-repo"
+  mkdir -p "$mut"
+  cp "$repo_root/divvy-up/scripts/check-waves.py" "$mut/"
+  sed 's/os\.readlink(os\.path\.join(root, p))/os.readlink(os.path.join(root, p, "gone"))/' "$repo_root/divvy-up/scripts/wave-snapshot.py" > "$mut/wave-snapshot.py"
+  ! cmp -s "$repo_root/divvy-up/scripts/wave-snapshot.py" "$mut/wave-snapshot.py" || {
+    echo "wave-snapshot: the readlink mutation did not apply to the scratch copy" >&2
+    exit 1
+  }
+  snap_repo "$r"
+  ln -s peer.txt "$r/m.txt"
+  local s=0
+  (cd "$r" && python3 "$mut/wave-snapshot.py" record --out "$ws/readlink.json") >/dev/null 2>"$ws/readlink.err" || s=$?
+  [[ "$s" == 1 && "$(wc -l < "$ws/readlink.err" | tr -d ' ')" == 1 ]] && grep -q '^wave-snapshot: m.txt: cannot read the symlink' "$ws/readlink.err" || {
+    echo "wave-snapshot: an unreadable symlink must exit 1 with one 'cannot read the symlink' line, got exit $s: $(cat "$ws/readlink.err")" >&2
+    exit 1
+  }
+}
+
 snap_case_clean_base
 snap_case_dirty_base
 snap_case_decision_12
@@ -1632,6 +1703,9 @@ snap_case_link_kept
 snap_case_link_restored
 snap_case_restore_readonly
 snap_case_restore_dir
+snap_case_tracked_dir
+snap_case_tracked_checkout_fails
+snap_case_readlink_mutation
 # --- end wave-snapshot cases ---
 
 echo "divvy-up smoke: OK"
