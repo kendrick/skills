@@ -5,7 +5,7 @@
     "run_root": "work-issue",
     "probe_args": ["--run-dir", "{run_dir}", "--root", "{root}", "{probe}", "--herdr-state", "{herdr}"],
     "probe_keys": ["issue", "pr"],
-    "rows": 20,
+    "rows": 21,
     "steps": 9,
     "end_phases": ["done", "wait", "stop"],
     "herdr_states": ["working", "blocked", "idle", "done", "absent"],
@@ -278,7 +278,7 @@
         {"step": 2, "subpath": "herdr", "op": "herdr", "state": "idle",
          "resume": {"phase": "stop", "row": 3}, "cite": "resume.md row 3: HERDR and agent blocked, show the blocked UI and stop"}
       ],
-      "end": {"phase": "2", "row": 7}, "end_cite": "resume.md row 7: alpha's report sits beside an uncommitted a.py, so it is unreported and Step 2 reverts and re-dispatches it"
+      "end": {"phase": "wait", "row": 21}, "end_cite": "resume.md row 21: the agent is idle and alpha's report sits beside an uncommitted a.py, so alpha is unreported by row 7's count; a listed agent may still hold it, so the run waits rather than reverting"
     },
     {
       "name": "conflict",
@@ -421,6 +421,7 @@
     {"name": "closed-pr-waits-on-filing", "cite": "resume.md row 1: stop where `queue_unfiled_rows` is above 0, for the filing pass; SKILL.md Where a Run Stops: a merged or closed pull request's queue still holds `queued` rows", "if": [["pr_state", "in", ["MERGED", "CLOSED"]], ["queue_unfiled_rows", ">", 0]], "then": [["phase", "==", "stop"]]},
     {"name": "herdr-working-waits", "cite": "resume.md row 2: HERDR and agent `working`: wait, re-probe; an agent still `working` is waited on rather than duplicated by a second dispatch into the same tree", "if": [["herdr_agent_state", "==", "working"], ["pr_state", "in", [null, "OPEN"]]], "then": [["phase", "==", "wait"]]},
     {"name": "herdr-blocked-stops", "cite": "resume.md row 3: HERDR and agent `blocked`: show the blocked UI, stop", "if": [["herdr_agent_state", "==", "blocked"], ["pr_state", "in", [null, "OPEN"]]], "then": [["phase", "==", "stop"]]},
+    {"name": "herdr-listed-agent-never-reverted", "cite": "resume.md row 21: HERDR and agent `idle` or `done` with some task not counted as reported: wait, or stop naming the task, and revert nothing; only `absent` reaches row 7's revert", "if": [["herdr_agent_state", "in", ["idle", "done"]], ["pr_state", "in", [null, "OPEN"]]], "then": [["phase", "!=", "2"]]},
     {"name": "drifted-base-stops", "cite": "resume.md: a `base_sha_state` of `not-merge-base` or `not-ancestor` answers `stop` naming the mismatch, after rows 1 through 3 and ahead of every other row, unless `conflict` or `rebase_in_progress` is true", "if": [["base_sha_state", "in", ["not-merge-base", "not-ancestor"]], ["conflict", "==", false], ["rebase_in_progress", "==", false], ["herdr_agent_state", "in", ["idle", "done", "absent"]], ["pr_state", "in", [null, "OPEN"]]], "then": [["phase", "==", "stop"]]},
     {"name": "fresh-issue-starts-at-step-0", "cite": "resume.md row 4: no `issue-N` branch locally or on origin, no RUN_DIR: Step 0", "if": [["run_dir", "==", false], ["branch_local", "==", false], ["branch_remote", "==", false], ["herdr_agent_state", "in", ["idle", "done", "absent"]], ["pr_state", "==", null]], "then": [["phase", "==", "0"]]},
     {"name": "wave-legs-end-at-self-review", "cite": "resume.md: Row 7's wave legs read Step 2 and 3 state, so they end once `review/self-*.md` exists", "if": [["self_reviews", ">", 0]], "then": [["phase", "!=", "2"]]},
