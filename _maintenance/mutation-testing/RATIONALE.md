@@ -68,6 +68,7 @@ Each row below is pinned by at least one `refute_text` assertion in `tests/mutat
 | Parsing the runner's output into structured numbers | Decision 6. A parser is wrong per project and silently, and the summary line is quoted precisely so a reader can check it. |
 | Mutating anything the diff did not add | The trigger is what the diff adds, and a run that wanders into surrounding code produces findings about work nobody is reviewing, on a budget the guard's own check was meant to spend. |
 | Restoring with `git checkout` in any form, by directory or by name | Decisions 4 and 19. The directory form is the one that reverted the new test alongside the mutation. The by-name form is worse and less obvious: on this skill's own tree it replaces the user's uncommitted guard with the committed version, and the backup is the only other copy. |
+| A second comparison mode on `mutation-guard.py`: a `--force`, a bytes-only check, or a comparison against HEAD or the index | Decision 21, applied to the script. Each would be offered as a convenience beside the one fixed comparison, and the convenience becomes the route a run takes. A bytes-only check clears the `chmod -x` restore that row 18 measured, and a check against HEAD clears a restore from HEAD on the dirty tree this skill runs on, since the mode matches HEAD there. A `--force` skips the refusal that rows 30 and 35 settled. |
 
 ## Known Limitations
 

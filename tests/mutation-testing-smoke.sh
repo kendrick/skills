@@ -689,6 +689,27 @@ require_text mutation-testing/SKILL.md "**Back up** — copy each path"
 require_text mutation-testing/SKILL.md "**Prove** — apply the edit"
 require_text mutation-testing/SKILL.md "**Check** — verify the restore two ways"
 
+# The exit contract is how Step 3 reads every call, so it has to stay in the
+# document that executes, and exit 3 has to stay a stop.
+require_text mutation-testing/SKILL.md "exit 0 pass, 1 with one stderr line per problem naming the path, and 3 on a usage error or an unreadable backup or snapshot"
+require_text mutation-testing/SKILL.md "Exit 3 stops the run quoting its stderr"
+# The reference table is checked column by column, so each column has to keep
+# naming the subcommand a change to it lands in.
+require_text mutation-testing/references/what-each-check-sees.md "- **Proof** — \`prove\`, bytes against the backup."
+require_text mutation-testing/references/what-each-check-sees.md "- **Contents** and **mode** — \`check\`, bytes and permission bits against the backup, path by path."
+require_text mutation-testing/references/what-each-check-sees.md "- **Collateral** — \`check\`, the current \`git status --porcelain -uall\` against the file \`snapshot\` wrote, byte for byte."
+
+# Row: a second comparison mode on mutation-guard.py. Row 21's convenience
+# alternative, rebuilt as a flag; the falsifier cases above catch a weakened
+# comparison, and these catch the option that would sit beside the real one.
+refute_text "$guard" "--force"
+refute_text "$guard" "--bytes-only"
+refute_text "$guard" "--against"
+refute_text "$guard" '"HEAD"'
+refute_text "$guard" "diff-index"
+refute_text mutation-testing/SKILL.md "--force"
+refute_text mutation-testing/SKILL.md "--bytes-only"
+
 case_backup_refuses_symlink
 case_backup_refuses_dir_in_repo
 case_backup_mirrors_paths
@@ -697,6 +718,25 @@ case_falsifier_mode
 case_falsifier_head
 case_check_untracked_dir
 case_snapshot_guard_ignored
+# core.quotePath turns a non-ASCII name into a quoted escape, and `backup`
+# then reports the guard's own file as missing.
+case_snapshot_lists_non_ascii() {
+  new_repo
+  echo a >"$repo/a.py"
+  commit_all
+  echo g >"$repo/café.py"
+  snap="$bak.snapshot"
+  scratch_dirs+=("$snap")
+  listed="$(cd "$repo" && python3 "$guard" snapshot --out "$snap")"
+  grep -Fxq "café.py" <<<"$listed" || {
+    echo "mutation-guard: snapshot did not list café.py verbatim: $listed" >&2
+    exit 1
+  }
+  run_guard backup --dir "$bak" "café.py"
+  expect_rc 0 "backup of a non-ASCII path snapshot listed"
+}
+
 case_usage_exits_3
+case_snapshot_lists_non_ascii
 
 echo "mutation-testing smoke: OK"

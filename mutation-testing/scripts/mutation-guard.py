@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Back up, prove, restore, and check one mutation against the user's tree.
+"""Snapshot, back up, prove, restore, and check one mutation against the user's tree.
 
     mutation-guard.py snapshot --out FILE [--guard PATH]...
     mutation-guard.py backup   --dir D PATH...
@@ -125,19 +125,18 @@ def cmd_snapshot(args, top):
     if problems:
         return problems
     status = git(top, "status", "--porcelain", "-uall")
-    seen = []
-    for out in (
-        git(top, "diff", "--name-only"),
-        git(top, "diff", "--cached", "--name-only"),
-        git(top, "ls-files", "--others", "--exclude-standard"),
-    ):
-        for line in out.decode().splitlines():
-            if line and line not in seen:
-                seen.append(line)
+    # -z keeps core.quotePath from turning a non-ASCII name into a quoted
+    # escape that `backup` would then report as missing.
+    raw = (
+        git(top, "diff", "--name-only", "-z")
+        + git(top, "diff", "--cached", "--name-only", "-z")
+        + git(top, "ls-files", "--others", "--exclude-standard", "-z")
+    )
+    paths = dict.fromkeys(os.fsdecode(name) for name in raw.split(b"\0") if name)
     with open(args.out, "wb") as fh:
         fh.write(status)
-    for line in seen:
-        print(line)
+    for path in paths:
+        print(path)
     return []
 
 
@@ -219,8 +218,9 @@ def cmd_check(args, top):
     if status != snapshot:
         before = snapshot.decode(errors="replace").splitlines()
         after = status.decode(errors="replace").splitlines()
-        changed = [f"status: snapshot had '{line}', now absent" for line in before if line not in after]
-        changed += [f"status: now '{line}', absent from snapshot" for line in after if line not in before]
+        before_set, after_set = set(before), set(after)
+        changed = [f"status: snapshot had '{line}', now absent" for line in before if line not in after_set]
+        changed += [f"status: now '{line}', absent from snapshot" for line in after if line not in before_set]
         problems += changed or ["status: same lines as the snapshot in a different order"]
     return problems
 
