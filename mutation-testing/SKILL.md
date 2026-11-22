@@ -61,7 +61,7 @@ Reach for the plausible version rather than an arbitrary break, because an arbit
 
 Per mutation, in this order. The steps are named rather than numbered, because their numbers have shifted twice and every cross-reference to a number went stale silently.
 
-**Refuse** — any path that is not a regular file, or that sits in a directory you cannot write, before anything is copied. `mutation-guard.py backup` runs this refusal first and exits 1, copying nothing to BACKUP_DIR, on any path that fails it. A symlink stops the run, naming the path and saying no mutation was written through it. So does a path whose directory you cannot write: restore removes the path before copying the backup back, and in that directory the removal fails and leaves the mutation on disk.
+**Refuse** — any path that is not a regular file, that sits in a directory you cannot write, or whose mode has no owner-read bit, before anything is copied. `mutation-guard.py backup` runs this refusal first and exits 1, copying nothing to BACKUP_DIR, on any path that fails it. A symlink stops the run, naming the path and saying no mutation was written through it. So does a path whose directory you cannot write: restore removes the path before copying the backup back, and in that directory the removal fails and leaves the mutation on disk. So does a file whose owner cannot read it, because its backup keeps that mode and the run could not read the backup back.
 
 A symlink cannot be handled safely here, and both obvious handlings are worse than refusing. Backing up the link (`cp -P`) captures none of the bytes a mutation writes, because writing through a link lands on the target: the target is never backed up, the restore puts the link back, and every check passes while the mutation stays on disk. Backing up the target instead (`cp` without `-P`) loses the link, so the restore writes a regular file where the link was, and again every check passes. Both were measured, one after the other, each as the repair for the one before. Row 28 settled the principle for ignored files and it holds here: stop rather than measure what the run cannot put back.
 
@@ -75,7 +75,7 @@ A symlink cannot be handled safely here, and both obvious handlings are worse th
 
 **Measure** — run SUITE_CMD. Capture its summary line verbatim, and the names of the failing tests.
 
-**Restore** — copy the backup back to its named path, one path at a time: `mutation-guard.py restore --dir BACKUP_DIR <path>...`, which removes each named path, copies its backup back, and sets the backup's mode on it.
+**Restore** — copy the backup back to its named path, one path at a time: `mutation-guard.py restore --dir BACKUP_DIR <path>...`, which removes each named path, copies its backup back, and sets the backup's mode on it. It checks that every backup is readable before removing any path, and exits 3 with nothing removed when one is not.
 
 Never with `git checkout`. That restores from the index, which on the tree this skill runs on is the state *before* the guard existed, so it deletes the very work the run was called to measure: `git checkout -- guard.py`, where the guard is an uncommitted change to a tracked file, replaces it with the committed version and the user's edit is gone. A guard in a brand-new untracked file is safe from that particular command, which errors instead, so the tracked case is the one to picture.
 

@@ -819,11 +819,52 @@ case_backup_refuses_unwritable_dir() {
   expect_empty_dir "$bak" "backup of a file in an unwritable directory"
 }
 
+# copy2 gives the caller-owned backup the source's mode, so a file its owner
+# cannot read backs up to a file the caller cannot read back. Root ignores
+# the bit, so skip there.
+case_backup_refuses_owner_unreadable() {
+  [[ $EUID -eq 0 ]] && return 0
+  new_repo
+  echo base >"$repo/guard.py"
+  commit_all
+  echo "base + guard" >"$repo/guard.py"
+  chmod 044 "$repo/guard.py"
+  run_guard backup --dir "$bak" guard.py
+  chmod 644 "$repo/guard.py"
+  expect_rc 1 "backup of a file its owner cannot read"
+  expect_err "guard.py: its mode has no owner-read bit" "backup of a file its owner cannot read"
+  expect_empty_dir "$bak" "backup of a file its owner cannot read"
+}
+
+# restore unlinks before copying back, so an unreadable backup found after the
+# unlink deleted the live file. Every backup is checked first.
+case_restore_unreadable_backup_unlinks_nothing() {
+  [[ $EUID -eq 0 ]] && return 0
+  new_repo
+  echo base >"$repo/guard.py"
+  commit_all
+  echo "base + guard" >"$repo/guard.py"
+  run_guard backup --dir "$bak" guard.py
+  expect_rc 0 "backup before an unreadable-backup restore"
+  echo mutated >"$repo/guard.py"
+  chmod 000 "$bak/guard.py"
+  run_guard restore --dir "$bak" guard.py
+  chmod 644 "$bak/guard.py"
+  expect_rc 3 "restore from an unreadable backup"
+  expect_err "is not readable" "restore from an unreadable backup"
+  [[ -f "$repo/guard.py" && "$(cat "$repo/guard.py")" == mutated ]] || {
+    echo "mutation-guard: restore from an unreadable backup unlinked or changed guard.py" >&2
+    exit 1
+  }
+}
+
 case_usage_exits_3
 case_snapshot_lists_non_ascii
 case_snapshot_from_subdir
 
 case_backup_read_only_twice
 case_backup_refuses_unwritable_dir
+case_backup_refuses_owner_unreadable
+case_restore_unreadable_backup_unlinks_nothing
 
 echo "mutation-testing smoke: OK"

@@ -21,11 +21,13 @@ run's own mutation (rows 16, 18, 20).
   backup    copies each PATH to D/<repo-relative path>, mode kept, replacing
             any backup already there. Refuses, copying nothing, a PATH that
             is not a regular file (rows 30, 35), a PATH whose directory the
-            caller cannot write, or a D inside the repository (row 12).
+            caller cannot write (row 39), a PATH its owner cannot read
+            (row 40), or a D inside the repository (row 12).
   prove     exits 1 for a PATH whose bytes match its backup (row 20).
   restore   unlinks each PATH, copies its backup back, and sets the backup's
             mode, since a copy onto an existing file keeps the destination's
-            mode (row 22).
+            mode (row 22). Exits 3, unlinking nothing, when any backup is
+            missing or unreadable (row 40).
   check     exits 1 for a PATH that differs from its backup in bytes or mode,
             and for any difference between current status and FILE (rows 16,
             18, 26). Reports every problem, not only the first.
@@ -89,21 +91,29 @@ def repo_relative(path, top):
 
 
 def backups(paths, d, top):
-    """Pair each PATH with its backup, or raise if any backup is unreadable.
-    Checked up front so a restore never stops halfway through the paths."""
-    pairs = []
+    """Pair each PATH with its backup, or raise naming every backup that is
+    missing or unreadable. Checked for all paths before restore unlinks any,
+    so a restore never deletes a live file and then fails to copy it back."""
+    pairs, problems = [], []
     for path in paths:
         rel = repo_relative(path, top)
         if rel is None:
-            raise UsageError(f"{path}: outside the repository")
+            problems.append(f"{path}: outside the repository")
+            continue
         bak = os.path.join(d, rel)
         try:
             st = os.lstat(bak)
         except OSError:
-            raise UsageError(f"{path}: no backup at {bak}")
+            problems.append(f"{path}: no backup at {bak}")
+            continue
         if not stat.S_ISREG(st.st_mode):
-            raise UsageError(f"{path}: backup at {bak} is not a regular file")
-        pairs.append((path, bak, st))
+            problems.append(f"{path}: backup at {bak} is not a regular file")
+        elif not os.access(bak, os.R_OK):
+            problems.append(f"{path}: backup at {bak} is not readable")
+        else:
+            pairs.append((path, bak, st))
+    if problems:
+        raise UsageError(*problems)
     return pairs
 
 
@@ -170,6 +180,10 @@ def cmd_backup(args, top):
             # needs a writable directory, so refuse before the mutation lands
             # rather than leave it on a file nothing can put back (row 39).
             problems.append(f"{path}: its directory is not writable, so restore could not put it back")
+        elif not st.st_mode & stat.S_IRUSR:
+            # copy2 gives the caller-owned backup this same mode, so the
+            # caller could not read the backup back to prove or restore (row 40).
+            problems.append(f"{path}: its mode has no owner-read bit, so its backup would be unreadable")
         else:
             planned.append((path, os.path.join(args.dir, rel)))
     # Every refusal lands before the first copy, so --dir stays untouched.
@@ -267,7 +281,8 @@ def main(argv=None):
     try:
         problems = handlers[args.cmd](args, toplevel())
     except UsageError as exc:
-        sys.stderr.write(f"{PROG}: {exc}\n")
+        for problem in exc.args:
+            sys.stderr.write(f"{PROG}: {problem}\n")
         return 3
     except OSError as exc:
         sys.stderr.write(f"{PROG}: {exc.filename}: {exc.strerror}\n")
