@@ -153,7 +153,7 @@ require_text "$skill" "told to invoke \`work-issue\` by name with \`<N> <PLAN[N]
 # meet the ask row, and the exemption keeps a wave that includes an
 # already-started issue passable.
 require_text "$skill" "Any hit refuses the wave here, naming every such path at once."
-require_text "$skill" "A lane already started (Step 0 item 4) is exempt when its WORKTREE is registered in \`git worktree list --porcelain\` on its own \`issue-N\` branch"
+require_text "$skill" "A lane already started (Step 0 item 4) is exempt when the tree at its WORKTREE holds its own \`issue-N\`, checked out or mid-rebase"
 
 # The orchestrator's git boundary. A wave that commits or pushes on a lane's
 # branch races the lane doing the same.
@@ -1726,5 +1726,222 @@ rec="$(cat "$mt/out")"
 expect_record "DEFAULT conflict" "$rec" '^conflict: issue-6 with DEFAULT — x$'
 expect_gone "DEFAULT conflict"
 
+
+# --- check-worktrees.py: Step 3's collision check (#391). A lane that stopped
+# on a Step 5 rebase conflict has a detached HEAD, so its porcelain entry has
+# no branch line, and a hand comparison refused the wave over its own lane. ---
+
+wtscript=work-wave/scripts/check-worktrees.py
+require_file "$wtscript"
+
+# The vendored block. find_tree and the helpers it calls come out of
+# work-issue/scripts/run-state.py byte for byte. Extracted by name, since
+# run-state.py reflows as work-issue grows. Each function in the block has no
+# blank line inside it, so the first blank line ends the extraction.
+require_text "$wtscript" "Vendored verbatim from work-issue/scripts/run-state.py"
+require_text "$wtscript" "Upstream is authoritative: fix it there, then re-copy."
+
+extract_tree_block() {
+  local file="$1"
+  sed -n '/^GIT_TIMEOUT = /p' "$file"
+  local name
+  for name in run_git git_failure read_text chomp rebasing_branch; do
+    sed -n "/^def $name(/,/^\$/p" "$file"
+  done
+  # find_tree's docstring holds a blank line, so it ends on its last statement.
+  sed -n '/^def find_tree(/,/^    return root, None$/p' "$file"
+}
+
+extract_tree_block work-issue/scripts/run-state.py > "$tmp/tree-upstream.txt"
+extract_tree_block "$wtscript" > "$tmp/tree-vendored.txt"
+
+# Two empty extractions `cmp` clean, so a renamed function would read as a
+# passing identity check. The floor fails first.
+[[ "$(wc -l < "$tmp/tree-upstream.txt" | tr -d ' ')" -gt 45 ]] || {
+  echo "the find_tree markers matched almost nothing in run-state.py; fix the markers, not the floor" >&2
+  exit 1
+}
+for fn in run_git git_failure read_text chomp rebasing_branch find_tree; do
+  grep -q "^def $fn(" "$tmp/tree-vendored.txt" || {
+    echo "check-worktrees.py is missing vendored $fn" >&2
+    exit 1
+  }
+done
+cmp "$tmp/tree-upstream.txt" "$tmp/tree-vendored.txt" || {
+  echo "check-worktrees.py's vendored find_tree block has drifted from work-issue/scripts/run-state.py" >&2
+  exit 1
+}
+
+# Stdlib only, so the skill stays copy-in portable.
+python3 - "$wtscript" <<'PY' || { echo "check-worktrees.py imports outside the standard library" >&2; exit 1; }
+import ast, sys
+tree = ast.parse(open(sys.argv[1]).read())
+for node in ast.walk(tree):
+    names = []
+    if isinstance(node, ast.Import):
+        names = [a.name for a in node.names]
+    elif isinstance(node, ast.ImportFrom):
+        names = [node.module or ""]
+    for name in names:
+        if name.split(".")[0] not in sys.stdlib_module_names:
+            sys.exit(1)
+PY
+python3 -W error::SyntaxWarning -c "import ast; ast.parse(open('$wtscript').read())" || {
+  echo "check-worktrees.py raises a SyntaxWarning" >&2
+  exit 1
+}
+
+check_worktrees() {
+  set +e
+  python3 "$wtscript" "$@" >"$tmp/out" 2>"$tmp/err"
+  status=$?
+  set -e
+  out="$(cat "$tmp/out")"
+  err="$(cat "$tmp/err")"
+}
+
+wgit() { git -c user.name=t -c user.email=t@t -c commit.gpgsign=false "$@"; }
+
+# A scratch ROOT at $tmp/wt/<name>/skills with branches issue-7 and main that
+# edit one line of f differently, so a rebase of issue-7 onto main conflicts.
+make_wt_repo() {
+  local root="$tmp/wt/$1/skills"
+  mkdir -p "$root"
+  git init -q -b main "$root"
+  printf 'base\n' >"$root/f"
+  wgit -C "$root" add f
+  wgit -C "$root" commit -q -m base
+  wgit -C "$root" branch issue-7
+  wgit -C "$root" checkout -q issue-7
+  printf 'from issue\n' >"$root/f"
+  wgit -C "$root" commit -q -am issue
+  wgit -C "$root" checkout -q main
+  printf 'from main\n' >"$root/f"
+  wgit -C "$root" commit -q -am main
+  echo "$root"
+}
+
+# The lane's own tree, `issue-7` checked out, then a rebase onto main that
+# stops on the conflict and leaves HEAD detached.
+make_rebasing_tree() {
+  local root="$1"
+  wgit -C "$root" worktree add -q "$root/../skills-issue-7" issue-7
+  set +e
+  wgit -C "$root/../skills-issue-7" rebase main >/dev/null 2>&1
+  local st=$?
+  set -e
+  [[ $st -ne 0 ]] || { echo "the scratch rebase should stop on a conflict" >&2; exit 1; }
+  [[ -d "$root/../skills-issue-7/.git" || -f "$root/../skills-issue-7/.git" ]]
+  grep -Fxq detached <<<"$(git -C "$root" worktree list --porcelain)" || {
+    echo "the scratch tree should be detached mid-rebase" >&2
+    exit 1
+  }
+}
+
+# Criterion: an already-started lane mid-rebase of issue-N exits 0, with
+# WORKTREE spelled the way Step 0 derives it, `..` and a trailing slash,
+# while porcelain prints the resolved path.
+r1="$(make_wt_repo midrebase)"
+make_rebasing_tree "$r1"
+check_worktrees --root "$r1" --lane "issue-7=$r1/../skills-issue-7/" --started issue-7
+expect_status 0 "a started lane mid-rebase of its own branch, WORKTREE spelled with .. and a slash"
+refute_text "$tmp/out" "collision:"
+
+# The same tree, but the lane isn't passed as --started: the exemption keys on
+# the lane being started, so a tree on issue-N for any other lane collides.
+check_worktrees --root "$r1" --lane "issue-7=$r1/../skills-issue-7/"
+expect_status 1 "an unstarted lane whose tree holds its own branch"
+expect_line "$out" "collision: issue-7 $(cd "$r1/../skills-issue-7" && pwd -P)" "an unstarted lane on its own branch"
+
+# A tree on its branch normally, no rebase, is exempt too.
+wgit -C "$r1/../skills-issue-7" rebase --abort
+check_worktrees --root "$r1" --lane "issue-7=$r1/../skills-issue-7" --started issue-7
+expect_status 0 "a started lane with issue-7 checked out"
+
+# Criterion: the same tree with `other` checked out collides, mid-rebase's
+# neighbor on the exemption's key.
+wgit -C "$r1/../skills-issue-7" checkout -q -b other
+check_worktrees --root "$r1" --lane "issue-7=$r1/../skills-issue-7" --started issue-7
+expect_status 1 "a started lane whose tree has other checked out"
+expect_line "$out" "collision: issue-7 $(cd "$r1/../skills-issue-7" && pwd -P)" "a started lane on other"
+
+# A tree mid-rebase of some other branch is no one's own lane either.
+r2="$(make_wt_repo otherrebase)"
+wgit -C "$r2" branch issue-8 issue-7
+make_rebasing_tree "$r2"
+check_worktrees --root "$r2" --lane "issue-8=$r2/../skills-issue-7" --started issue-8
+expect_status 1 "issue-8's WORKTREE pointing at a tree mid-rebase of issue-7"
+
+# A stale directory nothing registered is a hit, started or not.
+r3="$(make_wt_repo plaindir)"
+mkdir "$r3/../skills-issue-7"
+check_worktrees --root "$r3" --lane "issue-7=$r3/../skills-issue-7" --started issue-7
+expect_status 1 "a started lane whose WORKTREE is an unregistered directory"
+check_worktrees --root "$r3" --lane "issue-7=$r3/../skills-issue-9"
+expect_status 0 "a lane whose WORKTREE does not exist"
+expect_line "$out" "OK: 1 lane clear, 0 already started" "a clean single lane"
+
+# A prunable entry, registered with its directory gone, is still a hit.
+r4="$(make_wt_repo prunable)"
+wgit -C "$r4" worktree add -q "$r4/../skills-issue-7" issue-7
+rm -rf "$r4/../skills-issue-7"
+check_worktrees --root "$r4" --lane "issue-7=$r4/../skills-issue-7"
+expect_status 1 "a prunable registered WORKTREE"
+
+# A lane whose WORKTREE is ROOT itself is never exempted by find_tree's ROOT
+# fallback, which answers ROOT for a branch that doesn't exist locally.
+check_worktrees --root "$r4" --lane "issue-99=$r4" --started issue-99
+expect_status 1 "a started lane whose WORKTREE is ROOT"
+
+# A lane whose branch is local but checked out nowhere has no tree to exempt.
+r5="$(make_wt_repo nowhere)"
+mkdir "$r5/../skills-issue-7"
+check_worktrees --root "$r5" --lane "issue-7=$r5/../skills-issue-7" --started issue-7
+expect_status 1 "a started lane with issue-7 checked out in no worktree"
+
+# Criterion: two colliding lanes print two collision lines in one run, so one
+# refusal names every hit.
+r6="$(make_wt_repo twohits)"
+mkdir "$r6/../skills-issue-8" "$r6/../skills-issue-9"
+check_worktrees --root "$r6" --lane "issue-9=$r6/../skills-issue-9" --lane "issue-8=$r6/../skills-issue-8" --lane "issue-7=$r6/../skills-issue-7"
+expect_status 1 "two colliding lanes beside a clear one"
+[[ "$(grep -c '^collision: ' "$tmp/out")" == 2 ]] || {
+  echo "two colliding lanes should print two collision lines, got: $out" >&2
+  exit 1
+}
+[[ "$(grep '^collision: ' "$tmp/out" | head -1)" == "collision: issue-8 "* ]] || {
+  echo "collision lines should print in ascending issue order, got: $out" >&2
+  exit 1
+}
+
+# Exit 3: usage errors and a failed `git worktree list`, each before any lane
+# is judged.
+check_worktrees --root "$r6" --lane "issue-7"
+expect_status 3 "a --lane with no ="
+check_worktrees --root "$r6" --lane "feature=$r6/../x"
+expect_status 3 "a --lane not named issue-N"
+check_worktrees --root "$r6" --lane "issue-7=$r6/../a" --lane "issue-7=$r6/../b"
+expect_status 3 "a lane named twice"
+check_worktrees --root "$r6" --lane "issue-7=$r6/../a" --started issue-8
+expect_status 3 "a --started lane with no matching --lane"
+check_worktrees --root "$r6" --lane "issue-7=$r6/../a" --started feature
+expect_status 3 "a malformed --started"
+check_worktrees --root "$r6"
+expect_status 3 "no lanes"
+check_worktrees --root "$tmp/not-a-repo" --lane "issue-7=$tmp/not-a-repo/../x"
+expect_status 3 "a ROOT that isn't a repo"
+grep -Fq "worktree list" <<<"$err" || {
+  echo "a failed git worktree list should name the command on stderr, got: $err" >&2
+  exit 1
+}
+
+# Step 3 and its ledger rows name the script and the widened exemption.
+require_text "$skill" "work-wave/scripts/check-worktrees.py --root ROOT --lane issue-N=WORKTREE"
+require_text "$skill" "is exempt when the tree at its WORKTREE holds its own \`issue-N\`, checked out or mid-rebase"
+refute_text "$skill" "is exempt when its WORKTREE is registered in \`git worktree list --porcelain\` on its own \`issue-N\` branch"
+require_text work-wave/README.md "check-worktrees.py"
+require_text "$ledger" "| 64 | \`check-worktrees.py\` runs Step 3's collision check"
+require_text "$ledger" "when the tree at its WORKTREE holds \`issue-N\`, checked out or mid-rebase of it"
+require_text "$ledger" "| Judging the already-started exemption by the porcelain's \`branch\` line |"
 
 echo "work-wave smoke: OK"
