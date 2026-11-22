@@ -57,7 +57,7 @@ Write `scope.json` (shape: [assets/scope.schema.json](assets/scope.schema.json))
 adversarial-review/scripts/check-territories.py validate RUN_DIR/scope.json
 ```
 
-A non-zero exit is a hard stop, not a warning. Overlapping territories remove the property the whole design rests on: verification replaces cross-reviewer agreement precisely because no two finders were looking at the same code.
+`validate` also checks the derivation record: every changed file has exactly one record, every record names a changed file, and the territory a record names owns that file. A non-zero exit is a hard stop, not a warning. Overlapping territories remove the property the whole design rests on: verification replaces cross-reviewer agreement precisely because no two finders were looking at the same code.
 
 Ask once, in one question, before any subagent spends a token: print the depth line—`Depth 1: 3 territories (money, authz, general), opus verifier.`—with the out-of-scope list as collected, and ask whether to fan out. That question is the user's correction point for the depth, the territories, and the list, and a waived run (below) never reaches it. An answer that changes any of them goes into `scope.json`, and `validate` runs again before Step 3.
 

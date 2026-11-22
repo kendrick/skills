@@ -1582,6 +1582,85 @@ ar_case_report_artifact_counts() {
   }
 }
 
+# #392: validate reads the derivation record. Each case is an inline copy of
+# scope-good.json with one record perturbed, run through validate for its exit
+# code and stderr line.
+ar_derivation_run() {
+  local name="$1" edit="$2" d="$tmp/ar392-$1"
+  mkdir -p "$d"
+  python3 - "$fixtures/scope-good.json" "$d/scope.json" "$edit" <<'PY'
+import json, sys
+s = json.load(open(sys.argv[1]))
+d = s["derivation"]
+edit = sys.argv[3]
+if edit == "drop":
+    s["derivation"] = [r for r in d if r["file"] != "src/billing/tax.py"]
+elif edit == "extra":
+    d.append({"file": "src/never/changed.py", "matched_rows": ["money"], "territory": "money"})
+elif edit == "dup":
+    d.append(dict(d[0]))
+elif edit == "wrong-owner":
+    next(r for r in d if r["file"] == "src/api/tenancy.py")["territory"] = "money"
+elif edit == "rename":
+    for t in s["territories"]:
+        if t["name"] == "tenancy":
+            t["name"] = "audit"
+    for r in d:
+        if r["territory"] == "tenancy":
+            r["territory"] = "audit"
+        r["matched_rows"] = ["audit" if m == "tenancy" else m for m in r["matched_rows"]]
+    s["rounds"][0]["territories"] = ["money", "audit", "tests"]
+json.dump(s, open(sys.argv[2], "w"))
+PY
+  AR_STATUS=0
+  AR_ERR="$(python3 "$territories" validate "$d/scope.json" 2>&1 >/dev/null)" || AR_STATUS=$?
+}
+
+ar_expect_derivation_failure() {
+  local name="$1" edit="$2" want="$3"
+  ar_derivation_run "$name" "$edit"
+  [[ "$AR_STATUS" == 1 ]] || {
+    echo "validate on a $name derivation record must exit 1, got $AR_STATUS: $AR_ERR" >&2
+    exit 1
+  }
+  grep -Fq -- "$want" <<<"$AR_ERR" || {
+    echo "validate on a $name derivation record must print '$want': $AR_ERR" >&2
+    exit 1
+  }
+}
+
+ar_case_derivation_missing() {
+  ar_expect_derivation_failure missing drop "no derivation record: src/billing/tax.py"
+}
+
+ar_case_derivation_extra() {
+  ar_expect_derivation_failure extra extra "derivation record for a path not in changed_files: src/never/changed.py"
+}
+
+ar_case_derivation_duplicate() {
+  ar_expect_derivation_failure duplicate dup "duplicate derivation records: src/billing/invoice.py"
+}
+
+# Perturbation one: money exists but does not own the file, so a territory-
+# exists check would pass it. Perturbation two: a territory renamed to a name no
+# trigger-table row carries is still a correct record.
+ar_case_derivation_wrong_owner() {
+  ar_expect_derivation_failure wrong-owner wrong-owner "src/api/tenancy.py is recorded under 'money'"
+}
+
+ar_case_derivation_renamed_territory() {
+  ar_derivation_run renamed rename
+  [[ "$AR_STATUS" == 0 ]] || {
+    echo "a renamed territory with a consistent record must validate, got $AR_STATUS: $AR_ERR" >&2
+    exit 1
+  }
+}
+
+ar_case_derivation_docs() {
+  require_text adversarial-review/scripts/check-territories.py "It checks the derivation record as well as the territories"
+  require_text adversarial-review/SKILL.md "\`validate\` also checks the derivation record"
+}
+
 ar_case_import_order
 ar_case_rank_falsifiers
 ar_case_import_twice
@@ -1597,5 +1676,12 @@ ar_case_report_bad_scope
 ar_case_import_empty
 ar_case_report_listed_superseded
 ar_case_report_artifact_counts
+
+ar_case_derivation_missing
+ar_case_derivation_extra
+ar_case_derivation_duplicate
+ar_case_derivation_wrong_owner
+ar_case_derivation_renamed_territory
+ar_case_derivation_docs
 
 echo "adversarial-review smoke: OK"
