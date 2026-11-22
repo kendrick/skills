@@ -16,7 +16,7 @@
       "issue",
       "pr"
     ],
-    "rows": 19,
+    "rows": 20,
     "steps": 9,
     "end_phases": [
       "done",
@@ -1403,6 +1403,191 @@
       "end_cite": "resume.md row 10: two failed rounds in a row stop with the evidence"
     },
     {
+      "name": "overlap-refire",
+      "about": "#362: Step 4's build review lands before round 1's file, as the overlap allows, round 1 fails, a red-team repair adds an authz line, round 2 comes back clean, and the repair's own re-fire runs to settled.",
+      "run_dir": "issue-1",
+      "probe": {
+        "issue": 1
+      },
+      "prefix": {
+        "sequence": "main",
+        "through": "build-final"
+      },
+      "entries": [
+        {
+          "step": 4,
+          "subpath": "redteam/trigger.txt",
+          "op": "write",
+          "path": "redteam/trigger.txt",
+          "content": "fired: yes\ngit diff BASE_SHA..HEAD | adversarial-review/scripts/match-triggers.py rows --only 1,2,4\n2 authz\n",
+          "resume": {
+            "phase": "4",
+            "row": 10
+          },
+          "cite": "resume.md row 10: build-final.json, no redteam/round-*.json; SKILL.md Step 4 item 2 runs item 7 while round 1's reproducer runs, so the trigger can land first"
+        },
+        {
+          "step": 4,
+          "subpath": "redteam/ar-report.md",
+          "op": "write",
+          "path": "redteam/ar-report.md",
+          "content": "## Findings\n\nnone\n",
+          "resume": {
+            "phase": "4",
+            "row": 10
+          },
+          "cite": "resume.md row 10: still no round file, so round 1 runs again and item 7 resumes at the invocation"
+        },
+        {
+          "step": 4,
+          "subpath": "redteam/ar-state.txt",
+          "op": "write",
+          "path": "redteam/ar-state.txt",
+          "content": ".adversarial-review/runs/1\nblocking (REPRODUCED): 0 UNVERIFIED: 0\n",
+          "resume": {
+            "phase": "4",
+            "row": 10
+          },
+          "cite": "resume.md row 10: no round file wins over row 11, which would otherwise see a fired trigger with no ar-state.txt"
+        },
+        {
+          "step": 4,
+          "subpath": "redteam/round-<k>.json",
+          "op": "write",
+          "path": "redteam/round-1.json",
+          "content": "{\"verdicts\": [{\"claim\": \"alpha is set\", \"verdict\": \"NOT_REPRODUCED\", \"reproduced_at\": null}]}\n",
+          "resume": {
+            "phase": "4",
+            "row": 10
+          },
+          "cite": "resume.md row 10: the review finished before round-1.json, so round 1 re-runs and item 7 is skipped on ar-state.txt's UNVERIFIED: 0"
+        },
+        {
+          "step": 4,
+          "subpath": "redteam/redteam-repair-base-<k>",
+          "op": "write",
+          "path": "redteam/redteam-repair-base-1",
+          "content": "{head}\n",
+          "resume": {
+            "phase": "4",
+            "row": 10
+          },
+          "cite": "resume.md row 10: newest round failed, no repair report after it, so the repair dispatch; SKILL.md Step 4 item 4 records the base before it"
+        },
+        {
+          "step": 4,
+          "subpath": "tree",
+          "op": "edit",
+          "file": "a.py",
+          "content": "if user.is_admin:\n    alpha = 2\n",
+          "resume": {
+            "phase": "4",
+            "row": 10
+          },
+          "cite": "resume.md row 10: newest round failed, so the repair dispatch"
+        },
+        {
+          "step": 4,
+          "subpath": "baseline-repair-<n>.txt",
+          "op": "write",
+          "path": "baseline-repair-1.txt",
+          "content": "exit: 0\nok\n",
+          "blind": "resume.md's baseline field: the probe never reads baseline-repair-<n>.txt"
+        },
+        {
+          "step": 4,
+          "subpath": "branch",
+          "op": "commit",
+          "paths": [
+            "a.py"
+          ],
+          "message": "fix: alpha behind the admin check",
+          "resume": {
+            "phase": "4",
+            "row": 10
+          },
+          "cite": "resume.md row 10: newest round failed, no repair report after it, so the repair dispatch"
+        },
+        {
+          "step": 4,
+          "subpath": "reports/redteam-repair-<k>.json",
+          "op": "write",
+          "path": "reports/redteam-repair-1.json",
+          "content": "{\"task\": \"repair\", \"claims\": [{\"claim\": \"alpha is set\", \"path\": \"a.py\"}]}\n",
+          "resume": {
+            "phase": "4",
+            "row": 10
+          },
+          "cite": "resume.md row 10: the repair dispatch"
+        },
+        {
+          "step": 4,
+          "subpath": "redteam/round-<k>.json",
+          "op": "write",
+          "path": "redteam/round-2.json",
+          "content": "{\"verdicts\": [{\"claim\": \"alpha is set\", \"verdict\": \"REPRODUCED\", \"reproduced_at\": \"seam\"}]}\n",
+          "resume": {
+            "phase": "4",
+            "row": 10
+          },
+          "cite": "resume.md row 10: a repair report followed the failed round, so round k+1"
+        },
+        {
+          "step": 4,
+          "subpath": "redteam/trigger-redteam-repair-<k>.txt",
+          "op": "write",
+          "path": "redteam/trigger-redteam-repair-1.txt",
+          "content": "fired: yes\ngit diff \"$(cat RUN_DIR/redteam/redteam-repair-base-1)\"..HEAD\n2 authz\nimplements\t2 authz\ta.py\tis_admin\t+if user.is_admin:\tnew admin gate\n",
+          "resume": {
+            "phase": "4",
+            "row": 20
+          },
+          "cite": "resume.md row 20: red-team clean over a red-team repair whose diff hits row 2, trigger-redteam-repair-<k>.txt absent, so the matcher"
+        },
+        {
+          "step": 4,
+          "subpath": "redteam/ar-report-redteam-repair-<k>.md",
+          "op": "write",
+          "path": "redteam/ar-report-redteam-repair-1.md",
+          "content": "## Findings\n\nnone\n",
+          "resume": {
+            "phase": "4",
+            "row": 20
+          },
+          "cite": "resume.md row 20: fired with no ar-state-redteam-repair-<k>.txt, so the adversarial-review invocation"
+        },
+        {
+          "step": 4,
+          "subpath": "redteam/escalation-redteam-repair-<k>.md",
+          "op": "write",
+          "path": "redteam/escalation-redteam-repair-1.md",
+          "content": "# Escalation\n\n- F1 needs a human: `pytest -k admin`\n",
+          "resume": {
+            "phase": "4",
+            "row": 20
+          },
+          "cite": "resume.md row 20: SKILL.md Step 4 item 4 copies escalation.md before the state file, so the review re-runs"
+        },
+        {
+          "step": 4,
+          "subpath": "redteam/ar-state-redteam-repair-<k>.txt",
+          "op": "write",
+          "path": "redteam/ar-state-redteam-repair-1.txt",
+          "content": ".adversarial-review/runs/2\nblocking (REPRODUCED): 0 UNVERIFIED: 0\n",
+          "resume": {
+            "phase": "4",
+            "row": 20
+          },
+          "cite": "resume.md row 20: no ar-state-redteam-repair-<k>.txt showing UNVERIFIED: 0 yet"
+        }
+      ],
+      "end": {
+        "phase": "5",
+        "row": 13
+      },
+      "end_cite": "resume.md row 13: red-team clean, trigger recorded, the re-fire settled, no triage round, no PR"
+    },
+    {
       "name": "plan-gate",
       "about": "A branch that exists before the plan carries its ## Waves table.",
       "run_dir": "issue-1",
@@ -2480,7 +2665,7 @@
     {
       "step": 4,
       "done_when": [],
-      "cite": "SKILL.md Step 4 Done when: no claim is `NOT_REPRODUCED`, or the run stopped after two rounds; `trigger.txt` is written; where the trigger fired, `adversarial-review` completed",
+      "cite": "SKILL.md Step 4 Done when: no claim is `NOT_REPRODUCED`, or the run stopped after two rounds; `trigger.txt` is written; where the trigger fired, `adversarial-review` completed; a red-team repair whose own diff from `redteam-repair-base-<k>` prints a trigger row has its re-fire settled, `fired: no` or `ar-state-redteam-repair-<k>.txt` showing `UNVERIFIED: 0`",
       "outcomes": [
         {
           "name": "clean round, fired: no",
