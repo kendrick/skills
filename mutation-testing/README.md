@@ -40,7 +40,7 @@ git clone git@github.com:kendrick/skills.git
 cp -R skills/mutation-testing ~/.claude/skills/mutation-testing
 ```
 
-Needs a git repo and a test suite you can run from one command. No Python, and no script to install. Every step is judgment, your runner, or `git`.
+Needs a git repo, a test suite you can run from one command, and Python 3 for `scripts/mutation-guard.py`, which uses the standard library only and installs with the skill.
 
 ## Use
 
@@ -64,11 +64,13 @@ It asks for your test command when the project's config does not name one, and i
 mutation-testing/
 ├── SKILL.md      # the skill: name the guards, write both mutations, run, re-measure, report
 ├── README.md     # this file
-└── references/
-    └── what-each-check-sees.md   # what each restore check sees, per kind of path
+├── references/
+│   └── what-each-check-sees.md   # what each restore check sees, per kind of path
+└── scripts/
+    └── mutation-guard.py   # snapshot, backup, prove, restore, check
 ```
 
-There is no `scripts/`, because choosing a mutation is judgment, the suite is your own command, and restoring is a copy-back checked by a `cmp` against the backup, a mode comparison, and a `git status --porcelain -uall` comparison against the snapshot. The one reference file is a table of what each of those checks can and cannot see, per kind of path, which exists because almost every bug found in this skill was a change to one check made without asking what the others still covered.
+`mutation-guard.py` runs every step that can lose your uncommitted work: the snapshot, the backup, the proof that a mutation landed, the restore, and the check that the restore put everything back. Ten measured defects in the ledger came from hand-built versions of those steps, among them a backup that collided on basenames and a restore that dropped the executable bit and still passed, so the script runs each one as a single fixed comparison. Choosing a mutation, reading a verdict, and ruling on an equivalent mutant stay with the agent, because those are judgment. The one reference file is a table of what each of the script's comparisons can and cannot see, per kind of path, which exists because almost every bug found in this skill was a change to one check made without asking what the others still covered.
 
 ## Gotchas
 
@@ -78,7 +80,7 @@ There is no `scripts/`, because choosing a mutation is judgment, the suite is yo
 - **The measurement is of your suite, not your guard.** "Fails 1, leaves 62 green" says one test noticed. Whether one is enough is your call, and the report is deliberately silent on it.
 - **An equivalent mutant is reported unresolved, not as a defect.** A mutation that changes nothing a caller could observe could not have been caught by any test, so the guard may be sound. Those rows say they are waiting on a human ruling, and making it is yours. Where the run cannot tell an equivalent mutant from a real gap, the row says that too.
 - **It sees your brand-new files.** A guard and its test in files you have not added yet are still in scope, which matters because that is how a guard usually arrives. Their backups are the only copies anywhere, though, since git holds no version to fall back on.
-- **It refuses symlinks.** A mutation written through a link lands on the link's target, which the run has no copy of, so it names the path and stops instead of measuring something it cannot put back.
+- **It refuses symlinks, files in a directory you cannot write, files their owner cannot read, and files with more than one hard link.** A mutation written through a link lands on the link's target, which the run has no copy of. A file in a read-only directory can be mutated but not restored, because the restore removes it before copying the backup back. A file with no owner-read bit backs up to a file with that same mode, which the run then cannot read back. A mutation to a hard-linked file shows up under every one of its names, and the restore puts back only the name it was given. In each case it names the path and stops instead of measuring something it cannot put back.
 - **Ignored files restore unverified.** `git status --porcelain` says nothing about anything in `.gitignore`, so a mutation that writes into an ignored build directory sits outside the snapshot check.
 - **A slow suite bounds the run.** Two mutations per guard, re-run at the end, against a ten-minute suite is a long afternoon. Fewer guards per run beats fewer mutations per guard.
 - **It stays inside what the diff added.** It will not wander into surrounding code to find something else worth mutating.
