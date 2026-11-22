@@ -1223,17 +1223,30 @@ require_text "$cp_tmp/err" "missing or reordered heading: "
 { cat "$cp_before"; printf '\n## Notes\n\nAdded.\n'; } > "$cp_tmp/added.md"
 run_cp 0 "added heading" --before "$cp_before" --after "$cp_tmp/added.md"
 
-# A `#` in a heading marker or a URL fragment is not a reference, and spans,
-# URLs, and references count, so one of two copies going missing reports.
-printf '## Step 7\n\nSee https://github.com/o/r/pull/9#discussion_r2 and #12 and o/r#5.\n\nRun `make` then `make`.\n' > "$cp_tmp/refs.md"
-printf '## Step 7\n\nSee https://github.com/o/r/pull/9#discussion_r2.\n\nRun `make`.\n' > "$cp_tmp/refs-after.md"
-run_cp 1 "dropped references and a repeated span" --before "$cp_tmp/refs.md" --after "$cp_tmp/refs-after.md"
+# A `#` in a heading marker, a URL fragment, or an `&#56;` entity is not a
+# reference. Spans, URLs, and references are counted, so losing one of two
+# copies reports. The dropped URL carries a digit fragment, so a script that
+# stops blanking URLs reports a phantom #34.
+printf '## Step 7\n\nSee https://github.com/o/r/pull/9#12, https://example.com/a?tab=#34, #12, and o/r#5, and write &#56; for 8.\n\nRun `make` then `make`.\n' > "$cp_tmp/refs.md"
+printf '## Step 7\n\nSee https://github.com/o/r/pull/9#12.\n\nRun `make`.\n' > "$cp_tmp/refs-after.md"
+run_cp 1 "dropped references, a URL, and a repeated span" --before "$cp_tmp/refs.md" --after "$cp_tmp/refs-after.md"
+require_text "$cp_tmp/err" "missing URL: https://example.com/a?tab=#34"
 require_text "$cp_tmp/err" "missing issue reference: #12"
 require_text "$cp_tmp/err" "missing issue reference: o/r#5"
 require_text "$cp_tmp/err" 'missing inline code: `make`'
-require_count "$cp_tmp/err" "missing" 3
+require_count "$cp_tmp/err" "missing" 4
 
-# Usage: one title flag alone and an unreadable body both exit 3.
+# CommonMark runs an unclosed fence to the end of the body, so an edit inside
+# one still reports.
+printf 'Intro.\n\n```\nmake test\n' > "$cp_tmp/open.md"
+printf 'Intro.\n\n```\nmake tests\n' > "$cp_tmp/open-after.md"
+run_cp 1 "edit inside an unclosed fence" --before "$cp_tmp/open.md" --after "$cp_tmp/open-after.md"
+require_text "$cp_tmp/err" "missing fenced block: \`\`\` ... make test"
+require_count "$cp_tmp/err" "missing" 1
+
+# Usage: a missing flag, one title flag alone, and an unreadable body all
+# exit 3. Argparse alone would exit 2, and AGENTS.md reserves 3 for usage.
+run_cp 3 "missing --before" --after "$cp_before"
 run_cp 3 "one title flag alone" --before "$cp_before" --after "$cp_before" --before-title "file-issue: x"
 run_cp 3 "unreadable body" --before "$cp_tmp/nope.md" --after "$cp_before"
 

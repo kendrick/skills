@@ -31,8 +31,8 @@ outside code spans are not compared; that stays a reading job.
 Exit codes:
     0  nothing went missing
     1  at least one item went missing, one stderr line per item
-    3  usage error (one title flag without the other) or an unreadable body
-       file; argparse supplies 2 for a mistyped flag
+    3  usage error (a missing or mistyped flag, or one title flag without
+       the other) or an unreadable body file
 """
 
 import argparse
@@ -41,6 +41,7 @@ import sys
 from collections import Counter
 
 FENCE_OPEN_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
+FENCE_CLOSE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})[ \t]*$")
 HEADING_RE = re.compile(r"^ {0,3}(#{1,6})(?:[ \t]+(.*?))?(?:[ \t]+#+)?[ \t]*$")
 CHECKBOX_RE = re.compile(r"^\s*[-*+] \[ \]")
 # A backtick run closes only on a run of the same length (CommonMark), which
@@ -48,6 +49,14 @@ CHECKBOX_RE = re.compile(r"^\s*[-*+] \[ \]")
 SPAN_RE = re.compile(r"(?<!`)(`+)(?!`)(.+?)(?<!`)\1(?!`)")
 URL_RE = re.compile(r"https?://[^\s<>()\[\]`\"']+")
 REF_RE = re.compile(r"(?<![\w./&#-])((?:[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9._-]+)?#\d+)(?!\w)")
+
+
+class Parser(argparse.ArgumentParser):
+    # argparse exits 2 on bad usage; the repo's validator convention is 3.
+    def error(self, message):
+        self.print_usage(sys.stderr)
+        print(f"{self.prog}: error: {message}", file=sys.stderr)
+        sys.exit(3)
 
 
 def read_body(path):
@@ -73,7 +82,7 @@ def split_fences(text):
                 prose.append(line.rstrip("\n"))
             continue
         current["lines"].append(line)
-        close = re.match(r"^ {0,3}(`{3,}|~{3,})[ \t]*$", line)
+        close = FENCE_CLOSE_RE.match(line)
         if close and close.group(1)[0] == current["char"] and len(close.group(1)) >= current["len"]:
             fences.append(current["lines"])
             current = None
@@ -154,7 +163,7 @@ def compare(before, after, before_title=None, after_title=None):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="Report what a wording pass dropped from an issue body.")
+    ap = Parser(description="Report what a wording pass dropped from an issue body.")
     ap.add_argument("--before", required=True, help="the body as it entered Step 7")
     ap.add_argument("--after", required=True, help="the revised body")
     ap.add_argument("--before-title")
