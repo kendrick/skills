@@ -128,8 +128,9 @@ do_raw() {
   # The temp file sits beside the sidecar so the final mv is a rename, and
   # no refusal can leave a half-written sidecar under the real name.
   tmp="$(mktemp "$raw_dir/.dispose-source.XXXXXX")"
-  # mktemp makes the file 0600, and the rename keeps that mode.
-  chmod 644 "$tmp"
+  # mktemp makes the file 0600 and the rename keeps it, so give the sidecar
+  # the mode a plain write would get under the caller's umask.
+  chmod "$(printf '%o' $((0666 & ~0$(umask))))" "$tmp"
   trap 'rm -f "$tmp"; [[ $made_raw == 0 ]] || rmdir "$raw_dir"; [[ $made_notes == 0 ]] || rmdir "$scope/notes"; true' EXIT
 
   if [[ "$kind" == binary ]]; then

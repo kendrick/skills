@@ -128,6 +128,7 @@ The Decision body came from #42. The template put Context fifth and marked it op
 | 90 | `dispose-source.sh` exits 0 on success, 1 on a refusal with one stderr line per problem, and 3 on a usage error or unreadable input. `raw` turns any nonzero exit from `collapse-vtt.sh` into 1 (#388). | `dispose` gates a delete, so it follows AGENTS.md's validator convention. `collapse-vtt.sh` keeps its own 1 and 2, but a caller of `raw` only needs to know whether a sidecar landed, and a collapser refusal leaves the source in place like every other refusal. | [C] |
 | 91 | `raw` exits 3 on an `--id` outside `^[A-Za-z0-9_-]+$`, the nanoid alphabet (#388). | The id becomes part of the sidecar's path, so a slash or `..` would write outside `notes/raw/`. Phase 3 always passes a `nanoid -s 10` id, so the narrow alphabet costs nothing. | [P] |
 | 92 | `dispose` refuses a note that is not directly in `<scope-root>/notes/` (#388). | `raw` writes only to `<scope-root>/notes/raw/`, so a note anywhere else names a sidecar `raw` never wrote, and its attachments would land outside the scope. Every groomed note sits directly in `notes/` anyway. | [P] |
+| 93 | `raw` sets the sidecar's mode to `0666` masked by the caller's umask (#388). | `mktemp` creates the temp file `0600` and the rename keeps that, so every sidecar came out readable by its owner only. A fixed `644` would override a strict umask and leave a transcript world-readable on a machine set to `077`, so the sidecar gets what a plain write would. | [P] |
 
 ## Deliberately Not Built
 

@@ -4903,6 +4903,31 @@ bash "$ds" raw "$s" _inbox/deck.pdf --id Pd00000001 >/dev/null 2>&1 || rc=$?
 bash "$ds" raw "$s" _inbox/deck.pdf --id Pd00000001 --text "$ds_tmp/deck.txt" >/dev/null 2>&1 || ds_fail "raw refused a binary with --text"
 cmp -s "$ds_tmp/deck.txt" "$s/notes/raw/Pd00000001.md" || ds_fail "raw binary sidecar differs from its --text"
 
+# The id lands in the sidecar's path, so a slash or .. must never reach it.
+s="$(ds_scope badid)"
+printf 'words\n' >"$s/_inbox/a.md"
+rc=0
+bash "$ds" raw "$s" _inbox/a.md --id ../evil >/dev/null 2>&1 || rc=$?
+[[ "$rc" == 3 ]] || ds_fail "raw on --id ../evil exited $rc, want 3"
+[[ ! -e "$s/notes/evil.md" ]] || ds_fail "raw wrote outside notes/raw/ for --id ../evil"
+
+# A refusal on a scope with no notes/ yet undoes the mkdir it made.
+s="$ds_tmp/fresh"
+mkdir -p "$s/_inbox" "$s/_memory"
+: >"$s/_inbox/empty.md"
+bash "$ds" raw "$s" _inbox/empty.md --id Fr00000001 >/dev/null 2>&1 || true
+[[ ! -e "$s/notes" ]] || ds_fail "a refused raw left notes/ behind on a fresh scope"
+
+# The sidecar gets the mode a plain write would, under the caller's umask,
+# not mktemp's 0600 and not a fixed mode that overrides a strict umask.
+s="$(ds_scope mode)"
+printf 'words\n' >"$s/_inbox/a.md"
+printf 'words\n' >"$s/_inbox/b.md"
+(umask 022 && bash "$ds" raw "$s" _inbox/a.md --id Mo00000001 >/dev/null 2>&1) || ds_fail "raw refused under umask 022"
+(umask 077 && bash "$ds" raw "$s" _inbox/b.md --id Mo00000002 >/dev/null 2>&1) || ds_fail "raw refused under umask 077"
+[[ -n "$(find "$s/notes/raw/Mo00000001.md" -perm 644 2>/dev/null)" ]] || ds_fail "sidecar under umask 022 is not mode 644"
+[[ -n "$(find "$s/notes/raw/Mo00000002.md" -perm 600 2>/dev/null)" ]] || ds_fail "sidecar under umask 077 is not mode 600"
+
 ds_note=notes/2026-07-07-pier-lighting-review-Kp3vR8sNq2.md
 
 # The Rule keys on the note's own sidecar. Perturbing that key refuses...
