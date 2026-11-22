@@ -215,7 +215,10 @@ require_text divvy-up/README.md "When the baseline is red and either output name
 # status comes from an `exit:` first line (PR #229 review): read off the
 # output, a suite that exited non-zero without printing a failure read as
 # green. A file without the line reads red.
-require_text divvy-up/SKILL.md "Resolve VERIFY_CMD all the same, because Step 6 runs it."
+# #434: a wrapper that names its own verify command (work-issue names the plan's)
+# must win over the repo-disk harvest, or the gate runs the wide suite against a narrow baseline.
+require_text divvy-up/SKILL.md "Where the wrapping skill names a verify command, that command is **VERIFY_CMD**, and the repo-disk resolution below is skipped."
+require_text divvy-up/SKILL.md "Resolve VERIFY_CMD all the same, because Step 6 runs it; a command the wrapper named is that resolution."
 require_text divvy-up/SKILL.md "The wrapper must have recorded the run-start file at the HEAD this run starts from, and a later wave's file at the HEAD that wave's gate passed on"
 require_text divvy-up/SKILL.md "keep its exit status and the tail of its output as a first line \`exit: <n>\` followed by the tail, the shape a wrapper's file has and \`{{BASELINE}}\` hands workers."
 require_text divvy-up/SKILL.md "A wrapping skill that continues the run at a later wave can name another file, and that file replaces BASELINE from then on."
@@ -240,7 +243,7 @@ require_text divvy-up/README.md "Once a wave passes, the gate's own verification
 
 # The attribution rule, at the gate and in the worker's own contract. Drop
 # either half and a pre-existing failure gets charged to a task again.
-require_text divvy-up/SKILL.md "Run VERIFY_CMD, the command Step 3 resolved, so the gate verifies with the same command BASELINE ran."
+require_text divvy-up/SKILL.md "Run VERIFY_CMD, the command Step 3 resolved or the wrapper named, so the gate verifies with the same command BASELINE ran."
 require_text divvy-up/SKILL.md "a failure routes a task as \`failed\` only when BASELINE does not show that same test or check."
 require_text divvy-up/references/worker-prompt.md "A failure that also appears in this baseline is not yours."
 require_text divvy-up/references/worker-prompt.md "a failure the baseline already shows aside"
