@@ -128,6 +128,8 @@ do_raw() {
   # The temp file sits beside the sidecar so the final mv is a rename, and
   # no refusal can leave a half-written sidecar under the real name.
   tmp="$(mktemp "$raw_dir/.dispose-source.XXXXXX")"
+  # mktemp makes the file 0600, and the rename keeps that mode.
+  chmod 644 "$tmp"
   trap 'rm -f "$tmp"; [[ $made_raw == 0 ]] || rmdir "$raw_dir"; [[ $made_notes == 0 ]] || rmdir "$scope/notes"; true' EXIT
 
   if [[ "$kind" == binary ]]; then
@@ -161,15 +163,22 @@ frontmatter() {
 do_dispose() {
   [[ -n "$note_arg" ]] || fail_usage "dispose needs --note"
   command -v yq >/dev/null 2>&1 || fail_usage "yq is required and not on PATH (brew install yq)"
-  local note fm note_id raw_file
+  local note fields note_id raw_file
   note="$(resolve "$note_arg")"
   [[ -f "$note" && -r "$note" ]] || fail_usage "not a readable note: $note"
-  fm="$(frontmatter "$note")"
-  note_id="$(printf '%s\n' "$fm" | yq -r '.id // ""' 2>/dev/null)" || fail_usage "yq could not parse the frontmatter of $note"
-  raw_file="$(printf '%s\n' "$fm" | yq -r '.raw_file // ""' 2>/dev/null)" || fail_usage "yq could not parse the frontmatter of $note"
+  fields="$(frontmatter "$note" | yq -r '(.id // ""), (.raw_file // "")' 2>/dev/null)" ||
+    fail_usage "yq could not parse the frontmatter of $note"
+  note_id="$(printf '%s\n' "$fields" | sed -n 1p)"
+  raw_file="$(printf '%s\n' "$fields" | sed -n 2p)"
 
+  # raw writes under <scope-root>/notes/, so a note anywhere else names a
+  # sidecar raw never wrote, and attachments would land outside the scope.
   local bad=0 note_dir
-  note_dir="$(dirname "$note")"
+  note_dir="$(cd "$(dirname "$note")" && pwd -P)"
+  if [[ "$note_dir" != "$(cd "$scope" && pwd -P)/notes" ]]; then
+    echo "note is not directly in $scope/notes/: $note" >&2
+    exit 1
+  fi
   if [[ -z "$note_id" ]]; then
     echo "note has no id: $note" >&2
     bad=1
@@ -203,7 +212,7 @@ do_dispose() {
   mkdir -p "$note_dir/attachments"
   mv -n -- "$src" "$att"
   if [[ -e "$src" ]]; then
-    echo "attachment name already taken: attachments/$name" >&2
+    echo "attachments/$name appeared during the move; source left in place" >&2
     exit 1
   fi
   echo "source_file: attachments/$name"

@@ -4941,6 +4941,20 @@ err="$(bash "$ds" dispose "$s" _inbox/deck.pdf --note "$ds_note" 2>&1 >/dev/null
 [[ "$(cat "$s/_inbox/deck.pdf" 2>/dev/null)" == "second deck" ]] || ds_fail "dispose changed or moved the clashing source"
 [[ "$(cat "$s/notes/attachments/deck.pdf")" == "first deck" ]] || ds_fail "dispose overwrote an existing attachment"
 grep -Fq 'attachments/deck.pdf' <<<"$err" || ds_fail "dispose's clash refusal did not name the clash: $err"
+# A renamed copy such as deck-2.pdf would leave both decks in place and pass
+# the two checks above, so pin the count too.
+[[ "$(/bin/ls -A "$s/notes/attachments" | wc -l | tr -d ' ')" == 1 ]] || ds_fail "dispose added a file to notes/attachments/ on a clash"
+
+# raw writes under <scope-root>/notes/raw/, so a note anywhere else can never
+# name a sidecar raw wrote.
+s="$(ds_scope nested)"
+printf 'words\n' >"$s/_inbox/a.md"
+mkdir -p "$s/notes/sub/raw"
+cp "$s/$ds_note" "$s/notes/sub/"
+cp "$s/notes/raw/Kp3vR8sNq2.md" "$s/notes/sub/raw/"
+rc=0
+bash "$ds" dispose "$s" _inbox/a.md --note "notes/sub/${ds_note#notes/}" >/dev/null 2>&1 || rc=$?
+[[ "$rc" == 1 && -f "$s/_inbox/a.md" ]] || ds_fail "dispose accepted a note outside <scope-root>/notes/ (exit $rc)"
 
 s="$(ds_scope move)"
 printf 'only deck\n' >"$s/_inbox/deck.pdf"

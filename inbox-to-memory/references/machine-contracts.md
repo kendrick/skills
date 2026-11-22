@@ -182,7 +182,7 @@ A note carries `raw_file` exactly when its raw text lives in the sidecar. The si
 In [raw/<id>.md](raw/<id>.md). Open it only to verify a quote.
 ```
 
-[scripts/dispose-source.sh](../scripts/dispose-source.sh) `raw` writes the sidecar during grooming, and its `dispose` subcommand removes the source only once the note's `raw_file` is `raw/<its own id>.md` and that sidecar is non-empty.
+[scripts/dispose-source.sh](../scripts/dispose-source.sh) `raw` writes the sidecar during grooming, and its `dispose` subcommand removes the source only once the note's `raw_file` is `raw/<its own id>.md` and that sidecar is non-empty. The write order is sidecar, then note: a run that stops between them leaves an orphan sidecar, which nothing reads, while the other order leaves a note pointing at nothing, which the lint fails as `raw-file`.
 
 The sidecar exists so an embedding index can exclude `notes/raw/`. Left inline, a two-hour transcript becomes dozens of chunks competing with the three or four reviewed ones above it.
 

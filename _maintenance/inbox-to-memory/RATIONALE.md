@@ -126,6 +126,8 @@ The Decision body came from #42. The template put Context fifth and marked it op
 | 88 | `dispose-source.sh` has two subcommands, `raw` and `dispose`, instead of one call that writes the sidecar and disposes of the source (#388). | Phase 3's order is sidecar, then note, then disposal, so the note gets written between the two calls. One call would run before the note exists and could not check that the note's `raw_file` names its own sidecar, which is the wrong-id mistake the check exists to catch. | [P] |
 | 89 | `dispose` refuses a binary source whose name is already taken under `notes/attachments/`, and never renames it (#388). | Moving over the old file replaces the first deck, and the first note's `source_file` then points at the second. A generated name such as `deck-2.pdf` is a choice the user never sees, so the script names the clash and leaves both files alone. | [P] |
 | 90 | `dispose-source.sh` exits 0 on success, 1 on a refusal with one stderr line per problem, and 3 on a usage error or unreadable input. `raw` turns any nonzero exit from `collapse-vtt.sh` into 1 (#388). | `dispose` gates a delete, so it follows AGENTS.md's validator convention. `collapse-vtt.sh` keeps its own 1 and 2, but a caller of `raw` only needs to know whether a sidecar landed, and a collapser refusal leaves the source in place like every other refusal. | [C] |
+| 91 | `raw` exits 3 on an `--id` outside `^[A-Za-z0-9_-]+$`, the nanoid alphabet (#388). | The id becomes part of the sidecar's path, so a slash or `..` would write outside `notes/raw/`. Phase 3 always passes a `nanoid -s 10` id, so the narrow alphabet costs nothing. | [P] |
+| 92 | `dispose` refuses a note that is not directly in `<scope-root>/notes/` (#388). | `raw` writes only to `<scope-root>/notes/raw/`, so a note anywhere else names a sidecar `raw` never wrote, and its attachments would land outside the scope. Every groomed note sits directly in `notes/` anyway. | [P] |
 
 ## Deliberately Not Built
 
@@ -164,6 +166,7 @@ The Decision body came from #42. The template put Context fifth and marked it op
 | `inbox-not-empty` on by default. | A mid-migration run can hold queue files on purpose (row 86). | The smoke case that finds no `inbox-not-empty` line in the reproduction run without `--drained` |
 | Phase 6 checking `id`, `memory_type`, `source_refs`, and the inbox by hand. | The agent opened every record on every run and nothing recorded that it did. The lint now fails each one (rows 81 and 86). | `refute_text inbox-to-memory/SKILL.md 'Every record file has a valid \`id\`'` and `refute_text inbox-to-memory/SKILL.md 'The \`_inbox/\` is empty.'` |
 | A hand check that the sidecar exists and is non-empty before phase 4's delete. | Nothing enforced it, so a skipped check, a wrong id, or an empty sidecar lost the source's words before phase 6's lint could notice (rows 88 and 90). | `refute_text` on the old sentence, ``confirm `notes/raw/<id>.md` exists and is non-empty before deleting``, in the dispose-source block |
+| Renaming a binary source to get around an attachment name clash, such as `deck-2.pdf`. | The user never sees a generated name, and the first note's `source_file` keeps pointing at whichever file holds the old name, so the clash goes to the user (row 89). | The clash case's count check that `notes/attachments/` still holds one file |
 
 ## Known Limitations
 
