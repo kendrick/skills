@@ -1857,6 +1857,7 @@ expect_line "$err" "collision: issue-7 $(cd "$r1/../skills-issue-7" && pwd -P)" 
 wgit -C "$r1/../skills-issue-7" rebase --abort
 check_worktrees --root "$r1" --lane "issue-7=$r1/../skills-issue-7" --started issue-7
 expect_status 0 "a started lane with issue-7 checked out"
+expect_line "$out" "OK: 1 lane, 1 exempt" "an exempted started lane"
 
 # Criterion: the same tree with `other` checked out collides, mid-rebase's
 # neighbor on the exemption's key.
@@ -1879,7 +1880,12 @@ check_worktrees --root "$r3" --lane "issue-7=$r3/../skills-issue-7" --started is
 expect_status 1 "a started lane whose WORKTREE is an unregistered directory"
 check_worktrees --root "$r3" --lane "issue-7=$r3/../skills-issue-9"
 expect_status 0 "a lane whose WORKTREE does not exist"
-expect_line "$out" "OK: 1 lane, 0 already started" "a clean single lane"
+expect_line "$out" "OK: 1 lane, 0 exempt" "a clean single lane"
+# --started names a lane whose tree is gone: nothing to exempt, nothing to
+# collide with, so the count says 0 rather than counting the flag.
+check_worktrees --root "$r3" --lane "issue-7=$r3/../skills-issue-9" --started issue-7
+expect_status 0 "a started lane whose WORKTREE does not exist"
+expect_line "$out" "OK: 1 lane, 0 exempt" "a started lane with no tree"
 
 # A prunable entry, registered with its directory gone, is still a hit.
 r4="$(make_wt_repo prunable)"

@@ -31,7 +31,9 @@ hit too.
 
 Output: one `collision: issue-N <resolved path>` line per hit on stderr, in
 ascending issue order, so one run names every hit as Step 3 requires. A pass
-prints `OK: <n> lanes, <k> already started` on stdout.
+prints `OK: <n> lanes, <k> exempt` on stdout, where <k> counts the --started
+lanes whose own tree was found and exempted, not every --started lane: one whose
+WORKTREE is gone has nothing to exempt.
 
 Exit codes: 0 pass; 1 one or more collisions; 3 usage or unreadable input,
 which covers no lanes, a malformed --lane or --started, a lane named twice, a
@@ -238,7 +240,7 @@ def main():
         print("\n".join(hits), file=sys.stderr)
         return 1
     count = len(lanes)
-    print(f"OK: {count} lane{'' if count == 1 else 's'}, {exempt} already started")
+    print(f"OK: {count} lane{'' if count == 1 else 's'}, {exempt} exempt")
     return 0
 
 
