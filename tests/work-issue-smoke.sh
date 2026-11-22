@@ -6006,4 +6006,86 @@ require_text work-issue/references/redteam.md "A reason about the change is judg
 require_text work-issue/references/redteam.md "Where REPAIR_BASE is given above and the claim is about the repair itself (\"the repair\", \"only this line changed\"), the range is \`REPAIR_BASE..HEAD\`"
 require_text work-issue/references/worker-prompt.md "In a repair round it judges a reason or claim about the repair against \`git diff REPAIR_BASE..HEAD\`, so cite that range, not the whole branch."
 
+# --- liveness pooling at MERGE_ROWS ---
+# #436: a pool group stops taking merges at the move whose pooled rows would
+# pass MERGE_ROWS, and starts a new group there. No other model here reaches
+# that limit in seconds, and merge-limit.json reaches it four times. It's
+# write-order.json with every step but 4 made terminal and Step 4's effect
+# emptied. Its pinned output came from resume_checks.py as it stood before
+# #436. Pooling past the limit, or checking the limit only once a group is
+# pooled, prints a different probe on the 4 row 10 cycle.
+merge_dir=tests/fixtures/work-issue/liveness
+logic_run "$crash_checks" liveness "$merge_dir/merge-limit.json" "$tmp/live-merge"
+[[ "$(cat "$tmp/live-merge.status")" == "1" ]] \
+  && cmp -s "$tmp/live-merge.out" "$merge_dir/merge-limit.out" \
+  && cmp -s "$tmp/live-merge.err" "$merge_dir/merge-limit.err" || {
+  echo "#436: liveness on merge-limit.json should exit 1 with the pinned output, got $(cat "$tmp/live-merge.status"):" >&2
+  diff "$merge_dir/merge-limit.out" "$tmp/live-merge.out" >&2 || true
+  diff "$merge_dir/merge-limit.err" "$tmp/live-merge.err" >&2 || true
+  exit 1
+}
+# `split` finds every independent field in one pass, where it once peeled
+# one off and rescanned. Four models' output is too thin a check on that
+# shortcut, so this runs the peel loop beside it on seeded random components,
+# half of them built as products so that some fields come out independent.
+python3 - "$crash_checks" <<'PY' || { echo "#436: split no longer matches the peel-and-rescan loop" >&2; exit 1; }
+import importlib.util, itertools, random, sys
+spec = importlib.util.spec_from_file_location("resume_checks", sys.argv[1])
+rc = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(rc)
+
+def peel(comp):
+    names, rows = comp
+    parts = []
+    while len(names) > 1:
+        for i in range(len(names)):
+            mine = {r[i] for r in rows}
+            rest = {r[:i] + r[i + 1:] for r in rows}
+            if len(mine) * len(rest) == len(rows):
+                parts.append(((names[i],), frozenset((v,) for v in mine)))
+                names, rows = names[:i] + names[i + 1:], frozenset(rest)
+                break
+        else:
+            break
+    return parts + [(names, frozenset(rows))]
+
+rng = random.Random(436)
+for n in range(600):
+    width = rng.randint(1, 5)
+    names = tuple(f"f{i}" for i in range(width))
+    if n % 2:
+        blocks, at = [], 0
+        while at < width:
+            size = rng.randint(1, width - at)
+            space = list(itertools.product(range(3), repeat=size))
+            blocks.append(rng.sample(space, rng.randint(1, len(space))))
+            at += size
+        rows = frozenset(sum(combo, ()) for combo in itertools.product(*blocks))
+    else:
+        space = list(itertools.product(range(3), repeat=width))
+        rows = frozenset(rng.sample(space, rng.randint(0, len(space))))
+    got, want = rc.split((names, rows)), peel((names, rows))
+    assert got == want, (names, sorted(rows), got, want)
+PY
+# per_domains keeps caches for only PER_DOMAINS_KEPT domains objects.
+# invariants builds a fresh domains dict per search leaf, and an unbounded
+# cache took its peak RSS from 43 MB to 614 MB. RSS varies by platform, so
+# this pins the bound itself.
+python3 - "$crash_checks" <<'PY' || { echo "#436: per_domains no longer caps its cache at PER_DOMAINS_KEPT" >&2; exit 1; }
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("resume_checks", sys.argv[1])
+rc = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(rc)
+kept = rc.PER_DOMAINS_KEPT
+made = [{"f": (False, True), "n": (i,)} for i in range(3 * kept)]
+firsts = []
+for domains in made:
+    firsts.append(rc.full_comps(domains))
+    assert len(rc._PER_DOMAINS) <= kept, len(rc._PER_DOMAINS)
+# The newest PER_DOMAINS_KEPT are still held, so each hands back its own cache.
+for domains, first in list(zip(made, firsts))[-kept:]:
+    assert rc.full_comps(domains) is first
+assert len(rc._PER_DOMAINS) == kept, len(rc._PER_DOMAINS)
+PY
+
 echo "work-issue smoke: OK"

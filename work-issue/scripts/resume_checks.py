@@ -155,6 +155,7 @@ import argparse
 import ast
 import itertools
 import json
+import operator
 import os
 import re
 import shutil
@@ -1187,6 +1188,47 @@ def same(a, b):
     return a is b or (type(a) is type(b) and a == b)
 
 
+# `invariants` builds a fresh non-null domains dict for every search leaf, and
+# holding a cache for each one took its run from 43 MB to 614 MB peak RSS. A
+# run asks about one domains object at a time, so the newest few are enough.
+PER_DOMAINS_KEPT = 4
+_PER_DOMAINS = {}
+
+
+def per_domains(domains, kind, build):
+    """`build(domains)`, worked out once per domains object while that object
+    is among the PER_DOMAINS_KEPT newest it has seen. Each entry holds
+    `domains` itself, so a reused id never hands back another model's answer."""
+    entry = _PER_DOMAINS.get(id(domains))
+    if entry is None or entry[0] is not domains:
+        if len(_PER_DOMAINS) >= PER_DOMAINS_KEPT:
+            del _PER_DOMAINS[next(iter(_PER_DOMAINS))]
+        entry = _PER_DOMAINS[id(domains)] = (domains, {})
+    found = entry[1].get(kind)
+    if found is None:
+        found = entry[1][kind] = build(domains)
+    return found
+
+
+def full_comps(domains):
+    """Each field's untested component, every value of its domain."""
+    return per_domains(domains, "full", lambda d: {f: ((f,), frozenset((v,) for v in vs)) for f, vs in d.items()})
+
+
+def nullable_fields(domains):
+    return per_domains(domains, "nullable", lambda d: frozenset(f for f, vs in d.items() if any(v is None for v in vs)))
+
+
+def loose_fields(domains):
+    """The fields whose values `==` can match across types, as True and 1
+    do. A row lookup by hash stands in for a scan with `same` only where it
+    can't match that way."""
+    return per_domains(
+        domains, "loose",
+        lambda d: frozenset(f for f, vs in d.items() if any(a == b and not same(a, b) for a in vs for b in vs)),
+    )
+
+
 class Store:
     """What one path knows about the probe. A field nothing has tested is
     absent and may hold any value in its domain. A tested field sits in a
@@ -1203,7 +1245,7 @@ class Store:
     def comp(self, field):
         found = self.comps.get(field)
         if found is None:
-            return (field,), frozenset((v,) for v in self.domains[field])
+            return full_comps(self.domains)[field]
         return found
 
     def cut(self, fields, test):
@@ -1223,15 +1265,19 @@ class Store:
         rows = comps[0][1]
         for c in comps[1:]:
             rows = [r + t for r in rows for t in c[1]]
-        at = [names.index(f) for f in fields]
+        get = operator.itemgetter(*(names.index(f) for f in fields))
         yes = []
         no = []
-        for r in rows:
-            (yes if test(*(r[i] for i in at)) else no).append(r)
+        if len(fields) == 1:
+            for r in rows:
+                (yes if test(get(r)) else no).append(r)
+        else:
+            for r in rows:
+                (yes if test(*get(r)) else no).append(r)
         return names, frozenset(yes), frozenset(no)
 
     def keep(self, comp):
-        for part in split(comp):
+        for part in split_seen(comp, self.domains):
             for f in part[0]:
                 self.comps[f] = part
 
@@ -1254,13 +1300,23 @@ class Store:
         self.keep((names, frozenset(r[:i] + (r[i] + n,) + r[i + 1:] for r in rows)))
 
     def key(self):
-        return frozenset(
-            c for c in set(self.comps.values())
-            if not (len(c[0]) == 1 and c[1] == frozenset((v,) for v in self.domains[c[0][0]]))
-        )
+        full = full_comps(self.domains)
+        return frozenset(c for c in set(self.comps.values()) if not (len(c[0]) == 1 and c == full[c[0][0]]))
 
 
 MERGE_ROWS = 4096
+
+
+def rows_in(comps, names):
+    """The rows the joined `comps` allow, laid out in `names` order."""
+    joined = tuple(n for c in comps for n in c[0])
+    rows = comps[0][1]
+    for c in comps[1:]:
+        rows = [r + t for r in rows for t in c[1]]
+    if joined == names:
+        return rows
+    at = [joined.index(f) for f in names]
+    return [tuple(r[i] for i in at) for r in rows]
 
 
 def union(a, b):
@@ -1278,22 +1334,54 @@ def union(a, b):
         close.add(f)
         differ |= {g for st in (a, b) for g in st.comp(f)[0]} - close
     names = tuple(sorted(close))
+    sides = []
     for st in (a, b):
+        comps = []
+        for f in names:
+            c = st.comp(f)
+            if c not in comps:
+                comps.append(c)
         size = 1
-        for comp in {st.comp(f) for f in names}:
-            size *= len(comp[1])
+        for c in comps:
+            size *= len(c[1])
         if size > MERGE_ROWS:
             return None
+        sides.append(comps)
     pooled = set()
-    for st in (a, b):
-        joined, rows = st.cut(names, lambda *v: True)
-        at = [joined.index(f) for f in names]
-        pooled |= {tuple(r[i] for i in at) for r in rows}
+    for comps in sides:
+        pooled.update(rows_in(comps, names))
     if len(pooled) > MERGE_ROWS:
         return None
     out = a.copy()
     out.keep((names, frozenset(pooled)))
     return out
+
+
+# Every search path replays phase_of's tests from the root, so nearly every
+# component `keep` splits was split moments before. In the first 60 s of a
+# shipped-model liveness run, 1 call in 3,400 brought a new one. The cap
+# counts rows held, since one entry can carry MERGE_ROWS of them.
+SPLIT_ROWS = 1 << 20
+
+
+def split_seen(comp, domains):
+    """`split(comp)`, from a memo kept per domains object when that component
+    was split before.
+
+    A dict key matches by `==`, so a component holding a field whose values
+    can be equal across types, as True and 1 are, is always split afresh, and
+    two models never share a memo."""
+    if not loose_fields(domains).isdisjoint(comp[0]):
+        return split(comp)
+    memo = per_domains(domains, "splits", lambda d: {"parts": {}, "rows": 0})
+    parts = memo["parts"].get(comp)
+    if parts is None:
+        if memo["rows"] > SPLIT_ROWS:
+            memo["parts"].clear()
+            memo["rows"] = 0
+        parts = memo["parts"][comp] = split(comp)
+        memo["rows"] += len(comp[1])
+    return parts
 
 
 def split(comp):
@@ -1302,18 +1390,29 @@ def split(comp):
     know the same thing then hold the same Store, which liveness relies on
     to see a state twice."""
     names, rows = comp
-    parts = []
-    while len(names) > 1:
-        for i in range(len(names)):
-            mine = {r[i] for r in rows}
-            rest = {r[:i] + r[i + 1:] for r in rows}
-            if len(mine) * len(rest) == len(rows):
-                parts.append(((names[i],), frozenset((v,) for v in mine)))
-                names, rows = names[:i] + names[i + 1:], frozenset(rest)
-                break
-        else:
-            break
-    return parts + [(names, frozenset(rows))]
+    if len(names) == 1:
+        return [(names, frozenset(rows))]
+    # Peeling off an independent field leaves every other field exactly as
+    # independent as it was, so one pass over `rows` finds every field that
+    # goes off alone, in the order a peel-and-rescan loop would.
+    alone = []
+    for i in range(len(names)):
+        mine = {r[i] for r in rows}
+        # One value (or none) is always independent, and a count that doesn't
+        # divide the rows never is, so neither needs the rest built.
+        if len(mine) <= 1 or (len(rows) % len(mine) == 0 and len(mine) * len({r[:i] + r[i + 1:] for r in rows}) == len(rows)):
+            alone.append((i, mine))
+    if len(alone) >= len(names) - 1:
+        # The rest are a single field, which goes off alone too.
+        return [((n,), frozenset((r[i],) for r in rows)) for i, n in enumerate(names)]
+    if not alone:
+        return [(names, frozenset(rows))]
+    lone = {i for i, _ in alone}
+    keep = [i for i in range(len(names)) if i not in lone]
+    get = operator.itemgetter(*keep)
+    return [((names[i],), frozenset((v,) for v in mine)) for i, mine in alone] + [
+        (tuple(names[i] for i in keep), frozenset(map(get, rows)))
+    ]
 
 
 def order(domain, value):
@@ -1450,7 +1549,7 @@ class SymProbe:
         self.path = path
 
     def __getitem__(self, name):
-        if any(v is None for v in self.path.store.domains[name]):
+        if name in nullable_fields(self.path.store.domains):
             return self.path.concrete(name)
         return Sym(self.path, name)
 
@@ -1549,7 +1648,7 @@ def narrow(store, rules, fields, phase):
     dom = {f: store.values(f) for f in fields}
 
     def can(atom, want, fixed=None):
-        fs, test = atom_test(atom, phase)
+        fs, test = atom
         if not fs:
             return test() == want
         values = [[fixed[1]] if fixed and fixed[0] == f else dom[f] for f in fs]
@@ -1563,12 +1662,21 @@ def narrow(store, rules, fields, phase):
             return True
         return all(can(a, True, fixed) for a in rule["then"])
 
+    # Built once per call, since `can` runs for every value tried.
+    tests = [
+        (
+            {"if": [atom_test(a, phase) for a in rule["if"]], "then": [atom_test(a, phase) for a in rule["then"]]},
+            {x for a in rule["if"] + rule["then"] for x in fields_of(a)},
+        )
+        for rule in rules
+    ]
+    loose = loose_fields(store.domains)
     comps = set(store.comps.values())
     changed = True
     while changed:
         changed = False
-        for rule in rules:
-            for f in {x for a in rule["if"] + rule["then"] for x in fields_of(a)}:
+        for rule, named in tests:
+            for f in named:
                 kept = [v for v in dom[f] if supported(rule, (f, v))]
                 if len(kept) != len(dom[f]):
                     dom[f] = kept
@@ -1576,9 +1684,17 @@ def narrow(store, rules, fields, phase):
                     if not kept:
                         return None
         for names, rows in comps:
-            live = [r for r in rows if all(any(same(r[j], v) for v in dom[n]) for j, n in enumerate(names))]
+            if loose.isdisjoint(names):
+                allowed = [set(dom[n]) for n in names]
+                live = [r for r in rows if all(r[j] in allowed[j] for j in range(len(names)))]
+            else:
+                live = [r for r in rows if all(any(same(r[j], v) for v in dom[n]) for j, n in enumerate(names))]
             for j, n in enumerate(names):
-                kept = [v for v in dom[n] if any(same(r[j], v) for r in live)]
+                if n in loose:
+                    kept = [v for v in dom[n] if any(same(r[j], v) for r in live)]
+                else:
+                    present = {r[j] for r in live}
+                    kept = [v for v in dom[n] if v in present]
                 if len(kept) != len(dom[n]):
                     dom[n] = kept
                     changed = True
@@ -1605,6 +1721,7 @@ def first_probe(store, rules, fields, phase=None):
     dom = narrow(store, rules, fields, phase)
     if dom is None:
         return None
+    loose = loose_fields(store.domains)
     index = {f: i for i, f in enumerate(fields)}
     checks = []
     for rule in rules:
@@ -1624,19 +1741,25 @@ def first_probe(store, rules, fields, phase=None):
         else:
             at.setdefault(max(index[f] for f in named), []).append(check)
     # The assigned fields that some check still waiting on a later field reads.
-    frontier = [
-        tuple(sorted(
-            {f for named, _ in checks if any(index[g] >= i for g in named) for f in named if index[f] < i},
-            key=index.get,
-        ))
-        for i in range(len(fields) + 1)
-    ]
+    # A field stays on the frontier through the last field of any check that
+    # reads it. Asking each check at each depth was once the costliest line
+    # of a liveness run.
+    reach = {}
+    for named, _ in checks:
+        if named:
+            last = max(index[g] for g in named)
+            for f in named:
+                if reach.get(f, -1) < last:
+                    reach[f] = last
+    frontier = [tuple(f for f in fields[:i] if reach.get(f, -1) >= i) for i in range(len(fields) + 1)]
     probe = {}
 
     def ok(check):
         kind, what = check
         if kind == "comp":
             names, rows = what
+            if loose.isdisjoint(names):
+                return tuple(probe[n] for n in names) in rows
             return any(all(same(r[j], probe[n]) for j, n in enumerate(names)) for r in rows)
 
         def atom(a):
