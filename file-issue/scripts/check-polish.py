@@ -16,11 +16,16 @@ stderr line naming its kind and quoting it. Additions are never reported.
   URLs                 counted
   issue references     `#N` and `owner/repo#N`, counted; a `#` inside a URL
                        or a heading marker is not a reference
-  headings             level and text; the before sequence has to appear in
-                       the after sequence in order, so an added heading
-                       passes and a rename or reorder reports
+  headings             level and text, ATX or Setext (`===` under a
+                       paragraph is level 1, `---` level 2, so either
+                       spelling of a heading compares equal); the before
+                       sequence has to appear in the after sequence in
+                       order, so an added heading passes and a rename or
+                       reorder reports
   `- [ ]` items        reported when the after count is lower, which is what
-                       folding one criterion into another looks like
+                       folding one criterion into another looks like; the
+                       `*` and `+` bullets count too, since GitHub renders
+                       all three as a checkbox
   title prefix         the before title up to and including its first `: `;
                        a title with no `: ` has no prefix to check
 
@@ -43,6 +48,10 @@ from collections import Counter
 FENCE_OPEN_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 FENCE_CLOSE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})[ \t]*$")
 HEADING_RE = re.compile(r"^ {0,3}(#{1,6})(?:[ \t]+(.*?))?(?:[ \t]+#+)?[ \t]*$")
+SETEXT_RE = re.compile(r"^ {0,3}(=+|-+)[ \t]*$")
+# A list item's text is not a paragraph, so `- [ ] x` over `---` is a list
+# then a thematic break, never a Setext heading.
+LIST_ITEM_RE = re.compile(r"^\s*(?:[-*+]|\d{1,9}[.)])(?:[ \t]|$)")
 CHECKBOX_RE = re.compile(r"^\s*[-*+] \[ \]")
 # A backtick run closes only on a run of the same length (CommonMark), which
 # is how `` `cmd` `` keeps its inner backticks.
@@ -78,6 +87,9 @@ def split_fences(text):
             if m:
                 marker = m.group(1)
                 current = {"char": marker[0], "len": len(marker), "lines": [line]}
+                # A blank stand-in ends the paragraph above, so the line
+                # before a fence never pairs with a `---` after it.
+                prose.append("")
             else:
                 prose.append(line.rstrip("\n"))
             continue
@@ -95,10 +107,22 @@ def split_fences(text):
 def extract(text):
     fences, prose = split_fences(text)
     spans, urls, refs, headings, boxes = [], [], [], [], 0
+    paragraph = []
     for line in prose:
         h = HEADING_RE.match(line)
         if h:
             headings.append(f"{h.group(1)} {(h.group(2) or '').strip()}".rstrip())
+        s = SETEXT_RE.match(line)
+        if s:
+            # With no paragraph above, `---` is a thematic break.
+            if paragraph:
+                level = "#" if s.group(1)[0] == "=" else "##"
+                headings.append(f"{level} {' '.join(x.strip() for x in paragraph)}")
+            paragraph = []
+        elif not line.strip() or h or LIST_ITEM_RE.match(line):
+            paragraph = []
+        else:
+            paragraph.append(line)
         if CHECKBOX_RE.match(line):
             boxes += 1
         spans += [m.group(0) for m in SPAN_RE.finditer(line)]
