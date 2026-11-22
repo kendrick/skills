@@ -4947,6 +4947,69 @@ require_text work-issue/SKILL.md "\`--wave-baseline\` refuses the run the same w
 require_text work-issue/SKILL.md "Any other exit status means print the script's stderr once"
 require_text _maintenance/work-issue/RATIONALE.md "Step 1 copies a \`--wave-baseline\` file into \`baseline.txt\` instead of running VERIFY_CMD when BASE_SHA and both commands match"
 
+# --- #434: verify-cmd ---
+# A lane gates on its own plan's `- Verify with:` command. The wave's VERIFY_CMD
+# chains every lane's suites, so keying on it made each lane run suites its
+# diff never touched. The answer must move with the plan and ignore the wave.
+vc_plan() {
+  printf '# Plan\n\n## Global Constraints\n\n- Own only: a.sh\n%s\n- Other: `not this`\n' "$1"
+}
+vc_case() {
+  set +e
+  python3 "$run_state" verify-cmd --plan "$1" >"$vc_dir/out" 2>"$vc_dir/err"
+  vc_status=$?
+  set -e
+}
+vc_fail() {
+  echo "#434: $1, got status $vc_status: $(cat "$vc_dir/out" "$vc_dir/err")" >&2
+  exit 1
+}
+vc_dir="$(mktemp -d "$tmp/vc.XXXXXX")"
+
+# 1. The first backticked span on the Verify with line is the command, and a
+# later span on the same line or another line is not.
+vc_plan '- Verify with: `bash tests/a.sh`, run through `slot.sh`.' >"$vc_dir/plan.md"
+vc_case "$vc_dir/plan.md"
+[[ "$vc_status" == "0" && "$(cat "$vc_dir/out")" == "bash tests/a.sh" ]] || vc_fail "plan A should print its command"
+
+# 2. Falsifier, plan side: editing the plan's line from A to B changes the output.
+vc_plan '- Verify with: `bash tests/b.sh`, run through `slot.sh`.' >"$vc_dir/plan.md"
+vc_case "$vc_dir/plan.md"
+[[ "$vc_status" == "0" && "$(cat "$vc_dir/out")" == "bash tests/b.sh" ]] || vc_fail "plan B should print its command"
+
+# 3. Falsifier, wave side: the wave baseline's verify: line moves A+B to A+B+C
+# while the plan keeps A. verify-cmd reads only the plan, and reuse-baseline
+# declines in both cases without erroring, so the lane runs its own suite A.
+vc_plan '- Verify with: `bash tests/a.sh`' >"$vc_dir/plan.md"
+for wave_verify in 'bash tests/a.sh && bash tests/b.sh' 'bash tests/a.sh && bash tests/b.sh && bash tests/c.sh'; do
+  printf 'exit: 0\nbase: origin/main %s\ninstall: npm ci\nverify: %s\nok 1\n' "$rb_sha" "$wave_verify" >"$vc_dir/wave.txt"
+  vc_case "$vc_dir/plan.md"
+  [[ "$vc_status" == "0" && "$(cat "$vc_dir/out")" == "bash tests/a.sh" ]] || vc_fail "wave verify '$wave_verify' should leave the lane's command at A"
+  set +e
+  python3 "$run_state" reuse-baseline --wave-baseline "$vc_dir/wave.txt" --base-sha "$rb_sha" \
+    --install "npm ci" --verify "$(cat "$vc_dir/out")" --out "$vc_dir/baseline.txt" >/dev/null 2>"$vc_dir/err"
+  vc_status=$?
+  set -e
+  [[ "$vc_status" == "1" && ! -e "$vc_dir/baseline.txt" ]] || vc_fail "a lane whose command is a subset of the wave's should decline reuse with exit 1"
+done
+
+# 4. No Verify with line: exit 1, one stderr line, nothing on stdout.
+printf '# Plan\n\n- Own only: a.sh\n' >"$vc_dir/plan.md"
+vc_case "$vc_dir/plan.md"
+[[ "$vc_status" == "1" && ! -s "$vc_dir/out" && "$(wc -l <"$vc_dir/err" | tr -d ' ')" == "1" ]] || vc_fail "a plan with no Verify with line should exit 1 with one stderr line"
+
+# 5. A Verify with line with no backticked span: same.
+printf -- '- Verify with: bash tests/a.sh\n- Other: `x`\n' >"$vc_dir/plan.md"
+vc_case "$vc_dir/plan.md"
+[[ "$vc_status" == "1" && ! -s "$vc_dir/out" && "$(wc -l <"$vc_dir/err" | tr -d ' ')" == "1" ]] || vc_fail "a Verify with line with no backticks should exit 1 with one stderr line"
+
+# 6. An unreadable plan is exit 3, which Step 1 reads as a usage fault rather than a fallback.
+vc_case "$vc_dir/missing.md"
+[[ "$vc_status" == "3" && ! -s "$vc_dir/out" ]] || vc_fail "a missing plan should exit 3"
+
+require_text work-issue/SKILL.md "run-state.py verify-cmd --plan"
+require_text _maintenance/work-issue/RATIONALE.md "A lane gates on its own plan's \`- Verify with:\` command"
+
 # --- #133: merge-verdicts.py ---
 # The script builds round-<k>.json from per-claim verdict lines and names the
 # claims no line covers. It decides which claims the subagent re-runs, so each
