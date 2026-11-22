@@ -1184,4 +1184,90 @@ require_text file-issue/SKILL.md "Run \`python3 scripts/harvest.py\` from inside
 require_text file-issue/SKILL.md "The org rung may instead hold \`unchecked\`, which is not \`absent\`."
 require_text file-issue/README.md "harvest.py"
 
+# check-polish.py (#393): Step 7 kept the pre-polish body but never compared
+# it, so a dropped command or criterion shipped past a gate 6 that had passed
+# on the old body. Each fixture under polish/ is before.md with one edit.
+cp_script=file-issue/scripts/check-polish.py
+cp_fx=tests/fixtures/file-issue/polish
+cp_tmp="$(mktemp -d)"
+trap 'rm -rf "$link_tmp" "$hv_tmp" "$cp_tmp"' EXIT
+run_cp() {
+  local want="$1" what="$2"
+  shift 2
+  rc=0; python3 "$cp_script" "$@" 2> "$cp_tmp/err" || rc=$?
+  expect_rc "$want" "$rc" "check-polish: $what"
+}
+cp_before="$cp_fx/before.md"
+
+# Criterion 1: identical bodies.
+run_cp 0 "identical bodies" --before "$cp_before" --after "$cp_before"
+[[ ! -s "$cp_tmp/err" ]] || { echo "check-polish printed on identical bodies" >&2; exit 1; }
+# Criterion 2: a reword that keeps the span passes; dropping it reports it.
+run_cp 0 "reworded sentence that keeps its span" --before "$cp_before" --after "$cp_fx/reworded.md"
+run_cp 1 "dropped inline span" --before "$cp_before" --after "$cp_fx/dropped-span.md"
+require_text "$cp_tmp/err" 'missing inline code: `bash tests/file-issue-smoke.sh`'
+# Criterion 3: one byte inside a fence, reported once, as a fence.
+run_cp 1 "one-character fence edit" --before "$cp_before" --after "$cp_fx/fence-edit.md"
+require_text "$cp_tmp/err" "missing fenced block: "
+require_count "$cp_tmp/err" "missing" 1
+# Criterion 4: a criterion folded into its neighbor keeps every span and
+# still drops a box.
+run_cp 1 "checklist item folded into another" --before "$cp_before" --after "$cp_fx/folded.md"
+require_text "$cp_tmp/err" "missing checklist items: 2"
+require_count "$cp_tmp/err" "missing" 1
+# Criterion 5: rename and reorder; an added heading is not a loss.
+run_cp 1 "renamed heading" --before "$cp_before" --after "$cp_fx/renamed-heading.md"
+require_text "$cp_tmp/err" "missing or reordered heading: ## Acceptance Criteria"
+run_cp 1 "reordered headings" --before "$cp_before" --after "$cp_fx/reordered-heading.md"
+require_text "$cp_tmp/err" "missing or reordered heading: "
+{ cat "$cp_before"; printf '\n## Notes\n\nAdded.\n'; } > "$cp_tmp/added.md"
+run_cp 0 "added heading" --before "$cp_before" --after "$cp_tmp/added.md"
+
+# A `#` in a heading marker or a URL fragment is not a reference, and spans,
+# URLs, and references count, so one of two copies going missing reports.
+printf '## Step 7\n\nSee https://github.com/o/r/pull/9#discussion_r2 and #12 and o/r#5.\n\nRun `make` then `make`.\n' > "$cp_tmp/refs.md"
+printf '## Step 7\n\nSee https://github.com/o/r/pull/9#discussion_r2.\n\nRun `make`.\n' > "$cp_tmp/refs-after.md"
+run_cp 1 "dropped references and a repeated span" --before "$cp_tmp/refs.md" --after "$cp_tmp/refs-after.md"
+require_text "$cp_tmp/err" "missing issue reference: #12"
+require_text "$cp_tmp/err" "missing issue reference: o/r#5"
+require_text "$cp_tmp/err" 'missing inline code: `make`'
+require_count "$cp_tmp/err" "missing" 3
+
+# Usage: one title flag alone and an unreadable body both exit 3.
+run_cp 3 "one title flag alone" --before "$cp_before" --after "$cp_before" --before-title "file-issue: x"
+run_cp 3 "unreadable body" --before "$cp_tmp/nope.md" --after "$cp_before"
+
+# Criterion 6: the issue's falsifier. Perturbing the prefix fails; a reword
+# after the prefix passes, which a whole-title check would fail.
+cp_title='file-issue: strip writes None'
+run_cp 1 "title prefix perturbed" --before "$cp_before" --after "$cp_before" --before-title "$cp_title" --after-title 'file issue: strip writes None'
+require_text "$cp_tmp/err" 'missing title prefix: "file-issue: "'
+run_cp 0 "title reworded after its prefix" --before "$cp_before" --after "$cp_before" --before-title "$cp_title" --after-title 'file-issue: strip still writes None'
+run_cp 0 "title with no prefix" --before "$cp_before" --after "$cp_before" --before-title 'strip writes None' --after-title 'Strip still writes None'
+
+# Each falsifier case has to fail a mutant keyed on the wrong thing, or it
+# pins nothing: a whole-title comparison fails the reword case, and a script
+# with no title check passes the perturbed prefix.
+cp_line='        if prefix is not None and not after_title.startswith(prefix):'
+for mutant in whole none; do
+  python3 - "$cp_script" "$cp_tmp/$mutant.py" "$cp_line" "$mutant" <<'PY'
+import sys
+src = open(sys.argv[1], encoding="utf-8").read()
+assert src.count(sys.argv[3] + "\n") == 1, "the title-prefix check moved; update this mutant"
+new = "        if before_title != after_title:" if sys.argv[4] == "whole" else "        if False:"
+open(sys.argv[2], "w", encoding="utf-8").write(src.replace(sys.argv[3], new, 1))
+PY
+done
+rc=0; python3 "$cp_tmp/whole.py" --before "$cp_before" --after "$cp_before" --before-title "$cp_title" --after-title 'file-issue: strip still writes None' 2> /dev/null || rc=$?
+expect_rc 1 "$rc" "whole-title mutant on the reworded title"
+rc=0; python3 "$cp_tmp/none.py" --before "$cp_before" --after "$cp_before" --before-title "$cp_title" --after-title 'file issue: strip writes None' 2> /dev/null || rc=$?
+expect_rc 0 "$rc" "no-title-check mutant on the perturbed prefix"
+
+# Criterion 7: Step 7 runs the script and its done-when needs exit 0.
+require_text file-issue/SKILL.md "python3 <skill-path>/scripts/check-polish.py --before <before.md> --after <after.md>"
+require_text file-issue/SKILL.md "\`check-polish.py\` exits 0"
+require_text file-issue/SKILL.md "Restore the original wording of each item it reports"
+require_text file-issue/README.md "check-polish.py"
+require_text _maintenance/file-issue/RATIONALE.md "up to and including its first \`: \`"
+
 echo "file-issue smoke: OK"

@@ -143,13 +143,21 @@ Depth 0 skips this step entirely. A one-line body does not earn a dispatch and a
 
 At Depths 1 and 2, where the `technical-writing` skill is installed, invoke it via the Skill tool on the drafted issue body and follow what it loads. It supplies instructions, not a rewritten body, so the revision is yours to make. Where it isn't installed, ship the draft unchanged—absence degrades to current behavior, never to an error or a stall. `technical-writing` owns any downstream prose auditor, so never reach past it to one directly.
 
-Keep the body as it entered this step. Without that copy, nothing below is checkable afterward.
+Save the body as it entered this step to a file, `<before.md>`, and note the title beside it. Without that copy, nothing below is checkable afterward.
 
 The pass changes wording only. Section structure, the title's harvested prefix convention, commands, paths, error output, and every fact the Step 6 gates passed survive it; where a revision would alter one, keep the original. Acceptance criteria may be reworded, but every symbol and condition inside them survives, and a criterion that comes out unfalsifiable has failed the pass rather than passed it. A named falsifier is protected the same way: reword it freely, but what it perturbs and both outcomes it asserts survive the pass.
 
+Save the revised body to a second file, `<after.md>`, and diff the two:
+
+```
+python3 <skill-path>/scripts/check-polish.py --before <before.md> --after <after.md> --before-title '<title before>' --after-title '<title after>'
+```
+
+Exit 1 prints one stderr line per item the pass dropped: a fenced block, an inline code span, a URL, an issue reference, a heading renamed or moved, a lost `- [ ]` item, or the title prefix. Restore the original wording of each item it reports, then run it again. Exit 3 is a usage error or an unreadable file, so fix the call. The script compares only those items; a path or command outside a code span, and whether a reworded criterion is still falsifiable, stay yours to read.
+
 This is not the delegation Step 3 rules out. The interview carries the depth governor—judgment this skill owns, and lost the moment another skill runs it. A wording pass has no governor to lose. The audit is mechanical, and where the skill is missing the cost is polish, not correctness.
 
-**Done when:** the body has been revised under `technical-writing`, or its absence is noted and the draft stands, or Depth 0 skipped the pass.
+**Done when:** the body has been revised under `technical-writing` and `check-polish.py` exits 0 on the two bodies, or its absence is noted and the draft stands, or Depth 0 skipped the pass.
 
 ## Step 8 — Write Guard
 
