@@ -16,7 +16,7 @@ Then there's the part nobody plans for. In the session this design came out of, 
 
 Preflight resolves your fixed point and pins the merge-base SHA, so a branch moving underneath a multi-day review can't silently change what's being reviewed. A bad ref or an empty diff dies here, in front of you, rather than inside six subagents.
 
-Then it matches the diff's changed lines against a trigger table—money, authz, state transitions, schema, budgets, representation boundaries—and partitions the changed files into territories. Each file has exactly one owner, but a territory carries every suspicion class its files earned, so a file that's both an authz change and a money change gets hunted both ways. A script proves the territories don't overlap before anything runs. Overlap is a hard error, not a warning.
+Then it matches the diff's changed lines against a trigger table—money, authz, state transitions, schema, budgets, representation boundaries—and partitions the changed files into territories. Each file has exactly one owner, but a territory carries every suspicion class its files earned, so a file that's both an authz change and a money change gets hunted both ways. A script proves the territories don't overlap before anything runs, and checks that each file's derivation record names the territory that owns it. Overlap and a wrong record are hard errors, not warnings.
 
 One finder per territory, in parallel, each told what to be suspicious of, what's already settled and off-limits, and to trust code over comments. Each finding also says what it takes to hit the bug and whether it fails loudly or silently, and the finder sets both before anyone verifies it. The findings go into an append-only ledger as claims, not conclusions.
 

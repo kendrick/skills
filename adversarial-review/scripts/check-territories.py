@@ -7,8 +7,11 @@ and later work out which territories a fix diff landed in.
         | scripts/check-territories.py intersect RUN_DIR/scope.json \\
             --exclude RUN_DIR/excluded.txt
 
-`validate` is the hard gate at the end of the scope contract step. Overlapping
-territories are worth failing a run over: the whole reason findings can be
+`validate` is the hard gate at the end of the scope contract step.
+It checks the derivation record as well as the territories: every changed file
+needs exactly one record, a record may only name a changed file, and the
+territory a record names has to own that file. Overlapping territories are
+worth failing a run over: the whole reason findings can be
 trusted without cross-territory agreement is that no two finders were looking at
 the same file, so an overlap quietly removes the property the verification gate
 is standing on.
@@ -24,7 +27,8 @@ the pipe fed `intersect` no input and the round ended as if the fix touched
 nothing.
 
 Exit codes: 0 pass; 1 semantic failure (overlap, malformed entry, unowned or
-multiply-owned path) with one line per problem on stderr; 3 usage, missing file,
+multiply-owned path, a wrong, missing, or duplicate derivation record) with one
+line per problem on stderr; 3 usage, missing file,
 unreadable JSON. A missing `--exclude` file is the exception: it excludes
 nothing, the way an empty one does, and an unreadable one exits 3. Argparse supplies 2 for a mistyped flag.
 
@@ -287,6 +291,39 @@ def owners_of(path, territories):
     return owners
 
 
+def derivation_problems(changed_files, derivation, territories):
+    """One problem line per way the derivation record disagrees with the
+    contract: a changed file with no record, a record for a path outside
+    `changed_files`, two records for one file, or a record naming a territory
+    that does not own its file.
+
+    Ownership goes through `owners_of`, the containment the unowned check uses.
+    A territory-exists check would pass a record that puts `src/api/tenancy.py`
+    under `money`, because `money` exists and does not own that file.
+    `matched_rows` and first-match stay unchecked, because the cap merges
+    territories and a merged name matches no trigger-table row."""
+    problems = []
+    seen = {}
+    for record in derivation:
+        seen[record["file"]] = seen.get(record["file"], 0) + 1
+    for path in changed_files:
+        if path not in seen:
+            problems.append(f"no derivation record: {path}")
+    for path, count in seen.items():
+        if path not in changed_files:
+            problems.append(f"derivation record for a path not in changed_files: {path}")
+        elif count > 1:
+            problems.append(f"duplicate derivation records: {path} ({count})")
+    for record in derivation:
+        path = record["file"]
+        if path in changed_files and record["territory"] not in owners_of(path, territories):
+            problems.append(
+                f"derivation names the wrong owner: {path} is recorded under "
+                f"{record['territory']!r}, which does not own it"
+            )
+    return problems
+
+
 def cmd_validate(args):
     scope = load_json(args.scope, args.scope)
 
@@ -326,6 +363,10 @@ def cmd_validate(args):
             problems.append(f"unowned: {path}")
         elif len(owners) > 1:
             problems.append(f"multiply-owned: {path} ({', '.join(owners)})")
+
+    problems.extend(
+        derivation_problems(scope["changed_files"], scope["derivation"], territories)
+    )
 
     if problems:
         for problem in problems:
