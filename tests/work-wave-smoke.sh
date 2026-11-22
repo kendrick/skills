@@ -1845,13 +1845,13 @@ r1="$(make_wt_repo midrebase)"
 make_rebasing_tree "$r1"
 check_worktrees --root "$r1" --lane "issue-7=$r1/../skills-issue-7/" --started issue-7
 expect_status 0 "a started lane mid-rebase of its own branch, WORKTREE spelled with .. and a slash"
-refute_text "$tmp/out" "collision:"
+refute_text "$tmp/err" "collision:"
 
 # The same tree, but the lane isn't passed as --started: the exemption keys on
 # the lane being started, so a tree on issue-N for any other lane collides.
 check_worktrees --root "$r1" --lane "issue-7=$r1/../skills-issue-7/"
 expect_status 1 "an unstarted lane whose tree holds its own branch"
-expect_line "$out" "collision: issue-7 $(cd "$r1/../skills-issue-7" && pwd -P)" "an unstarted lane on its own branch"
+expect_line "$err" "collision: issue-7 $(cd "$r1/../skills-issue-7" && pwd -P)" "an unstarted lane on its own branch"
 
 # A tree on its branch normally, no rebase, is exempt too.
 wgit -C "$r1/../skills-issue-7" rebase --abort
@@ -1863,7 +1863,7 @@ expect_status 0 "a started lane with issue-7 checked out"
 wgit -C "$r1/../skills-issue-7" checkout -q -b other
 check_worktrees --root "$r1" --lane "issue-7=$r1/../skills-issue-7" --started issue-7
 expect_status 1 "a started lane whose tree has other checked out"
-expect_line "$out" "collision: issue-7 $(cd "$r1/../skills-issue-7" && pwd -P)" "a started lane on other"
+expect_line "$err" "collision: issue-7 $(cd "$r1/../skills-issue-7" && pwd -P)" "a started lane on other"
 
 # A tree mid-rebase of some other branch is no one's own lane either.
 r2="$(make_wt_repo otherrebase)"
@@ -1879,7 +1879,7 @@ check_worktrees --root "$r3" --lane "issue-7=$r3/../skills-issue-7" --started is
 expect_status 1 "a started lane whose WORKTREE is an unregistered directory"
 check_worktrees --root "$r3" --lane "issue-7=$r3/../skills-issue-9"
 expect_status 0 "a lane whose WORKTREE does not exist"
-expect_line "$out" "OK: 1 lane clear, 0 already started" "a clean single lane"
+expect_line "$out" "OK: 1 lane, 0 already started" "a clean single lane"
 
 # A prunable entry, registered with its directory gone, is still a hit.
 r4="$(make_wt_repo prunable)"
@@ -1905,12 +1905,12 @@ r6="$(make_wt_repo twohits)"
 mkdir "$r6/../skills-issue-8" "$r6/../skills-issue-9"
 check_worktrees --root "$r6" --lane "issue-9=$r6/../skills-issue-9" --lane "issue-8=$r6/../skills-issue-8" --lane "issue-7=$r6/../skills-issue-7"
 expect_status 1 "two colliding lanes beside a clear one"
-[[ "$(grep -c '^collision: ' "$tmp/out")" == 2 ]] || {
-  echo "two colliding lanes should print two collision lines, got: $out" >&2
+[[ "$(grep -c '^collision: ' "$tmp/err")" == 2 ]] || {
+  echo "two colliding lanes should print two collision lines, got: $err" >&2
   exit 1
 }
-[[ "$(grep '^collision: ' "$tmp/out" | head -1)" == "collision: issue-8 "* ]] || {
-  echo "collision lines should print in ascending issue order, got: $out" >&2
+[[ "$(grep '^collision: ' "$tmp/err" | head -1)" == "collision: issue-8 "* ]] || {
+  echo "collision lines should print in ascending issue order, got: $err" >&2
   exit 1
 }
 
@@ -1928,6 +1928,13 @@ check_worktrees --root "$r6" --lane "issue-7=$r6/../a" --started feature
 expect_status 3 "a malformed --started"
 check_worktrees --root "$r6"
 expect_status 3 "no lanes"
+check_worktrees --lane "issue-7=$r6/../a"
+expect_status 3 "a missing --root"
+check_worktrees --root "$r6" --lane "issue-7=$r6/../a" --bogus
+expect_status 3 "an unknown flag"
+# Collisions are problems, so they go to stderr with the other validators'.
+check_worktrees --root "$r6" --lane "issue-8=$r6/../skills-issue-8"
+refute_text "$tmp/out" "collision:"
 check_worktrees --root "$tmp/not-a-repo" --lane "issue-7=$tmp/not-a-repo/../x"
 expect_status 3 "a ROOT that isn't a repo"
 grep -Fq "worktree list" <<<"$err" || {
@@ -1939,6 +1946,7 @@ grep -Fq "worktree list" <<<"$err" || {
 require_text "$skill" "work-wave/scripts/check-worktrees.py --root ROOT --lane issue-N=WORKTREE"
 require_text "$skill" "is exempt when the tree at its WORKTREE holds its own \`issue-N\`, checked out or mid-rebase"
 refute_text "$skill" "is exempt when its WORKTREE is registered in \`git worktree list --porcelain\` on its own \`issue-N\` branch"
+require_text "$skill" "line per hit on stderr"
 require_text work-wave/README.md "check-worktrees.py"
 require_text "$ledger" "| 64 | \`check-worktrees.py\` runs Step 3's collision check"
 require_text "$ledger" "when the tree at its WORKTREE holds \`issue-N\`, checked out or mid-rebase of it"

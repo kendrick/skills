@@ -29,15 +29,16 @@ for a branch that exists nowhere locally. A branch that is local and checked
 out in no worktree, or in a different tree than the lane's WORKTREE, is a
 hit too.
 
-Output: one `collision: issue-N <resolved path>` line per hit on stdout, in
+Output: one `collision: issue-N <resolved path>` line per hit on stderr, in
 ascending issue order, so one run names every hit as Step 3 requires. A pass
-prints `OK: <n> lanes clear, <k> already started`.
+prints `OK: <n> lanes, <k> already started` on stdout.
 
 Exit codes: 0 pass; 1 one or more collisions; 3 usage or unreadable input,
 which covers no lanes, a malformed --lane or --started, a lane named twice, a
 --started lane with no matching --lane (a lane the wave forgot to pass is a
 conductor mistake, and ignoring it would hide that), and a failed `git
-worktree list`. Argparse supplies 2 for a mistyped flag.
+worktree list`. A missing --root or a mistyped flag exits 3 as well, since
+argparse's own exit 2 would sit outside the contract Step 3 branches on.
 
 Stdlib only, so the skill stays copy-in portable.
 """
@@ -167,19 +168,18 @@ def usage_error(message):
 
 
 def parse_lanes(specs):
+    """{N: WORKTREE} for each `issue-N=WORKTREE` spec."""
     lanes = {}
     for spec in specs:
         name, sep, path = spec.partition("=")
-        if not sep or not path or not LANE_NAME.match(name):
+        match = LANE_NAME.match(name)
+        if not sep or not path or not match:
             usage_error(f"--lane {spec!r} is not issue-N=WORKTREE")
-        if name in lanes:
+        number = int(match.group(1))
+        if number in lanes:
             usage_error(f"{name} is named by more than one --lane")
-        lanes[name] = path
+        lanes[number] = path
     return lanes
-
-
-def real(path):
-    return os.path.realpath(path)
 
 
 def registered_paths(root):
@@ -187,7 +187,7 @@ def registered_paths(root):
     if done.returncode != 0:
         usage_error(git_failure(("worktree", "list", "--porcelain"), done))
     return {
-        real(line[len("worktree "):])
+        os.path.realpath(line[len("worktree "):])
         for line in done.stdout.split("\n")
         if line.startswith("worktree ")
     }
@@ -195,11 +195,12 @@ def registered_paths(root):
 
 def holds_own_branch(root, name, worktree):
     tree, problem = find_tree(root, name)
-    return problem is None and real(tree) == worktree and worktree != real(root)
+    return problem is None and os.path.realpath(tree) == worktree and worktree != os.path.realpath(root)
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser.error = usage_error
     parser.add_argument("--root", required=True)
     parser.add_argument("--lane", action="append", default=[])
     parser.add_argument("--started", action="append", default=[])
@@ -208,21 +209,25 @@ def main():
     lanes = parse_lanes(args.lane)
     if not lanes:
         usage_error("no --lane given")
+    started = set()
     for name in args.started:
-        if not LANE_NAME.match(name):
+        match = LANE_NAME.match(name)
+        if not match:
             usage_error(f"--started {name!r} is not issue-N")
-        if name not in lanes:
+        if int(match.group(1)) not in lanes:
             usage_error(f"--started {name} has no --lane")
+        started.add(int(match.group(1)))
 
     try:
         registered = registered_paths(args.root)
         hits = []
         exempt = 0
-        for name in sorted(lanes, key=lambda n: int(n.split("-")[1])):
-            worktree = real(lanes[name])
+        for number in sorted(lanes):
+            name = f"issue-{number}"
+            worktree = os.path.realpath(lanes[number])
             if not (os.path.isdir(worktree) or worktree in registered):
                 continue
-            if name in args.started and holds_own_branch(args.root, name, worktree):
+            if number in started and holds_own_branch(args.root, name, worktree):
                 exempt += 1
                 continue
             hits.append(f"collision: {name} {worktree}")
@@ -230,10 +235,10 @@ def main():
         usage_error(f"git did not run: {e}")
 
     if hits:
-        print("\n".join(hits))
+        print("\n".join(hits), file=sys.stderr)
         return 1
     count = len(lanes)
-    print(f"OK: {count} lane{'' if count == 1 else 's'} clear, {exempt} already started")
+    print(f"OK: {count} lane{'' if count == 1 else 's'}, {exempt} already started")
     return 0
 
 
