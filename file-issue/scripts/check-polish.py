@@ -16,7 +16,8 @@ stderr line naming its kind and quoting it. Additions are never reported.
   inline code spans    counted, so a span written twice and kept once reports;
                        a span may wrap onto the next line of its paragraph,
                        and its line break compares as a space
-  URLs                 counted, with balanced parentheses in the path
+  URLs                 counted, with one level of balanced parentheses in
+                       the path
   issue references     `#N` and `owner/repo#N`, counted; a `#` inside a URL
                        or a heading marker is not a reference
   headings             level and text, ATX or Setext (`===` under a
@@ -63,8 +64,8 @@ CHECKBOX_RE = re.compile(r"^\s*[-*+] \[ \]")
 # A backtick run closes only on a run of the same length (CommonMark), which
 # is how `` `cmd` `` keeps its inner backticks.
 SPAN_RE = re.compile(r"(?<!`)(`+)(?!`)(.+?)(?<!`)\1(?!`)", re.S)
-# Balanced parentheses stay in the URL, so `a(b)/c` compares whole, while
-# the `)` closing a Markdown link or a parenthetical stays out.
+# One level of balanced parentheses stays in the URL, so `a(b)/c` compares
+# whole, while the `)` closing a Markdown link or a parenthetical stays out.
 URL_RE = re.compile(r"https?://(?:[^\s<>()\[\]`\"']|\([^\s<>()\[\]`\"']*\))+")
 REF_RE = re.compile(r"(?<![\w./&#-])((?:[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9._-]+)?#\d+)(?!\w)")
 
