@@ -104,7 +104,13 @@ Three zones, always in this order:
 
 The raw text itself, the verbatim original (text sources) or extracted text (binary sources), goes in the sidecar `<scope-root>/notes/raw/<id>.md`, where `<id>` is the note's `id`. The sidecar has no frontmatter and holds every line that would otherwise follow the `## Raw Content` heading, so note and sidecar together reproduce the raw text byte for byte. Keeping it out of the note lets an embedding index exclude `notes/raw/`, so a transcript's chunks never outnumber the reviewed sections above it. `L<n>` in a quote anchor counts lines in the sidecar. The full rule is in [references/machine-contracts.md](references/machine-contracts.md), under "The Raw Sidecar".
 
-Write the sidecar first, creating `notes/raw/` if it is missing, then the note with `raw_file` set. A run that stops between the two leaves an orphan sidecar, which nothing reads. The other order leaves a note pointing at nothing, which the lint fails as `raw-file`. A note with no raw text at all, such as a directly authored one, keeps an empty `## Raw Content` section and no `raw_file`.
+Write the sidecar first, then the note with `raw_file` set:
+
+```bash
+bash <skill-path>/scripts/dispose-source.sh raw <scope-root> <inbox-file> --id <id> [--text <extracted-text-file>]
+```
+
+It copies a `.md` or `.txt` byte for byte, collapses a `.vtt` through `scripts/collapse-vtt.sh`, and takes a binary source's text from `--text`. Exit 1 is a refusal that wrote nothing: report its stderr line, leave the source in `_inbox/`, and groom nothing from it. A run that stops between sidecar and note leaves an orphan sidecar, which nothing reads; the other order leaves a note pointing at nothing, which the lint fails as `raw-file`. A note with no raw text at all, such as a directly authored one, keeps an empty `## Raw Content` section and no `raw_file`.
 
 Inside the extracted sections, flag candidates **inline** using the taxonomy below. Don't hide candidates in a separate file or section — keep them where the triggering passage lives, so the user can read both together.
 
@@ -146,9 +152,13 @@ Use the heuristics in [references/scope-decisions.md](references/scope-decisions
 
 ### Phase 4 — Dispose Source
 
-Text sources (`.md`, `.txt`, `.vtt`) get deleted from `_inbox/`. Their words survive in the note's raw sidecar, so confirm `notes/raw/<id>.md` exists and is non-empty before deleting.
+Once the note is written, dispose of the source files. Their words survive in the note's raw sidecar, so the script checks that sidecar before it deletes or moves anything:
 
-Binary sources (`.pdf`, `.docx`, `.pptx`) move to `<scope-root>/notes/attachments/<original-filename>`. Set `source_file: attachments/<filename>` in the note's frontmatter so the original is referenceable. Their extracted text goes to the sidecar like any other raw text.
+```bash
+bash <skill-path>/scripts/dispose-source.sh dispose <scope-root> <inbox-file> --note <note-path>
+```
+
+It requires the note's `raw_file` to be `raw/<its own id>.md` and that sidecar non-empty, then deletes a text source (`.md`, `.txt`, `.vtt`), or moves a binary one (`.pdf`, `.docx`, `.pptx`) to `notes/attachments/<original-filename>` and prints the `source_file: attachments/<filename>` line to set in the note's frontmatter. Exit 1 is a refusal with the source still in `_inbox/`: fix what each stderr line names and rerun. A taken attachment name goes to the user, since the script never renames.
 
 Never leave a file in `_inbox/` after grooming. The inbox is a queue, not a library.
 
@@ -431,7 +441,7 @@ The scope's `CLAUDE.md` declares the mode in its top frontmatter blockquote. Rea
 - **Cross-scope references are fine.** A project note can wiki-link to a client-scope record. A client record can list project note ids in its `source_refs`. The record's _home_ (which `_memory/` it lives in) defines its scope, not its references.
 - **Don't open `raw_file` unless verifying a quote.** When reading a note to answer a question, read its extracted sections and leave the sidecar closed. Those sections are the reviewed layer and are what you came for. The raw text is for a human reading back, and for verifying a quote you have specific reason to doubt. Opening it by default pulls a whole transcript into context to answer something the sections already answered. A note with no `raw_file` still holds its raw text inline, so read it down to `## Raw Content` and no further.
 - **Never rename, resolve by id.** Files keep the name they were created with and ids never regenerate. Resolve a wiki link as a path from the linking note's directory first, which is how a cross-scope link resolves, then, where the target holds no `/`, by filename within the scope. When both miss, resolve by id. A `<slug>-<nanoid>` name carries its id as the ten characters that end the basename, with a hyphen right before them. The nanoid alphabet includes `-`, so the id can hold a hyphen of its own: `atlas-dry-run-prep-zFpm-hfD5u` carries `zFpm-hfD5u`, not the `hfD5u` after its last hyphen. The id search stays within the linking note's scope. A target whose basename lacks that suffix carries no id and has no id step. Report a link broken only after every step fails.
-- **VTT raw content is collapsed, not verbatim.** Cues get merged into speaker turns with timestamps kept at turn boundaries, via `scripts/collapse-vtt.sh`. This is the one sanctioned exception to preserving raw content exactly as captured. A wall of two-second cues is unreadable to the human the zone exists for, and the words themselves are unchanged. A blank line separates the turns, because markdown runs consecutive non-blank lines together as one paragraph; `scripts/reflow-raw.sh` repairs notes groomed before that separator existed ([references/migration.md](references/migration.md)). Captions carrying no speaker label collapse one turn per cue under `@unknown`, the same token an open question uses for a resolver nobody named. Attribute unlabelled speech to `@unknown` even when a neighbouring turn makes a name look obvious. When the collapser exits nonzero it has refused the file and written no usable output: report the line it names, leave the source in `_inbox/`, and groom nothing from it.
+- **VTT raw content is collapsed, not verbatim.** Cues get merged into speaker turns with timestamps kept at turn boundaries, via `scripts/collapse-vtt.sh`. This is the one sanctioned exception to preserving raw content exactly as captured. A wall of two-second cues is unreadable to the human the zone exists for, and the words themselves are unchanged. A blank line separates the turns, because markdown runs consecutive non-blank lines together as one paragraph; `scripts/reflow-raw.sh` repairs notes groomed before that separator existed ([references/migration.md](references/migration.md)). Captions carrying no speaker label collapse one turn per cue under `@unknown`, the same token an open question uses for a resolver nobody named. Attribute unlabelled speech to `@unknown` even when a neighbouring turn makes a name look obvious. When the collapser refuses the file, `dispose-source.sh raw` exits 1 and writes no sidecar: report the line the collapser names, leave the source in `_inbox/`, and groom nothing from it.
 
 ---
 

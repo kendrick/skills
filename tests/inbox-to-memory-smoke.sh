@@ -4838,4 +4838,123 @@ require_text "$lint" 'if ! has_key "${KIT_TYPES// /$'"'"'\n'"'"'}" "$type"; then
 refute_text "$lint" '| grep -qx'
 refute_text "$lint" '| grep -Fqx'
 
+# Phase 4 deletes a source, so a script checks its sidecar before the delete;
+# phase 6's lint runs only after the words are gone (#388). Each case records
+# its failure in ds_bad and carries on, so a run with the script absent shows
+# every case failing, not just the first.
+ds=inbox-to-memory/scripts/dispose-source.sh
+ds_bad=0
+ds_fail() {
+  echo "dispose-source: $1" >&2
+  ds_bad=1
+}
+ds_tmp="$(mktemp -d "${TMPDIR:-/tmp}/i2m-dispose.XXXXXX")"
+ds_scope() {
+  local d="$ds_tmp/$1"
+  mkdir -p "$d/_memory"
+  cp -R "$fixtures/split/notes" "$fixtures/split/_inbox" "$d/"
+  printf '%s\n' "$d"
+}
+
+# A text source is copied byte for byte, and raw never touches the source.
+s="$(ds_scope md)"
+printf '# Kickoff\n\nNo trailing newline here' >"$s/_inbox/kickoff.md"
+bash "$ds" raw "$s" _inbox/kickoff.md --id Md00000001 >/dev/null 2>&1 || ds_fail "raw refused a non-empty .md"
+cmp -s "$s/_inbox/kickoff.md" "$s/notes/raw/Md00000001.md" || ds_fail "raw .md sidecar differs from its source"
+[[ -f "$s/_inbox/kickoff.md" ]] || ds_fail "raw removed its .md source"
+
+s="$(ds_scope vtt)"
+cp "$fixtures/steerco-excerpt.vtt" "$s/_inbox/"
+bash "$ds" raw "$s" _inbox/steerco-excerpt.vtt --id Vt00000001 >/dev/null 2>&1 || ds_fail "raw refused steerco-excerpt.vtt"
+cmp -s <(bash "$vtt" "$fixtures/steerco-excerpt.vtt") "$s/notes/raw/Vt00000001.md" 2>/dev/null ||
+  ds_fail "raw .vtt sidecar differs from what collapse-vtt.sh prints"
+
+# Each refusal: exit 1, no sidecar, source still in _inbox/.
+ds_refuses_raw() {
+  local label="$1" scope="$2" file="$3" id="$4" rc=0
+  bash "$ds" raw "$scope" "$file" --id "$id" >/dev/null 2>&1 || rc=$?
+  [[ "$rc" == 1 ]] || ds_fail "raw on $label exited $rc, want 1"
+  [[ ! -e "$scope/notes/raw/$id.md" ]] || ds_fail "raw on $label wrote a sidecar"
+  [[ -f "$scope/$file" ]] || ds_fail "raw on $label removed its source"
+  ! ls -A "$scope/notes/raw" | grep -q '^\.dispose' || ds_fail "raw on $label left a temp file in notes/raw/"
+}
+s="$(ds_scope empty)"
+: >"$s/_inbox/empty.md"
+ds_refuses_raw "an empty source" "$s" _inbox/empty.md Em00000001
+s="$(ds_scope badvtt)"
+printf 'GARBAGE HEADER\n\n1\n00:00:01.000 --> 00:00:05.000\n<v Alice>Hello</v>\n' >"$s/_inbox/bad.vtt"
+ds_refuses_raw "a .vtt collapse-vtt.sh refuses" "$s" _inbox/bad.vtt Bv00000001
+
+s="$(ds_scope exists)"
+printf 'new words\n' >"$s/_inbox/again.md"
+cp "$s/notes/raw/Kp3vR8sNq2.md" "$ds_tmp/kept.md"
+rc=0
+bash "$ds" raw "$s" _inbox/again.md --id Kp3vR8sNq2 >/dev/null 2>&1 || rc=$?
+[[ "$rc" == 1 ]] || ds_fail "raw over an existing sidecar exited $rc, want 1"
+cmp -s "$ds_tmp/kept.md" "$s/notes/raw/Kp3vR8sNq2.md" || ds_fail "raw changed an existing sidecar's bytes"
+
+# A binary source carries the text another skill extracted, and needs it.
+s="$(ds_scope binraw)"
+printf '%%PDF-1.4 fake\n' >"$s/_inbox/deck.pdf"
+printf 'Slide one says the pier opens in May.\n' >"$ds_tmp/deck.txt"
+rc=0
+bash "$ds" raw "$s" _inbox/deck.pdf --id Pd00000001 >/dev/null 2>&1 || rc=$?
+[[ "$rc" == 3 ]] || ds_fail "raw on a binary without --text exited $rc, want 3"
+bash "$ds" raw "$s" _inbox/deck.pdf --id Pd00000001 --text "$ds_tmp/deck.txt" >/dev/null 2>&1 || ds_fail "raw refused a binary with --text"
+cmp -s "$ds_tmp/deck.txt" "$s/notes/raw/Pd00000001.md" || ds_fail "raw binary sidecar differs from its --text"
+
+ds_note=notes/2026-07-07-pier-lighting-review-Kp3vR8sNq2.md
+
+# The Rule keys on the note's own sidecar. Perturbing that key refuses...
+s="$(ds_scope emptied)"
+printf 'words\n' >"$s/_inbox/a.md"
+: >"$s/notes/raw/Kp3vR8sNq2.md"
+rc=0
+bash "$ds" dispose "$s" _inbox/a.md --note "$ds_note" >/dev/null 2>&1 || rc=$?
+[[ "$rc" == 1 && -f "$s/_inbox/a.md" ]] || ds_fail "dispose deleted a source whose sidecar is empty (exit $rc)"
+
+# ...and perturbing the folder it isn't keyed on doesn't.
+s="$(ds_scope stray)"
+printf 'words\n' >"$s/_inbox/a.md"
+: >"$s/notes/raw/Zz99999999.md"
+bash "$ds" dispose "$s" _inbox/a.md --note "$ds_note" >/dev/null 2>&1 || ds_fail "dispose refused over an unrelated empty file in notes/raw/"
+[[ ! -e "$s/_inbox/a.md" ]] || ds_fail "dispose left a text source whose sidecar checks out"
+
+# Another note's sidecar is non-empty, which a folder-level check would accept.
+s="$(ds_scope borrowed)"
+printf 'words\n' >"$s/_inbox/a.md"
+sed 's/^id: Kp3vR8sNq2$/id: Br00000001/' "$s/$ds_note" >"$s/notes/2026-07-08-borrowed-Br00000001.md"
+grep -qx 'raw_file: raw/Kp3vR8sNq2.md' "$s/notes/2026-07-08-borrowed-Br00000001.md" || ds_fail "borrowed-sidecar fixture lost its raw_file line"
+rc=0
+err="$(bash "$ds" dispose "$s" _inbox/a.md --note notes/2026-07-08-borrowed-Br00000001.md 2>&1 >/dev/null)" || rc=$?
+[[ "$rc" == 1 && -f "$s/_inbox/a.md" ]] || ds_fail "dispose accepted a note whose raw_file names another note's sidecar (exit $rc)"
+grep -Fq 'raw/Br00000001.md' <<<"$err" || ds_fail "dispose's refusal did not name the expected sidecar: $err"
+
+# Binary disposal moves, refuses a taken name, and never overwrites.
+s="$(ds_scope clash)"
+printf 'second deck\n' >"$s/_inbox/deck.pdf"
+mkdir -p "$s/notes/attachments"
+printf 'first deck\n' >"$s/notes/attachments/deck.pdf"
+rc=0
+err="$(bash "$ds" dispose "$s" _inbox/deck.pdf --note "$ds_note" 2>&1 >/dev/null)" || rc=$?
+[[ "$rc" == 1 ]] || ds_fail "dispose over a taken attachment name exited $rc, want 1"
+[[ "$(cat "$s/_inbox/deck.pdf" 2>/dev/null)" == "second deck" ]] || ds_fail "dispose changed or moved the clashing source"
+[[ "$(cat "$s/notes/attachments/deck.pdf")" == "first deck" ]] || ds_fail "dispose overwrote an existing attachment"
+grep -Fq 'attachments/deck.pdf' <<<"$err" || ds_fail "dispose's clash refusal did not name the clash: $err"
+
+s="$(ds_scope move)"
+printf 'only deck\n' >"$s/_inbox/deck.pdf"
+out="$(bash "$ds" dispose "$s" _inbox/deck.pdf --note "$ds_note" 2>/dev/null)" || ds_fail "dispose refused to move a binary source"
+[[ "$out" == "source_file: attachments/deck.pdf" ]] || ds_fail "dispose printed '$out', want 'source_file: attachments/deck.pdf'"
+[[ ! -e "$s/_inbox/deck.pdf" && "$(cat "$s/notes/attachments/deck.pdf" 2>/dev/null)" == "only deck" ]] ||
+  ds_fail "dispose did not move the binary source to notes/attachments/"
+
+# Phases 3 and 4 call the script; the hand check it replaces is gone.
+(require_text inbox-to-memory/SKILL.md 'scripts/dispose-source.sh raw') 2>/dev/null || ds_fail "SKILL.md phase 3 does not call raw"
+(require_text inbox-to-memory/SKILL.md 'scripts/dispose-source.sh dispose') 2>/dev/null || ds_fail "SKILL.md phase 4 does not call dispose"
+(refute_text inbox-to-memory/SKILL.md 'confirm `notes/raw/<id>.md` exists and is non-empty before deleting') 2>/dev/null ||
+  ds_fail "SKILL.md phase 4 still carries the hand check"
+rm -rf "$ds_tmp"
+[[ "$ds_bad" == 0 ]] || exit 1
+
 echo "inbox-to-memory smoke: ok"
