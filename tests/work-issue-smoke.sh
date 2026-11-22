@@ -5032,6 +5032,7 @@ vc_case "$vc_dir/missing.md"
 
 require_text work-issue/SKILL.md "run-state.py verify-cmd --plan"
 require_text work-issue/SKILL.md "where that exits 3, the plan is unreadable, so stop the run quoting the script's stderr"
+require_text work-issue/SKILL.md "an adopted run has no plan, so it never calls \`verify-cmd\` and harvests"
 require_text work-issue/SKILL.md "and never widens it to match the handed file"
 require_text work-wave/SKILL.md "gates on its own plan's command at Step 1, Step 3, and every repair re-gate, while every merge test runs the full VERIFY_CMD"
 require_text _maintenance/work-wave/RATIONALE.md "A lane gates on its own plan's \`- Verify with:\` command while every merge test runs the full VERIFY_CMD"
