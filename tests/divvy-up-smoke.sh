@@ -620,6 +620,13 @@ max0_status=$?
 python3 "$waves" validate "$fixtures/waves-max-entries.md" --max 3 >/dev/null 2>&1
 entries_status=$?
 set -e
+# Captured first: under pipefail a producer's expected non-zero exit would fail a piped grep.
+unowned_err="$(printf 'src/other/file.ts\n' | python3 "$waves" owners "$fixtures/waves-good.md" --wave 1 --task "Implement auth" 2>&1 >/dev/null || true)"
+unknown_err="$(printf '' | python3 "$waves" owners "$fixtures/waves-good.md" --wave 1 --task "No such task" 2>&1 >/dev/null || true)"
+max0_err="$(python3 "$waves" validate "$fixtures/waves-good.md" --max 0 2>&1 >/dev/null || true)"
+grep -Fq "unowned in wave 1: src/other/file.ts" <<<"$unowned_err" || { echo "an unowned path under --task must name itself on stderr: $unowned_err" >&2; exit 1; }
+grep -Fq "no task 'No such task' in wave 1" <<<"$unknown_err" || { echo "an unknown --task must say no task in wave on stderr: $unknown_err" >&2; exit 1; }
+grep -Fq "is below 1" <<<"$max0_err" || { echo "--max 0 must say below 1 on stderr: $max0_err" >&2; exit 1; }
 [[ "$unowned_task_status" == 1 ]] || { echo "an unowned path under --task must exit 1, got $unowned_task_status" >&2; exit 1; }
 [[ "$unknown_task_status" == 3 ]] || { echo "a --task naming no wave-1 task must exit 3 even on empty stdin, got $unknown_task_status" >&2; exit 1; }
 [[ "$other_wave_status" == 3 ]] || { echo "a --task from another wave must exit 3, got $other_wave_status" >&2; exit 1; }
@@ -632,8 +639,8 @@ grep -Fq "wave 1 holds 3 tasks" "$tmp/max.err" || { echo "--max stderr must name
 require_text divvy-up/scripts/check-waves.py "validate PLAN.md [--max N]"
 require_text divvy-up/scripts/check-waves.py "owners PLAN.md --wave 1 [--task LABEL]"
 require_text divvy-up/SKILL.md "check-waves.py validate <PLAN> --max <MAX>"
-require_text divvy-up/SKILL.md "check-waves.py owners <PLAN> --wave N --task <LABEL> < PROMPT_DIR/N-LABEL.files"
-require_text _maintenance/divvy-up/RATIONALE.md "owners --task"
+require_text divvy-up/SKILL.md "check-waves.py owners <PLAN> --wave N --task \"<LABEL>\" < \"PROMPT_DIR/N-LABEL.files\""
+require_text _maintenance/divvy-up/RATIONALE.md "\`--max\` counts rows because a wave's width is its task count"
 # --- end owners --task and validate --max ---
 
 cat > "$tmp/pipe.md" <<'PLAN'
