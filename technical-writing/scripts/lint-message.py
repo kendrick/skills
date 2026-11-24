@@ -46,8 +46,10 @@ TYPE_PREFIX_RE = re.compile(r"^[a-z]+(\([^)]*\))?!?: ")
 COAUTHOR_RE = re.compile(r"^\s*co-authored-by:", re.I)
 FENCE_RE = re.compile(r"^\s*(`{3,}|~{3,})(.*)$")
 # A line that starts its own block is never a continuation of the line above.
-BLOCK_OPEN_RE = re.compile(r"^\s*(?:[-*+][ \t]|\d{1,9}[.)][ \t]|\||#{1,6}(?:[ \t]|$)|>|```|~~~)")
-HEADING_RE = re.compile(r"^\s*#{1,6}(?:[ \t]|$)")
+# A Setext underline (only = or only -) is a heading's second line, so it ends the block like an ATX heading.
+SETEXT_RE = r" {0,3}(?:=+|-+)[ \t]*$"
+BLOCK_OPEN_RE = re.compile(SETEXT_RE + r"|^\s*(?:[-*+][ \t]|\d{1,9}[.)][ \t]|\||#{1,6}(?:[ \t]|$)|>|```|~~~)")
+HEADING_RE = re.compile(r"^\s*#{1,6}(?:[ \t]|$)|" + SETEXT_RE)
 # git's trailer shape; a block of these is one trailer per line, not a wrapped sentence.
 TRAILER_RE = re.compile(r"^[A-Za-z0-9-]+: \S")
 ROBOT = "\U0001F916"
