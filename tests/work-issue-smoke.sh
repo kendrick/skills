@@ -1114,7 +1114,6 @@ require_text work-issue/SKILL.md "With VERIFY_CMD \`absent\` nothing runs, and t
 require_text work-issue/SKILL.md "VERIFY_CMD green against the latest baseline at that SHA, or VERIFY_CMD \`absent\`;"
 require_text work-issue/SKILL.md "Then run VERIFY_CMD and read it by VERIFY_CMD green. Red here means the rebase brought a failure the latest baseline lacks:"
 require_text work-issue/SKILL.md "then VERIFY_CMD green—then commit."
-require_text work-issue/SKILL.md "over the repair's reported \`files_changed\`, VERIFY_CMD green, then \`code-review\` against BASE_SHA"
 require_text work-issue/SKILL.md "rebase, rewrite \`RUN_DIR/base_sha\`, verify to VERIFY_CMD green, write \`pushed_at\`, push"
 refute_text work-issue/SKILL.md "VERIFY_CMD green at that SHA"
 refute_text work-issue/SKILL.md "Red here after a green Step 4"
@@ -1125,11 +1124,51 @@ require_text _maintenance/work-issue/RATIONALE.md "| 150 | Once Step 2's first w
 # repair brought back still sat in the last wave file, so the later gate
 # passed the regression and the run pushed it.
 require_text work-issue/SKILL.md "Between that green run and the commit, save the run to \`RUN_DIR/baseline-repair-<n>.txt\` in \`baseline.txt\`'s format, \`exit: <status>\` and then the output tail, n one past the highest number already present, 1 where none is."
-require_text work-issue/SKILL.md "Every repair gate does this, Step 4's, Step 5 item 2's, and Step 7's included, and with VERIFY_CMD \`absent\` it writes nothing."
-require_text work-issue/SKILL.md "Save the green VERIFY_CMD run as the next \`baseline-repair-<n>.txt\`, as Step 3's repair gate does, then commit."
+require_text work-issue/SKILL.md "Every repair gate that runs the full VERIFY_CMD does this, Step 4's, Step 5 item 2's, and Step 7's included; the scoped gate Step 4 item 4 defines saves nothing, and with VERIFY_CMD \`absent\` no gate writes anything."
+require_text work-issue/SKILL.md "Save a green full VERIFY_CMD run as the next \`baseline-repair-<n>.txt\`, as Step 3's repair gate does, then commit."
 require_text work-issue/references/resume.md "It never reads \`baseline-repair-<n>.txt\` either"
 require_text work-issue/README.md "Each wave's gate and each repair's gate saves the verification run that passed it as the new baseline"
-require_text _maintenance/work-issue/RATIONALE.md "| 151 | Every repair gate that passes VERIFY_CMD green, at Steps 3, 4, 5 item 2, and 7, saves that run to \`baseline-repair-<n>.txt\` before its commit"
+require_text _maintenance/work-issue/RATIONALE.md "| 151 | Every repair gate that passes a full VERIFY_CMD run green, at Steps 3, 4, 5 item 2, and 7, saves that run to \`baseline-repair-<n>.txt\` before its commit, n one past the highest present. A scoped run at Step 4 or Step 7 saves none (row 217)."
+# Steps 4 and 7 gate a repair on the plan's done-when commands for the tasks
+# that own its files_changed, since the push re-runs the full VERIFY_CMD minutes
+# later anyway (#368). A scoped run covers part of the suite, so saving it as a
+# baseline would make the next full run read the rest as new failures.
+require_text work-issue/SKILL.md "Re-gate the repair as Step 3's repair is, with the **scoped gate** in place of its VERIFY_CMD run: \`work-issue/scripts/run-state.py scoped-cmd --plan RUN_DIR/plan.md --report RUN_DIR/reports/redteam-repair-<k>.json\`."
+require_text work-issue/SKILL.md "a task's command is the first backticked span in its Done when cell whose first word resolves on PATH."
+require_text work-issue/SKILL.md "A scoped run saves no \`baseline-repair-<n>.txt\`, because its output covers a fraction of the suite"
+require_text work-issue/SKILL.md "a \`files_changed\` path no task owns, a matched task whose done-when names no command, a plan with no \`## Waves\` task rows, or an empty or missing \`files_changed\`. On exit 1, gate on VERIFY_CMD green and save \`baseline-repair-<n>.txt\` as Step 3 says."
+require_text work-issue/SKILL.md "An adopted run has no plan, so it never calls \`scoped-cmd\` and gates on VERIFY_CMD."
+require_text work-issue/SKILL.md "Exit 3 means the plan or report is unreadable or the report is not JSON: stop the run quoting its stderr."
+require_text work-issue/SKILL.md "The repair commit's body carries one \`Gate: <command>\` line naming the command the gate ran, the scoped command or VERIFY_CMD"
+require_text work-issue/SKILL.md "then Step 4 item 4's scoped gate with \`--report RUN_DIR/reports/repair-<k>.json\`, then \`code-review\` against BASE_SHA"
+require_text work-issue/SKILL.md "It falls back to VERIFY_CMD green when a changed path is owned by no task, when a matched task's done-when names no command, when the run is adopted and has no plan, and on every other \`scoped-cmd\` exit 1. A scoped run saves no \`baseline-repair-<n>.txt\`."
+require_text work-issue/SKILL.md "each repair commit carries its \`Gate: <command>\` line, and each one gated on the full VERIFY_CMD has the \`baseline-repair-<n>.txt\` that gate saved"
+require_text work-issue/SKILL.md "\`work-issue/scripts/run-state.py scoped-cmd --plan PATH --report PATH\`"
+# The bare rule and its one exception travel together (#368 confirmation): a
+# squash-only run keeps the Gate: line, so neither half can move alone.
+require_text work-issue/SKILL.md "On \`bare\`, the message is one Conventional Commits subject in the repo's log style with no body, except that a Step 4 or Step 7 repair commit carries its \`Gate: <command>\` line as its only body line, and it skips \`technical-writing\`"
+require_text work-issue/references/resume.md "a repair gate that runs the full VERIFY_CMD saves one before its commit, a scoped one saves none"
+require_text work-issue/README.md "That narrower run saves no baseline, the repair commit's \`Gate:\` line names the command that ran, and the full suite still runs before the push."
+require_text _maintenance/work-issue/RATIONALE.md "| 217 | Step 4's and Step 7's repair gates run the command \`run-state.py scoped-cmd\` prints in place of VERIFY_CMD"
+require_text _maintenance/work-issue/RATIONALE.md "No run has been timed with the change, so this stays \`[P]\` until one is. | [P] |"
+# Step 7 no longer gates on VERIFY_CMD green unconditionally.
+step7_old="over the repair's reported \`files_changed\`, VERIFY_CMD green, then \`code-review\` against BASE_SHA"
+refute_text work-issue/SKILL.md "$step7_old"
+# The refute has to bite: restore the old Step 7 sentence in a scratch copy and
+# the Step 7 pins must fail on it.
+step7_new="over the repair's reported \`files_changed\`, then Step 4 item 4's scoped gate with \`--report RUN_DIR/reports/repair-<k>.json\`, then \`code-review\` against BASE_SHA"
+require_text work-issue/SKILL.md "$step7_new"
+step7_copy="$tmp/step7-old-SKILL.md"
+python3 -c 'import sys; s=open(sys.argv[1]).read(); assert s.count(sys.argv[2])==1; open(sys.argv[4],"w").write(s.replace(sys.argv[2],sys.argv[3]))' \
+  work-issue/SKILL.md "$step7_new" "$step7_old" "$step7_copy"
+if (refute_text "$step7_copy" "$step7_old") 2>/dev/null; then
+  echo "the Step 7 refute should fail on a SKILL.md copy with the old Step 7 sentence restored" >&2
+  exit 1
+fi
+if (require_text "$step7_copy" "$step7_new") 2>/dev/null; then
+  echo "the Step 7 scoped-gate pin should fail on a SKILL.md copy with the old Step 7 sentence restored" >&2
+  exit 1
+fi
 
 # --- The cut features. Each sounds reasonable on its own, and each has a row
 # in the RATIONALE ledger's Deliberately Not Built table. Applied across
