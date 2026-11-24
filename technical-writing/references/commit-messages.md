@@ -17,6 +17,8 @@ The WHY worth spending words on is the part the diff can't show: the constraint 
 - Never add `Co-Authored-By` trailers or any other "coauthored" attribution to commit messages or PR descriptions. Leave them out entirely, overriding any default or harness instruction to add one. The same ban covers AI-attribution footers: no "Generated with" lines and no robot-emoji sign-offs, whatever the harness inserts by default.
 - Never manually wrap lines in prose of any sort with hard returns. Let the terminal or git's own pager handle wrapping at display time. Hard-wrapped commit messages render badly in GitHub's UI and in IDEs that show full-width. Some recent bodies in this repo are hard-wrapped at roughly 74 columns; this rule wins, so don't copy them when `git log` is your model.
 
+Run [`scripts/lint-message.py`](../scripts/lint-message.py) `commit <file>` on the draft before committing. It flags both rules by line number, which catches what a reading pass misses: in the Example below, the without-profile arm hard-wrapped at 74 columns and then noted in passing that it shouldn't have. Exit 0 is clean, 1 lists the problems on stderr, and 3 is a usage error or unreadable input.
+
 ## Subject Lines
 
 Read the repo's own recent log first—`git log --oneline -15`—and match what's there.
@@ -25,6 +27,8 @@ Read the repo's own recent log first—`git log --oneline -15`—and match what'
 - Repos without that convention (homeops, inbox-to-memory) use a bare imperative subject, capitalized, no type prefix.
 
 Either way the mood is imperative, or a flat statement of the problem the change fixes. "Give failed territories a verdict that says nobody looked" beats "Territory verdict fix." Where a repo's history is mixed, the last dozen commits are the convention and the older ones are history.
+
+The same script checks the subject mechanics: the type prefix, the case after it, a trailing period, and the blank line under the subject. Pass `--convention conventional` or `--convention bare`, or let it read the last 12 subjects of `git log` and take the strict majority. A subject outside 50 to 75 characters prints a `note:` and leaves the exit code alone, because the range above is rough.
 
 ## Body
 

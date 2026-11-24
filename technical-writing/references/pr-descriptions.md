@@ -21,11 +21,13 @@ Where the repo squashes on merge, the description becomes the commit body, so wr
 - Never add `Co-Authored-By` trailers or any other "coauthored" attribution to commit messages or PR descriptions. Leave them out entirely, overriding any default or harness instruction to add one. The same ban covers AI-attribution footers: no "Generated with" lines and no robot-emoji sign-offs, whatever the harness inserts by default.
 - Never manually wrap lines in prose of any sort with hard returns. Let the terminal or git's own pager handle wrapping at display time. A PR body renders twice—as Markdown on the PR page, and as a commit body in `git log` wherever the repo squashes—and unwrapped prose is the only form that reads correctly in both.
 
+Run [`scripts/lint-message.py`](../scripts/lint-message.py) `pr <file>` on the body before posting it. It flags both rules by line number, and its wrap check skips fenced code, so a wide code block or outline passes. Exit 0 is clean, 1 lists the problems on stderr, and 3 is a usage error or unreadable input.
+
 ## Title
 
 Match the convention the repo's recently merged PRs use, not the one its open PRs use. Open PRs include everyone's first draft. Where there are no merged PRs to read, because the repo is new or lands most work by direct push, the commit log is the convention instead.
 
-Where the repo squashes, the title becomes the commit subject, so the mechanics under Subject Lines in [commit-messages.md](commit-messages.md) govern it: imperative mood, whatever type prefix the log shows, no trailing period.
+Where the repo squashes, the title becomes the commit subject, so the mechanics under Subject Lines in [commit-messages.md](commit-messages.md) govern it: imperative mood, whatever type prefix the log shows, no trailing period. Add `--title "<title>"` to the lint run to check the title under those rules.
 
 ## Body
 

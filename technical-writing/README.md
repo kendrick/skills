@@ -51,12 +51,14 @@ cp -R skills/technical-writing ~/.claude/skills/technical-writing
 technical-writing/
 ├── SKILL.md                      # the skill — four layers, dispatch table, audit loop
 ├── README.md                     # this file
-└── references/
-    ├── commit-messages.md        # register, content, subject-line conventions
-    ├── comments.md               # when to comment, docblock/inline mode mapping, auditing
-    ├── pr-descriptions.md        # reviewer-first content, testing disclosure, change outlines, squash-merge survival
-    ├── review-correspondence.md  # answering register, the divergence rule, the SHA that goes stale
-    └── readme.md                 # per-section mode mapping, register, the existing-voice rule
+├── references/
+│   ├── commit-messages.md        # register, content, subject-line conventions
+│   ├── comments.md               # when to comment, docblock/inline mode mapping, auditing
+│   ├── pr-descriptions.md        # reviewer-first content, testing disclosure, change outlines, squash-merge survival
+│   ├── review-correspondence.md  # answering register, the divergence rule, the SHA that goes stale
+│   └── readme.md                 # per-section mode mapping, register, the existing-voice rule
+└── scripts/
+    └── lint-message.py           # checks a commit message or PR body for trailers, hard wraps, and subject mechanics
 ```
 
 ## Gotchas
