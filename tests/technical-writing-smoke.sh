@@ -472,6 +472,22 @@ msg setextdash "Summary" "-------" "" "Adds validation."
 lint_case "Setext - underline is not a wrap" 0 "" pr "$lint_tmp/setextdash.txt"
 msg setextwrap "Summary" "=======" "Adds validation in a paragraph" "that a writer broke by hand."
 lint_case "prose wrapped under a Setext heading is still a wrap" 1 "line 4: hard wrap" pr "$lint_tmp/setextwrap.txt"
+msg listfence '- ```python' '  first = 1' '  second = 2' '  ```'
+lint_case "a fence opened inside a list item holds its lines" 0 "" pr "$lint_tmp/listfence.txt"
+msg codemarker '```' 'code line one' '- ```' 'still code a' 'more code b' '```'
+lint_case "a list-marker fence line inside a fence is code" 0 "" pr "$lint_tmp/codemarker.txt"
+msg inlineopen '- ```code``` inline start' 'prose that a writer broke' 'across two lines by hand.'
+lint_case "a backtick opener with a backtick in its info string is not a fence" 1 "line 3: hard wrap" pr "$lint_tmp/inlineopen.txt"
+msg breakstar "Adds validation." "" "***" "Checks existing messages."
+lint_case "a *** break ends its block" 0 "" pr "$lint_tmp/breakstar.txt"
+msg breakunder "Adds validation." "" "___" "Checks existing messages."
+lint_case "a ___ break ends its block" 0 "" pr "$lint_tmp/breakunder.txt"
+msg breakspaced "Adds validation." "" "* * *" "Checks existing messages."
+lint_case "a spaced * * * break ends its block" 0 "" pr "$lint_tmp/breakspaced.txt"
+msg breakwrap "Adds validation." "" "***" "Checks existing messages in a paragraph" "that a writer broke by hand."
+lint_case "prose wrapped after a break is still a wrap" 1 "line 5: hard wrap" pr "$lint_tmp/breakwrap.txt"
+msg bulletwrap2 "- A list item that a writer broke across two lines" "  by indenting the rest under the bullet." "" "- another item"
+lint_case "a wrapped bullet is still a wrap beside the break rule" 1 "line 2: hard wrap" pr "$lint_tmp/bulletwrap2.txt"
 # A prefix with nothing after it has no lowercase letter to fail, so it needs its own check.
 msg emptydesc "feat: "
 lint_case "conventional prefix with an empty description" 1 "empty description after the type prefix" commit "$lint_tmp/emptydesc.txt" --convention conventional

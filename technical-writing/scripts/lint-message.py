@@ -45,11 +45,13 @@ import sys
 TYPE_PREFIX_RE = re.compile(r"^[a-z]+(\([^)]*\))?!?: ")
 COAUTHOR_RE = re.compile(r"^\s*co-authored-by:", re.I)
 FENCE_RE = re.compile(r"^\s*(`{3,}|~{3,})(.*)$")
+# A list marker can only precede an opener, so "- ```" inside a fence is code, not a closer.
+OPEN_RE = re.compile(r"^\s*(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)?(`{3,}|~{3,})(.*)$")
 # A line that starts its own block is never a continuation of the line above.
-# A Setext underline (only = or only -) is a heading's second line, so it ends the block like an ATX heading.
-SETEXT_RE = r" {0,3}(?:=+|-+)[ \t]*$"
-BLOCK_OPEN_RE = re.compile(SETEXT_RE + r"|^\s*(?:[-*+][ \t]|\d{1,9}[.)][ \t]|\||#{1,6}(?:[ \t]|$)|>|```|~~~)")
-HEADING_RE = re.compile(r"^\s*#{1,6}(?:[ \t]|$)|" + SETEXT_RE)
+# A Setext underline or a thematic break (3+ of * - _, spaces allowed) is a line that closes its own block, like an ATX heading.
+BOUNDARY_RE = r" {0,3}(?:=+|-+|(?:-[ \t]*){3,}|(?:\*[ \t]*){3,}|(?:_[ \t]*){3,})[ \t]*$"
+BLOCK_OPEN_RE = re.compile(BOUNDARY_RE + r"|^\s*(?:[-*+][ \t]|\d{1,9}[.)][ \t]|\||#{1,6}(?:[ \t]|$)|>|```|~~~)")
+HEADING_RE = re.compile(r"^\s*#{1,6}(?:[ \t]|$)|" + BOUNDARY_RE)
 # git's trailer shape; a block of these is one trailer per line, not a wrapped sentence.
 TRAILER_RE = re.compile(r"^[A-Za-z0-9-]+: \S")
 ROBOT = "\U0001F916"
@@ -134,15 +136,17 @@ def check_lines(lines, first, problems):
             continue
         blank = not line.strip()
         trailer = bool(TRAILER_RE.match(line))
-        m = FENCE_RE.match(line)
         # CommonMark: a closer repeats the opener's character, is at least as long,
         # and carries no info string. A bare toggle closes a four-backtick example
         # at the three-backtick fence nested inside it.
         if open_fence is None:
-            fence = bool(m)
-            if m:
+            m = OPEN_RE.match(line)
+            # A backtick info string can't hold a backtick, so "```code``` text" is inline code.
+            fence = bool(m and not (m.group(1)[0] == "`" and "`" in m.group(2)))
+            if fence:
                 open_fence = m.group(1)
         else:
+            m = FENCE_RE.match(line)
             fence = bool(m and m.group(1)[0] == open_fence[0]
                          and len(m.group(1)) >= len(open_fence) and not m.group(2).strip())
             if fence:
