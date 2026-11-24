@@ -654,6 +654,8 @@ refs_text noslash 'The `name` and `v1` and `plain.` words are not paths.'
 refs_case "a span with no slash and no extension is not a path" 0 "" "$refs_tmp/noslash.txt"
 refs_text bare_path 'Run tests/no-such-smoke.sh or see technical-writing/no-such.md for more.'
 refs_case "a bare path outside a code span is not checked" 0 "" "$refs_tmp/bare_path.txt"
+refs_text dotslash 'See `./AGENTS.md` and `././tests/file-issue-smoke.sh`.'
+refs_case "a leading ./ is dropped before lookup" 0 "" "$refs_tmp/dotslash.txt"
 refs_text ext 'See `no-such-file.py`.'
 refs_case "a bare filename with an extension is a path" 1 'line 1: no-such-file.py' "$refs_tmp/ext.txt"
 

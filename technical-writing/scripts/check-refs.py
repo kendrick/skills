@@ -38,8 +38,9 @@ import re
 import subprocess
 import sys
 
-# Fence reading copied from lint-message.py so each script stays copy-in
-# portable; that file is authoritative, so fix a fence bug there first.
+# Fence reading adapted from lint-message.py, not vendored: the regexes match it
+# and the open/close loop is rewritten as a generator, so a fence fix there has
+# to be carried here by hand. That keeps each script copy-in portable.
 FENCE_RE = re.compile(r"^\s*(`{3,}|~{3,})(.*)$")
 # A list marker can only precede an opener, so "- ```" inside a fence is code, not a closer.
 OPEN_RE = re.compile(r"^\s*(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)?(`{3,}|~{3,})(.*)$")
@@ -82,7 +83,8 @@ def tracked_paths():
                              capture_output=True, text=True, check=True).stdout.strip()
         listing = subprocess.run(
             ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
-            capture_output=True, text=True, check=True, cwd=top).stdout
+            capture_output=True, text=True, check=True, cwd=top,
+            errors="surrogateescape").stdout
     except (OSError, subprocess.CalledProcessError) as e:
         die(f"needs a git repository in the current directory ({e})")
     files = {p for p in listing.split("\0") if p}
@@ -116,7 +118,7 @@ def as_path(span):
     span = span.strip()
     if not span or NOT_PATH.search(span):
         return None
-    key = LINE_SUFFIX_RE.sub("", span).rstrip("/")
+    key = re.sub(r"^(\./)+", "", LINE_SUFFIX_RE.sub("", span)).rstrip("/")
     if key and ("/" in span or EXTENSION_RE.search(key)):
         return key
     return None
@@ -143,20 +145,20 @@ def main():
     args = parser.parse_args()
 
     lines = read_input(args.file).splitlines()
-    known = tracked_paths()
-    problems, seen, asked = [], set(), {}
+    repo_paths = tracked_paths()
+    problems, seen, issue_found = [], set(), {}
     for number, line in prose_lines(lines):
         for m in SPAN_RE.finditer(line):
             key = as_path(m.group(2))
-            if key and key not in known and (number, key) not in seen:
+            if key and key not in repo_paths and (number, key) not in seen:
                 seen.add((number, key))
                 problems.append(f"line {number}: {key} does not resolve in this repository")
         if args.gh:
             for m in BARE_ISSUE_RE.finditer(SPAN_RE.sub(" ", line)):
                 n = m.group(1)
-                if n not in asked:
-                    asked[n] = issue_exists(n)
-                    if not asked[n]:
+                if n not in issue_found:
+                    issue_found[n] = issue_exists(n)
+                    if not issue_found[n]:
                         problems.append(f"line {number}: #{n} is not an issue or pull request here")
 
     for problem in problems:
