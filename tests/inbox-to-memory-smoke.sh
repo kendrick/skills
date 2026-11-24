@@ -3807,6 +3807,37 @@ for lm_case in 'Atlas (2026)|atlas-2026' 'Atlas  (2026)|atlas-2026' 'Acme  Co|ac
   }
   require_line "$(cat "$lm_named/memory-bank.yaml")" "name: '${lm_case##*|}'" "memory-bank.yaml in '${lm_case%%|*}'"
 done
+# memory-index names a scope from its resolved path (`Path(scope_root).resolve()`), so a scope
+# reached through a symlink takes the target's name, not the link's.
+lm_real="$lm_dir/real/Real Dir"
+lm_stage "$lm_real"
+mkdir -p "$lm_dir/links"
+ln -s "$lm_real" "$lm_dir/links/Link Name"
+lm_out="$(bash "$lm_migrator" "$lm_dir/links/Link Name" --to-ltm --facet-map "$lm_map" --apply 2>&1)" || {
+  echo "--to-ltm --apply failed on a symlinked scope" >&2
+  printf '%s\n' "$lm_out" >&2
+  exit 1
+}
+require_line "$(cat "$lm_real/memory-bank.yaml")" "name: 'real-dir'" "memory-bank.yaml behind the symlink 'Link Name'"
+# A python3 that cannot derive the name must stop the pass and say why, not abort with no message.
+# The shim fails only on the bank-name program and hands every other call to the real python3.
+lm_pyfail="$lm_dir/pyfail"
+mkdir -p "$lm_pyfail/bin"
+printf '#!/bin/sh\ncase "$*" in *root.name.lower*) exit 1 ;; esac\nexec "%s" "$@"\n' "$(command -v python3)" >"$lm_pyfail/bin/python3"
+chmod +x "$lm_pyfail/bin/python3"
+lm_pyscope="$lm_dir/pyfail-scope"
+lm_stage "$lm_pyscope"
+lm_rc=0
+lm_out="$(PATH="$lm_pyfail/bin:$PATH" bash "$lm_migrator" "$lm_pyscope" --to-ltm --facet-map "$lm_map" --apply 2>&1)" || lm_rc=$?
+[[ "$lm_rc" -ne 0 ]] || {
+  echo "--to-ltm --apply exited 0 although python3 failed" >&2
+  exit 1
+}
+require_output "$lm_out" "python3 failed while deriving the bank name from the scope directory"
+[[ ! -e "$lm_pyscope/memory-bank.yaml" ]] || {
+  echo "--to-ltm --apply wrote memory-bank.yaml although python3 failed" >&2
+  exit 1
+}
 # The migrator carries the rule as code, so a drift from memory-index fails here.
 require_text "$lm_migrator" 're.sub(r"[^a-z0-9]+", "-", root.name.lower()).strip("-")'
 # None of the four docs may say the per-character rule again.
