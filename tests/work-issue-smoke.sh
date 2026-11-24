@@ -5038,6 +5038,87 @@ vc_case "$vc_dir/missing.md"
 require_text work-issue/SKILL.md "run-state.py verify-cmd --plan"
 require_text work-issue/SKILL.md "where that exits 3, the plan is unreadable, so stop the run quoting the script's stderr"
 require_text work-issue/SKILL.md "an adopted run has no plan, so it never calls \`verify-cmd\` and harvests"
+
+# --- #368: scoped-cmd ---
+# A repair gate runs the done-when commands of the tasks owning the files the
+# repair changed, not the full VERIFY_CMD. Anything the script cannot place
+# falls back to exit 1, so a wrong guess costs a full run and never a skipped one.
+sc_plan() {
+  printf '# Plan\n\n## Waves\n\n| Wave | Task | Files owned | Model | Done when | Constraints |\n|---|---|---|---|---|---|\n'
+  printf '| 0 | one | a.py | sonnet | `bash tests/a.sh` exits 0 | none |\n'
+  printf '| 0 | two | docs/ | sonnet | `bash tests/d.sh` exits 0 | none |\n'
+  printf '%s\n' "$1"
+  printf '\n## After\n\n| 9 | late | z.py | sonnet | `bash tests/z.sh` | none |\n'
+}
+sc_case() {
+  set +e
+  python3 "$run_state" scoped-cmd --plan "$1" --report "$2" >"$sc_dir/out" 2>"$sc_dir/err"
+  sc_status=$?
+  set -e
+}
+sc_fail() {
+  echo "#368: $1, got status $sc_status: $(cat "$sc_dir/out" "$sc_dir/err")" >&2
+  exit 1
+}
+sc_expect_fallback() {
+  [[ "$sc_status" == "1" && ! -s "$sc_dir/out" && "$(wc -l <"$sc_dir/err" | tr -d ' ')" == "1" ]] \
+    && grep -q '^run-state: scoped-cmd:' "$sc_dir/err" || sc_fail "$1 should exit 1 with one scoped-cmd stderr line"
+}
+sc_dir="$(mktemp -d "$tmp/sc.XXXXXX")"
+sc_plan '' >"$sc_dir/plan.md"
+
+# 1. Two owning tasks print both commands once, in table order.
+printf '{"files_changed": ["docs/x.md", "a.py"]}\n' >"$sc_dir/r.json"
+sc_case "$sc_dir/plan.md" "$sc_dir/r.json"
+[[ "$sc_status" == "0" && "$(cat "$sc_dir/out")" == "bash tests/a.sh && bash tests/d.sh" ]] || sc_fail "two owners should print both commands in table order"
+
+# 2. A third task repeating the first's command is dropped.
+sc_plan '| 0 | three | b.py | sonnet | `bash tests/a.sh` exits 0 | none |' >"$sc_dir/plan3.md"
+printf '{"files_changed": ["a.py", "b.py"]}\n' >"$sc_dir/r3.json"
+sc_case "$sc_dir/plan3.md" "$sc_dir/r3.json"
+[[ "$sc_status" == "0" && "$(cat "$sc_dir/out")" == "bash tests/a.sh" ]] || sc_fail "a repeated command should print once"
+
+# 3. Falsifier, files side: one unowned path in files_changed flips exit 0 to 1.
+printf '{"files_changed": ["a.py", "z.py"]}\n' >"$sc_dir/r.json"
+sc_case "$sc_dir/plan.md" "$sc_dir/r.json"
+sc_expect_fallback "an unowned files_changed path"
+
+# 4. Falsifier, finding side: the files_changed of case 1 plus a finding, a
+# left entry and a summary that all name the unowned z.py leave the output as
+# case 1 printed it. The fields are present on purpose; omitting them would
+# pass a script that read them and ignored the result.
+printf '{"files_changed": ["a.py"], "finding": "z.py is broken", "summary": "fixed z.py", "left": [{"what": "z.py", "why": "z.py"}], "plan_concerns": [{"found": "z.py"}]}\n' >"$sc_dir/r.json"
+sc_case "$sc_dir/plan.md" "$sc_dir/r.json"
+[[ "$sc_status" == "0" && "$(cat "$sc_dir/out")" == "bash tests/a.sh" ]] || sc_fail "unowned files named outside files_changed should not move the command"
+
+# 5. A matched task whose done-when has no command falls back.
+sc_plan '| 0 | three | c.py | sonnet | `c.py` exists | none |' >"$sc_dir/plan5.md"
+printf '{"files_changed": ["c.py"]}\n' >"$sc_dir/r.json"
+sc_case "$sc_dir/plan5.md" "$sc_dir/r.json"
+sc_expect_fallback "a done-when with no command"
+
+# 6. Empty and missing files_changed fall back.
+printf '{"files_changed": []}\n' >"$sc_dir/r.json"
+sc_case "$sc_dir/plan.md" "$sc_dir/r.json"
+sc_expect_fallback "an empty files_changed"
+printf '{"summary": "x"}\n' >"$sc_dir/r.json"
+sc_case "$sc_dir/plan.md" "$sc_dir/r.json"
+sc_expect_fallback "a missing files_changed"
+
+# 7. A plan with no ## Waves task rows falls back.
+printf '# Plan\n\n- Own only: a.py\n' >"$sc_dir/planx.md"
+printf '{"files_changed": ["a.py"]}\n' >"$sc_dir/r.json"
+sc_case "$sc_dir/planx.md" "$sc_dir/r.json"
+sc_expect_fallback "a plan with no Waves task rows"
+
+# 8. Exit 3: an unreadable report, a non-JSON report, and an unreadable plan.
+sc_case "$sc_dir/plan.md" "$sc_dir/missing.json"
+[[ "$sc_status" == "3" && ! -s "$sc_dir/out" ]] || sc_fail "a missing report should exit 3"
+printf 'not json\n' >"$sc_dir/bad.json"
+sc_case "$sc_dir/plan.md" "$sc_dir/bad.json"
+[[ "$sc_status" == "3" && ! -s "$sc_dir/out" ]] || sc_fail "a non-JSON report should exit 3"
+sc_case "$sc_dir/missing.md" "$sc_dir/r.json"
+[[ "$sc_status" == "3" && ! -s "$sc_dir/out" ]] || sc_fail "a missing plan should exit 3"
 require_text work-issue/SKILL.md "Name VERIFY_CMD to \`divvy-up\` as the verify command, so its Step 3 skips its own repo-disk resolution and its Step 6 gate runs it."
 require_text work-issue/SKILL.md "name VERIFY_CMD to it again as the verify command at every wave it continues."
 require_text work-issue/SKILL.md "with \`--verify-cmd\` set to VERIFY_CMD."

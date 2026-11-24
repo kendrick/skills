@@ -9,6 +9,7 @@
     work-issue/scripts/run-state.py adopt M --pr-json FILE --bundle FILE --run-dir DIR --root ROOT --default DEFAULT --invoker LOGIN [--max-review-rounds R] [--dry-run]
     work-issue/scripts/run-state.py reuse-baseline --wave-baseline PATH --base-sha SHA --install CMD --verify CMD --out PATH
     work-issue/scripts/run-state.py verify-cmd --plan PATH
+    work-issue/scripts/run-state.py scoped-cmd --plan PATH --report PATH
 
 Neither `review` nor `phase` is a gate. `review` answers `findings`, `cleared`, or
 `pending` on its first stdout line, then lists every item that bore on the
@@ -68,11 +69,21 @@ grows from A+B to A+B+C leaves a lane's gate where it was. It exits 1 with one
 `run-state: verify-cmd:` stderr line when the plan has no such line or the line
 has no backticked span, and Step 1 falls back to the harvested VERIFY_CMD.
 
-Exit codes: 0 with an answer on stdout; 1 only from `adopt`, `reuse-baseline`
-and `verify-cmd`, as above; 3 usage, a `gh` failure, an unwritable `--save`
+`scoped-cmd` prints the done-when command of every `## Waves` task that owns a
+path in the repair report's `files_changed`, in table order, repeats dropped,
+joined by ` && `. A task's command is the first backticked span in its Done when
+cell whose first word resolves on PATH, so `` `a.py` exists `` names none. It
+reads `files_changed` and nothing else, never the finding or `left`, so a
+report that merely mentions an unowned file cannot move the answer. It exits 1
+with one `run-state: scoped-cmd:` stderr line, and the gate runs VERIFY_CMD
+instead, when a changed path matches no task, a matched task names no command,
+the plan has no task rows, or `files_changed` is empty or missing.
+
+Exit codes: 0 with an answer on stdout; 1 only from `adopt`, `reuse-baseline`,
+`verify-cmd` and `scoped-cmd`, as above; 3 usage, a `gh` failure, an unwritable `--save`
 path, a `reuse-baseline` --out with no directory, or input this script cannot
 read (an unparseable bundle, a bundle missing a top-level key, a probe missing
-a field, a wave baseline or plan that cannot be read). Argparse supplies 2 for a
+a field, a wave baseline, plan or report that cannot be read, or a report that is not JSON). Argparse supplies 2 for a
 mistyped flag, except under `probe` and `adopt`, where it is 3 too,
 because the issue that asked for `probe` asked for the validator convention.
 
@@ -83,6 +94,7 @@ import fnmatch
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -3119,6 +3131,77 @@ def cmd_verify_cmd(args):
     return 1
 
 
+def cmd_scoped_cmd(args):
+    """Print the done-when commands of the tasks that own the repair's files.
+
+    A repair touches a few files, and the full VERIFY_CMD the push runs again
+    re-proves all of them (#368). The plan's own done-when for the owning tasks
+    is the narrower check. Only `files_changed` is read: a finding or `left`
+    entry that names a file the repair never touched must not widen or narrow
+    the gate.
+
+    Exits 0 with the commands joined by ` && `, 1 with one stderr line where
+    any fallback to the full VERIFY_CMD applies, and 3 on an unreadable plan
+    or report, or a report that is not JSON.
+    """
+    try:
+        with open(args.plan, "rb") as f:
+            plan = f.read().decode("utf-8", "replace")
+        with open(args.report, "rb") as f:
+            raw = f.read().decode("utf-8", "replace")
+    except OSError as e:
+        sys.stderr.write(f"run-state: scoped-cmd: {e.filename}: {e.strerror or e}\n")
+        return 3
+    try:
+        report = json.loads(raw)
+    except ValueError as e:
+        sys.stderr.write(f"run-state: scoped-cmd: {args.report}: not JSON: {e}\n")
+        return 3
+
+    def fallback(why):
+        sys.stderr.write(f"run-state: scoped-cmd: {why}; run VERIFY_CMD\n")
+        return 1
+
+    changed = report.get("files_changed") if isinstance(report, dict) else None
+    if not isinstance(changed, list) or not changed or not all(isinstance(c, str) and c for c in changed):
+        return fallback(f"{args.report}: files_changed is empty or missing")
+
+    tasks = []  # (owned paths, done-when cell)
+    in_section = started = False
+    for line in plan.split("\n"):
+        if WAVES_HEADING.match(line):
+            in_section = True
+        elif not in_section:
+            continue
+        elif TABLE_LINE.match(line):
+            started = True
+            cells = [c.strip(" \t") for c in line.split("|")]
+            if len(cells) > 5 and re.fullmatch(r"[0-9]+", cells[1]) and cells[2]:
+                tasks.append((owned_paths(re.sub(r"[ \t]*,[ \t]*", ",", cells[3])), cells[5]))
+        elif started:
+            break
+    if not tasks:
+        return fallback(f"{args.plan}: no ## Waves task rows")
+
+    def owns(owned, path):
+        return any(path == o or (o.endswith("/") and path.startswith(o)) for o in owned if o)
+
+    for path in changed:
+        if not any(owns(owned, path) for owned, _ in tasks):
+            return fallback(f"{path} is owned by no task")
+    commands = []
+    for owned, done in tasks:
+        if not any(owns(owned, path) for path in changed):
+            continue
+        cmd = next((s for s in re.findall(r"`([^`]+)`", done) if s.split() and shutil.which(s.split()[0])), None)
+        if cmd is None:
+            return fallback("a task owning a changed path has a done-when that names no command")
+        if cmd not in commands:
+            commands.append(cmd)
+    print(" && ".join(commands))
+    return 0
+
+
 def parse_args(argv=None):
     ap = argparse.ArgumentParser(
         description="Read a PR's review state, or map a resume probe to a phase."
@@ -3168,6 +3251,11 @@ def parse_args(argv=None):
     vc = sub.add_parser("verify-cmd", help="print the command the plan's '- Verify with:' line names")
     vc.add_argument("--plan", metavar="PATH", required=True, help="the issue's plan file")
     vc.set_defaults(func=cmd_verify_cmd)
+
+    sc = sub.add_parser("scoped-cmd", help="print the done-when commands of the plan tasks that own a repair's changed files")
+    sc.add_argument("--plan", metavar="PATH", required=True, help="the issue's plan file")
+    sc.add_argument("--report", metavar="PATH", required=True, help="the repair report; only files_changed is read")
+    sc.set_defaults(func=cmd_scoped_cmd)
 
     g = sub.add_parser("probe", help="gather the resume probe that phase reads")
     g.add_argument("--run-dir", metavar="DIR", required=True, help="RUN_DIR; read, never created")
