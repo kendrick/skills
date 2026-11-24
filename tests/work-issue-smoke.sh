@@ -5532,9 +5532,9 @@ grep -Fq -- "VERDICTS_FILE" <<<"$prompt_block" && {
 require_text _maintenance/work-issue/RATIONALE.md "\`WORK_ISSUE_REPRODUCER\` is opt-in, and every fallback reaches the subagent"
 require_text _maintenance/work-issue/RATIONALE.md "\`merge-verdicts.py\` builds \`round-<k>.json\`"
 require_text _maintenance/work-issue/RATIONALE.md "**The executor preference isn't recorded in RUN_DIR.**"
-# The README names merge-verdicts.py and counts it among the seven scripts.
+# The README names merge-verdicts.py and counts it among the eight scripts.
 require_text work-issue/README.md "merge-verdicts.py"
-require_text work-issue/README.md "Python 3 for the seven bundled scripts"
+require_text work-issue/README.md "Python 3 for the eight bundled scripts"
 # Cut: routing other dispatches through WORK_ISSUE_REPRODUCER; the issue's Non-Goals keep it to the reproducer.
 refute_text work-issue/references/worker-prompt.md "WORK_ISSUE_REPRODUCER"
 refute_text adversarial-review/SKILL.md "WORK_ISSUE_REPRODUCER"
@@ -5636,6 +5636,10 @@ for ce_pin in \
 done
 # The reproducer greps per-commit history now, so the old "at HEAD" wording is stale.
 refute_text work-issue/references/worker-prompt.md "the file the reproducer greps at HEAD"
+
+# #464: Step 1 only warns about a stale review-rules block and keeps going; it never installs one into the target repo.
+require_text work-issue/SKILL.md "print one warning naming \`review-rules.py install <tree>\`"
+refute_text work-issue/SKILL.md "run \`work-issue/scripts/review-rules.py install"
 
 # --- crash points ---
 # #147: resume_checks.py replays every write the skill makes and asks the real

@@ -47,7 +47,9 @@ git clone git@github.com:kendrick/skills.git
 cp -R skills/work-issue ~/.claude/skills/work-issue
 ```
 
-Needs a git repo and Python 3 for the seven bundled scripts, which are stdlib-only. Needs `gh` authenticated too, since the opening gate cannot read the issue without it and would invent the acceptance criteria. It invokes `divvy-up`, `code-review`, `adversarial-review`, and `technical-writing` by name, and the step that needs a missing one stops and says which. An issue with no plan needs a planner: `writing-plans` where it's installed, otherwise the harness's plan mode, and with neither the run refuses. `ponytail-review` is optional: where it's installed, the run invokes it while `code-review`'s subagents run, over the same assembled diff, and where it isn't, the run skips it and goes on. `herdr` is optional; without it the run falls back to `git worktree` and plain subagents.
+The install doesn't touch your repos. Step 1 checks each target repo's `AGENTS.md` for the review-rules block and warns when it is missing or stale. Run `work-issue/scripts/review-rules.py install <repo>` once to add or refresh it, so Codex reviews that repo's pull requests against the same conventions the run builds to.
+
+Needs a git repo and Python 3 for the eight bundled scripts, which are stdlib-only. Needs `gh` authenticated too, since the opening gate cannot read the issue without it and would invent the acceptance criteria. It invokes `divvy-up`, `code-review`, `adversarial-review`, and `technical-writing` by name, and the step that needs a missing one stops and says which. An issue with no plan needs a planner: `writing-plans` where it's installed, otherwise the harness's plan mode, and with neither the run refuses. `ponytail-review` is optional: where it's installed, the run invokes it while `code-review`'s subagents run, over the same assembled diff, and where it isn't, the run skips it and goes on. `herdr` is optional; without it the run falls back to `git worktree` and plain subagents.
 
 ## Use
 
@@ -82,6 +84,7 @@ work-issue/
 ├── references/
 │   ├── resume.md               # how to gather the probe, what each field means, and the phase table
 │   ├── worker-prompt.md        # the preamble every dispatch carries, and the report contract
+│   ├── codex-review-rules.md   # the review-rules block `review-rules.py` installs into a repo's AGENTS.md
 │   ├── redteam.md              # the reproducer's instructions and the adversarial-review trigger
 │   └── triage.md               # scoring review signal, queueing what's out of scope, answering threads
 └── scripts/
@@ -89,6 +92,7 @@ work-issue/
     ├── check-inflight.py       # proves no run in flight owns a path this plan owns
     ├── find-plan.py            # finds issue N's plan in WORK_ISSUE_PLAN_DIRS, ~/.claude/plans by default
     ├── drive.py                # relaunches a confirmed run from outside the session until it reaches a stop that needs you
+    ├── review-rules.py         # checks that a repo's AGENTS.md carries the current review-rules block, and installs it on request
     ├── merge-verdicts.py       # builds a red-team round from codex's per-claim verdict lines and names the claims left uncovered
     ├── run-state.py            # gathers the resume probe and places a run on the phase table; scores a pull request's review; weighs review time against build time
     ├── resume_checks.py        # checks the phase table three ways: `crash-points` replays every write and checks where a crash before each one resumes, `invariants` holds every probe `phase_of` can tell apart to the model's safety rules, and `liveness` follows each probe through the step effects to a stop, a wait, or done
@@ -108,7 +112,7 @@ work-issue/
 
 ## Maintainers
 
-The decision ledger and eval suite live in [`_maintenance/work-issue/`](../_maintenance/work-issue/). Every contested choice has a row in [RATIONALE.md](../_maintenance/work-issue/RATIONALE.md), including where each borrowed mechanism came from and everything deliberately cut. Run the smoke tests from the repo root. `bash tests/work-issue-smoke.sh` pins the documents, runs the five scripts against fixtures, and runs all three `resume_checks.py` subcommands, which takes several minutes. `bash tests/work-issue-resume-tables-smoke.sh` checks that both copies of the Resume table and `run-state.py` agree row for row. [EVALS.md](../_maintenance/work-issue/EVALS.md) carries the live end-to-end scenarios, unrun until somebody runs one.
+The decision ledger and eval suite live in [`_maintenance/work-issue/`](../_maintenance/work-issue/). Every contested choice has a row in [RATIONALE.md](../_maintenance/work-issue/RATIONALE.md), including where each borrowed mechanism came from and everything deliberately cut. Run the smoke tests from the repo root. `bash tests/work-issue-smoke.sh` pins the documents, runs the six scripts against fixtures, and runs all three `resume_checks.py` subcommands, which takes several minutes. `bash tests/work-issue-resume-tables-smoke.sh` checks that both copies of the Resume table and `run-state.py` agree row for row. [EVALS.md](../_maintenance/work-issue/EVALS.md) carries the live end-to-end scenarios, unrun until somebody runs one.
 
 ## License
 
