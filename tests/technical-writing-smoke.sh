@@ -459,6 +459,17 @@ msg headingwrap "## Summary" "Adds the thing, in a paragraph that a writer" "bro
 lint_case "a wrap under a heading is still a wrap" 1 "line 3: hard wrap" pr "$lint_tmp/headingwrap.txt"
 msg afterfence '```' "$eighty" '```' "Text right under the closing fence."
 lint_case "text right under a closing fence passes" 0 "" pr "$lint_tmp/afterfence.txt"
+# A three-backtick fence nested in a four-backtick one is content, not a closer.
+msg nestedfence '````markdown' '```python' 'first = 1' 'second = 2' '```' '````'
+lint_case "nested shorter fence stays inside the outer one" 0 "" pr "$lint_tmp/nestedfence.txt"
+msg infofence '```' '``` not a closer' 'first = 1' 'second = 2' '```'
+lint_case "a fence line with an info string does not close" 0 "" pr "$lint_tmp/infofence.txt"
+msg tildefence '```' '~~~' 'first = 1' 'second = 2' '```'
+lint_case "a tilde line does not close a backtick fence" 0 "" pr "$lint_tmp/tildefence.txt"
+# A prefix with nothing after it has no lowercase letter to fail, so it needs its own check.
+msg emptydesc "feat: "
+lint_case "conventional prefix with an empty description" 1 "empty description after the type prefix" commit "$lint_tmp/emptydesc.txt" --convention conventional
+lint_case "PR title with an empty description" 1 "empty description after the type prefix" pr "$lint_tmp/joined.txt" --title "feat: " --convention conventional
 msg trailers "$clean_subject" "" "$clean_body" "" "Refs: #394" "Signed-off-by: Someone <someone@example.com>"
 lint_case "adjacent git trailers pass" 0 "" commit "$lint_tmp/trailers.txt" --convention conventional
 msg trailerwrap "$clean_subject" "" "$clean_body" "" "Refs: #394" "and a sentence that wrapped under the trailer."

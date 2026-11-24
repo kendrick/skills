@@ -44,7 +44,7 @@ import sys
 
 TYPE_PREFIX_RE = re.compile(r"^[a-z]+(\([^)]*\))?!?: ")
 COAUTHOR_RE = re.compile(r"^\s*co-authored-by:", re.I)
-FENCE_RE = re.compile(r"^\s*(```|~~~)")
+FENCE_RE = re.compile(r"^\s*(`{3,}|~{3,})(.*)$")
 # A line that starts its own block is never a continuation of the line above.
 BLOCK_OPEN_RE = re.compile(r"^\s*(?:[-*+][ \t]|\d{1,9}[.)][ \t]|\||#{1,6}(?:[ \t]|$)|>|```|~~~)")
 HEADING_RE = re.compile(r"^\s*#{1,6}(?:[ \t]|$)")
@@ -102,6 +102,8 @@ def check_subject(subject, convention, where, problems, notes):
     if convention == "conventional":
         if not prefix:
             problems.append(f"{where}: no type(scope): prefix under Conventional Commits")
+        elif not subject[prefix.end():].strip():
+            problems.append(f"{where}: empty description after the type prefix")
         elif subject[prefix.end():prefix.end() + 1].isupper():
             problems.append(f"{where}: uppercase letter after the type prefix")
     else:
@@ -115,7 +117,7 @@ def check_subject(subject, convention, where, problems, notes):
 
 def check_lines(lines, first, problems):
     """Check lines[first:]; the line before `first` counts as blank."""
-    in_fence = False
+    open_fence = None  # the opening run, e.g. "````"; None outside a fence
     prev_blank = True
     prev_trailer = False
     for i, line in enumerate(lines):
@@ -130,11 +132,21 @@ def check_lines(lines, first, problems):
             continue
         blank = not line.strip()
         trailer = bool(TRAILER_RE.match(line))
-        fence = bool(FENCE_RE.match(line))
-        if fence:
-            in_fence = not in_fence
-        elif (not in_fence and not blank and not prev_blank
-              and not BLOCK_OPEN_RE.match(line) and not (trailer and prev_trailer)):
+        m = FENCE_RE.match(line)
+        # CommonMark: a closer repeats the opener's character, is at least as long,
+        # and carries no info string. A bare toggle closes a four-backtick example
+        # at the three-backtick fence nested inside it.
+        if open_fence is None:
+            fence = bool(m)
+            if m:
+                open_fence = m.group(1)
+        else:
+            fence = bool(m and m.group(1)[0] == open_fence[0]
+                         and len(m.group(1)) >= len(open_fence) and not m.group(2).strip())
+            if fence:
+                open_fence = None
+        if (not fence and open_fence is None and not blank and not prev_blank
+                and not BLOCK_OPEN_RE.match(line) and not (trailer and prev_trailer)):
             problems.append(f"line {number}: hard wrap, this line continues the one above")
         # A heading or fence line closes its own block, so the next line starts fresh.
         prev_blank = blank or fence or bool(HEADING_RE.match(line))
