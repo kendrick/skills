@@ -155,6 +155,11 @@ for timing in build30-review61 build30-review59 poll-excluded poll-nested budget
   require_file "tests/fixtures/work-issue/timing/$timing.txt"
 done
 require_file tests/fixtures/work-issue/review/pr-comment-finding.json
+require_file work-issue/scripts/review-rules.py
+require_file work-issue/references/codex-review-rules.md
+for rr_fixture in no-heading older-block heading-no-block; do
+  require_file "tests/fixtures/work-issue/review-rules/$rr_fixture/AGENTS.md"
+done
 
 [[ "$(find work-issue -maxdepth 1 -type f | wc -l | tr -d ' ')" == "2" ]] || {
   echo "work-issue/ must ship only SKILL.md and README.md at top level" >&2
@@ -5042,6 +5047,177 @@ require_text work-issue/SKILL.md "and never widens it to match the handed file"
 require_text work-wave/SKILL.md "gates on its own plan's command at Step 1, Step 3, and every repair re-gate, while every merge test runs the full VERIFY_CMD"
 require_text _maintenance/work-wave/RATIONALE.md "A lane gates on its own plan's \`- Verify with:\` command while every merge test runs the full VERIFY_CMD"
 require_text _maintenance/work-issue/RATIONALE.md "A lane gates on its own plan's \`- Verify with:\` command"
+
+# --- review-rules.py (#464) ---
+# Codex reads only the reviewed repo's AGENTS.md, so work-issue ships its
+# review rules as a block another repo installs. Every expected value below is
+# read off the reference or the fixture with sed and cmp, never from the
+# script's own parser, so a bug in the parser can't confirm itself.
+rr_script=work-issue/scripts/review-rules.py
+rr_ref=work-issue/references/codex-review-rules.md
+rr_fix=tests/fixtures/work-issue/review-rules
+rr_dir="$(mktemp -d "$tmp/rr.XXXXXX")"
+rr_fail() {
+  echo "#464: $1, got status $rr_status: $(cat "$rr_dir/out" "$rr_dir/err" 2>/dev/null)" >&2
+  exit 1
+}
+rr_run() {
+  set +e
+  python3 "$rr_script" "$@" >"$rr_dir/out" 2>"$rr_dir/err"
+  rr_status=$?
+  set -e
+}
+rr_block() {
+  sed -n '/^<!-- work-issue review rules v[0-9]* begin -->$/,/^<!-- work-issue review rules v[0-9]* end -->$/p' "$1"
+}
+rr_before() {
+  sed '/^<!-- work-issue review rules v[0-9]* begin -->$/,$d' "$1"
+}
+rr_after() {
+  sed '1,/^<!-- work-issue review rules v[0-9]* end -->$/d' "$1"
+}
+rr_copy() {
+  rm -rf "${rr_dir:?}/$1"
+  cp -R "$rr_fix/$1" "$rr_dir/$1"
+}
+cp -R "$rr_fix" "$rr_dir/pristine"
+rr_block "$rr_ref" >"$rr_dir/shipped"
+[[ "$(head -1 "$rr_dir/shipped")" == "<!-- work-issue review rules v1 begin -->" && "$(tail -1 "$rr_dir/shipped")" == "<!-- work-issue review rules v1 end -->" ]] || {
+  echo "#464: the reference must carry one v1 block" >&2
+  exit 1
+}
+# The five labels are the names a finding cites, and #461's unowned-write
+# sorting cites the third character for character.
+for label in '**Declared limits.**' '**Heuristic scripts.**' "**Writes outside a task's files.**" '**Repeat findings.**' '**Evidence.**'; do
+  grep -Fq -- "$label" "$rr_dir/shipped" || { echo "#464: the shipped block lost the label $label" >&2; exit 1; }
+done
+require_text "$rr_dir/shipped" "**Writes outside a task's files.** A change that lets a script write, delete, or overwrite a path the caller didn't hand it, or lose data, is P0. In the finding, name the exact path that gets overwritten or the data that gets lost, and cite this rule. Safe path: refuse the write, or restore without following links."
+# A heading inside the markers would put the repo's own rules under it.
+grep -q '^#' "$rr_dir/shipped" && { echo "#464: the shipped block must carry no heading" >&2; exit 1; }
+[[ -x "$rr_script" ]] || { echo "#464: $rr_script must be executable" >&2; exit 1; }
+
+# AC1: no heading. Every original byte stays at its position, then the heading,
+# then the shipped block.
+rr_copy no-heading
+rr_run install "$rr_dir/no-heading"
+[[ "$rr_status" == "0" ]] || rr_fail "install on no-heading should exit 0"
+rr_orig="$rr_fix/no-heading/AGENTS.md"
+head -c "$(wc -c <"$rr_orig")" "$rr_dir/no-heading/AGENTS.md" | cmp -s - "$rr_orig" || rr_fail "install on no-heading changed an original byte"
+rr_before "$rr_dir/no-heading/AGENTS.md" | tail -c +"$(($(wc -c <"$rr_orig") + 1))" | grep -qx '## Code Review Rules' || rr_fail "install on no-heading should add the heading after the original text"
+rr_block "$rr_dir/no-heading/AGENTS.md" | cmp -s - "$rr_dir/shipped" || rr_fail "install on no-heading should add the shipped block"
+[[ -z "$(rr_after "$rr_dir/no-heading/AGENTS.md")" ]] || rr_fail "install on no-heading should end the file at the block"
+rr_run check "$rr_dir/no-heading"
+[[ "$rr_status" == "0" ]] || rr_fail "check on a fresh install should exit 0"
+
+# Install twice is byte-identical and leaves no temp file behind.
+cp "$rr_dir/no-heading/AGENTS.md" "$rr_dir/once"
+rr_run install "$rr_dir/no-heading"
+[[ "$rr_status" == "0" ]] && cmp -s "$rr_dir/once" "$rr_dir/no-heading/AGENTS.md" || rr_fail "a second install should change nothing"
+[[ "$(ls -A "$rr_dir/no-heading")" == "AGENTS.md" ]] || rr_fail "install left a stray file: $(ls -A "$rr_dir/no-heading")"
+
+# AC2: an older block. The bytes before the begin marker and after the end
+# marker are the fixture's own, and v0 is gone.
+rr_copy older-block
+rr_run install "$rr_dir/older-block"
+[[ "$rr_status" == "0" ]] || rr_fail "install on older-block should exit 0"
+cmp -s <(rr_before "$rr_fix/older-block/AGENTS.md") <(rr_before "$rr_dir/older-block/AGENTS.md") || rr_fail "install on older-block changed text before the begin marker"
+cmp -s <(rr_after "$rr_fix/older-block/AGENTS.md") <(rr_after "$rr_dir/older-block/AGENTS.md") || rr_fail "install on older-block changed the repo's rules after the end marker"
+rr_block "$rr_dir/older-block/AGENTS.md" | cmp -s - "$rr_dir/shipped" || rr_fail "install on older-block should leave the shipped block between the markers"
+grep -q 'rules v0' "$rr_dir/older-block/AGENTS.md" && rr_fail "install on older-block left the v0 block"
+rr_after "$rr_dir/older-block/AGENTS.md" | grep -Fqx 'A migration without a down step is P0 here.' || rr_fail "the older-block fixture's own rule should survive"
+
+# An exact heading and no block: the block lands right after the heading and
+# the repo's rules follow it unchanged.
+rr_copy heading-no-block
+rr_run install "$rr_dir/heading-no-block"
+[[ "$rr_status" == "0" ]] || rr_fail "install on heading-no-block should exit 0"
+rr_heading_line="$(grep -nx '## Code Review Rules' "$rr_fix/heading-no-block/AGENTS.md" | cut -d: -f1)"
+cmp -s <(rr_before "$rr_dir/heading-no-block/AGENTS.md") <(head -n "$rr_heading_line" "$rr_fix/heading-no-block/AGENTS.md"; echo) || rr_fail "install on heading-no-block should put the block one blank line after the heading"
+cmp -s <(rr_after "$rr_dir/heading-no-block/AGENTS.md") <(tail -n +"$((rr_heading_line + 1))" "$rr_fix/heading-no-block/AGENTS.md") || rr_fail "install on heading-no-block changed the repo's rules after the heading"
+[[ "$(grep -cx '## Code Review Rules' "$rr_dir/heading-no-block/AGENTS.md")" == "1" ]] || rr_fail "install on heading-no-block should not add a second heading"
+
+# A missing AGENTS.md: check says no block, install creates heading and block.
+mkdir "$rr_dir/empty"
+rr_run check "$rr_dir/empty"
+[[ "$rr_status" == "1" ]] && grep -Fq 'no block' "$rr_dir/err" && grep -Fq 'review-rules.py install' "$rr_dir/err" || rr_fail "check with no AGENTS.md should exit 1 naming no block and the install command"
+rr_run install "$rr_dir/empty"
+[[ "$rr_status" == "0" && "$(head -1 "$rr_dir/empty/AGENTS.md")" == "## Code Review Rules" ]] || rr_fail "install with no AGENTS.md should create it under the heading"
+rr_block "$rr_dir/empty/AGENTS.md" | cmp -s - "$rr_dir/shipped" || rr_fail "install with no AGENTS.md should write the shipped block"
+
+# AC3: check. One character inside the block, then the block removed, each
+# exit 1 with one stderr line naming the install command; an edit outside the
+# markers stays 0.
+rr_copy older-block
+rr_run install "$rr_dir/older-block"
+sed 's/^\*\*Evidence\.\*\* Each/**Evidence.** Bach/' "$rr_dir/older-block/AGENTS.md" >"$rr_dir/mut" && mv "$rr_dir/mut" "$rr_dir/older-block/AGENTS.md"
+rr_block "$rr_dir/older-block/AGENTS.md" | cmp -l - "$rr_dir/shipped" >"$rr_dir/delta" || true
+[[ "$(wc -l <"$rr_dir/delta" | tr -d ' ')" == "1" ]] || { echo "#464: the one-character mutation did not land exactly once: $(cat "$rr_dir/delta")" >&2; exit 1; }
+rr_run check "$rr_dir/older-block"
+[[ "$rr_status" == "1" && "$(wc -l <"$rr_dir/err" | tr -d ' ')" == "1" ]] && grep -Fq 'review-rules.py install' "$rr_dir/err" || rr_fail "check after one changed character inside the block should exit 1 with one stderr line naming the install command"
+rr_copy older-block
+rr_run install "$rr_dir/older-block"
+sed '/^<!-- work-issue review rules v[0-9]* begin -->$/,/^<!-- work-issue review rules v[0-9]* end -->$/d' "$rr_dir/older-block/AGENTS.md" >"$rr_dir/mut" && mv "$rr_dir/mut" "$rr_dir/older-block/AGENTS.md"
+grep -q 'review rules v' "$rr_dir/older-block/AGENTS.md" && { echo "#464: the block removal did not land" >&2; exit 1; }
+rr_run check "$rr_dir/older-block"
+[[ "$rr_status" == "1" ]] && grep -Fq 'no block' "$rr_dir/err" || rr_fail "check with the block removed should exit 1 naming no block"
+rr_copy older-block
+rr_run install "$rr_dir/older-block"
+sed 's/^Build with `make`\.$/Build with `make all`./; s/^A migration without a down step is P0 here\.$/A migration without a down step is P1 here./' "$rr_dir/older-block/AGENTS.md" >"$rr_dir/mut" && mv "$rr_dir/mut" "$rr_dir/older-block/AGENTS.md"
+grep -Fqx 'Build with `make all`.' "$rr_dir/older-block/AGENTS.md" && grep -Fqx 'A migration without a down step is P1 here.' "$rr_dir/older-block/AGENTS.md" || { echo "#464: the edits outside the markers did not land" >&2; exit 1; }
+rr_run check "$rr_dir/older-block"
+[[ "$rr_status" == "0" ]] || rr_fail "check after edits outside the markers should stay 0"
+# The fixture's v0 block is stale, and check names the version it found.
+rr_copy older-block
+rr_run check "$rr_dir/older-block"
+[[ "$rr_status" == "1" ]] && grep -Fq 'v0' "$rr_dir/err" || rr_fail "check on a v0 block should exit 1 naming v0"
+
+# Malformed markers: install refuses with one stderr line and the file
+# unchanged, and check fails too.
+rr_b='<!-- work-issue review rules v1 begin -->'
+rr_e='<!-- work-issue review rules v1 end -->'
+for rr_case in begin-only end-only end-first two-blocks; do
+  mkdir -p "$rr_dir/bad-$rr_case"
+  case "$rr_case" in
+    begin-only) printf '# A\n\n%s\nrules\n' "$rr_b" ;;
+    end-only) printf '# A\n\nrules\n%s\n' "$rr_e" ;;
+    end-first) printf '# A\n\n%s\nrules\n%s\n' "$rr_e" "$rr_b" ;;
+    two-blocks) printf '# A\n\n%s\none\n%s\n\n%s\ntwo\n%s\n' "$rr_b" "$rr_e" "$rr_b" "$rr_e" ;;
+  esac >"$rr_dir/bad-$rr_case/AGENTS.md"
+  cp "$rr_dir/bad-$rr_case/AGENTS.md" "$rr_dir/bad-$rr_case.orig"
+  rr_run install "$rr_dir/bad-$rr_case"
+  [[ "$rr_status" == "1" && "$(wc -l <"$rr_dir/err" | tr -d ' ')" == "1" && ! -s "$rr_dir/out" ]] || rr_fail "install on $rr_case markers should exit 1 with one stderr line"
+  cmp -s "$rr_dir/bad-$rr_case.orig" "$rr_dir/bad-$rr_case/AGENTS.md" || rr_fail "install on $rr_case markers changed the file"
+  [[ "$(ls -A "$rr_dir/bad-$rr_case")" == "AGENTS.md" ]] || rr_fail "install on $rr_case markers left a stray file"
+  rr_run check "$rr_dir/bad-$rr_case"
+  [[ "$rr_status" == "1" ]] || rr_fail "check on $rr_case markers should exit 1"
+done
+
+# A symlinked AGENTS.md: install refuses naming it, and both the link and its
+# target stay as they were.
+mkdir "$rr_dir/linked"
+cp "$rr_fix/no-heading/AGENTS.md" "$rr_dir/target.md"
+ln -s ../target.md "$rr_dir/linked/AGENTS.md"
+rr_run install "$rr_dir/linked"
+[[ "$rr_status" == "1" ]] && grep -Fq "$rr_dir/linked/AGENTS.md" "$rr_dir/err" || rr_fail "install through a symlinked AGENTS.md should exit 1 naming it"
+cmp -s "$rr_fix/no-heading/AGENTS.md" "$rr_dir/target.md" || rr_fail "install through a symlink changed its target"
+[[ -L "$rr_dir/linked/AGENTS.md" && "$(readlink "$rr_dir/linked/AGENTS.md")" == "../target.md" ]] || rr_fail "install through a symlink replaced the link"
+
+# Usage errors exit 3, never argparse's default 2.
+rr_run --no-such-flag
+[[ "$rr_status" == "3" ]] || rr_fail "an unknown flag should exit 3"
+rr_run
+[[ "$rr_status" == "3" ]] || rr_fail "no subcommand should exit 3"
+rr_run check
+[[ "$rr_status" == "3" ]] || rr_fail "check with no repo should exit 3"
+for rr_cmd in install check; do
+  rr_run "$rr_cmd" "$rr_fix/no-heading/AGENTS.md"
+  [[ "$rr_status" == "3" ]] || rr_fail "$rr_cmd on a file instead of a repo should exit 3"
+done
+mkdir -p "$rr_dir/dir-agents/AGENTS.md"
+rr_run check "$rr_dir/dir-agents"
+[[ "$rr_status" == "3" ]] || rr_fail "an unreadable AGENTS.md should exit 3"
+# The fixtures are read-only inputs; no case above may have written them.
+diff -r "$rr_dir/pristine" "$rr_fix" >/dev/null || { echo "#464: a case wrote into $rr_fix" >&2; exit 1; }
 
 # --- #133: merge-verdicts.py ---
 # The script builds round-<k>.json from per-claim verdict lines and names the
