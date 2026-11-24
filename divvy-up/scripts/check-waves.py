@@ -2,15 +2,15 @@
 """Prove a plan's waves are safe to dispatch in parallel, then work out which
 task in a wave owns a path an agent wrote.
 
-    divvy-up/scripts/check-waves.py validate PLAN.md
+    divvy-up/scripts/check-waves.py validate PLAN.md [--max N]
     git diff --name-only \\
-        | divvy-up/scripts/check-waves.py owners PLAN.md --wave 1
+        | divvy-up/scripts/check-waves.py owners PLAN.md --wave 1 [--task LABEL]
 
 `validate` is the gate the skill passes before it dispatches anything. Two tasks
 in one wave run at the same moment against one working tree, so if the paths
 they own overlap, one of them loses a write and nobody finds out. Disjoint
 ownership is the only reason a wave can fan out at all, so an overlap fails the
-run rather than warning about it.
+run rather than warning about it. `--max N` also fails a wave holding more than N tasks.
 
 An overlap between tasks in DIFFERENT waves is not a problem. It is the planner having
 serialized two tasks that touch one tree, which is what should happen. Those print on stdout
@@ -19,12 +19,12 @@ as `serialized:` lines and pass. With no `.git`: `skipped:`, then `OK (spelling 
 `owners` is the check on a wave that already ran. A path in the diff that no
 task in the wave owns exits 1 instead of being skipped. An agent writing outside
 its territory is the exact failure the wave structure exists to prevent, and
-catching it is worth nothing unless it stops the run.
+catching it is worth nothing unless it stops the run. `--task` names the one task whose paths these are, and fails any path another task owns.
 
 Exit codes: 0 pass; 1 semantic failure (missing or malformed table, in-wave
 overlap, malformed entry, unknown model, non-contiguous waves, unowned or
-multiply-owned path) with one line per problem on stderr; 3 usage, missing file,
-unreadable input. Argparse supplies 2 for a mistyped flag.
+multiply-owned path, wave over --max, path owned by another --task) with one line per problem on stderr; 3 usage, missing file,
+unreadable input, --max below 1, --task naming no task in the wave. Argparse supplies 2 for a mistyped flag.
 
 Stdlib only, so the skill stays copy-in portable.
 """
@@ -371,6 +371,9 @@ def repo_root_for():
 
 
 def cmd_validate(args):
+    if args.max is not None and args.max < 1:
+        sys.stderr.write(f"check-waves: --max {args.max} is below 1\n")
+        return 3
     rows, problems = read_rows(load_plan(args.plan, args.plan))
     repo_root = repo_root_for()
 
@@ -427,6 +430,15 @@ def cmd_validate(args):
                             f"{second.task}:{b} (wave {second.wave})"
                         )
 
+    # Rows, not owned entries: the cap is on how many tasks one wave runs at once.
+    if args.max is not None:
+        per_wave = collections.Counter(row.wave for row in comparable)
+        for wave, count in sorted(per_wave.items()):
+            if count > args.max:
+                problems.append(
+                    f"wave {wave} holds {_count(count, 'task')}, over --max {args.max}"
+                )
+
     waves = sorted({row.wave for row in rows if row.wave is not None})
     if waves and waves != list(range(len(waves))):
         problems.append(
@@ -471,11 +483,17 @@ def cmd_owners(args):
             sys.stderr.write(f"check-waves: {problem}\n")
         return 1
 
+    in_wave = [row for row in rows if row.wave == args.wave]
+    # Resolved before the empty-stdin return, so a mistyped label fails on an
+    # empty report instead of passing it.
+    if args.task is not None and not any(row.task == args.task for row in in_wave):
+        sys.stderr.write(f"check-waves: no task {args.task!r} in wave {args.wave}\n")
+        return 3
+
     paths = [line.strip() for line in sys.stdin.read().splitlines() if line.strip()]
     if not paths:
         return 0
 
-    in_wave = [row for row in rows if row.wave == args.wave]
     for path in paths:
         owners = owners_of(path, in_wave)
         if not owners:
@@ -484,8 +502,12 @@ def cmd_owners(args):
             problems.append(
                 f"multiply-owned in wave {args.wave}: {path} ({', '.join(owners)})"
             )
-        else:
+        elif args.task is None:
             print(owners[0])
+        elif owners[0] != args.task:
+            problems.append(
+                f"{path} is owned by {owners[0]}, not {args.task}, in wave {args.wave}"
+            )
 
     if problems:
         for problem in problems:
@@ -502,11 +524,13 @@ def parse_args(argv=None):
 
     v = sub.add_parser("validate", help="prove each wave's tasks own disjoint paths")
     v.add_argument("plan", metavar="PLAN_MD", help="plan markdown, or '-' for stdin")
+    v.add_argument("--max", type=int, metavar="N", help="most tasks one wave may hold")
     v.set_defaults(func=cmd_validate)
 
     o = sub.add_parser("owners", help="task in a wave owning each path on stdin")
     o.add_argument("plan", metavar="PLAN_MD")
     o.add_argument("--wave", type=int, required=True, metavar="N")
+    o.add_argument("--task", metavar="LABEL", help="task whose report this is")
     o.set_defaults(func=cmd_owners)
 
     return ap.parse_args(argv)
