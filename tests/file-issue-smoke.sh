@@ -1471,9 +1471,11 @@ run_cd 3 "missing body file" "$cd_tmp/nope.md"
 run_cd 3 "title flag without a value" "$cd_fx/clean.md" --title
 
 # Step 5 runs the script and its done-when needs exit 0.
-require_text file-issue/SKILL.md "python3 <skill-path>/scripts/check-draft.py <body.md> --title <title>"
+require_text file-issue/SKILL.md "python3 <skill-path>/scripts/check-draft.py <body.md> --title '<title>'"
 require_text file-issue/SKILL.md "\`check-draft.py\` exits 0"
 require_text file-issue/README.md "check-draft.py"
-require_text _maintenance/file-issue/RATIONALE.md "\`check-draft.py\`"
+require_text _maintenance/file-issue/RATIONALE.md "Step 5's no-placeholders check runs as \`check-draft.py\`"
+require_text _maintenance/file-issue/RATIONALE.md "The script also flags a \`<!--\` or a template placeholder anywhere"
+require_text file-issue/SKILL.md "read that draft for leftovers yourself"
 
 echo "file-issue smoke: OK"

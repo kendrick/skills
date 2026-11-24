@@ -111,7 +111,7 @@ Strip the templates' HTML comments; they are authoring guidance and do not belon
 
 Title follows {component} + {wrong behavior} + {trigger}, matching whatever prefix convention the harvest observed. Acceptance criteria default to a falsifiable checklist; escalate to Given/When/Then only for multi-step stateful behavior in a repo whose tooling actually executes scenarios.
 
-Write the body to a file and run `python3 <skill-path>/scripts/check-draft.py <body.md> --title <title>`. It prints one stderr line per leftover comment, template placeholder, empty list item or fenced block, empty or `n/a` heading, and unfilled `{component}`-style title token, each with its line number. Fix every line it prints, then rerun. A repo's own template or issue form is not checked, because the script reads placeholders only from `assets/`; read that draft for leftovers yourself.
+Write the body to a file and run `python3 <skill-path>/scripts/check-draft.py <body.md> --title '<title>'`. It prints one stderr line per leftover comment, template placeholder, empty list item or fenced block, empty or `n/a` heading, and unfilled `{component}`-style title token, each with its line number. Fix every line it prints, then rerun. A repo's own template or issue form is not checked, because the script reads placeholders only from `assets/`; read that draft for leftovers yourself.
 
 **Done when:** a complete issue body exists, and `check-draft.py` exits 0 on it.
 
