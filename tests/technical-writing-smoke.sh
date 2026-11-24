@@ -55,8 +55,8 @@ require_file _maintenance/technical-writing/EVALS.md
 require_file _maintenance/technical-writing/upstream/SKILL.md
 
 # Top level ships exactly SKILL.md, README.md, and the references/ and
-# scripts/ dirs — nothing else. A plain file count (like the other smoke tests use) would
-# miss a stray directory, so compare the full listing.
+# scripts/ dirs—nothing else. A plain file count (like the other smoke
+# tests use) would miss a stray directory, so compare the full listing.
 #
 # LC_ALL=C pins the collation, because the expected listing below is written in
 # C order (uppercase before lowercase). Under a UTF-8 locale `sort` ignores case
@@ -425,11 +425,11 @@ clean_body="One unwrapped body paragraph saying why the change exists, on a sing
 msg clean "$clean_subject" "" "$clean_body"
 lint_case "clean commit message" 0 "" commit "$lint_tmp/clean.txt" --convention conventional
 msg coauthor "$clean_subject" "" "$clean_body" "" "co-AUTHORED-by: Someone <someone@example.com>"
-lint_case "Co-Authored-By trailer, mixed case" 1 "line 5:" commit "$lint_tmp/coauthor.txt" --convention conventional
+lint_case "Co-Authored-By trailer, mixed case" 1 "line 5: Co-Authored-By trailer" commit "$lint_tmp/coauthor.txt" --convention conventional
 msg generated "$clean_subject" "" "$clean_body" "" "Generated with a coding agent"
-lint_case "Generated with footer" 1 "line 5:" commit "$lint_tmp/generated.txt" --convention conventional
+lint_case "Generated with footer" 1 'line 5: "Generated with" footer' commit "$lint_tmp/generated.txt" --convention conventional
 msg robot "$clean_subject" "" "$clean_body" "" "🤖 signed off by the harness"
-lint_case "robot-emoji sign-off" 1 "line 5:" commit "$lint_tmp/robot.txt" --convention conventional
+lint_case "robot-emoji sign-off" 1 "line 5: robot-emoji sign-off" commit "$lint_tmp/robot.txt" --convention conventional
 
 # Hard wrap, in PR bodies so no subject rule fires.
 msg wrapped "A paragraph that a writer broke across two lines" "by pressing return at the edge of their editor."
@@ -450,26 +450,40 @@ eighty="$(printf 'x%.0s' $(seq 1 80))"
 msg fenced "Intro paragraph." "" '```' "$eighty" "$eighty" "$eighty" '```'
 lint_case "fenced 80-column lines pass" 0 "" pr "$lint_tmp/fenced.txt"
 
+# A heading or a closing fence is one line, so the text right under it starts
+# a paragraph, and a block of git trailers is one trailer per line. The second
+# line under each is checked as usual.
+msg heading "## Summary" "Adds the thing."
+lint_case "text right under a heading passes" 0 "" pr "$lint_tmp/heading.txt"
+msg headingwrap "## Summary" "Adds the thing, in a paragraph that a writer" "broke across two lines."
+lint_case "a wrap under a heading is still a wrap" 1 "line 3: hard wrap" pr "$lint_tmp/headingwrap.txt"
+msg afterfence '```' "$eighty" '```' "Text right under the closing fence."
+lint_case "text right under a closing fence passes" 0 "" pr "$lint_tmp/afterfence.txt"
+msg trailers "$clean_subject" "" "$clean_body" "" "Refs: #394" "Signed-off-by: Someone <someone@example.com>"
+lint_case "adjacent git trailers pass" 0 "" commit "$lint_tmp/trailers.txt" --convention conventional
+msg trailerwrap "$clean_subject" "" "$clean_body" "" "Refs: #394" "and a sentence that wrapped under the trailer."
+lint_case "prose wrapped under a trailer is a wrap" 1 "line 6: hard wrap" commit "$lint_tmp/trailerwrap.txt" --convention conventional
+
 # Commit-only rules. Line 2 is reported once, as the missing blank line.
 msg noblank "$clean_subject" "$clean_body"
 lint_case "non-blank second line" 1 "line 2: no blank line after the subject" commit "$lint_tmp/noblank.txt" --convention conventional
 if grep -Fq "hard wrap" "$lint_tmp/err"; then lint_fail "non-blank second line also reported as a wrap" 1; fi
 msg period "$clean_subject." "" "$clean_body"
-lint_case "subject ending in a period" 1 "line 1:" commit "$lint_tmp/period.txt" --convention conventional
+lint_case "subject ending in a period" 1 "line 1: subject ends in a period" commit "$lint_tmp/period.txt" --convention conventional
 
 # Convention, set by flag.
 msg upper "feat(x): Add thing"
-lint_case "uppercase after the colon under conventional" 1 "line 1:" commit "$lint_tmp/upper.txt" --convention conventional
+lint_case "uppercase after the colon under conventional" 1 "line 1: uppercase letter after the type prefix" commit "$lint_tmp/upper.txt" --convention conventional
 msg bare "Add thing"
 lint_case "bare subject under bare" 0 "" commit "$lint_tmp/bare.txt" --convention bare
 lint_stdin="$lint_tmp/bare.txt"
 lint_case "bare subject read from stdin" 0 "" commit - --convention bare
 lint_stdin=/dev/null
 msg prefixed "feat: add thing"
-lint_case "type prefix under bare" 1 "line 1:" commit "$lint_tmp/prefixed.txt" --convention bare
+lint_case "type prefix under bare" 1 "line 1: type prefix in a bare-imperative repo" commit "$lint_tmp/prefixed.txt" --convention bare
 msg lower "add thing"
-lint_case "lowercase first letter under bare" 1 "line 1:" commit "$lint_tmp/lower.txt" --convention bare
-lint_case "PR title under the subject rules" 1 "title:" pr "$lint_tmp/joined.txt" --title "feat(x): Add thing" --convention conventional
+lint_case "lowercase first letter under bare" 1 "line 1: bare subject starts lowercase" commit "$lint_tmp/lower.txt" --convention bare
+lint_case "PR title under the subject rules" 1 "title: uppercase letter after the type prefix" pr "$lint_tmp/joined.txt" --title "feat(x): Add thing" --convention conventional
 
 # Length is a note: a 90-character subject prints one and still exits 0.
 long_subject="feat(lint): $(printf 'a%.0s' $(seq 1 78))"
@@ -505,7 +519,7 @@ lint_case "no flag behaves as --log 12" 0 "" commit "$lint_tmp/probe.txt"
 IFS=$'\n' read -r -d '' -a subjects < <(bare 6; conv 6) || true
 make_log_repo six "${subjects[@]}"
 lint_cwd="$lint_tmp/six"
-lint_case "6 of 12 Conventional infers bare" 1 "line 1:" commit "$lint_tmp/probe.txt" --log 12
+lint_case "6 of 12 Conventional infers bare" 1 "line 1: type prefix in a bare-imperative repo" commit "$lint_tmp/probe.txt" --log 12
 
 # 7 of 12 Conventional with the newest bare: still conventional.
 IFS=$'\n' read -r -d '' -a subjects < <(bare 4; conv 7; bare 1) || true

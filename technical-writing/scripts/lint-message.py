@@ -15,7 +15,10 @@ FILE may be `-` for stdin. Every mode checks each line for:
               `Generated with`, any line holding the robot emoji
   hard wrap   outside fenced code, a non-blank line under a non-blank line,
               unless it opens a block: a list marker, a `|` table row, a
-              heading, a blockquote, or a fence. Line length plays no part.
+              heading, a blockquote, or a fence. A heading or a fence line is
+              one line long, so the line under it is never a continuation,
+              and neither is a `Key: value` trailer under another trailer.
+              Line length plays no part.
 
 `commit` also checks the subject (line 1) and that line 2 is blank. `pr`
 checks the subject rules only on --title. The subject rules: no trailing
@@ -44,6 +47,9 @@ COAUTHOR_RE = re.compile(r"^\s*co-authored-by:", re.I)
 FENCE_RE = re.compile(r"^\s*(```|~~~)")
 # A line that starts its own block is never a continuation of the line above.
 BLOCK_OPEN_RE = re.compile(r"^\s*(?:[-*+][ \t]|\d{1,9}[.)][ \t]|\||#{1,6}(?:[ \t]|$)|>|```|~~~)")
+HEADING_RE = re.compile(r"^\s*#{1,6}(?:[ \t]|$)")
+# git's trailer shape; a block of these is one trailer per line, not a wrapped sentence.
+TRAILER_RE = re.compile(r"^[A-Za-z0-9-]+: \S")
 ROBOT = "\U0001F916"
 
 
@@ -111,6 +117,7 @@ def check_lines(lines, first, problems):
     """Check lines[first:]; the line before `first` counts as blank."""
     in_fence = False
     prev_blank = True
+    prev_trailer = False
     for i, line in enumerate(lines):
         number = i + 1
         if COAUTHOR_RE.match(line):
@@ -122,11 +129,16 @@ def check_lines(lines, first, problems):
         if i < first:
             continue
         blank = not line.strip()
-        if FENCE_RE.match(line):
+        trailer = bool(TRAILER_RE.match(line))
+        fence = bool(FENCE_RE.match(line))
+        if fence:
             in_fence = not in_fence
-        elif not in_fence and not blank and not prev_blank and not BLOCK_OPEN_RE.match(line):
+        elif (not in_fence and not blank and not prev_blank
+              and not BLOCK_OPEN_RE.match(line) and not (trailer and prev_trailer)):
             problems.append(f"line {number}: hard wrap, this line continues the one above")
-        prev_blank = blank
+        # A heading or fence line closes its own block, so the next line starts fresh.
+        prev_blank = blank or fence or bool(HEADING_RE.match(line))
+        prev_trailer = trailer
 
 
 def main():
