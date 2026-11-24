@@ -5,7 +5,7 @@ Step 5's done-when asked for "no placeholders and no orphaned headings", and
 the agent that wrote the draft was the one confirming it. A leftover comment
 or template slot reads as finished from the inside and posts as written (#400).
 
-    check-draft.py BODY [--title TITLE]
+    check-draft.py BODY [--title TITLE] [--literal LINE ...]
 
 One stderr line per problem, `LINE: kind: text`, in line order. The title's
 lines carry no number and come last.
@@ -30,11 +30,17 @@ lines carry no number and come last.
   title                `{component}`, `{wrong behavior}`, `{trigger}`, or any
                        other `{...}` token the templates' comments name
 
+--literal LINE keeps the html comment and placeholder problems on that body
+line, for a literal the issue quotes on purpose, such as verbatim error output
+a bug report must not alter. Other kinds on the line still report. A LINE with
+no such problem exits 1 with `--literal LINE: nothing to keep`, so a stale or
+mistyped allowance can't sit silently.
+
 Exit codes:
     0  clean
     1  at least one problem, one stderr line each
-    3  usage error, an unreadable body file, or no template to read the
-       placeholders from
+    3  usage error, a non-positive or non-integer --literal, an unreadable
+       body file, or no template to read the placeholders from
 """
 
 import argparse
@@ -47,7 +53,11 @@ ASSETS = Path(__file__).resolve().parent.parent / "assets"
 COMMENT_RE = re.compile(r"<!--.*?-->", re.S)
 SLOT_RE = re.compile(r"<[^<>\n]+>")
 TITLE_TOKEN_RE = re.compile(r"\{[^{}\n]+\}")
-FENCE_RE = re.compile(r"^( {0,3})(`{3,}|~{3,})")
+# Indent is checked in scan(): a fence may sit up to 3 spaces past the content
+# column of the list item it is under, so a block indented 4 under `1. ` is a
+# fence and its contents are code, not structure.
+FENCE_RE = re.compile(r"^( *)(`{3,}|~{3,})")
+LIST_RE = re.compile(r"^( *)(?:[-*+]|\d{1,9}[.)])( *)")
 HEADING_RE = re.compile(r"^ {0,3}(#{1,6})(?:[ \t]+(.*?))?(?:[ \t]+#+)?[ \t]*$")
 EMPTY_ITEM_RE = re.compile(r"^\s*(?:[-*+] \[[ xX]\]|\d{1,9}[.)])[ \t]*$")
 NA_RE = re.compile(r"^\s*n/a(?:\s*[—–-]+\s*\S.*)?\s*$", re.I)
@@ -59,6 +69,15 @@ class Parser(argparse.ArgumentParser):
         self.print_usage(sys.stderr)
         print(f"{self.prog}: error: {message}", file=sys.stderr)
         sys.exit(3)
+
+
+LITERAL_KINDS = {"html comment", "placeholder"}
+
+
+def positive(value):
+    if not value.isdigit() or int(value) < 1:
+        raise argparse.ArgumentTypeError(f"--literal wants a positive line number, got {value!r}")
+    return int(value)
 
 
 def die(message):
@@ -93,7 +112,8 @@ def scan(text, slots):
     lines = text.splitlines()
     problems = []
     headings = []  # (index, level, line) outside fences
-    fence = None  # (opening index, char, length, has content)
+    fence = None  # (opening index, char, length, has content, list column)
+    col = 0  # content column of the innermost open list item; 0 outside a list
     for i, line in enumerate(lines):
         if "<!--" in line or "-->" in line:
             problems.append((i + 1, "html comment", line.strip()))
@@ -101,16 +121,24 @@ def scan(text, slots):
             problems.append((i + 1, "placeholder", slot))
         m = FENCE_RE.match(line)
         if fence:
-            close = m and m.group(2)[0] == fence[1] and len(m.group(2)) >= fence[2] and not line[m.end():].strip()
+            close = (m and len(m.group(1)) <= fence[4] + 3 and m.group(2)[0] == fence[1]
+                     and len(m.group(2)) >= fence[2] and not line[m.end():].strip())
             if close:
                 if not fence[3]:
                     problems.append((fence[0] + 1, "empty fenced block", lines[fence[0]].strip()))
                 fence = None
             elif line.strip():
-                fence = fence[:3] + (True,)
+                fence = fence[:3] + (True,) + fence[4:]
             continue
-        if m and not (m.group(2)[0] == "`" and "`" in line[m.end():]):
-            fence = (i, m.group(2)[0], len(m.group(2)), False)
+        if line.strip():
+            lm = LIST_RE.match(line)
+            if lm and (lm.group(2) or not line[lm.end():].strip()):
+                # Content starts after the marker and 1-4 spaces; 5+ means indented code.
+                col = lm.end() if len(lm.group(2)) <= 4 else lm.end() - len(lm.group(2)) + 1
+            elif len(line) - len(line.lstrip(" ")) < col:
+                col = 0  # shallower than the item's content ends it; lazy continuation is not tracked
+        if m and len(m.group(1)) <= col + 3 and not (m.group(2)[0] == "`" and "`" in line[m.end():]):
+            fence = (i, m.group(2)[0], len(m.group(2)), False, col)
             continue
         if EMPTY_ITEM_RE.match(line):
             problems.append((i + 1, "empty list item", line.strip()))
@@ -133,9 +161,15 @@ def main(argv=None):
     ap = Parser(description="Report template leftovers in a drafted issue body.")
     ap.add_argument("body", metavar="BODY", help="the drafted issue body")
     ap.add_argument("--title", help="the drafted issue title")
+    ap.add_argument("--literal", type=positive, action="append", default=[], metavar="LINE",
+                    help="body line whose comment or placeholder is quoted on purpose; repeatable")
     args = ap.parse_args(argv)
     slots, tokens = template_vocabulary()
-    problems = [f"{n}: {kind}: {text}" for n, kind, text in scan(read(args.body), slots)]
+    found = scan(read(args.body), slots)
+    kept = {n for n, kind, _ in found if kind in LITERAL_KINDS}
+    found = [p for p in found if not (p[0] in args.literal and p[1] in LITERAL_KINDS)]
+    problems = [f"{n}: {kind}: {text}" for n, kind, text in found]
+    problems += [f"--literal {n}: nothing to keep" for n in sorted(set(args.literal) - kept)]
     if args.title is not None:
         problems += [f"title: {t}" for t in sorted(tokens) if t in args.title]
     for p in problems:

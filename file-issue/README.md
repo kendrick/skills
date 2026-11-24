@@ -66,7 +66,7 @@ file-issue/
 │   ├── issue-forms.md    # issue-form YAML schema and gh mechanics
 │   └── evidence-map.md   # every gate traced to its claim and evidence tier
 └── scripts/
-    ├── check-draft.py    # Step 5's scan of the draft for leftover comments, template placeholders, and empty or `n/a` sections, one stderr line per problem
+    ├── check-draft.py    # Step 5's scan of the draft for leftover comments, template placeholders, and empty or `n/a` sections, one stderr line per problem, with `--literal LINE` to keep a comment or placeholder the issue quotes on purpose
     ├── check-polish.py   # Step 7's diff of the body before and after the wording pass, one stderr line per dropped item
     ├── harvest.py        # Step 1's repo reads as JSON: template rung, verification candidates, CODEOWNERS, workflows, contributors
     └── link-issues.py    # resolves Parent and Blocked by entries and sets them as native links

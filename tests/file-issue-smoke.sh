@@ -1432,6 +1432,26 @@ run_cd 0 "filled title" "$cd_fx/clean.md" --title "file-issue: add CSV export to
 run_cd 0 "angle brackets that no template carries" "$cd_fx/rationale-prose.md"
 run_cd 0 "parent heading over a deeper heading" "$cd_fx/parent-deeper.md"
 
+# A fence indented under a list item is code, so its contents are not
+# structure, and an empty one is still empty. Quoted evidence stays verbatim:
+# --literal keeps the comment or placeholder on one line, and only there.
+run_cd 0 "checklist marker inside a fence indented under a numbered step" "$cd_fx/list-fence-checkbox.md"
+run_cd 1 "empty fence indented under a numbered step" "$cd_fx/list-fence-empty.md"
+require_text "$cd_tmp/err" "11: empty fenced block"
+require_count "$cd_tmp/err" "" 1
+run_cd 1 "quoted comment opener in a fence" "$cd_fx/quoted-comment.md"
+require_text "$cd_tmp/err" "10: html comment: SyntaxError: unexpected token <!--"
+run_cd 0 "quoted comment kept with --literal" "$cd_fx/quoted-comment.md" --literal 10
+run_cd 1 "--literal on a line with no comment or placeholder" "$cd_fx/clean.md" --literal 7
+require_text "$cd_tmp/err" "--literal 7: nothing to keep"
+run_cd 1 "--literal on another line leaves the quoted comment" "$cd_fx/quoted-comment.md" --literal 9
+require_text "$cd_tmp/err" "10: html comment: "
+run_cd 1 "--literal keeps the placeholder but not the empty heading on its line" "$cd_fx/literal-heading.md" --literal 30
+require_text "$cd_tmp/err" "30: empty heading: ## <the exact command>"
+require_count "$cd_tmp/err" "" 1
+run_cd 3 "--literal 0" "$cd_fx/clean.md" --literal 0
+run_cd 3 "--literal not an integer" "$cd_fx/clean.md" --literal x
+
 # Each falsifier case has to fail a mutant keyed on the wrong thing, or it
 # pins nothing: flagging every angle-bracket span fails the path prose, and a
 # script that matches no placeholder passes the leftover slot.
@@ -1452,6 +1472,27 @@ rc=0; python3 "$cd_tmp/mut/scripts/any.py" "$cd_fx/rationale-prose.md" 2> /dev/n
 expect_rc 1 "$rc" "any-angle-bracket mutant on the path prose"
 rc=0; python3 "$cd_tmp/mut/scripts/none.py" "$cd_fx/placeholder.md" 2> /dev/null || rc=$?
 expect_rc 0 "$rc" "no-placeholder mutant on the leftover slot"
+# Measuring fence indent from column 0 scans a nested fence's contents as
+# structure, so the checklist marker inside it reads as an empty item.
+cd_fence='        if m and len(m.group(1)) <= col + 3 and not'
+python3 - "$cd_script" "$cd_tmp/mut/scripts/col0.py" "$cd_fence" <<'MUT'
+import sys
+src = open(sys.argv[1], encoding="utf-8").read()
+assert src.count(sys.argv[3]) == 1, "the fence-open check moved; update this mutant"
+open(sys.argv[2], "w", encoding="utf-8").write(src.replace(sys.argv[3], sys.argv[3].replace("col + 3", "3"), 1))
+MUT
+rc=0; python3 "$cd_tmp/mut/scripts/col0.py" "$cd_fx/list-fence-checkbox.md" 2> /dev/null || rc=$?
+expect_rc 1 "$rc" "column-0 fence mutant on the nested checklist marker"
+# A --literal that keeps every kind passes the empty heading it should not.
+cd_keep='    found = [p for p in found if not (p[0] in args.literal and p[1] in LITERAL_KINDS)]'
+python3 - "$cd_script" "$cd_tmp/mut/scripts/allkinds.py" "$cd_keep" <<'MUT'
+import sys
+src = open(sys.argv[1], encoding="utf-8").read()
+assert src.count(sys.argv[3]) == 1, "the literal filter moved; update this mutant"
+open(sys.argv[2], "w", encoding="utf-8").write(src.replace(sys.argv[3], sys.argv[3].replace(" and p[1] in LITERAL_KINDS", ""), 1))
+MUT
+rc=0; python3 "$cd_tmp/mut/scripts/allkinds.py" "$cd_fx/literal-heading.md" --literal 30 2> /dev/null || rc=$?
+expect_rc 0 "$rc" "keep-every-kind mutant on the empty heading that carries a placeholder"
 
 # Placeholders come from assets/ at run time: a slot added to a template is
 # caught with no edit to the script.
@@ -1473,7 +1514,9 @@ run_cd 3 "title flag without a value" "$cd_fx/clean.md" --title
 # Step 5 runs the script and its done-when needs exit 0.
 require_text file-issue/SKILL.md "python3 <skill-path>/scripts/check-draft.py <body.md> --title '<title>'"
 require_text file-issue/SKILL.md "\`check-draft.py\` exits 0"
+require_text file-issue/SKILL.md "rerun with \`--literal <line>\`"
 require_text file-issue/README.md "check-draft.py"
+require_text file-issue/README.md "with \`--literal LINE\` to keep a comment or placeholder"
 require_text _maintenance/file-issue/RATIONALE.md "Step 5's no-placeholders check runs as \`check-draft.py\`"
 require_text _maintenance/file-issue/RATIONALE.md "The script also flags a \`<!--\` or a template placeholder anywhere"
 require_text file-issue/SKILL.md "read that draft for leftovers yourself"
