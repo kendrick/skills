@@ -105,6 +105,22 @@ require_text AGENTS.md "**P0 — blocks merge.**"
 # land in, and a reviewer files it as a P2 wording nit.
 require_text AGENTS.md "A step that contradicts another document in the same skill, or the document it sits in."
 require_text AGENTS.md "**P1 — fix before merge, or record why not.**"
+
+# Codex reads only the AGENTS.md of the repo under review, so work-issue's PR
+# review rules reach this repo's reviews through the installed block, and a
+# stale or missing block means Codex reviews without them. check exits 1 on
+# either, which set -e turns into a failed suite.
+python3 work-issue/scripts/review-rules.py check .
+
+# The P0 band stops at input a real caller produces. The old sentence put a
+# constructed edge case in a heuristic script at P0, which the block's
+# Heuristic scripts rule now bands P1; both bands left standing contradict
+# each other inside one file.
+require_text AGENTS.md "A script that fails on valid input a real caller in this repo produces, or passes on invalid input one produces."
+if grep -Fq -- "A script that fails on valid input or passes on invalid input." AGENTS.md; then
+  echo "AGENTS.md still carries the unnarrowed P0 sentence for scripts" >&2
+  exit 1
+fi
 require_text AGENTS.md "**P2 — non-blocking.**"
 
 # The Scope rule reaches inside one file, not only across the four artifacts
