@@ -1959,4 +1959,282 @@ require_text "$ledger" "| 64 | \`check-worktrees.py\` runs Step 3's collision ch
 require_text "$ledger" "when the tree at its WORKTREE holds \`issue-N\`, checked out or mid-rebase of it"
 require_text "$ledger" "| Judging the already-started exemption by the porcelain's \`branch\` line |"
 
+# --- order.py: Step 2's order.md, built from coupling.md, and Steps 5 and 7's
+# hold (#397). Sorted by hand, the order nothing checked was the order Step 6
+# merged, and an ask that Step 3 settled into order: never reached it. ---
+
+oscript=work-wave/scripts/order.py
+require_file "$oscript"
+[[ -x "$oscript" ]] || {
+  echo "order.py is not executable: $oscript" >&2
+  exit 1
+}
+
+python3 - "$oscript" <<'PY' || { echo "order.py imports outside the standard library" >&2; exit 1; }
+import ast, sys
+tree = ast.parse(open(sys.argv[1]).read())
+for node in ast.walk(tree):
+    names = []
+    if isinstance(node, ast.Import):
+        names = [a.name for a in node.names]
+    elif isinstance(node, ast.ImportFrom):
+        names = [node.module or ""]
+    for name in names:
+        if name.split(".")[0] not in sys.stdlib_module_names:
+            sys.exit(1)
+PY
+
+order_py() {
+  set +e
+  python3 "$oscript" "$@" >"$tmp/out" 2>"$tmp/err"
+  status=$?
+  set -e
+  out="$(cat "$tmp/out")"
+  err="$(cat "$tmp/err")"
+}
+
+# A repo of its own, so the probe's git reads can't meet the other sections'
+# branches.
+orepo="$tmp/orepo"
+git init -q -b main "$orepo"
+git -C "$orepo" -c user.name=t -c user.email=t@t -c commit.gpgsign=false commit -q --allow-empty -m init
+
+# The consumer check: what order.py writes is right only if the probe reads a
+# merge set from it. A byte comparison alone passes a table the probe nulls.
+order_probes() {
+  local dir="$1"
+  local what="$2"
+  wave_state probe --wave-dir "$dir" --root "$orepo" --default main
+  expect_status 0 "probe over $what"
+  python3 - "$tmp/out" "$what" <<'PY' || exit 1
+import json, sys
+probe = json.load(open(sys.argv[1]))
+if probe["merge_set_size"] is None:
+    sys.exit(f"probe over {sys.argv[2]} read merge_set_size as null")
+PY
+}
+
+# The Order and Lane columns top to bottom, as one line.
+order_lanes() {
+  python3 - "$1/order.md" <<'PY'
+import sys
+rows = [l for l in open(sys.argv[1]).read().split("\n") if l.startswith("| ")][1:]
+print(" ".join(f"{r.split('|')[1].strip()}:{r.split('|')[2].strip()}" for r in rows))
+PY
+}
+
+expect_lanes() {
+  local dir="$1"
+  local want="$2"
+  local what="$3"
+  local got
+  got="$(order_lanes "$dir")"
+  [[ "$got" == "$want" ]] || {
+    echo "$what should order $want, got: $got" >&2
+    exit 1
+  }
+}
+
+coupling_header='| Pair | Answer | Evidence | Resolution |\n|---|---|---|---|\n'
+ow="$orepo/.git/work-wave/wave-113-114-115"
+mkdir -p "$ow"
+
+# The rule's falsifier, first half: the order: row is what moves issue-113.
+printf "$coupling_header"'| issue-113 issue-114 | independent | nothing shared | none |\n| issue-113 issue-115 | directional 115→113 | 113 tests what 115 adds | order: issue-113 after issue-115 |\n| issue-114 issue-115 | independent | nothing shared | none |\n' >"$ow/coupling.md"
+order_py build --wave-dir "$ow"
+expect_status 0 "build with order: issue-113 after issue-115"
+expect_lanes "$ow" "1:issue-114 2:issue-115 3:issue-113" "build with order: issue-113 after issue-115"
+require_text "$ow/order.md" "| 3 | issue-113 | issue-115 | order: issue-113 after issue-115 |"
+require_text "$ow/order.md" "| 1 | issue-114 | — | no coupling; number order |"
+order_probes "$ow" "a built order.md"
+cp "$ow/order.md" "$tmp/order-forward.md"
+
+# Second half: the nearest wrong key is the row order in coupling.md, so
+# reversing it must leave the bytes alone.
+printf "$coupling_header"'| issue-114 issue-115 | independent | nothing shared | none |\n| issue-113 issue-115 | directional 115→113 | 113 tests what 115 adds | order: issue-113 after issue-115 |\n| issue-113 issue-114 | independent | nothing shared | none |\n' >"$ow/coupling.md"
+order_py build --wave-dir "$ow"
+expect_status 0 "build over reversed coupling rows"
+cmp "$tmp/order-forward.md" "$ow/order.md" || {
+  echo "reversing coupling.md's rows changed order.md" >&2
+  exit 1
+}
+# A lane behind two others joins both Resolutions into Why, and an order
+# taken from the rows would flip that join when they're reversed.
+printf "$coupling_header"'| issue-113 issue-115 | directional 113→115 | reads 113 | order: issue-115 after issue-113 |\n| issue-114 issue-115 | directional 114→115 | reads 114 | order: issue-115 after issue-114 |\n' >"$ow/coupling.md"
+order_py build --wave-dir "$ow"
+expect_status 0 "build with issue-115 after two lanes"
+require_text "$ow/order.md" "| 3 | issue-115 | issue-113, issue-114 | order: issue-115 after issue-113; order: issue-115 after issue-114 |"
+cp "$ow/order.md" "$tmp/order-forward.md"
+printf "$coupling_header"'| issue-114 issue-115 | directional 114→115 | reads 114 | order: issue-115 after issue-114 |\n| issue-113 issue-115 | directional 113→115 | reads 113 | order: issue-115 after issue-113 |\n' >"$ow/coupling.md"
+order_py build --wave-dir "$ow"
+cmp "$tmp/order-forward.md" "$ow/order.md" || {
+  echo "reversing two order: rows for one lane changed order.md" >&2
+  exit 1
+}
+
+printf "$coupling_header"'| issue-113 issue-114 | independent | nothing shared | none |\n| issue-113 issue-115 | independent | nothing shared | none |\n| issue-114 issue-115 | independent | nothing shared | none |\n' >"$ow/coupling.md"
+order_py build --wave-dir "$ow"
+expect_status 0 "build with the order: row dropped"
+expect_lanes "$ow" "1:issue-113 2:issue-114 3:issue-115" "build with the order: row dropped"
+order_probes "$ow" "an uncoupled order.md"
+
+# A hold: row holds its lane with After naming what it waits on, and a lane
+# ordered after the held one leaves with it, as Step 5 holds a failed lane's
+# successors.
+printf "$coupling_header"'| issue-113 issue-114 | directional 113→114 | 114 writes against 113 | hold: issue-114 until issue-113 merges |\n| issue-113 issue-115 | independent | nothing shared | none |\n| issue-114 issue-115 | directional 114→115 | 115 reads 114 | order: issue-115 after issue-114 |\n' >"$ow/coupling.md"
+order_py build --wave-dir "$ow"
+expect_status 0 "build with a hold: row"
+expect_lanes "$ow" "1:issue-113 held:issue-114 held:issue-115" "build with a hold: row"
+require_text "$ow/order.md" "| held | issue-114 | issue-113 | hold: issue-114 until issue-113 merges |"
+require_text "$ow/order.md" "| held | issue-115 | issue-114 |"
+order_probes "$ow" "an order.md with held lanes"
+
+# hold on a held lane changes nothing, and a lane outside the table is usage.
+cp "$ow/order.md" "$tmp/order-held.md"
+order_py hold --wave-dir "$ow" --lane issue-114 --why "again"
+expect_status 0 "hold on a lane already held"
+cmp "$tmp/order-held.md" "$ow/order.md" || {
+  echo "hold on a held lane rewrote order.md" >&2
+  exit 1
+}
+order_py hold --wave-dir "$ow" --lane issue-9 --why "not here"
+expect_status 3 "hold on a lane order.md doesn't name"
+grep -Fq "issue-9" <<<"$err" || {
+  echo "hold on a missing lane should name it on stderr, got: $err" >&2
+  exit 1
+}
+
+# hold goes by Order position: issue-115 has no After and is still held, and
+# issue-114 keeps Order 3 across the gap. A hold that followed After edges or
+# renumbered would write another table; see the ledger's matching DNB rows.
+printf '| Order | Lane | After | Why |\n|---|---|---|---|\n| 1 | issue-113 | — | no coupling; number order |\n| 3 | issue-114 | — | no coupling; number order |\n| 4 | issue-115 | — | no coupling; number order |\n' >"$ow/order.md"
+order_py hold --wave-dir "$ow" --lane issue-114 --why "issue-114 failed"
+expect_status 0 "hold across a gap in Order"
+expect_lanes "$ow" "1:issue-113 3:issue-114 held:issue-115" "hold --lane issue-114 across a gap"
+order_probes "$ow" "an order.md with a gap after hold"
+
+# refuse and a two-lane cycle exit 1 naming the lanes, and write nothing.
+rm -f "$ow/order.md"
+printf "$coupling_header"'| issue-113 issue-114 | mutual | each half of one change | refuse |\n| issue-113 issue-115 | independent | nothing shared | none |\n| issue-114 issue-115 | independent | nothing shared | none |\n' >"$ow/coupling.md"
+order_py build --wave-dir "$ow"
+expect_status 1 "build with a refuse row"
+{ grep -Fq "issue-113" <<<"$err" && grep -Fq "issue-114" <<<"$err"; } || {
+  echo "a refuse row should name both lanes on stderr, got: $err" >&2
+  exit 1
+}
+[[ ! -e "$ow/order.md" ]] || { echo "a refused build wrote order.md" >&2; exit 1; }
+
+printf "$coupling_header"'| issue-113 issue-114 | directional | loop | order: issue-114 after issue-113 |\n| issue-113 issue-115 | directional | after the loop | order: issue-115 after issue-114 |\n| issue-114 issue-113 | directional | loop | order: issue-113 after issue-114 |\n' >"$ow/coupling.md"
+order_py build --wave-dir "$ow"
+expect_status 1 "build over a two-lane cycle"
+{ grep -Fq "issue-113" <<<"$err" && grep -Fq "issue-114" <<<"$err"; } || {
+  echo "a cycle should name both lanes on stderr, got: $err" >&2
+  exit 1
+}
+# issue-115 waits on the cycle without being in it.
+if grep -Fq "issue-115" <<<"$err"; then
+  echo "a cycle named issue-115, which only waits on it: $err" >&2
+  exit 1
+fi
+[[ ! -e "$ow/order.md" ]] || { echo "a cyclic build wrote order.md" >&2; exit 1; }
+
+# Exit 3: no coupling.md, no table in it, a lane outside the wave, a
+# Resolution it can't read, and a WAVE_DIR whose name names no lanes.
+rm -f "$ow/coupling.md"
+order_py build --wave-dir "$ow"
+expect_status 3 "build with no coupling.md"
+printf 'no table here\n' >"$ow/coupling.md"
+order_py build --wave-dir "$ow"
+expect_status 3 "build over a coupling.md with no table"
+printf "$coupling_header"'| issue-113 issue-114 | directional | reads | order: issue-114 after issue-9 |\n' >"$ow/coupling.md"
+order_py build --wave-dir "$ow"
+expect_status 3 "build naming a lane outside the wave"
+grep -Fq "issue-9" <<<"$err" || {
+  echo "a Resolution naming a lane outside the wave should name it on stderr, got: $err" >&2
+  exit 1
+}
+printf "$coupling_header"'| issue-113 issue-114 | directional | reads | merge them somehow |\n' >"$ow/coupling.md"
+order_py build --wave-dir "$ow"
+expect_status 3 "build over an unreadable Resolution"
+# none and ask match as whole words, so a Resolution like nonexistent exits 3.
+printf "$coupling_header"'| issue-113 issue-114 | directional | reads | nonexistent |\n' >"$ow/coupling.md"
+order_py build --wave-dir "$ow"
+expect_status 3 "build over a Resolution that only starts with none"
+mkdir -p "$orepo/.git/work-wave/not-a-wave"
+cp "$ow/coupling.md" "$orepo/.git/work-wave/not-a-wave/coupling.md"
+order_py build --wave-dir "$orepo/.git/work-wave/not-a-wave"
+expect_status 3 "build in a WAVE_DIR not named wave-<N>"
+[[ ! -e "$ow/order.md" ]] || { echo "a build that exited 3 wrote order.md" >&2; exit 1; }
+
+# The model's tables, read at run time so a hand copy can't drift from them.
+# build on main's Step 2 coupling.md writes main's Step 2 order.md byte for
+# byte, and so does the asks sequence's ask row, which counts as none until
+# Step 3 settles it. hold --lane issue-7 on that table writes
+# publish-failed-holds' Step 7 order.md, Why aside.
+wm="$orepo/.git/work-wave/wave-7-8"
+mkdir -p "$wm"
+python3 - "$wave_model" "$tmp" <<'PY' || exit 1
+import json, sys
+model = json.load(open(sys.argv[1]))
+seqs = {s["name"]: s for s in model["sequences"]}
+def write(seq, step, path):
+    hits = [e for e in seqs[seq]["entries"] if e.get("step") == step and e.get("path") == path and e.get("op") == "write"]
+    if len(hits) != 1:
+        sys.exit(f"wave-order.json: {seq} has {len(hits)} step {step} writes of {path}")
+    return hits[0]["content"]
+for name, text in (
+    ("main-coupling.md", write("main", 2, "coupling.md")),
+    ("main-order.md", write("main", 2, "order.md")),
+    ("asks-coupling.md", write("asks", 2, "coupling.md")),
+    ("held-order.md", write("publish-failed-holds", 7, "order.md")),
+):
+    open(f"{sys.argv[2]}/{name}", "w").write(text)
+PY
+cp "$tmp/main-coupling.md" "$wm/coupling.md"
+order_py build --wave-dir "$wm"
+expect_status 0 "build on wave-order.json's Step 2 coupling.md"
+cmp "$tmp/main-order.md" "$wm/order.md" || {
+  echo "build on wave-order.json's Step 2 coupling.md differs from its Step 2 order.md" >&2
+  exit 1
+}
+order_probes "$wm" "the model's Step 2 order.md, as built"
+cp "$tmp/asks-coupling.md" "$wm/coupling.md"
+order_py build --wave-dir "$wm"
+expect_status 0 "build over an ask row"
+cmp "$tmp/main-order.md" "$wm/order.md" || {
+  echo "build over an ask row should write the uncoupled order" >&2
+  exit 1
+}
+order_py hold --wave-dir "$wm" --lane issue-7 --why "issue-7 failed publishing here"
+expect_status 0 "hold --lane issue-7 on the model's Step 2 order.md"
+order_probes "$wm" "the model's order.md after hold"
+python3 - "$tmp/held-order.md" "$wm/order.md" <<'PY' || exit 1
+import sys
+def masked(path):
+    out = []
+    for line in open(path).read().split("\n"):
+        cells = line.split("|")
+        if len(cells) > 4 and cells[1].strip() == "held":
+            line = "|".join(cells[:4] + [" WHY "] + cells[5:])
+        out.append(line)
+    return out
+want, got = masked(sys.argv[1]), masked(sys.argv[2])
+if want != got:
+    sys.exit(f"hold --lane issue-7 should write publish-failed-holds' table, Why aside:\nwant {want}\ngot  {got}")
+PY
+require_text "$wm/order.md" "| held | issue-8 | issue-7 | issue-7 failed publishing here |"
+
+# The prose that routes the conductor through the script, and its ledger rows.
+require_text "$skill" "After every \`ask\` row is settled, run \`work-wave/scripts/order.py build --wave-dir WAVE_DIR\` again"
+require_text "$skill" "work-wave/scripts/order.py hold --wave-dir WAVE_DIR --lane issue-N --why TEXT"
+require_text work-wave/README.md "order.py"
+require_text "$ledger" "| 65 | \`order.py\` writes \`order.md\`"
+require_text "$ledger" "| 66 | A lane whose \`order:\` row puts it after a held lane is held"
+require_text "$ledger" "| 67 | \`hold\` stays positional"
+# Row 67's two cuts, refuted where either would have to be stated or built.
+for f in "$skill" "$oscript"; do
+  refute_text "$f" "whose \`After\` names"
+  refute_text "$f" "renumber"
+done
+
 echo "work-wave smoke: OK"

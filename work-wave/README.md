@@ -69,6 +69,7 @@ work-wave/
     ├── check-footprints.py     # proves every lane's footprint disjoint and lists the pairs to answer for coupling
     ├── check-worktrees.py      # Step 3's collision check: refuses a lane whose worktree path exists, but not a started lane's own tree, mid-rebase included
     ├── merge-test.py           # runs the merge test's seven steps in one call and writes the record and baseline.txt
+    ├── order.py                # builds order.md from coupling.md, and holds every lane ordered after one that leaves
     ├── wave-state.py           # probe reads WAVE_DIR and git into JSON, phase answers which step to resume at
     ├── resume_checks.py        # vendored from work-issue: replays the write order against wave-state.py
     └── wave-order.json         # the order the wave writes its artifacts, and where each crash must resume
