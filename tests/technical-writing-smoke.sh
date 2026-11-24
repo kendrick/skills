@@ -54,8 +54,8 @@ require_file _maintenance/technical-writing/PROVENANCE.md
 require_file _maintenance/technical-writing/EVALS.md
 require_file _maintenance/technical-writing/upstream/SKILL.md
 
-# Top level ships exactly SKILL.md, README.md, and the references/ dir —
-# nothing else. A plain file count (like the other smoke tests use) would
+# Top level ships exactly SKILL.md, README.md, and the references/ and
+# scripts/ dirs — nothing else. A plain file count (like the other smoke tests use) would
 # miss a stray directory, so compare the full listing.
 #
 # LC_ALL=C pins the collation, because the expected listing below is written in
@@ -63,9 +63,9 @@ require_file _maintenance/technical-writing/upstream/SKILL.md
 # and puts `references` between README.md and SKILL.md, so the comparison failed
 # on a correct directory for everyone whose shell was not in the C locale.
 top_level="$(find technical-writing -maxdepth 1 -mindepth 1 | LC_ALL=C sort)"
-expected_top_level=$'technical-writing/README.md\ntechnical-writing/SKILL.md\ntechnical-writing/references'
+expected_top_level=$'technical-writing/README.md\ntechnical-writing/SKILL.md\ntechnical-writing/references\ntechnical-writing/scripts'
 [[ "$top_level" == "$expected_top_level" ]] || {
-  echo "technical-writing/ must ship only SKILL.md, README.md, and references/ at top level" >&2
+  echo "technical-writing/ must ship only SKILL.md, README.md, references/, and scripts/ at top level" >&2
   echo "found:" >&2
   echo "$top_level" >&2
   exit 1
@@ -368,6 +368,182 @@ require_text _maintenance/technical-writing/PROVENANCE.md "MIT, Copyright (c) 20
 # table's third column. The command form around it is pinned once, in
 # repo-docs-smoke.sh, so this does not re-pin it twelve times.
 require_text README.md "--skill technical-writing"
+
+# --- lint-message.py ---------------------------------------------------
+# One case per acceptance criterion and falsifier in #394. The cases collect
+# failures instead of exiting on the first, so a run against a tree without
+# the script lists every case it fails rather than stopping at one.
+#
+# The wrap falsifiers run in both directions on purpose. A line-length rule
+# (the 72-column habit) flags the 200-character line and passes the two
+# 30-character ones, and a newest-commit-only inference flips on the
+# newest-bare case, so each wrong rule fails at least one case below.
+
+lint="$repo_root/technical-writing/scripts/lint-message.py"
+lint_tmp="$(mktemp -d)"
+lint_tmp="$(cd "$lint_tmp" && pwd -P)"
+trap 'rm -rf "$lint_tmp"' EXIT
+lint_failures=0
+lint_cwd="$repo_root"
+lint_stdin=/dev/null
+
+lint_fail() {
+  echo "lint-message case failed: $1" >&2
+  echo "  rc=$2 stdout: $(cat "$lint_tmp/out")" >&2
+  echo "  stderr: $(cat "$lint_tmp/err")" >&2
+  lint_failures=$((lint_failures + 1))
+}
+
+# lint_case NAME WANT_RC WANT_STDERR ARGS...: WANT_STDERR is a fixed string
+# the stderr must hold, or empty. An exit-0 case also requires empty stderr.
+lint_case() {
+  local name="$1" want_rc="$2" want_err="$3"
+  shift 3
+  local rc=0
+  (cd "$lint_cwd" && GIT_CEILING_DIRECTORIES="$lint_tmp" python3 "$lint" "$@" <"$lint_stdin") \
+    >"$lint_tmp/out" 2>"$lint_tmp/err" || rc=$?
+  if [[ "$rc" != "$want_rc" ]]; then
+    lint_fail "$name (want exit $want_rc)" "$rc"
+  elif [[ -n "$want_err" ]] && ! grep -Fq -- "$want_err" "$lint_tmp/err"; then
+    lint_fail "$name (want stderr '$want_err')" "$rc"
+  elif [[ "$want_rc" == 0 && -s "$lint_tmp/err" ]]; then
+    lint_fail "$name (want empty stderr)" "$rc"
+  fi
+  return 0
+}
+
+msg() {
+  local name="$1"
+  shift
+  printf '%s\n' "$@" >"$lint_tmp/$name.txt"
+}
+
+clean_subject="feat(lint): add a checker for the commit and PR hard rules"
+clean_body="One unwrapped body paragraph saying why the change exists, on a single line."
+
+# Trailers: each form alone in an otherwise clean message, at line 5.
+msg clean "$clean_subject" "" "$clean_body"
+lint_case "clean commit message" 0 "" commit "$lint_tmp/clean.txt" --convention conventional
+msg coauthor "$clean_subject" "" "$clean_body" "" "co-AUTHORED-by: Someone <someone@example.com>"
+lint_case "Co-Authored-By trailer, mixed case" 1 "line 5:" commit "$lint_tmp/coauthor.txt" --convention conventional
+msg generated "$clean_subject" "" "$clean_body" "" "Generated with a coding agent"
+lint_case "Generated with footer" 1 "line 5:" commit "$lint_tmp/generated.txt" --convention conventional
+msg robot "$clean_subject" "" "$clean_body" "" "🤖 signed off by the harness"
+lint_case "robot-emoji sign-off" 1 "line 5:" commit "$lint_tmp/robot.txt" --convention conventional
+
+# Hard wrap, in PR bodies so no subject rule fires.
+msg wrapped "A paragraph that a writer broke across two lines" "by pressing return at the edge of their editor."
+lint_case "two-line paragraph is a wrap" 1 "line 2: hard wrap" pr "$lint_tmp/wrapped.txt"
+msg joined "A paragraph that a writer broke across two lines by pressing return at the edge of their editor."
+lint_case "the same paragraph joined passes" 0 "" pr "$lint_tmp/joined.txt"
+msg bulletwrap "- A list item that a writer broke across two lines" "  by indenting the rest under the bullet."
+lint_case "wrapped list item is a wrap" 1 "line 2: hard wrap" pr "$lint_tmp/bulletwrap.txt"
+msg short "Thirty characters on this line" "and thirty more on this line.."
+lint_case "two 30-character lines are a wrap" 1 "line 2: hard wrap" pr "$lint_tmp/short.txt"
+msg long "$(printf 'word %.0s' $(seq 1 40))"
+lint_case "one 200-character line passes" 0 "" pr "$lint_tmp/long.txt"
+msg bullets "- the first of two adjacent bullets" "- the second of two adjacent bullets"
+lint_case "adjacent bullets pass" 0 "" pr "$lint_tmp/bullets.txt"
+msg table "| column | other |" "| --- | --- |" "| a | b |"
+lint_case "adjacent table rows pass" 0 "" pr "$lint_tmp/table.txt"
+eighty="$(printf 'x%.0s' $(seq 1 80))"
+msg fenced "Intro paragraph." "" '```' "$eighty" "$eighty" "$eighty" '```'
+lint_case "fenced 80-column lines pass" 0 "" pr "$lint_tmp/fenced.txt"
+
+# Commit-only rules. Line 2 is reported once, as the missing blank line.
+msg noblank "$clean_subject" "$clean_body"
+lint_case "non-blank second line" 1 "line 2: no blank line after the subject" commit "$lint_tmp/noblank.txt" --convention conventional
+if grep -Fq "hard wrap" "$lint_tmp/err"; then lint_fail "non-blank second line also reported as a wrap" 1; fi
+msg period "$clean_subject." "" "$clean_body"
+lint_case "subject ending in a period" 1 "line 1:" commit "$lint_tmp/period.txt" --convention conventional
+
+# Convention, set by flag.
+msg upper "feat(x): Add thing"
+lint_case "uppercase after the colon under conventional" 1 "line 1:" commit "$lint_tmp/upper.txt" --convention conventional
+msg bare "Add thing"
+lint_case "bare subject under bare" 0 "" commit "$lint_tmp/bare.txt" --convention bare
+lint_stdin="$lint_tmp/bare.txt"
+lint_case "bare subject read from stdin" 0 "" commit - --convention bare
+lint_stdin=/dev/null
+msg prefixed "feat: add thing"
+lint_case "type prefix under bare" 1 "line 1:" commit "$lint_tmp/prefixed.txt" --convention bare
+msg lower "add thing"
+lint_case "lowercase first letter under bare" 1 "line 1:" commit "$lint_tmp/lower.txt" --convention bare
+lint_case "PR title under the subject rules" 1 "title:" pr "$lint_tmp/joined.txt" --title "feat(x): Add thing" --convention conventional
+
+# Length is a note: a 90-character subject prints one and still exits 0.
+long_subject="feat(lint): $(printf 'a%.0s' $(seq 1 78))"
+msg longsubject "$long_subject"
+lint_case "90-character subject exits 0" 0 "" commit "$lint_tmp/longsubject.txt" --convention conventional
+grep -q '^note:' "$lint_tmp/out" || lint_fail "90-character subject prints a note: line" 0
+
+# Convention, inferred from the log. Subjects are written oldest first.
+make_log_repo() {
+  local dir="$lint_tmp/$1"
+  shift
+  mkdir -p "$dir"
+  git -C "$dir" init -q
+  local s
+  for s in "$@"; do
+    git -C "$dir" -c user.name=t -c user.email=t@t -c commit.gpgsign=false -c core.hooksPath=/dev/null \
+      commit -q --allow-empty -m "$s"
+  done
+}
+conv() { local i; for i in $(seq 1 "$1"); do echo "feat(a): add thing $i"; done; }
+bare() { local i; for i in $(seq 1 "$1"); do echo "Add thing $i"; done; }
+probe="feat(lint): add a probe subject that clears the length floor"
+msg probe "$probe"
+
+# 7 of 12 Conventional, newest Conventional.
+IFS=$'\n' read -r -d '' -a subjects < <(bare 5; conv 7) || true
+make_log_repo seven "${subjects[@]}"
+lint_cwd="$lint_tmp/seven"
+lint_case "7 of 12 Conventional infers conventional" 0 "" commit "$lint_tmp/probe.txt" --log 12
+lint_case "no flag behaves as --log 12" 0 "" commit "$lint_tmp/probe.txt"
+
+# 6 of 12: one Conventional changed to bare, so the strict majority is gone.
+IFS=$'\n' read -r -d '' -a subjects < <(bare 6; conv 6) || true
+make_log_repo six "${subjects[@]}"
+lint_cwd="$lint_tmp/six"
+lint_case "6 of 12 Conventional infers bare" 1 "line 1:" commit "$lint_tmp/probe.txt" --log 12
+
+# 7 of 12 Conventional with the newest bare: still conventional.
+IFS=$'\n' read -r -d '' -a subjects < <(bare 4; conv 7; bare 1) || true
+make_log_repo newestbare "${subjects[@]}"
+lint_cwd="$lint_tmp/newestbare"
+lint_case "newest bare at 7 of 12 still infers conventional" 0 "" commit "$lint_tmp/probe.txt" --log 12
+
+# A repo with no commits has nothing to infer from.
+mkdir -p "$lint_tmp/empty"
+git -C "$lint_tmp/empty" init -q
+lint_cwd="$lint_tmp/empty"
+lint_case "--log in a repo with no commits exits 3" 3 "" commit "$lint_tmp/probe.txt" --log 12
+
+# Outside any repository; GIT_CEILING_DIRECTORIES in lint_case keeps a
+# parent repo from leaking in.
+mkdir -p "$lint_tmp/norepo"
+lint_cwd="$lint_tmp/norepo"
+lint_case "--log outside a git repository exits 3" 3 "" commit "$lint_tmp/probe.txt" --log 12
+lint_cwd="$repo_root"
+
+# Usage errors and unreadable input exit 3, never argparse's default 2.
+lint_case "unknown flag exits 3" 3 "" commit "$lint_tmp/bare.txt" --bogus
+lint_case "--convention with --log exits 3" 3 "" commit "$lint_tmp/bare.txt" --convention bare --log 12
+lint_case "missing file exits 3" 3 "" commit "$lint_tmp/does-not-exist.txt" --convention bare
+
+if (( lint_failures > 0 )); then
+  echo "$lint_failures lint-message case(s) failed" >&2
+  exit 1
+fi
+
+# The script reports and never edits, and installs nothing; each cut is a
+# Deliberately Not Built row in RATIONALE.md.
+require_text technical-writing/scripts/lint-message.py "It reports and never edits."
+refute_text technical-writing/scripts/lint-message.py "--fix"
+refute_text technical-writing/scripts/lint-message.py "commit-msg"
+
+require_text technical-writing/references/commit-messages.md "scripts/lint-message.py"
+require_text technical-writing/references/pr-descriptions.md "scripts/lint-message.py"
 
 # --- Size ceiling -----------------------------------------------------
 # The self-imposed byte ceiling was raised from 6.5 KB to 7 KB when the new
