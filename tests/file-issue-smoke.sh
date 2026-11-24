@@ -1439,6 +1439,18 @@ run_cd 0 "checklist marker inside a fence indented under a numbered step" "$cd_f
 run_cd 1 "empty fence indented under a numbered step" "$cd_fx/list-fence-empty.md"
 require_text "$cd_tmp/err" "11: empty fenced block"
 require_count "$cd_tmp/err" "" 1
+# A fence can open on the marker's own line, and a marker alone on its line
+# holds the indented text that follows it.
+run_cd 0 "checklist marker inside a fence opened on the step's marker line" "$cd_fx/marker-fence-checkbox.md"
+run_cd 1 "empty fence opened on the step's marker line" "$cd_fx/marker-fence-empty.md"
+require_text "$cd_tmp/err" "9: empty fenced block: 1. \`\`\`sh"
+require_count "$cd_tmp/err" "" 1
+run_cd 0 "numbered marker alone with an indented continuation" "$cd_fx/empty-numbered-continued.md"
+run_cd 0 "checkbox marker alone with an indented continuation" "$cd_fx/empty-checkbox-continued.md"
+run_cd 1 "numbered marker with nothing after it" "$cd_fx/empty-numbered.md"
+require_text "$cd_tmp/err" "20: empty list item: 1."
+run_cd 1 "checkbox marker with nothing after it" "$cd_fx/empty-checkbox.md"
+require_text "$cd_tmp/err" "16: empty list item: - [ ]"
 run_cd 1 "quoted comment opener in a fence" "$cd_fx/quoted-comment.md"
 require_text "$cd_tmp/err" "10: html comment: SyntaxError: unexpected token <!--"
 run_cd 0 "quoted comment kept with --literal" "$cd_fx/quoted-comment.md" --literal 10
@@ -1483,6 +1495,25 @@ open(sys.argv[2], "w", encoding="utf-8").write(src.replace(sys.argv[3], sys.argv
 MUT
 rc=0; python3 "$cd_tmp/mut/scripts/col0.py" "$cd_fx/list-fence-checkbox.md" 2> /dev/null || rc=$?
 expect_rc 1 "$rc" "column-0 fence mutant on the nested checklist marker"
+# A fence recognized only at a line's start scans the marker-line fence's
+# contents as structure, and an empty-item verdict made before the next line
+# is read fails the item whose text sits on a continuation line.
+cd_open='                om = FENCE_RE.match(line[col:]) if line[col:].strip() else None'
+cd_defer='            pending = (i, line.strip(), col)'
+python3 - "$cd_script" "$cd_tmp/mut" "$cd_open" "$cd_defer" <<'MUT'
+import sys
+src = open(sys.argv[1], encoding="utf-8").read()
+for anchor in sys.argv[3:5]:
+    assert src.count(anchor) == 1, "an empty-item or marker-fence line moved; update this mutant"
+open(sys.argv[2] + "/scripts/linestart.py", "w", encoding="utf-8").write(
+    src.replace(sys.argv[3], "                om = None", 1))
+open(sys.argv[2] + "/scripts/immediate.py", "w", encoding="utf-8").write(
+    src.replace(sys.argv[4], '            problems.append((i + 1, "empty list item", line.strip()))', 1))
+MUT
+rc=0; python3 "$cd_tmp/mut/scripts/linestart.py" "$cd_fx/marker-fence-checkbox.md" 2> /dev/null || rc=$?
+expect_rc 1 "$rc" "line-start-only fence mutant on the marker-line fence"
+rc=0; python3 "$cd_tmp/mut/scripts/immediate.py" "$cd_fx/empty-numbered-continued.md" 2> /dev/null || rc=$?
+expect_rc 1 "$rc" "immediate empty-item mutant on the continued marker"
 # A --literal that keeps every kind passes the empty heading it should not.
 cd_keep='    found = [p for p in found if not (p[0] in args.literal and p[1] in LITERAL_KINDS)]'
 python3 - "$cd_script" "$cd_tmp/mut/scripts/allkinds.py" "$cd_keep" <<'MUT'

@@ -19,7 +19,8 @@ lines carry no number and come last.
                        covered with no edit here. An angle-bracket span no
                        template carries, like the `<skill>` in
                        `_maintenance/<skill>/RATIONALE.md`, is prose and passes
-  empty list item      `- [ ]` with nothing after it, or `1.` alone
+  empty list item      `- [ ]` with nothing after it, or `1.` alone, unless the next
+                       content line is indented to the item's content column
   empty fenced block   a fence with only blank lines between its markers
   empty heading        no content before the next heading at the same or a
                        shallower level, or before the end of the body. A
@@ -114,7 +115,14 @@ def scan(text, slots):
     headings = []  # (index, level, line) outside fences
     fence = None  # (opening index, char, length, has content, list column)
     col = 0  # content column of the innermost open list item; 0 outside a list
+    pending = None  # (index, text, content column) of a bare marker awaiting its continuation
     for i, line in enumerate(lines):
+        if pending and line.strip():
+            # Text indented to the marker's content column belongs to the item, so a
+            # marker alone on its line is empty only if the next content line is shallower.
+            if len(line) - len(line.lstrip(" ")) < pending[2]:
+                problems.append((pending[0] + 1, "empty list item", pending[1]))
+            pending = None
         if "<!--" in line or "-->" in line:
             problems.append((i + 1, "html comment", line.strip()))
         for slot in sorted(s for s in slots if s in line):
@@ -135,18 +143,27 @@ def scan(text, slots):
             if lm and (lm.group(2) or not line[lm.end():].strip()):
                 # Content starts after the marker and 1-4 spaces; 5+ means indented code.
                 col = lm.end() if len(lm.group(2)) <= 4 else lm.end() - len(lm.group(2)) + 1
+                if not lm.group(2):
+                    col += 1  # a bare marker's content column is one past it
+                om = FENCE_RE.match(line[col:]) if line[col:].strip() else None
+                if om and not om.group(1) and not (om.group(2)[0] == "`" and "`" in line[col + om.end():]):
+                    # A fence opened on the marker's own line starts at the item's content column.
+                    fence = (i, om.group(2)[0], len(om.group(2)), False, col)
+                    continue
             elif len(line) - len(line.lstrip(" ")) < col:
                 col = 0  # shallower than the item's content ends it; lazy continuation is not tracked
         if m and len(m.group(1)) <= col + 3 and not (m.group(2)[0] == "`" and "`" in line[m.end():]):
             fence = (i, m.group(2)[0], len(m.group(2)), False, col)
             continue
         if EMPTY_ITEM_RE.match(line):
-            problems.append((i + 1, "empty list item", line.strip()))
+            pending = (i, line.strip(), col)
         h = HEADING_RE.match(line)
         if h:
             headings.append((i, len(h.group(1)), line.strip()))
     if fence and not fence[3]:
         problems.append((fence[0] + 1, "empty fenced block", lines[fence[0]].strip()))
+    if pending:
+        problems.append((pending[0] + 1, "empty list item", pending[1]))
     for n, (i, level, heading) in enumerate(headings):
         end, deeper = (headings[n + 1][0], headings[n + 1][1] > level) if n + 1 < len(headings) else (len(lines), False)
         body = [(j, ln) for j, ln in enumerate(lines[i + 1:end], i + 1) if ln.strip()]
