@@ -58,7 +58,8 @@ technical-writing/
 │   ├── review-correspondence.md  # answering register, the divergence rule, the SHA that goes stale
 │   └── readme.md                 # per-section mode mapping, register, the existing-voice rule
 └── scripts/
-    └── lint-message.py           # checks a commit message or PR body for trailers, hard wraps, and subject mechanics
+    ├── lint-message.py           # checks a commit message or PR body for trailers, hard wraps, and subject mechanics
+    └── check-refs.py             # reports code-span paths in a draft that don't resolve in the repo
 ```
 
 ## Gotchas

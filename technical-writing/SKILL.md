@@ -49,7 +49,7 @@ Rows marked *not yet written* fall back to the globals, meaning the rules and la
 
 Draft under the profile first. Then, in order:
 
-1. **Self-check.** Every instruction is a command with its condition in front. No sentence carries two instructions or two thoughts. "Only" sits next to the word it changes, every "it" and "this" points at one thing, and no clause has lost its verb. Each thing has exactly one name across the artifact. Every symbol, path, flag, and count is real at this commit, and any count travels with the command that regenerates it.
+1. **Self-check.** Every instruction is a command with its condition in front. No sentence carries two instructions or two thoughts. "Only" sits next to the word it changes, every "it" and "this" points at one thing, and no clause has lost its verb. Each thing has exactly one name across the artifact. Every symbol, path, flag, and count is real at this commit, and any count travels with the command that regenerates it. `scripts/check-refs.py` checks code-span paths only (issue numbers with `--gh`); symbols, flags, and counts stay yours to check.
 2. **Run the prose audit.** Where your setup provides a prose-audit skill, invoke it formally via the Skill tool and follow its audit-and-revise loop. Applying one from memory misses tells. This skill owns the invocation, so callers route to one skill, not two.
 3. **Layer the house rules.** Where your setup defines house prose rules, read them fresh and apply them over the audit, never from a remembered summary.
 
