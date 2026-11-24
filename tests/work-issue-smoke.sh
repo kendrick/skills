@@ -1154,6 +1154,9 @@ require_text _maintenance/work-issue/RATIONALE.md "No run has been timed with th
 # Step 7 no longer gates on VERIFY_CMD green unconditionally.
 step7_old="over the repair's reported \`files_changed\`, VERIFY_CMD green, then \`code-review\` against BASE_SHA"
 refute_text work-issue/SKILL.md "$step7_old"
+require_text _maintenance/work-issue/RATIONALE.md "| Step 7's repair gate requiring VERIFY_CMD green whatever the repair touched | Row 217."
+# A relative done-when span resolves against scoped-cmd's cwd, both for its PATH check and when run.
+require_text work-issue/SKILL.md "Run it, and the command it prints, from the work tree, where a relative path in a Done when span resolves."
 # The refute has to bite: restore the old Step 7 sentence in a scratch copy and
 # the Step 7 pins must fail on it.
 step7_new="over the repair's reported \`files_changed\`, then Step 4 item 4's scoped gate with \`--report RUN_DIR/reports/repair-<k>.json\`, then \`code-review\` against BASE_SHA"
@@ -5135,6 +5138,23 @@ sc_plan '| 0 | three | c.py | sonnet | `c.py` exists | none |' >"$sc_dir/plan5.m
 printf '{"files_changed": ["c.py"]}\n' >"$sc_dir/r.json"
 sc_case "$sc_dir/plan5.md" "$sc_dir/r.json"
 sc_expect_fallback "a done-when with no command"
+
+# 5b. A row cut off before its Done when cell is still the owner, so the
+# fallback names the missing command rather than calling c.py unowned.
+sc_plan '| 0 | three | c.py |' >"$sc_dir/plan5b.md"
+sc_case "$sc_dir/plan5b.md" "$sc_dir/r.json"
+sc_expect_fallback "a row with no Done when cell"
+grep -q 'names no command' "$sc_dir/err" || sc_fail "a row with no Done when cell should name the missing command"
+
+# 5c. A slashless owner is the same directory as its slashed spelling (#162),
+# and still doesn't swallow a sibling that shares its prefix.
+sc_plan '| 0 | four | lib | sonnet | `bash tests/l.sh` exits 0 | none |' >"$sc_dir/plan5c.md"
+printf '{"files_changed": ["lib/x.py"]}\n' >"$sc_dir/r.json"
+sc_case "$sc_dir/plan5c.md" "$sc_dir/r.json"
+[[ "$sc_status" == "0" && "$(cat "$sc_dir/out")" == "bash tests/l.sh" ]] || sc_fail "a slashless owner should own the files under it"
+printf '{"files_changed": ["lib-extra/x.py"]}\n' >"$sc_dir/r.json"
+sc_case "$sc_dir/plan5c.md" "$sc_dir/r.json"
+sc_expect_fallback "a sibling sharing the owner's prefix"
 
 # 6. Empty and missing files_changed fall back.
 printf '{"files_changed": []}\n' >"$sc_dir/r.json"

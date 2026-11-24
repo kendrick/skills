@@ -1607,10 +1607,11 @@ def owed_scope(text):
     return text.startswith("inscope") and not text.startswith("inscope;queued:")
 
 
-def waves_rows(ctx):
+def waves_rows(text):
     """The `## Waves` table's lines and no others. The table ends at its first
-    non-table line, where the vendored parser ends it."""
-    text = read_or_none(ctx.path("plan.md"))
+    non-table line, where the vendored parser ends it. Takes plan text rather
+    than ctx so `scoped-cmd`, which reads a plan path with no RUN_DIR, parses
+    the table the gatherers parse."""
     if text is None:
         return []
     rows = []
@@ -1630,18 +1631,20 @@ def waves_rows(ctx):
     return rows
 
 
-def wave_tasks_rows(ctx):
-    """`(wave, task, owned paths)` per task row, as the vendored parser reads
-    the first three cells: each loses only its outer spaces and tabs, so
-    `my task` and `docs/my notes.md` keep theirs, and paths split on commas."""
+def wave_tasks_rows(text):
+    """`(wave, task, owned paths, done when)` per task row, as the vendored
+    parser reads the cells: each loses only its outer spaces and tabs, so
+    `my task` and `docs/my notes.md` keep theirs, and paths split on commas.
+    A row with no Done when cell reads as an empty one."""
     tasks = []
-    for line in waves_rows(ctx):
+    for line in waves_rows(text):
         cells = [c.strip(" \t") for c in line.split("|")]
         wave = cells[1] if len(cells) > 1 else ""
         task = cells[2] if len(cells) > 2 else ""
         owned = re.sub(r"[ \t]*,[ \t]*", ",", cells[3] if len(cells) > 3 else "")
+        done = cells[5] if len(cells) > 5 else ""
         if re.fullmatch(r"[0-9]+", wave) and task:
-            tasks.append((wave, task, owned))
+            tasks.append((wave, task, owned, done))
     return tasks
 
 
@@ -1781,7 +1784,7 @@ def g_wave_tasks(ctx):
     next `## ` heading counted a numbered row under a `### ` heading inside the
     section. Whitespace-tolerant inside the row, for a compact
     `|0|one|a.py|sonnet|done||`, and ahead of it, for an indented table."""
-    return sum(1 for line in waves_rows(ctx) if NUMBERED_ROW.match(line))
+    return sum(1 for line in waves_rows(read_or_none(ctx.path("plan.md"))) if NUMBERED_ROW.match(line))
 
 
 @gatherer("wave_reports")
@@ -1799,7 +1802,7 @@ def g_wave_reports(ctx):
     has_gated = ctx.path("gated").is_dir()
     counted = 0
     failures = []
-    for wave, task, owned in wave_tasks_rows(ctx):
+    for wave, task, owned, _ in wave_tasks_rows(read_or_none(ctx.path("plan.md"))):
         if not reported(ctx, wave, task):
             continue
         paths = owned_paths(owned)
@@ -1843,7 +1846,7 @@ def g_wave_unreported_committed(ctx):
     base = chomp(read_text(base_file))
     counted = 0
     failures = []
-    for wave, task, owned in wave_tasks_rows(ctx):
+    for wave, task, owned, _ in wave_tasks_rows(read_or_none(ctx.path("plan.md"))):
         if not owned:
             continue
         paths = owned_paths(owned)
@@ -3166,25 +3169,13 @@ def cmd_scoped_cmd(args):
     if not isinstance(changed, list) or not changed or not all(isinstance(c, str) and c for c in changed):
         return fallback(f"{args.report}: files_changed is empty or missing")
 
-    tasks = []  # (owned paths, done-when cell)
-    in_section = started = False
-    for line in plan.split("\n"):
-        if WAVES_HEADING.match(line):
-            in_section = True
-        elif not in_section:
-            continue
-        elif TABLE_LINE.match(line):
-            started = True
-            cells = [c.strip(" \t") for c in line.split("|")]
-            if len(cells) > 5 and re.fullmatch(r"[0-9]+", cells[1]) and cells[2]:
-                tasks.append((owned_paths(re.sub(r"[ \t]*,[ \t]*", ",", cells[3])), cells[5]))
-        elif started:
-            break
+    tasks = [(owned_paths(owned), done) for _, _, owned, done in wave_tasks_rows(plan)]
     if not tasks:
         return fallback(f"{args.plan}: no ## Waves task rows")
 
     def owns(owned, path):
-        return any(path == o or (o.endswith("/") and path.startswith(o)) for o in owned if o)
+        # `docs` and `docs/` are one territory, as vendored paths_overlap reads them (#162).
+        return any(path == o.rstrip("/") or path.startswith(o.rstrip("/") + "/") for o in owned if o.rstrip("/"))
 
     for path in changed:
         if not any(owns(owned, path) for owned, _ in tasks):

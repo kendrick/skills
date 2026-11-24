@@ -316,6 +316,7 @@ Five sources:
 | Merging the reproducer's verdict lines by hand | Row 200. A hand merge invites tidying a verdict, which `redteam.md` forbids, and a miscounted uncovered set either drops a claim unverified or re-runs finished work. `merge-verdicts.py` does the match and the count. Pinned by the `refute_text` on "merge the verdict lines by hand" in `work-issue/SKILL.md` and `references/redteam.md`. |
 | The net-diff change-exists grep | Row 203. The net diff drops a line a later commit removed and never shows the text of an absence claim, so both true claims came back `NOT_REPRODUCED` before their command ran. Pinned by a `refute_text` on `git diff BASE_SHA..HEAD -- <path> \| grep`. |
 | Step 1 running `review-rules.py install` | Row 215. The run would edit the target repo's `AGENTS.md` inside a pull request opened for something else, and a repo that keeps its own rules would get them rewritten without anyone asking. A stale block earns a warning. Pinned by a `refute_text` in `tests/work-issue-smoke.sh` on a Step 1 `review-rules.py install` invocation in `SKILL.md`. |
+| Step 7's repair gate requiring VERIFY_CMD green whatever the repair touched | Row 217. The push runs the full VERIFY_CMD again on the tree that ships, so a full run at Step 7's repair gate repeats a 10-to-20-minute suite minutes before the push. Step 7 runs the full suite only where `scoped-cmd` exits 1 or the run is adopted. Pinned by a `refute_text` on the old Step 7 sentence, held in `$step7_old` in `tests/work-issue-smoke.sh`. |
 
 ## Known Limitations
 
