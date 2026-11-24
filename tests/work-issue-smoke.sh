@@ -5641,6 +5641,13 @@ refute_text work-issue/references/worker-prompt.md "the file the reproducer grep
 require_text work-issue/SKILL.md "never in this run's tree, and continue the run"
 refute_text work-issue/SKILL.md "run \`work-issue/scripts/review-rules.py install"
 refute_text work-issue/SKILL.md "naming \`review-rules.py install <tree>\`"
+refute_text work-issue/SKILL.md "run \`review-rules.py install"
+require_text _maintenance/work-issue/RATIONALE.md "| 213 | \`references/codex-review-rules.md\` holds one block of five rules"
+require_text _maintenance/work-issue/RATIONALE.md "| 214 | \`review-rules.py install <repo>\` replaces a block's begin line through end line"
+require_text _maintenance/work-issue/RATIONALE.md "| 215 | \`work-issue\` Step 1 runs \`review-rules.py check\` on the run's tree"
+require_text _maintenance/work-issue/RATIONALE.md "| 216 | This repo's own \`AGENTS.md\` carries the block"
+require_text _maintenance/work-issue/RATIONALE.md "| Step 1 running \`review-rules.py install\` | Row 215."
+require_text _maintenance/work-issue/RATIONALE.md "- **The heuristic rule's falsifier is unmeasured, and \`install\` reads headings without reading code fences.**"
 
 # --- crash points ---
 # #147: resume_checks.py replays every write the skill makes and asks the real
