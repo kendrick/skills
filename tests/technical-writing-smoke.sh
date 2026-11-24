@@ -592,6 +592,199 @@ refute_text technical-writing/scripts/lint-message.py "commit-msg"
 require_text technical-writing/references/commit-messages.md "scripts/lint-message.py"
 require_text technical-writing/references/pr-descriptions.md "scripts/lint-message.py"
 
+# --- check-refs.py -------------------------------------------------------
+# One case per acceptance criterion and falsifier in #401. Cases collect
+# failures like lint_case does, so a run without the script lists every one.
+#
+# The shape rule is what the falsifiers perturb. Keyed on existence, a rule
+# reports `git diff --name-only` and `owner/repo#12` too, so the clean-exit
+# cases fail on it; keyed on nothing, `tests/no-such-smoke.sh` clears, so the
+# exit-1 case fails on that. Inputs live under $lint_tmp/refs, which the one
+# trap above already removes; a second trap would replace it.
+
+refs="$repo_root/technical-writing/scripts/check-refs.py"
+refs_tmp="$lint_tmp/refs"
+mkdir -p "$refs_tmp"
+refs_failures=0
+refs_cwd="$repo_root"
+refs_path="$PATH"
+refs_py=python3
+refs_stdin=/dev/null
+
+refs_fail() {
+  echo "check-refs case failed: $1" >&2
+  echo "  rc=$2 stdout: $(cat "$refs_tmp/out")" >&2
+  echo "  stderr: $(cat "$refs_tmp/err")" >&2
+  refs_failures=$((refs_failures + 1))
+}
+
+# refs_case NAME WANT_RC WANT_STDERR ARGS...: same contract as lint_case.
+refs_case() {
+  local name="$1" want_rc="$2" want_err="$3"
+  shift 3
+  local rc=0
+  (cd "$refs_cwd" && GIT_CEILING_DIRECTORIES="$lint_tmp" PATH="$refs_path" \
+    "$refs_py" "$refs" "$@" <"$refs_stdin") >"$refs_tmp/out" 2>"$refs_tmp/err" || rc=$?
+  if [[ "$rc" != "$want_rc" ]]; then
+    refs_fail "$name (want exit $want_rc)" "$rc"
+  elif [[ -n "$want_err" ]] && ! grep -Fq -- "$want_err" "$refs_tmp/err"; then
+    refs_fail "$name (want stderr '$want_err')" "$rc"
+  elif [[ "$want_rc" == 0 && -s "$refs_tmp/err" ]]; then
+    refs_fail "$name (want empty stderr)" "$rc"
+  fi
+  return 0
+}
+
+# refs_text NAME TEXT...: write one input file, a line per argument.
+refs_text() {
+  local name="$1"
+  shift
+  printf '%s\n' "$@" >"$refs_tmp/$name.txt"
+}
+
+# The rule's key, perturbed both ways: a missing path is reported, the same
+# shape naming a real file clears, and the two near-misses never are.
+refs_text missing 'Run `tests/no-such-smoke.sh` first.'
+refs_case "a missing path is reported" 1 'line 1: tests/no-such-smoke.sh' "$refs_tmp/missing.txt"
+refs_text present 'Run `tests/file-issue-smoke.sh` first.'
+refs_case "the same shape naming a real file clears" 0 "" "$refs_tmp/present.txt"
+refs_text shape 'List them with `git diff --name-only` and cite `owner/repo#12`.' 'Also `a#b/c`, `a*b/c`, `a?b/c`, `<dir>/x.sh`, `https://example.com/x.html`.'
+refs_case "whitespace, #, *, ?, <, and :// are never paths" 0 "" "$refs_tmp/shape.txt"
+refs_text noslash 'The `name` and `v1` and `plain.` words are not paths.'
+refs_case "a span with no slash and no extension is not a path" 0 "" "$refs_tmp/noslash.txt"
+refs_text bare_path 'Run tests/no-such-smoke.sh or see technical-writing/no-such.md for more.'
+refs_case "a bare path outside a code span is not checked" 0 "" "$refs_tmp/bare_path.txt"
+refs_text dotslash 'See `./AGENTS.md` and `././tests/file-issue-smoke.sh`.'
+refs_case "a leading ./ is dropped before lookup" 0 "" "$refs_tmp/dotslash.txt"
+refs_text ext 'See `no-such-file.py`.'
+refs_case "a bare filename with an extension is a path" 1 'line 1: no-such-file.py' "$refs_tmp/ext.txt"
+
+refs_text suffix 'See `adversarial-review/references/trigger-table.md:46` and `adversarial-review/`.'
+refs_case "a :line suffix is dropped and a directory resolves" 0 "" "$refs_tmp/suffix.txt"
+refs_text suffixmissing 'See `adversarial-review/references/no-such.md:46`.'
+refs_case "a :line suffix on a missing path is reported without the suffix" 1 'adversarial-review/references/no-such.md' "$refs_tmp/suffixmissing.txt"
+
+refs_text fenced 'Intro.' '```' 'tests/no-such-smoke.sh' '`tests/no-such-smoke.sh`' '```' 'Done.'
+refs_case "a path inside a fenced block is not checked" 0 "" "$refs_tmp/fenced.txt"
+refs_text nestedfence '````markdown' '```' '`tests/no-such-smoke.sh`' '```' '`tests/also-missing.sh`' '````' 'Done.'
+refs_case "a shorter fence nested in a longer one stays fenced" 0 "" "$refs_tmp/nestedfence.txt"
+refs_text afterfence '```' 'code' '```' 'See `tests/no-such-smoke.sh`.'
+refs_case "a path after the closing fence is checked again" 1 'line 4: tests/no-such-smoke.sh' "$refs_tmp/afterfence.txt"
+
+refs_stdin="$refs_tmp/missing.txt"
+refs_case "stdin works as -" 1 'tests/no-such-smoke.sh' -
+refs_stdin=/dev/null
+
+# Scratch repo: one tracked file, one untracked, one ignored, one directory.
+scratch="$refs_tmp/repo"
+mkdir -p "$scratch/sub"
+git -C "$scratch" init -q
+printf 'ignored.log\n' >"$scratch/.gitignore"
+printf 'x\n' >"$scratch/tracked.txt"
+printf 'x\n' >"$scratch/sub/a.txt"
+git -C "$scratch" add .gitignore tracked.txt sub/a.txt
+printf 'x\n' >"$scratch/new.txt"
+printf 'x\n' >"$scratch/ignored.log"
+refs_cwd="$scratch"
+refs_text tracked 'See `tracked.txt`, `sub/`, and `sub/a.txt`.'
+refs_case "tracked files and a directory resolve" 0 "" "$refs_tmp/tracked.txt"
+refs_text untracked 'See `new.txt`.'
+refs_case "an untracked, non-ignored file resolves" 0 "" "$refs_tmp/untracked.txt"
+refs_text ignored 'See `ignored.log`.'
+refs_case "an ignored file does not resolve, though it exists" 1 'line 1: ignored.log' "$refs_tmp/ignored.txt"
+# Paths resolve from the top level of the repo, never from the cwd.
+refs_cwd="$scratch/sub"
+refs_case "paths resolve against the repo top level from a subdirectory" 0 "" "$refs_tmp/tracked.txt"
+refs_cwd="$repo_root"
+
+# The gh rules. A PATH holding only git proves the path checks never need gh;
+# the stub below proves a run without --gh never calls it.
+bin_nogh="$refs_tmp/bin-nogh"
+mkdir -p "$bin_nogh"
+ln -s "$(command -v git)" "$bin_nogh/git"
+refs_py="$(python3 -c 'import sys; print(sys.executable)')"
+if PATH="$bin_nogh:/usr/bin:/bin" command -v gh >/dev/null 2>&1; then
+  echo "check-refs gh-absent cases cannot run: gh sits in /usr/bin or /bin on this machine" >&2
+  refs_failures=$((refs_failures + 1))
+else
+  refs_path="$bin_nogh:/usr/bin:/bin"
+  refs_case "gh absent from PATH, clean input, exit 0" 0 "" "$refs_tmp/present.txt"
+  refs_case "gh absent from PATH, missing path, exit 1" 1 'tests/no-such-smoke.sh' "$refs_tmp/missing.txt"
+  refs_text issues 'See #7 for the background.'
+  refs_case "--gh with gh absent exits 3 rather than passing" 3 "" "$refs_tmp/issues.txt" --gh
+  refs_path="$PATH"
+fi
+
+bin_stub="$refs_tmp/bin-stub"
+mkdir -p "$bin_stub"
+cat >"$bin_stub/gh" <<STUB
+#!/bin/sh
+echo "\$*" >>"$refs_tmp/gh-calls"
+case "\$3" in
+  7) exit 0 ;;
+  8) echo "GraphQL: Could not resolve to an issue or pull request with the number of 8." >&2; exit 1 ;;
+  *) echo "To get started with GitHub CLI, please run: gh auth login" >&2; exit 4 ;;
+esac
+STUB
+chmod +x "$bin_stub/gh"
+refs_path="$bin_stub:$PATH"
+rm -f "$refs_tmp/gh-calls"
+refs_case "without --gh the script never calls gh" 0 "" "$refs_tmp/issues.txt"
+[[ ! -e "$refs_tmp/gh-calls" ]] || refs_fail "without --gh the script never calls gh (gh was called)" 0
+
+refs_text bare 'Fixes #7 and #8, cross-ref owner/repo#9, abc#10, `#11`, and #7 again.' '```' '#12' '```'
+refs_case "--gh reports only a bare #N that gh cannot find" 1 'line 1: #8' "$refs_tmp/bare.txt" --gh
+if grep -Fq '#7' "$refs_tmp/err"; then refs_fail "--gh reports #7, which gh found" 1; fi
+asked="$(sort -u "$refs_tmp/gh-calls" | tr '\n' ';')"
+[[ "$asked" == "issue view 7;issue view 8;pr view 8;" ]] || refs_fail "--gh asks once per distinct bare number, got: $asked" 1
+refs_text authfail 'See #13.'
+refs_case "--gh exits 3 when gh fails for another reason" 3 "" "$refs_tmp/authfail.txt" --gh
+refs_path="$PATH"
+
+# A tracked name that isn't UTF-8 must not crash the lookup. A stub git stands
+# in for the file, since APFS refuses to create one; every other subcommand
+# goes to the real git.
+bin_badgit="$refs_tmp/bin-badgit"
+mkdir -p "$bin_badgit"
+cat >"$bin_badgit/git" <<STUB
+#!/bin/sh
+case "\$1" in
+  ls-files) printf 'bad\377.txt\0ok.txt\0' ;;
+  *) exec "$(command -v git)" "\$@" ;;
+esac
+STUB
+chmod +x "$bin_badgit/git"
+refs_path="$bin_badgit:$PATH"
+refs_text badname 'See `ok.txt` and `nope.txt`.'
+refs_case "a non-UTF-8 tracked name doesn't crash the lookup" 1 'nope.txt does not resolve' "$refs_tmp/badname.txt"
+if grep -Fq Traceback "$refs_tmp/err"; then refs_fail "a non-UTF-8 tracked name raised a traceback" 1; fi
+if grep -Fq "ok.txt does not" "$refs_tmp/err"; then refs_fail "the name after a non-UTF-8 one was lost" 1; fi
+refs_path="$PATH"
+
+# Usage errors, unreadable input, and a cwd outside any repo exit 3, never 2.
+refs_case "unknown flag exits 3" 3 "" "$refs_tmp/present.txt" --bogus
+refs_case "missing file exits 3" 3 "" "$refs_tmp/does-not-exist.txt"
+refs_case "no FILE exits 3" 3 ""
+mkdir -p "$refs_tmp/norepo"
+refs_cwd="$refs_tmp/norepo"
+refs_case "outside any git repository exits 3" 3 "" "$refs_tmp/present.txt"
+refs_cwd="$repo_root"
+refs_py=python3
+
+if (( refs_failures > 0 )); then
+  echo "$refs_failures check-refs case(s) failed" >&2
+  exit 1
+fi
+
+# The script reports and never edits; the cuts are Deliberately Not Built rows.
+require_text technical-writing/scripts/check-refs.py "It reports and never edits."
+refute_text technical-writing/scripts/check-refs.py "--fix"
+
+# Step 2 names the script and says how far it reaches, since a writer who
+# believes it checks symbols stops checking them.
+require_text technical-writing/SKILL.md "scripts/check-refs.py"
+require_text technical-writing/SKILL.md "checks code-span paths only"
+
 # --- Size ceiling -----------------------------------------------------
 # The self-imposed byte ceiling was raised from 6.5 KB to 7 KB when the new
 # dispatch rows landed, then to 7.3 KB when the README profile's row and
