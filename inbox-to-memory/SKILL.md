@@ -258,7 +258,7 @@ The CLAUDE.md and README templates use double-curly placeholders. Substitute the
 | `{{ClientName}}` / `{{ProjectName}}` / `{{ScopeName}}` | Human-readable name supplied by the user. |
 | `{{pursuit\|delivery project}}` / `{{pursuit\|project}}` / `{{pursuits\|projects}}` / `{{Pursuit\|Project}}` | Pick one side of the pipe based on question 3. Use the title-cased `{{Pursuit\|Project}}` form when the substitution lands inside a heading. |
 | `{{MEMORY_MODE}}` | `lightweight` or `canonical`. |
-| `{{SCOPE_NAME}}` | The scope directory's basename, lowercased to `a-z0-9-`. |
+| `{{SCOPE_NAME}}` | The scope directory's basename, lowercased, each run of characters outside `a-z0-9` collapsed to one hyphen, hyphens stripped from both ends. |
 | `{{MEMORY_TYPES}}` | `Decision, Context, PolicyRule` (lightweight) or `Decision, PolicyRule, Exception, Context` (canonical). |
 | `{{MEMORY_TYPE_ENUM}}` | `Decision \| Context \| PolicyRule` or `Decision \| PolicyRule \| Exception \| Context`. |
 | `{{MEMORY_TYPE_FOLDERS}}` | `decisions/, context/, rules/` or `decisions/, policy-rules/, exceptions/, context/`. |

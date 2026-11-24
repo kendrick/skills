@@ -709,7 +709,18 @@ TPL
     if [[ -z "$prefixes" ]]; then
       refuse "$bank" "no facet prefix to declare, since no record uses one; list at least one under the facet map's prefixes key"
     fi
-    bank_name="$(basename "$(cd "$scope" && pwd)" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g')"
+    # The expression inside print() is copied verbatim from scope_name in
+    # memory-index/scripts/memory-index.py (line 35), 2026-11-23. Upstream is
+    # authoritative: fix a bug there first, then re-copy. A bank name that
+    # drifts from the collection names memory-index registers labels the same
+    # scope two ways. This skill installs standalone, so it can't import it.
+    # The scope is resolved with pwd -P because memory-index names Path(...).resolve(),
+    # so a symlinked scope takes its target's name there too.
+    # set -e would abort a bare failing python3 mid-pass with no reason printed;
+    # refuse names it in the report instead.
+    if ! bank_name="$(python3 -c 'import re, sys; from pathlib import Path; root = Path(sys.argv[1]); print(re.sub(r"[^a-z0-9]+", "-", root.name.lower()).strip("-"))' "$(cd "$scope" && pwd -P)")"; then
+      refuse "$bank" "python3 failed while deriving the bank name from the scope directory"
+    fi
     {
       echo "schema: 1"
       echo "name: '$bank_name'"
