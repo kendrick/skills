@@ -1364,4 +1364,192 @@ require_text file-issue/SKILL.md "Restore the original wording of each item it r
 require_text file-issue/README.md "check-polish.py"
 require_text _maintenance/file-issue/RATIONALE.md "up to and including its first \`: \`"
 
+# check-draft.py (#400): Step 5's no-placeholders check was a self-read, so a
+# leftover comment or template placeholder posted as written. Each fixture
+# under draft/ is clean.md (feature.template.md, every slot filled, every
+# comment stripped) with one problem added.
+cd_script=file-issue/scripts/check-draft.py
+cd_fx=tests/fixtures/file-issue/draft
+cd_tmp="$(mktemp -d)"
+trap 'rm -rf "$link_tmp" "$hv_tmp" "$cp_tmp" "$cd_tmp"' EXIT
+run_cd() {
+  local want="$1" what="$2"
+  shift 2
+  rc=0; python3 "$cd_script" "$@" 2> "$cd_tmp/err" || rc=$?
+  expect_rc "$want" "$rc" "check-draft: $what"
+}
+
+# Criterion 3: the filled feature body passes, and silently.
+run_cd 0 "filled feature body" "$cd_fx/clean.md"
+[[ ! -s "$cd_tmp/err" ]] || { echo "check-draft printed on the clean body" >&2; exit 1; }
+# The fixture has to stay a filled feature template, or "clean" pins nothing.
+while IFS= read -r heading; do
+  grep -Fxq -- "$heading" file-issue/assets/feature.template.md || {
+    echo "clean.md heading not in feature.template.md: $heading" >&2; exit 1; }
+done < <(grep -E '^## ' "$cd_fx/clean.md")
+# The unfilled template with its comments stripped is the shape the check
+# exists for.
+python3 - file-issue/assets/feature.template.md "$cd_tmp/unfilled.md" <<'STRIP'
+import re, sys
+text = open(sys.argv[1], encoding="utf-8").read()
+open(sys.argv[2], "w", encoding="utf-8").write(re.sub(r"<!--.*?-->\n*", "", text, flags=re.S))
+STRIP
+run_cd 1 "unfilled template with comments stripped" "$cd_tmp/unfilled.md"
+
+# Criterion 1: each problem kind alone in the clean body, with its line number.
+run_cd 1 "comment opener" "$cd_fx/comment-open.md"
+require_text "$cd_tmp/err" "25: html comment: "
+require_count "$cd_tmp/err" "" 1
+run_cd 1 "comment closer" "$cd_fx/comment-close.md"
+require_text "$cd_tmp/err" "25: html comment: "
+require_count "$cd_tmp/err" "" 1
+run_cd 1 "template placeholder" "$cd_fx/placeholder.md"
+require_text "$cd_tmp/err" "24: placeholder: <the exact command>"
+require_count "$cd_tmp/err" "" 1
+run_cd 1 "empty checklist item" "$cd_fx/empty-checkbox.md"
+require_text "$cd_tmp/err" "16: empty list item: - [ ]"
+require_count "$cd_tmp/err" "" 1
+run_cd 1 "empty numbered item" "$cd_fx/empty-numbered.md"
+require_text "$cd_tmp/err" "20: empty list item: 1."
+require_count "$cd_tmp/err" "" 1
+run_cd 1 "empty fenced block" "$cd_fx/empty-fence.md"
+require_text "$cd_tmp/err" "25: empty fenced block"
+require_count "$cd_tmp/err" "" 1
+run_cd 1 "heading with nothing under it" "$cd_fx/empty-heading.md"
+require_text "$cd_tmp/err" "18: empty heading: ## Non-Goals"
+require_count "$cd_tmp/err" "" 1
+run_cd 1 "heading holding only n/a" "$cd_fx/na-heading.md"
+require_text "$cd_tmp/err" "20: n/a heading: ## Non-Goals"
+require_count "$cd_tmp/err" "" 1
+run_cd 1 "title still holding {component} and {trigger}" "$cd_fx/clean.md" --title "{component} drops the session when {trigger}"
+require_text "$cd_tmp/err" "title: {component}"
+require_text "$cd_tmp/err" "title: {trigger}"
+run_cd 0 "filled title" "$cd_fx/clean.md" --title "file-issue: add CSV export to the report page"
+
+# Criterion 2: the rule and its falsifier. A placeholder is a string the
+# templates carry, so `<the exact command>` fails and the `<skill>` in a path
+# does not. A parent heading over a deeper heading is not an empty heading.
+run_cd 0 "angle brackets that no template carries" "$cd_fx/rationale-prose.md"
+run_cd 0 "parent heading over a deeper heading" "$cd_fx/parent-deeper.md"
+
+# A fence indented under a list item is code, so its contents are not
+# structure, and an empty one is still empty. Quoted evidence stays verbatim:
+# --literal keeps the comment or placeholder on one line, and only there.
+run_cd 0 "checklist marker inside a fence indented under a numbered step" "$cd_fx/list-fence-checkbox.md"
+run_cd 1 "empty fence indented under a numbered step" "$cd_fx/list-fence-empty.md"
+require_text "$cd_tmp/err" "11: empty fenced block"
+require_count "$cd_tmp/err" "" 1
+# A fence can open on the marker's own line, and a marker alone on its line
+# holds the indented text that follows it.
+run_cd 0 "checklist marker inside a fence opened on the step's marker line" "$cd_fx/marker-fence-checkbox.md"
+run_cd 1 "empty fence opened on the step's marker line" "$cd_fx/marker-fence-empty.md"
+require_text "$cd_tmp/err" "9: empty fenced block: 1. \`\`\`sh"
+require_count "$cd_tmp/err" "" 1
+run_cd 0 "numbered marker alone with an indented continuation" "$cd_fx/empty-numbered-continued.md"
+run_cd 0 "checkbox marker alone with an indented continuation" "$cd_fx/empty-checkbox-continued.md"
+run_cd 1 "numbered marker with nothing after it" "$cd_fx/empty-numbered.md"
+require_text "$cd_tmp/err" "20: empty list item: 1."
+run_cd 1 "checkbox marker with nothing after it" "$cd_fx/empty-checkbox.md"
+require_text "$cd_tmp/err" "16: empty list item: - [ ]"
+run_cd 1 "quoted comment opener in a fence" "$cd_fx/quoted-comment.md"
+require_text "$cd_tmp/err" "10: html comment: SyntaxError: unexpected token <!--"
+run_cd 0 "quoted comment kept with --literal" "$cd_fx/quoted-comment.md" --literal 10
+run_cd 1 "--literal on a line with no comment or placeholder" "$cd_fx/clean.md" --literal 7
+require_text "$cd_tmp/err" "--literal 7: nothing to keep"
+run_cd 1 "--literal on another line leaves the quoted comment" "$cd_fx/quoted-comment.md" --literal 9
+require_text "$cd_tmp/err" "10: html comment: "
+run_cd 1 "--literal keeps the placeholder but not the empty heading on its line" "$cd_fx/literal-heading.md" --literal 30
+require_text "$cd_tmp/err" "30: empty heading: ## <the exact command>"
+require_count "$cd_tmp/err" "" 1
+run_cd 3 "--literal 0" "$cd_fx/clean.md" --literal 0
+run_cd 3 "--literal not an integer" "$cd_fx/clean.md" --literal x
+
+# Each falsifier case has to fail a mutant keyed on the wrong thing, or it
+# pins nothing: flagging every angle-bracket span fails the path prose, and a
+# script that matches no placeholder passes the leftover slot.
+cd_line='        for slot in sorted(s for s in slots if s in line):'
+# The script reads ../assets, so the mutants sit beside a link to the real one.
+mkdir -p "$cd_tmp/mut/scripts"
+ln -s "$PWD/file-issue/assets" "$cd_tmp/mut/assets"
+for mutant in any none; do
+  python3 - "$cd_script" "$cd_tmp/mut/scripts/$mutant.py" "$cd_line" "$mutant" <<'MUT'
+import sys
+src = open(sys.argv[1], encoding="utf-8").read()
+assert src.count(sys.argv[3] + "\n") == 1, "the placeholder loop moved; update this mutant"
+new = "        for slot in SLOT_RE.findall(line):" if sys.argv[4] == "any" else "        for slot in []:"
+open(sys.argv[2], "w", encoding="utf-8").write(src.replace(sys.argv[3], new, 1))
+MUT
+done
+rc=0; python3 "$cd_tmp/mut/scripts/any.py" "$cd_fx/rationale-prose.md" 2> /dev/null || rc=$?
+expect_rc 1 "$rc" "any-angle-bracket mutant on the path prose"
+rc=0; python3 "$cd_tmp/mut/scripts/none.py" "$cd_fx/placeholder.md" 2> /dev/null || rc=$?
+expect_rc 0 "$rc" "no-placeholder mutant on the leftover slot"
+# Measuring fence indent from column 0 scans a nested fence's contents as
+# structure, so the checklist marker inside it reads as an empty item.
+cd_fence='        if m and len(m.group(1)) <= col + 3 and not'
+python3 - "$cd_script" "$cd_tmp/mut/scripts/col0.py" "$cd_fence" <<'MUT'
+import sys
+src = open(sys.argv[1], encoding="utf-8").read()
+assert src.count(sys.argv[3]) == 1, "the fence-open check moved; update this mutant"
+open(sys.argv[2], "w", encoding="utf-8").write(src.replace(sys.argv[3], sys.argv[3].replace("col + 3", "3"), 1))
+MUT
+rc=0; python3 "$cd_tmp/mut/scripts/col0.py" "$cd_fx/list-fence-checkbox.md" 2> /dev/null || rc=$?
+expect_rc 1 "$rc" "column-0 fence mutant on the nested checklist marker"
+# A fence recognized only at a line's start scans the marker-line fence's
+# contents as structure, and an empty-item verdict made before the next line
+# is read fails the item whose text sits on a continuation line.
+cd_open='                om = FENCE_RE.match(line[col:]) if line[col:].strip() else None'
+cd_defer='            pending = (i, line.strip(), col)'
+python3 - "$cd_script" "$cd_tmp/mut" "$cd_open" "$cd_defer" <<'MUT'
+import sys
+src = open(sys.argv[1], encoding="utf-8").read()
+for anchor in sys.argv[3:5]:
+    assert src.count(anchor) == 1, "an empty-item or marker-fence line moved; update this mutant"
+open(sys.argv[2] + "/scripts/linestart.py", "w", encoding="utf-8").write(
+    src.replace(sys.argv[3], "                om = None", 1))
+open(sys.argv[2] + "/scripts/immediate.py", "w", encoding="utf-8").write(
+    src.replace(sys.argv[4], '            problems.append((i + 1, "empty list item", line.strip()))', 1))
+MUT
+rc=0; python3 "$cd_tmp/mut/scripts/linestart.py" "$cd_fx/marker-fence-checkbox.md" 2> /dev/null || rc=$?
+expect_rc 1 "$rc" "line-start-only fence mutant on the marker-line fence"
+rc=0; python3 "$cd_tmp/mut/scripts/immediate.py" "$cd_fx/empty-numbered-continued.md" 2> /dev/null || rc=$?
+expect_rc 1 "$rc" "immediate empty-item mutant on the continued marker"
+# A --literal that keeps every kind passes the empty heading it should not.
+cd_keep='    found = [p for p in found if not (p[0] in args.literal and p[1] in LITERAL_KINDS)]'
+python3 - "$cd_script" "$cd_tmp/mut/scripts/allkinds.py" "$cd_keep" <<'MUT'
+import sys
+src = open(sys.argv[1], encoding="utf-8").read()
+assert src.count(sys.argv[3]) == 1, "the literal filter moved; update this mutant"
+open(sys.argv[2], "w", encoding="utf-8").write(src.replace(sys.argv[3], sys.argv[3].replace(" and p[1] in LITERAL_KINDS", ""), 1))
+MUT
+rc=0; python3 "$cd_tmp/mut/scripts/allkinds.py" "$cd_fx/literal-heading.md" --literal 30 2> /dev/null || rc=$?
+expect_rc 0 "$rc" "keep-every-kind mutant on the empty heading that carries a placeholder"
+
+# Placeholders come from assets/ at run time: a slot added to a template is
+# caught with no edit to the script.
+mkdir -p "$cd_tmp/skill/scripts" "$cd_tmp/skill/assets"
+cp "$cd_script" "$cd_tmp/skill/scripts/"
+printf '# <title>\n\n<a slot no shipped template has>\n' > "$cd_tmp/skill/assets/new.template.md"
+printf '# t\n\n## S\n\n<a slot no shipped template has>\n' > "$cd_tmp/new-slot.md"
+rc=0; python3 "$cd_tmp/skill/scripts/check-draft.py" "$cd_tmp/new-slot.md" 2> /dev/null || rc=$?
+expect_rc 1 "$rc" "check-draft: placeholder from a template added after the script"
+rm -f "$cd_tmp/skill/assets/new.template.md"
+rc=0; python3 "$cd_tmp/skill/scripts/check-draft.py" "$cd_fx/clean.md" 2> /dev/null || rc=$?
+expect_rc 3 "$rc" "check-draft: no templates beside the script"
+
+# Usage and unreadable input.
+run_cd 3 "no body argument"
+run_cd 3 "missing body file" "$cd_tmp/nope.md"
+run_cd 3 "title flag without a value" "$cd_fx/clean.md" --title
+
+# Step 5 runs the script and its done-when needs exit 0.
+require_text file-issue/SKILL.md "python3 <skill-path>/scripts/check-draft.py <body.md> --title '<title>'"
+require_text file-issue/SKILL.md "\`check-draft.py\` exits 0"
+require_text file-issue/SKILL.md "rerun with \`--literal <line>\`"
+require_text file-issue/README.md "check-draft.py"
+require_text file-issue/README.md "with \`--literal LINE\` to keep a comment or placeholder"
+require_text _maintenance/file-issue/RATIONALE.md "Step 5's no-placeholders check runs as \`check-draft.py\`"
+require_text _maintenance/file-issue/RATIONALE.md "The script also flags a \`<!--\` or a template placeholder anywhere"
+require_text file-issue/SKILL.md "read that draft for leftovers yourself"
+
 echo "file-issue smoke: OK"
