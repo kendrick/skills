@@ -1141,13 +1141,19 @@ require_text work-issue/SKILL.md "An adopted run has no plan, so it never calls 
 require_text work-issue/SKILL.md "Exit 3 means the plan or report is unreadable or the report is not JSON: stop the run quoting its stderr."
 require_text work-issue/SKILL.md "The repair commit's body carries one \`Gate: <command>\` line naming the command the gate ran, the scoped command or VERIFY_CMD"
 require_text work-issue/SKILL.md "then Step 4 item 4's scoped gate with \`--report RUN_DIR/reports/repair-<k>.json\`, then \`code-review\` against BASE_SHA"
-require_text work-issue/SKILL.md "It falls back to VERIFY_CMD green when a changed path is owned by no task, when a matched task's done-when names no command, when the run is adopted and has no plan, and on every other \`scoped-cmd\` exit 1. A scoped run saves no \`baseline-repair-<n>.txt\`."
+require_text work-issue/SKILL.md "It falls back to VERIFY_CMD green when the latest baseline's \`exit:\` line reads anything but \`exit: 0\`, when a changed path is owned by no task, when a matched task's done-when names no command, when the run is adopted and has no plan, and on every other \`scoped-cmd\` exit 1. A scoped run saves no \`baseline-repair-<n>.txt\`."
 require_text work-issue/SKILL.md "each repair commit carries its \`Gate: <command>\` line, and each one gated on the full VERIFY_CMD has the \`baseline-repair-<n>.txt\` that gate saved"
 require_text work-issue/SKILL.md "\`work-issue/scripts/run-state.py scoped-cmd --plan PATH --report PATH\`"
 # The bare rule and its one exception travel together (#368 confirmation): a
 # squash-only run keeps the Gate: line, so neither half can move alone.
 require_text work-issue/SKILL.md "On \`bare\`, the message is one Conventional Commits subject in the repo's log style with no body, except that a Step 4 or Step 7 repair commit carries its \`Gate: <command>\` line as its only body line, and it skips \`technical-writing\`"
 require_text work-issue/references/resume.md "a repair gate that runs the full VERIFY_CMD saves one before its commit, a scoped one saves none"
+# A scoped pass on a red latest baseline could clear a failure without saving the
+# fix, so a later repair restoring it read green (PR #476, r4686697858).
+require_text work-issue/SKILL.md "Before calling \`scoped-cmd\`, read the latest baseline's \`exit:\` line. Where it reads anything but \`exit: 0\`, skip \`scoped-cmd\` and take its exit 1 fallback below, because a scoped pass that clears a failure that baseline holds saves no file recording the fix"
+require_text work-issue/SKILL.md "writes none and runs only on a latest baseline reading \`exit: 0\`"
+require_text work-issue/README.md "and the full suite when a changed file belongs to no task or the newest baseline is red."
+require_text _maintenance/work-issue/RATIONALE.md "They fall back to VERIFY_CMD on a latest baseline whose \`exit:\` line is not \`exit: 0\`, a changed path no task owns,"
 require_text work-issue/README.md "That narrower run saves no baseline, the repair commit's \`Gate:\` line names the command that ran, and the full suite still runs before the push."
 require_text _maintenance/work-issue/RATIONALE.md "| 217 | Step 4's and Step 7's repair gates run the command \`run-state.py scoped-cmd\` prints in place of VERIFY_CMD"
 require_text _maintenance/work-issue/RATIONALE.md "No run has been timed with the change, so this stays \`[P]\` until one is. | [P] |"
