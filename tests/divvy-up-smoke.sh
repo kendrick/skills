@@ -640,6 +640,9 @@ require_text divvy-up/scripts/check-waves.py "validate PLAN.md [--max N]"
 require_text divvy-up/scripts/check-waves.py "owners PLAN.md --wave 1 [--task LABEL]"
 require_text divvy-up/SKILL.md "check-waves.py validate <PLAN> --max <MAX>"
 require_text divvy-up/SKILL.md "check-waves.py owners <PLAN> --wave N --task \"<LABEL>\" < \"PROMPT_DIR/N-LABEL.files\""
+# Step 6 reads the report from wherever Step 5 saved it, so a wrapped run that saves under its own reports/ is not failed on a missing file.
+require_text divvy-up/SKILL.md "the path a wrapping skill saves its reports at, else \`PROMPT_DIR/N-LABEL.report.json\`"
+require_text divvy-up/SKILL.md "[\"files_changed\"]))' \"REPORT\" > \"PROMPT_DIR/N-LABEL.files\""
 require_text _maintenance/divvy-up/RATIONALE.md "\`--max\` counts rows because a wave's width is its task count"
 # --- end owners --task and validate --max ---
 

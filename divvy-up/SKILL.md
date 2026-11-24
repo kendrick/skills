@@ -123,7 +123,7 @@ Every git write belongs to you, not to a worker. Workers write files; you stage,
 
 Name each dispatch's model explicitly. An omitted model inherits the session's, which is usually the most expensive one available, and the routing silently evaporates while the run still looks correct.
 
-Save every returned JSON report verbatim, one file per task at `PROMPT_DIR/N-LABEL.report.json`. Save the JSON object itself unchanged and leave out only the code fence around it. Step 6 reads these as evidence of what happened, and a summarized report is evidence of what the orchestrator thought happened.
+Save every returned JSON report verbatim, one file per task, as **REPORT**: the path a wrapping skill saves its reports at, else `PROMPT_DIR/N-LABEL.report.json`. `work-issue` saves each at `RUN_DIR/reports/<wave>-<task>.json`, so that file is REPORT under it. Save the JSON object itself unchanged and leave out only the code fence around it. Step 6 reads these as evidence of what happened, and a summarized report is evidence of what the orchestrator thought happened.
 
 Before the dispatch goes out, record **WAVE_BASE** and the wave's untracked manifest with `python3 <skill-dir>/scripts/wave-snapshot.py record --out PROMPT_DIR/wave-N.json`. The snapshot file sits in PROMPT_DIR because one inside the tree would read as a write no task owns, so the script exits 1 on an in-tree `--out` and writes nothing. WAVE_BASE is a commit object: `git stash create`, falling back to `git rev-parse HEAD` when that prints nothing because the tree is clean. `git stash create` writes a commit of the current tree without touching the working tree or the index, which is what makes it safe to run mid-run.
 
@@ -154,7 +154,7 @@ Three checks with a format pass between the first two, then a route.
    Then check each report's `files_changed` against that task's own `owns`, and fail any task claiming a path it does not own. Run it once per task, writing the list to a file and chaining with `&&` for the same reason as above, since an extraction that fails would otherwise hand `owners` empty input and pass:
 
    ```
-   python3 -c 'import json,sys; print("\n".join(json.load(open(sys.argv[1]))["files_changed"]))' "PROMPT_DIR/N-LABEL.report.json" > "PROMPT_DIR/N-LABEL.files" && divvy-up/scripts/check-waves.py owners <PLAN> --wave N --task "<LABEL>" < "PROMPT_DIR/N-LABEL.files"
+   python3 -c 'import json,sys; print("\n".join(json.load(open(sys.argv[1]))["files_changed"]))' "REPORT" > "PROMPT_DIR/N-LABEL.files" && divvy-up/scripts/check-waves.py owners <PLAN> --wave N --task "<LABEL>" < "PROMPT_DIR/N-LABEL.files"
    ```
 
    A non-zero exit fails that task. `--task` exits 1 on a path the plan gives a peer or gives nobody, and 3 on a label with no task in the wave. `owners` answers which task owns a path, never which agent wrote it, so a worker that writes a peer's owned file leaves a path the gate happily attributes to its rightful owner. The report cross-check is what catches that case, and it rests on the worker's own account of what it touched—see Known Limitations for what stays uncovered.
