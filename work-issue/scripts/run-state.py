@@ -70,13 +70,17 @@ grows from A+B to A+B+C leaves a lane's gate where it was. It exits 1 with one
 has no backticked span, and Step 1 falls back to the harvested VERIFY_CMD.
 
 `scoped-cmd` prints the done-when command of every `## Waves` task that owns a
-path in the repair report's `files_changed`, in table order, repeats dropped,
-joined by ` && `. A task's command is the first backticked span in its Done when
-cell whose first word resolves on PATH, so `` `a.py` exists `` names none. It
-reads `files_changed` and nothing else, never the finding or `left`, so a
-report that merely mentions an unowned file cannot move the answer. It exits 1
-with one `run-state: scoped-cmd:` stderr line, and the gate runs VERIFY_CMD
-instead, when a changed path matches no task, a matched task names no command,
+path in the repair report's `files_changed`, in table order, repeats dropped. One
+command prints as written; two or more print as `sh -c '<cmd>'` joined by
+` && `, so a `;`, `&` or `#` inside one task's span can't let the line pass
+after another task's check fails. A task's command is the first backticked
+span in its Done when cell whose first word resolves on PATH, so
+`` `a.py` exists `` names none. It reads `files_changed` and nothing else,
+never the finding or `left`, so a report that merely mentions an unowned
+file cannot move the answer. It exits 1 with one `run-state: scoped-cmd:`
+stderr line, and the gate runs VERIFY_CMD instead, when a changed path
+matches no task, a matched task names no command, a matched task's Done when
+cell has an unclosed backtick span (a `|` inside the span splits the cell),
 the plan has no task rows, or `files_changed` is empty or missing.
 
 Exit codes: 0 with an answer on stdout; 1 only from `adopt`, `reuse-baseline`,
@@ -94,6 +98,7 @@ import fnmatch
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -3143,9 +3148,11 @@ def cmd_scoped_cmd(args):
     entry that names a file the repair never touched must not widen or narrow
     the gate.
 
-    Exits 0 with the commands joined by ` && `, 1 with one stderr line where
-    any fallback to the full VERIFY_CMD applies, and 3 on an unreadable plan
-    or report, or a report that is not JSON.
+    Exits 0 with the command printed as written when one task matches, and
+    with each command as `sh -c '<cmd>'` joined by ` && ` when several do.
+    Exits 1 with one stderr line where any fallback to the full VERIFY_CMD
+    applies, an unclosed backtick span in a matched Done when cell included,
+    and 3 on an unreadable plan or report, or a report that is not JSON.
     """
     try:
         with open(args.plan, "rb") as f:
@@ -3184,12 +3191,26 @@ def cmd_scoped_cmd(args):
     for owned, done in tasks:
         if not any(owns(owned, path) for path in changed):
             continue
+        # wave_tasks_rows splits cells on every `|`, so a span holding `||` or
+        # a pipe reaches here cut in two. An odd backtick count is that cut;
+        # gating on the span before it would skip the part of the check after it.
+        if done.count("`") % 2:
+            return fallback("a task owning a changed path has a Done when cell with an unclosed backtick span, which a `|` inside the span leaves")
         cmd = next((s for s in re.findall(r"`([^`]+)`", done) if s.split() and shutil.which(s.split()[0])), None)
         if cmd is None:
             return fallback("a task owning a changed path has a done-when that names no command")
         if cmd not in commands:
             commands.append(cmd)
-    print(" && ".join(commands))
+    # Joined bare, `false && true ; true` exits 0: the `;` ends the AND-list,
+    # and a trailing `&` backgrounds it.
+    # Each command runs as its own `sh -c` process. Wrapped as `( cmd )`, a `#`
+    # comments out the `)`. Wrapped as `(eval 'cmd')`, dash and zsh ignore a
+    # `set -e` inside it, since it sits left of `&&`. A lone command prints
+    # bare: no `&&` surrounds it, so it keeps its errexit in the gate's shell.
+    if len(commands) == 1:
+        print(commands[0])
+    else:
+        print(" && ".join(f"sh -c {shlex.quote(c)}" for c in commands))
     return 0
 
 

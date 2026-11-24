@@ -1134,9 +1134,10 @@ require_text _maintenance/work-issue/RATIONALE.md "| 151 | Every repair gate tha
 # later anyway (#368). A scoped run covers part of the suite, so saving it as a
 # baseline would make the next full run read the rest as new failures.
 require_text work-issue/SKILL.md "Re-gate the repair as Step 3's repair is, with the **scoped gate** in place of its VERIFY_CMD run: \`work-issue/scripts/run-state.py scoped-cmd --plan RUN_DIR/plan.md --report RUN_DIR/reports/redteam-repair-<k>.json\`."
-require_text work-issue/SKILL.md "a task's command is the first backticked span in its Done when cell whose first word resolves on PATH."
+require_text work-issue/SKILL.md "A task's command is the first backticked span in its Done when cell whose first word resolves on PATH."
+require_text work-issue/SKILL.md "One command prints as written, and two or more print as \`sh -c '<cmd>'\` joined by \` && \`, so the line fails whenever any task's command fails"
 require_text work-issue/SKILL.md "A scoped run saves no \`baseline-repair-<n>.txt\`, because its output covers a fraction of the suite"
-require_text work-issue/SKILL.md "a \`files_changed\` path no task owns, a matched task whose done-when names no command, a plan with no \`## Waves\` task rows, or an empty or missing \`files_changed\`. On exit 1, gate on VERIFY_CMD green and save \`baseline-repair-<n>.txt\` as Step 3 says."
+require_text work-issue/SKILL.md "a \`files_changed\` path no task owns, a matched task whose done-when names no command, a matched task whose Done when cell holds an unclosed backtick span because a \`|\` inside the span split the cell, a plan with no \`## Waves\` task rows, or an empty or missing \`files_changed\`. On exit 1, gate on VERIFY_CMD green and save \`baseline-repair-<n>.txt\` as Step 3 says."
 require_text work-issue/SKILL.md "An adopted run has no plan, so it never calls \`scoped-cmd\` and gates on VERIFY_CMD."
 require_text work-issue/SKILL.md "Exit 3 means the plan or report is unreadable or the report is not JSON: stop the run quoting its stderr."
 require_text work-issue/SKILL.md "The repair commit's body carries one \`Gate: <command>\` line naming the command the gate ran, the scoped command or VERIFY_CMD"
@@ -5118,7 +5119,7 @@ sc_plan '' >"$sc_dir/plan.md"
 # 1. Two owning tasks print both commands once, in table order.
 printf '{"files_changed": ["docs/x.md", "a.py"]}\n' >"$sc_dir/r.json"
 sc_case "$sc_dir/plan.md" "$sc_dir/r.json"
-[[ "$sc_status" == "0" && "$(cat "$sc_dir/out")" == "bash tests/a.sh && bash tests/d.sh" ]] || sc_fail "two owners should print both commands in table order"
+[[ "$sc_status" == "0" && "$(cat "$sc_dir/out")" == "sh -c 'bash tests/a.sh' && sh -c 'bash tests/d.sh'" ]] || sc_fail "two owners should print both commands in table order"
 
 # 2. A third task repeating the first's command is dropped.
 sc_plan '| 0 | three | b.py | sonnet | `bash tests/a.sh` exits 0 | none |' >"$sc_dir/plan3.md"
@@ -5175,6 +5176,56 @@ printf '# Plan\n\n- Own only: a.py\n' >"$sc_dir/planx.md"
 printf '{"files_changed": ["a.py"]}\n' >"$sc_dir/r.json"
 sc_case "$sc_dir/planx.md" "$sc_dir/r.json"
 sc_expect_fallback "a plan with no Waves task rows"
+
+# 7b. The printed line fails whenever any task's check fails, whatever shell
+# operator a later span holds. Joined bare, `false && true ; true` and
+# `false && true &` exit 0. No `|` case: the Waves parser splits cells on
+# every `|`, so a `||` never reaches scoped-cmd.
+# Each case runs the line under sh -c, and under zsh and dash where they're on
+# PATH, since the gate runs it in whatever shell the orchestrator has. The
+# assertion is on each shell's exit, not on the script's spelling.
+sc_runs() {
+  printf '# Plan\n\n## Waves\n\n| Wave | Task | Files owned | Model | Done when | Constraints |\n|---|---|---|---|---|---|\n' >"$sc_dir/plan7b.md"
+  printf '| 0 | one | f.py | sonnet | `%s` | none |\n| 0 | two | g.py | sonnet | `%s` | none |\n' "$1" "$2" >>"$sc_dir/plan7b.md"
+  printf '{"files_changed": ["f.py", "g.py"]}\n' >"$sc_dir/r7b.json"
+  sc_case "$sc_dir/plan7b.md" "$sc_dir/r7b.json"
+  [[ "$sc_status" == "0" ]] || sc_fail "done-whens '$1' and '$2' should print a command"
+  for sc_sh in sh zsh dash; do
+    command -v "$sc_sh" >/dev/null || continue
+    set +e
+    "$sc_sh" -c "$(cat "$sc_dir/out")" >/dev/null 2>&1
+    sc_ran=$?
+    set -e
+    [[ "$sc_ran" == "$3" ]] || sc_fail "done-whens '$1' and '$2' printed a line that exited $sc_ran under $sc_sh -c, want $3"
+  done
+}
+sc_runs false 'true ; true' 1
+sc_runs false 'true &' 1
+sc_runs false 'true # note' 1
+sc_runs 'true ; false' true 1
+# dash and zsh ignore `set -e` inside a subshell left of `&&`, so this exited
+# 0 there when each span was wrapped as `(eval 'cmd')`.
+sc_runs 'true ; set -e ; false ; true' true 1
+# Falsifier: the wrapper must still pass when every check passes, or a
+# line that always fails would clear the cases above.
+sc_runs 'true ; true' 'true # note' 0
+# A lone command prints as written, so the Gate: line reads as the plan does.
+printf '# Plan\n\n## Waves\n\n| Wave | Task | Files owned | Model | Done when | Constraints |\n|---|---|---|---|---|---|\n| 0 | one | f.py | sonnet | `true ; true` | none |\n' >"$sc_dir/plan7c.md"
+printf '{"files_changed": ["f.py"]}\n' >"$sc_dir/r7c.json"
+sc_case "$sc_dir/plan7c.md" "$sc_dir/r7c.json"
+[[ "$sc_status" == "0" && "$(cat "$sc_dir/out")" == "true ; true" ]] || sc_fail "a lone command should print as written"
+
+# 7d. A `|` inside a span splits the Done when cell, so the span arrives cut.
+# The cut alone already names no command, which is why the cause is grepped.
+# The second plan is the falsifier: its whole first span would otherwise be
+# the command, and the cut span after it would go unrun.
+printf '{"files_changed": ["c.py"]}\n' >"$sc_dir/r7d.json"
+for sc_cell in '`true || false` exits 0' '`true` then `true | false` exits 0'; do
+  sc_plan "| 0 | three | c.py | sonnet | $sc_cell | none |" >"$sc_dir/plan7d.md"
+  sc_case "$sc_dir/plan7d.md" "$sc_dir/r7d.json"
+  sc_expect_fallback "a Done when cell cut by a | ($sc_cell)"
+  grep -q 'unclosed backtick span' "$sc_dir/err" || sc_fail "a Done when cell cut by a | ($sc_cell) should name the unclosed span"
+done
 
 # 8. Exit 3: an unreadable report, a non-JSON report, and an unreadable plan.
 sc_case "$sc_dir/plan.md" "$sc_dir/missing.json"
