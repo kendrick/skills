@@ -25,7 +25,7 @@ A scope holding `schema: 1` records carries `memory-bank.yaml` at its root, scaf
 
 ```yaml
 schema: 1
-name: <scope directory basename, lowercased to a-z0-9->
+name: <scope directory basename: lowercased, each run outside a-z0-9 collapsed to one hyphen, hyphens stripped from both ends>
 facet_prefixes: [topic]           # every prefix this scope's facets may use; at least one
 folders: {PolicyRule: _memory/rules}   # lightweight mode only
 ```

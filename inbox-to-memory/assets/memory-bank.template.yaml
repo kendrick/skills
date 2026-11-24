@@ -2,7 +2,9 @@
 # scope's records through this file; schema/memory-bank.schema.json in the kit
 # is the authority on every key.
 schema: 1
-# The scope directory's basename, lowercased to a-z0-9-, the same name
+# The scope directory's basename, lowercased, each run of characters outside
+# a-z0-9 collapsed to one hyphen, hyphens stripped from both ends: the same
+# rule memory-index uses for collection names, and the name
 # `migrate-scope.sh --to-ltm` writes for a scope it migrates.
 name: '{{SCOPE_NAME}}'
 # Every prefix this scope's `applies_to` and `owners` facets may use. The kit

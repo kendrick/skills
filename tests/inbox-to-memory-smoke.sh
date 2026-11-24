@@ -3794,6 +3794,28 @@ require_output "$lm_out" "already ltm: 4"
   exit 1
 }
 
+# The bank's name follows memory-index's scope_name: each run of characters
+# outside a-z0-9 becomes one hyphen and the ends are stripped. The double-space
+# name is the nearest wrong key, since a per-character rule writes `atlas---2026-`.
+for lm_case in 'Atlas (2026)|atlas-2026' 'Atlas  (2026)|atlas-2026' 'Acme  Co|acme-co'; do
+  lm_named="$lm_dir/names/${lm_case%%|*}"
+  lm_stage "$lm_named"
+  lm_out="$(bash "$lm_migrator" "$lm_named" --to-ltm --facet-map "$lm_map" --apply 2>&1)" || {
+    echo "--to-ltm --apply failed on a scope named '${lm_case%%|*}'" >&2
+    printf '%s\n' "$lm_out" >&2
+    exit 1
+  }
+  require_line "$(cat "$lm_named/memory-bank.yaml")" "name: '${lm_case##*|}'" "memory-bank.yaml in '${lm_case%%|*}'"
+done
+# The migrator carries the rule as code, so a drift from memory-index fails here.
+require_text "$lm_migrator" 're.sub(r"[^a-z0-9]+", "-", root.name.lower()).strip("-")'
+# None of the four docs may say the per-character rule again.
+for lm_rule_doc in inbox-to-memory/SKILL.md "$lm_doc" inbox-to-memory/references/memory-bank-schema.md inbox-to-memory/assets/memory-bank.template.yaml; do
+  refute_text "$lm_rule_doc" 'lowercased to `a-z0-9-`'
+  refute_text "$lm_rule_doc" 'lowercased to a-z0-9-'
+  require_text "$lm_rule_doc" 'strip'
+done
+
 # The lint's single-colon test catches the `::` that ltm validate accepts,
 # since ltm reads `regions` as the prefix and `:emea` as the value.
 lm_planted="$lm_dir/planted"
