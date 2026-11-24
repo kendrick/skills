@@ -30,32 +30,32 @@
       "model_tier": "opus"
     },
     {
-      "name": "tests",
+      "name": "general",
       "entries": ["tests/test_invoice.py"],
       "classes": ["test-coverage"],
-      "model_tier": "sonnet"
+      "model_tier": "haiku"
     }
   ],
   "derivation": [
     {
       "file": "src/billing/invoice.py",
-      "matched_rows": ["money", "tests"],
+      "matched_rows": ["money", "general"],
       "territory": "money"
     },
     {
       "file": "src/billing/tax.py",
-      "matched_rows": ["money", "tests"],
+      "matched_rows": ["money", "general"],
       "territory": "money"
     },
     {
       "file": "src/api/tenancy.py",
-      "matched_rows": ["tenancy", "tests"],
+      "matched_rows": ["tenancy", "general"],
       "territory": "tenancy"
     },
     {
       "file": "tests/test_invoice.py",
-      "matched_rows": ["tests"],
-      "territory": "tests"
+      "matched_rows": ["general"],
+      "territory": "general"
     }
   ],
   "amendments": [],
@@ -63,7 +63,7 @@
     {
       "round": 1,
       "head_sha": "9f8e7d6c5b4a39281706f5e4d3c2b1a098765432",
-      "territories": ["money", "tenancy", "tests"]
+      "territories": ["money", "tenancy", "general"]
     }
   ]
 }
