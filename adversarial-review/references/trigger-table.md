@@ -43,7 +43,7 @@ Set each territory's `model_tier` from its highest-priority class, then let dept
 |---|---|
 | money, authz, state | opus |
 | schema, budget, representation | sonnet |
-| tests alone | haiku |
+| general alone | haiku |
 
 Depth 0 caps every territory at sonnet. Depth 2 raises money, authz, and state to opus and leaves the rest. The reason for tiering at all is that a full opus fan-out is genuinely expensive, and a docs-and-types diff does not earn one.
 

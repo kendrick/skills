@@ -221,6 +221,8 @@ require_text adversarial-review/SKILL.md "calibration:"
 # the next insertion.
 require_text adversarial-review/references/trigger-table.md "| 6 | representation |"
 require_text adversarial-review/references/trigger-table.md "| 7 | general |"
+require_text adversarial-review/references/trigger-table.md "| general alone | haiku |"
+refute_text adversarial-review/references/trigger-table.md "tests alone"
 require_text adversarial-review/references/trigger-table.md "An assertion that recomputes the implementation rather than observing the result."
 require_text adversarial-review/references/trigger-table.md "A unit suffix matches against the number in front of it"
 # The rule that keeps `round(` and `.query(` from reading as regex syntax
@@ -1305,7 +1307,7 @@ ar_report_run() {
   python3 - "$fixtures/scope-good.json" "$d/scope.json" <<'PY'
 import json, sys
 s = json.load(open(sys.argv[1]))
-s["territories"] = [t for t in s["territories"] if t["name"] != "tests"]
+s["territories"] = [t for t in s["territories"] if t["name"] != "general"]
 s["rounds"][0]["territories"] = ["money", "tenancy"]
 json.dump(s, open(sys.argv[2], "w"))
 PY
@@ -1609,7 +1611,7 @@ elif edit == "rename":
         if r["territory"] == "tenancy":
             r["territory"] = "audit"
         r["matched_rows"] = ["audit" if m == "tenancy" else m for m in r["matched_rows"]]
-    s["rounds"][0]["territories"] = ["money", "audit", "tests"]
+    s["rounds"][0]["territories"] = ["money", "audit", "general"]
 json.dump(s, open(sys.argv[2], "w"))
 PY
   AR_STATUS=0
