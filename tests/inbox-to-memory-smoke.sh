@@ -3813,7 +3813,7 @@ require_text "$lm_migrator" 're.sub(r"[^a-z0-9]+", "-", root.name.lower()).strip
 for lm_rule_doc in inbox-to-memory/SKILL.md "$lm_doc" inbox-to-memory/references/memory-bank-schema.md inbox-to-memory/assets/memory-bank.template.yaml; do
   refute_text "$lm_rule_doc" 'lowercased to `a-z0-9-`'
   refute_text "$lm_rule_doc" 'lowercased to a-z0-9-'
-  require_text "$lm_rule_doc" 'strip'
+  require_text "$lm_rule_doc" 'hyphens stripped from both ends'
 done
 
 # The lint's single-colon test catches the `::` that ltm validate accepts,

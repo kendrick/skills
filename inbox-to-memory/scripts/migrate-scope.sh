@@ -714,7 +714,11 @@ TPL
     # authoritative: fix a bug there first, then re-copy. A bank name that
     # drifts from the collection names memory-index registers labels the same
     # scope two ways. This skill installs standalone, so it can't import it.
-    bank_name="$(python3 -c 'import re, sys; from pathlib import Path; root = Path(sys.argv[1]); print(re.sub(r"[^a-z0-9]+", "-", root.name.lower()).strip("-"))' "$(cd "$scope" && pwd)")"
+    # A missing or failing python3 must stop the run: an empty name here would
+    # be written to memory-bank.yaml and the pass would still exit 0.
+    if ! bank_name="$(python3 -c 'import re, sys; from pathlib import Path; root = Path(sys.argv[1]); print(re.sub(r"[^a-z0-9]+", "-", root.name.lower()).strip("-"))' "$(cd "$scope" && pwd)")"; then
+      refuse "$bank" "python3 failed while deriving the bank name from the scope directory"
+    fi
     {
       echo "schema: 1"
       echo "name: '$bank_name'"
