@@ -5638,8 +5638,9 @@ done
 refute_text work-issue/references/worker-prompt.md "the file the reproducer greps at HEAD"
 
 # #464: Step 1 only warns about a stale review-rules block and keeps going; it never installs one into the target repo.
-require_text work-issue/SKILL.md "print one warning naming \`review-rules.py install <tree>\`"
+require_text work-issue/SKILL.md "never in this run's tree, and continue the run"
 refute_text work-issue/SKILL.md "run \`work-issue/scripts/review-rules.py install"
+refute_text work-issue/SKILL.md "naming \`review-rules.py install <tree>\`"
 
 # --- crash points ---
 # #147: resume_checks.py replays every write the skill makes and asks the real
