@@ -588,6 +588,54 @@ set -e
   exit 1
 }
 
+# --- owners --task and validate --max (#402) ---
+# A report path another task owns is attributed to its owner, so plain `owners`
+# passes it. `--task` is what fails it.
+set +e
+task_err="$(printf 'src/users/x.ts\n' | python3 "$waves" owners "$fixtures/waves-good.md" --wave 1 --task "Implement auth" 2>&1 >/dev/null)"
+peer_status=$?
+set -e
+[[ "$peer_status" == 1 ]] || { echo "a peer-owned path under --task must exit 1, got $peer_status" >&2; exit 1; }
+grep -Fq "src/users/x.ts" <<<"$task_err" && grep -Fq "Implement users" <<<"$task_err" || {
+  echo "--task stderr must name the path and its owner: $task_err" >&2
+  exit 1
+}
+printf 'src/auth/login.ts\n' | python3 "$waves" owners "$fixtures/waves-good.md" --wave 1 --task "Implement auth" >/dev/null || {
+  echo "a path the --task owns must exit 0" >&2
+  exit 1
+}
+set +e
+printf 'src/other/file.ts\n' | python3 "$waves" owners "$fixtures/waves-good.md" --wave 1 --task "Implement auth" >/dev/null 2>&1
+unowned_task_status=$?
+printf '' | python3 "$waves" owners "$fixtures/waves-good.md" --wave 1 --task "No such task" >/dev/null 2>&1
+unknown_task_status=$?
+printf 'src/auth/login.ts\n' | python3 "$waves" owners "$fixtures/waves-good.md" --wave 1 --task "Add auth tests" >/dev/null 2>&1
+other_wave_status=$?
+python3 "$waves" validate "$fixtures/waves-good.md" --max 2 >/dev/null 2>"$tmp/max.err"
+max2_status=$?
+python3 "$waves" validate "$fixtures/waves-good.md" --max 3 >/dev/null 2>&1
+max3_status=$?
+python3 "$waves" validate "$fixtures/waves-good.md" --max 0 >/dev/null 2>&1
+max0_status=$?
+python3 "$waves" validate "$fixtures/waves-max-entries.md" --max 3 >/dev/null 2>&1
+entries_status=$?
+set -e
+[[ "$unowned_task_status" == 1 ]] || { echo "an unowned path under --task must exit 1, got $unowned_task_status" >&2; exit 1; }
+[[ "$unknown_task_status" == 3 ]] || { echo "a --task naming no wave-1 task must exit 3 even on empty stdin, got $unknown_task_status" >&2; exit 1; }
+[[ "$other_wave_status" == 3 ]] || { echo "a --task from another wave must exit 3, got $other_wave_status" >&2; exit 1; }
+[[ "$max2_status" == 1 ]] || { echo "--max 2 on a three-task wave must exit 1, got $max2_status" >&2; exit 1; }
+grep -Fq "wave 1 holds 3 tasks" "$tmp/max.err" || { echo "--max stderr must name wave 1 and its count: $(cat "$tmp/max.err")" >&2; exit 1; }
+[[ "$max3_status" == 0 ]] || { echo "--max 3 on a three-task wave must exit 0, got $max3_status" >&2; exit 1; }
+[[ "$max0_status" == 3 ]] || { echo "--max 0 must exit 3, got $max0_status" >&2; exit 1; }
+# Five owned entries in three rows: a cap counting entries would fail this.
+[[ "$entries_status" == 0 ]] || { echo "--max counts tasks, not owned entries; waves-max-entries.md at --max 3 must exit 0, got $entries_status" >&2; exit 1; }
+require_text divvy-up/scripts/check-waves.py "validate PLAN.md [--max N]"
+require_text divvy-up/scripts/check-waves.py "owners PLAN.md --wave 1 [--task LABEL]"
+require_text divvy-up/SKILL.md "check-waves.py validate <PLAN> --max <MAX>"
+require_text divvy-up/SKILL.md "check-waves.py owners <PLAN> --wave N --task <LABEL> < PROMPT_DIR/N-LABEL.files"
+require_text _maintenance/divvy-up/RATIONALE.md "owners --task"
+# --- end owners --task and validate --max ---
+
 cat > "$tmp/pipe.md" <<'PLAN'
 ## Waves
 
