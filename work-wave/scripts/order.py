@@ -109,9 +109,9 @@ def build(wave_dir):
     refused, outside = [], []
     for cells in rows:
         resolution = ws.bare(cells[-1])
-        if resolution.startswith(("none", "ask")):
+        if re.match(r"(?:none|ask)\b", resolution):
             continue
-        if resolution.startswith("refuse"):
+        if re.match(r"refuse\b", resolution):
             refused.append(f"refuse: {ws.bare(cells[0])}: {resolution}")
             continue
         m = ORDER.match(resolution) or HOLD.match(resolution)

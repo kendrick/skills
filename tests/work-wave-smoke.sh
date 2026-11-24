@@ -2104,6 +2104,15 @@ grep -Fq "issue-9" <<<"$err" || {
   exit 1
 }
 
+# hold goes by Order position: issue-115 has no After and is still held, and
+# issue-114 keeps Order 3 across the gap. A hold that followed After edges or
+# renumbered would write another table; see the ledger's matching DNB rows.
+printf '| Order | Lane | After | Why |\n|---|---|---|---|\n| 1 | issue-113 | — | no coupling; number order |\n| 3 | issue-114 | — | no coupling; number order |\n| 4 | issue-115 | — | no coupling; number order |\n' >"$ow/order.md"
+order_py hold --wave-dir "$ow" --lane issue-114 --why "issue-114 failed"
+expect_status 0 "hold across a gap in Order"
+expect_lanes "$ow" "1:issue-113 3:issue-114 held:issue-115" "hold --lane issue-114 across a gap"
+order_probes "$ow" "an order.md with a gap after hold"
+
 # refuse and a two-lane cycle exit 1 naming the lanes, and write nothing.
 rm -f "$ow/order.md"
 printf "$coupling_header"'| issue-113 issue-114 | mutual | each half of one change | refuse |\n| issue-113 issue-115 | independent | nothing shared | none |\n| issue-114 issue-115 | independent | nothing shared | none |\n' >"$ow/coupling.md"
@@ -2147,6 +2156,10 @@ grep -Fq "issue-9" <<<"$err" || {
 printf "$coupling_header"'| issue-113 issue-114 | directional | reads | merge them somehow |\n' >"$ow/coupling.md"
 order_py build --wave-dir "$ow"
 expect_status 3 "build over an unreadable Resolution"
+# none and ask match as whole words, so a Resolution like nonexistent exits 3.
+printf "$coupling_header"'| issue-113 issue-114 | directional | reads | nonexistent |\n' >"$ow/coupling.md"
+order_py build --wave-dir "$ow"
+expect_status 3 "build over a Resolution that only starts with none"
 mkdir -p "$orepo/.git/work-wave/not-a-wave"
 cp "$ow/coupling.md" "$orepo/.git/work-wave/not-a-wave/coupling.md"
 order_py build --wave-dir "$orepo/.git/work-wave/not-a-wave"
@@ -2218,5 +2231,10 @@ require_text work-wave/README.md "order.py"
 require_text "$ledger" "| 65 | \`order.py\` writes \`order.md\`"
 require_text "$ledger" "| 66 | A lane whose \`order:\` row puts it after a held lane is held"
 require_text "$ledger" "| 67 | \`hold\` stays positional"
+# Row 67's two cuts, refuted where either would have to be stated or built.
+for f in "$skill" "$oscript"; do
+  refute_text "$f" "whose \`After\` names"
+  refute_text "$f" "renumber"
+done
 
 echo "work-wave smoke: OK"
