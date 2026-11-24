@@ -741,6 +741,26 @@ refs_text authfail 'See #13.'
 refs_case "--gh exits 3 when gh fails for another reason" 3 "" "$refs_tmp/authfail.txt" --gh
 refs_path="$PATH"
 
+# A tracked name that isn't UTF-8 must not crash the lookup. A stub git stands
+# in for the file, since APFS refuses to create one; every other subcommand
+# goes to the real git.
+bin_badgit="$refs_tmp/bin-badgit"
+mkdir -p "$bin_badgit"
+cat >"$bin_badgit/git" <<STUB
+#!/bin/sh
+case "\$1" in
+  ls-files) printf 'bad\377.txt\0ok.txt\0' ;;
+  *) exec "$(command -v git)" "\$@" ;;
+esac
+STUB
+chmod +x "$bin_badgit/git"
+refs_path="$bin_badgit:$PATH"
+refs_text badname 'See `ok.txt` and `nope.txt`.'
+refs_case "a non-UTF-8 tracked name doesn't crash the lookup" 1 'nope.txt does not resolve' "$refs_tmp/badname.txt"
+if grep -Fq Traceback "$refs_tmp/err"; then refs_fail "a non-UTF-8 tracked name raised a traceback" 1; fi
+if grep -Fq "ok.txt does not" "$refs_tmp/err"; then refs_fail "the name after a non-UTF-8 one was lost" 1; fi
+refs_path="$PATH"
+
 # Usage errors, unreadable input, and a cwd outside any repo exit 3, never 2.
 refs_case "unknown flag exits 3" 3 "" "$refs_tmp/present.txt" --bogus
 refs_case "missing file exits 3" 3 "" "$refs_tmp/does-not-exist.txt"
