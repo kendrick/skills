@@ -1,0 +1,16 @@
+```json
+{
+  "lane": "issue-7",
+  "phase": "build",
+  "status": "done",
+  "head": "0123456789abcdef0123456789abcdef01234567",
+  "worktree": "/w/7",
+  "run_dir": "/r/7",
+  "files_changed": ["src/seven.py"],
+  "contract_changed": [],
+  "facts": [],
+  "pr": null,
+  "detail": "work-issue reached the Done-when of Step 4.",
+  "question": ""
+}
+```

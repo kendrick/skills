@@ -198,6 +198,15 @@
               },
               {
                 "step": 4,
+                "subpath": "reports/issue-<N>-<phase>-interim-<k>.json",
+                "op": "write",
+                "path": "reports/issue-7-build-interim-1.json",
+                "content": "{\"lane\": \"issue-7\", \"phase\": \"build\", \"handback\": 1, \"text\": \"waiting on a repair\"}\n",
+                "blind": "no row reads an interim report: the probe fullmatches issue-<N>-build.json, so a lane with only interim reports stays unreported and row 7 re-dispatches it",
+                "cite": "Step 4: a lane that returns no terminal report has its message saved as an interim report before the lane is resumed"
+              },
+              {
+                "step": 4,
                 "subpath": "reports/issue-<N>-build.json",
                 "op": "write",
                 "path": "reports/issue-7-build.json",
