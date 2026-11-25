@@ -115,6 +115,7 @@ The pins below are what `tests/work-wave-smoke.sh` asserts. Its refutes run agai
 | Judging the already-started exemption by the porcelain's `branch` line | Rows 20 and 64. A tree mid-rebase has no `branch` line, so the exemption refused the wave over a lane's own tree (#391). Pinned by a `refute_text` on the old sentence in `SKILL.md`. |
 | A `hold` that holds only the lanes whose `After` names issue-N | Row 67 and #397's Non-Goals. It would leave issue-8 in `publish-failed-holds`' merge set, where `wave-order.json` holds it. Pinned by a `refute_text` on "whose \`After\` names" in `SKILL.md` and `order.py`, and by a smoke case where `hold --lane issue-114` holds issue-115 although its `After` is `—`. |
 | Renumbering the placed lanes after a `hold` | Row 67. The comparison with `publish-failed-holds` would then rest on a rule no step states, and `order_rows` already accepts a gap. Pinned by a `refute_text` on `renumber` in `SKILL.md` and `order.py`, and by a smoke case where issue-114 keeps `Order` 3 across a gap after `hold`. |
+| Re-prompting an unparseable report once, then failing the lane | Row 68. A lane that returns without a terminal report has usually outlived its turn, not garbled its message, so a re-prompt asked it to restate a contract it was still working on. `handback.py` now classifies every return and resumes a hand-back without asking. Pinned by a `refute_text` on `re-prompted once with the contract restated` in `SKILL.md`. |
 
 ## Known Limitations
 

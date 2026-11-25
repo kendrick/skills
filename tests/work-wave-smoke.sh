@@ -2393,6 +2393,22 @@ grep -Fq "a terminal report should print terminal" "$tmp/mutant.err" || {
   exit 1
 }
 
+# A gap in the interim numbers must not let a hand-back overwrite a saved one:
+# counting files instead of reading the highest number reused interim-2 here.
+hbgap="$tmp/hb-gap-wave"
+mkdir -p "$hbgap/reports"
+echo sentinel > "$hbgap/reports/issue-7-build-interim-2.json"
+hb_run "$hbgap"
+expect_status 0 "a hand-back after a numbering gap"
+[[ "$out" == "redispatch 3 $hbgap/reports/issue-7-build-interim-3.json" ]] || {
+  echo "a hand-back after a gap should take the number past the highest, got: $out" >&2
+  exit 1
+}
+[[ "$(cat "$hbgap/reports/issue-7-build-interim-2.json")" == sentinel ]] || {
+  echo "a hand-back overwrote interim-2" >&2
+  exit 1
+}
+
 # The prose that sends every lane return through the script. Without these the
 # script passes every case above while Step 4 still saves prose verbatim as a
 # report and Step 5 gates it.

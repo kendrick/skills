@@ -8,10 +8,12 @@ Reads the lane's final message from FILE. A message that is a terminal report
 are the ones passed and whose `status` is done, stopped, failed, or refused) is
 written to reports/issue-<N>-<phase>.json, and the script prints
 `terminal <path>`. Anything else is a hand-back: the lane's turn ended mid-run.
-It is written to reports/issue-<N>-<phase>-interim-<k>.json, k counting the
-interim files already there plus one. The first two print
+It is written to reports/issue-<N>-<phase>-interim-<k>.json, k one past the
+highest interim number already there, so a gap never lets a hand-back overwrite
+a saved one. The first two (by interim files on disk) print
 `redispatch <k> <path>`. The third prints `stop` and every interim path on
-stdout, and the same on stderr after a `handback:` prefix.
+stdout, and on stderr a `handback: <lane> <phase>: <n> hand-backs without a
+terminal report:` line naming the same paths.
 
 Exit codes: 0 terminal or redispatch, 1 third hand-back (the wave stops on the
 lane), 3 usage, unreadable FILE, or a terminal report already on disk for this
@@ -59,6 +61,7 @@ def write_atomic(path, content):
     fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".handback-")
     with os.fdopen(fd, "w") as f:
         f.write(content)
+    os.chmod(tmp, 0o644)  # mkstemp makes 0600; reports were world-readable before
     os.replace(tmp, path)
 
 
@@ -98,18 +101,21 @@ def main():
         return 0
 
     interim = re.compile(re.escape(base) + r"-interim-(\d+)\.json")
-    have = sorted(n for n in os.listdir(reports) if interim.fullmatch(n))
-    k = len(have) + 1
+    # Numeric sort: lexical puts interim-10 before interim-2.
+    have = sorted((n for n in os.listdir(reports) if interim.fullmatch(n)),
+                  key=lambda n: int(interim.fullmatch(n).group(1)))
+    k = int(interim.fullmatch(have[-1]).group(1)) + 1 if have else 1
+    count = len(have) + 1
     path = os.path.join(reports, f"{base}-interim-{k}.json")
     # No `status` key, so nothing downstream can read a hand-back as a report.
     write_atomic(path, json.dumps({"lane": args.lane, "phase": args.phase, "handback": k, "text": text}) + "\n")
-    if k <= MAX_REDISPATCH:
+    if count <= MAX_REDISPATCH:
         print(f"redispatch {k} {path}")
         return 0
     # A third hand-back means resuming isn't converging; a human has to look.
     paths = [os.path.join(reports, n) for n in have] + [path]
     print("stop " + " ".join(paths))
-    print(f"handback: {args.lane} {args.phase}: {k} hand-backs without a terminal report: {' '.join(paths)}", file=sys.stderr)
+    print(f"handback: {args.lane} {args.phase}: {count} hand-backs without a terminal report: {' '.join(paths)}", file=sys.stderr)
     return 1
 
 

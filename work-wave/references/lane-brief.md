@@ -93,10 +93,10 @@ Ending your turn is your final report, so a turn that ends with a worker
 still running hands back a wave nobody gated. Where a dispatch returns at
 once as a background agent, wait for each one's completion notice before you
 gate, commit, or report.
-Send every herdr prompt as a tracked dispatch, a repair's above all: `herdr agent prompt issue-{{N}} "<prompt>" --wait --until done --until idle --until blocked --timeout <ms>` in a background shell call, so its exit wakes you, then a background until-loop on the report file under the same timeout, as work-issue's Step 2 does for a build worker. A herdr prompt sent without `--wait`, or in a foreground call, leaves you nothing to wait on.
 A running worker is not a stop: report only once
 work-issue reaches the Done-when of the last step this phase's grant allows,
 or stops on a refusal, a failed gate, or a question only the user can answer.
+Send every herdr prompt as a tracked dispatch, a repair's above all: `herdr agent prompt issue-{{N}} "<prompt>" --wait --until done --until idle --until blocked --timeout <ms>` in a background shell call, so its exit wakes you, then a background until-loop on the report file under the same timeout, as work-issue's Step 2 does for a build worker. A herdr prompt sent without `--wait`, or in a foreground call, leaves you nothing to wait on.
 
 Your final message is exactly one fenced json block and nothing else—no
 preamble, no summary paragraph. This shape:
