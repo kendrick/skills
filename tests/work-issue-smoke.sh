@@ -133,6 +133,8 @@ require_file tests/fixtures/work-issue/probes/row-07-isolation-incomplete.json
 require_file tests/fixtures/work-issue/probes/row-11-trigger-unrecorded.json
 # A P2-only round whose repair diff hits a money, authz, or schema row (#162).
 require_file tests/fixtures/work-issue/probes/row-17-repair-diff-trigger.json
+# Row 17's budget stop on a pushed repair; the unpushed twin pushes first (#369).
+require_file tests/fixtures/work-issue/probes/row-17-over-budget-pushed.json
 # Row 7 with committed, unreported waves, and the run dir whose reports carry
 # only the herdr agent's <task>.json names (cambium #78, #136).
 require_file tests/fixtures/work-issue/probes/row-07-committed-unreported.json
@@ -1926,7 +1928,7 @@ declare -a probe_cases=(
   "row-14:6" "row-15:6" "row-16:7" "row-17:8" "row-17-queued:8" "row-17-postpush:8" "row-17-pushed-item1-pending:8" "row-17-pushed-item1-findings:8"
   "row-10-repair-unverified:4" "row-10-repair-needed:4" "row-10-failed-twice:stop" "row-13-prepr-repair-clean:5" "row-16-earlier-queued:8" "row-17-review-repair-unpushed:8" "row-17-deferred-owed:8" "row-17-worker-queue:8" "row-18-answered:done" "row-18:done"
   "row-17-repair-advisory-only:8" "row-17-repair-blocking:8" "row-17-repair-blocking-settled:8" "row-17-repair-diff-trigger:8"
-  "row-10-over-budget:stop" "row-11-over-budget:stop" "row-16-over-budget:stop" "row-16-over-budget-queued:8" "row-17-over-budget:stop"
+  "row-10-over-budget:stop" "row-11-over-budget:stop" "row-16-over-budget:stop" "row-16-over-budget-queued:8" "row-17-over-budget:8" "row-17-over-budget-pushed:stop"
   "row-16-under-cap:7" "row-17-review-cap:8" "row-16-cap-blocker:stop" "row-17-cap-replies-owed:8"
   "row-16-review-loop:7" "row-16-review-loop-over-budget:stop" "row-17-review-loop-capped:8"
   "row-12-stale-base:5" "row-12-stale-base-rebasing:5" "base-sha-not-merge-base:stop" "base-sha-not-ancestor:stop"
@@ -2037,7 +2039,16 @@ grep -Fq "adversarial-review" <<<"$advisory_reason" && {
   echo "a repair whose round held only P2 rows must not re-enter adversarial-review, got: $advisory_reason" >&2
   exit 1
 }
-blocking_reason="$(python3 "$run_state" phase --probe "$probes_dir/row-17-repair-blocking.json")"
+# These fixtures predate #369 and leave the repair unpushed, which now takes
+# row 17's push leg first. The re-fire leg reads their pushed twins.
+for refire in repair-blocking repair-diff-trigger; do
+  python3 -c 'import json, sys
+probe = json.load(open(sys.argv[1]))
+assert probe["ahead_of_origin"] is True
+probe["ahead_of_origin"] = False
+json.dump(probe, open(sys.argv[2], "w"))' "$probes_dir/row-17-$refire.json" "$tmp/$refire-pushed.json"
+done
+blocking_reason="$(python3 "$run_state" phase --probe "$tmp/repair-blocking-pushed.json")"
 # The resume starts item 1 from the reproducer until the repair's trigger
 # file exists, so a stop before the reproducer ran can't skip it.
 grep -Fq "resume at Step 8 item 1 from the reproducer where trigger-repair-<k>.txt is absent" <<<"$blocking_reason" || {
@@ -2054,7 +2065,7 @@ grep -Fq "adversarial-review" <<<"$settled_reason" && {
 # the repair's own diff hits trigger rows 1, 2, or 4. The twin is the same
 # probe with the flag false, and it must fall through to row 17's push leg.
 # Both land at phase 8, so the reason is what tells them apart.
-diff_reason="$(python3 "$run_state" phase --probe "$probes_dir/row-17-repair-diff-trigger.json")"
+diff_reason="$(python3 "$run_state" phase --probe "$tmp/repair-diff-trigger-pushed.json")"
 grep -Fq "phase: 8 reason: row 17:" <<<"$diff_reason" && grep -Fq "resume at Step 8 item 1 from the reproducer where trigger-repair-<k>.txt is absent" <<<"$diff_reason" || {
   echo "a P2-only repair whose own diff hits a trigger row must re-enter Step 8 item 1 from the reproducer, got: $diff_reason" >&2
   exit 1
@@ -2063,7 +2074,7 @@ python3 -c 'import json, sys
 probe = json.load(open(sys.argv[1]))
 assert probe["triage_blocking_rows"] == 0 and probe["repair_diff_triggers"] is True
 probe["repair_diff_triggers"] = False
-json.dump(probe, open(sys.argv[2], "w"))' "$probes_dir/row-17-repair-diff-trigger.json" "$tmp/repair-diff-quiet.json"
+json.dump(probe, open(sys.argv[2], "w"))' "$tmp/repair-diff-trigger-pushed.json" "$tmp/repair-diff-quiet.json"
 quiet_reason="$(python3 "$run_state" phase --probe "$tmp/repair-diff-quiet.json")"
 grep -Fq "phase: 8 reason: row 17: the deferred-findings comment is owed" <<<"$quiet_reason" || {
   echo "the same P2-only repair with a quiet diff should land past the re-fire leg on row 17's push leg, got: $quiet_reason" >&2
@@ -2081,7 +2092,7 @@ python3 -c 'import json, sys
 probe = json.load(open(sys.argv[1]))
 assert probe["repair_diff_triggers"] is True
 probe["repair_ar_settled"] = True
-json.dump(probe, open(sys.argv[2], "w"))' "$probes_dir/row-17-repair-diff-trigger.json" "$tmp/repair-diff-read-away.json"
+json.dump(probe, open(sys.argv[2], "w"))' "$tmp/repair-diff-trigger-pushed.json" "$tmp/repair-diff-read-away.json"
 read_away_reason="$(python3 "$run_state" phase --probe "$tmp/repair-diff-read-away.json")"
 grep -Fq "phase: 8 reason: row 17: the deferred-findings comment is owed" <<<"$read_away_reason" || {
   echo "a candidate repair diff read away to fired: no should move on to row 17's push leg, got: $read_away_reason" >&2
@@ -2138,11 +2149,22 @@ grep -Fq "phase: 8 reason: row 17: the deferred-findings comment is owed, or a r
   echo "an unpushed repair over budget should take row 17's push leg, not the item-1 leg's budget stop" >&2
   exit 1
 }
+# The re-fire leg needs the repair pushed too. An unpushed P1 repair over budget
+# takes the push leg, and its re-fire runs at item 1 once origin has it.
+python3 -c 'import json, sys
+probe = json.load(open(sys.argv[1]))
+assert probe["ahead_of_origin"] is True and probe["triage_blocking_rows"] == 1
+probe["review_over_budget"] = True
+json.dump(probe, open(sys.argv[2], "w"))' "$probes_dir/row-17-repair-blocking.json" "$tmp/refire-unpushed-over.json"
+grep -Fq "phase: 8 reason: row 17: the deferred-findings comment is owed, or a repair report or an all-queued or capped triage round leaves work unpushed" <<<"$(python3 "$run_state" phase --probe "$tmp/refire-unpushed-over.json")" || {
+  echo "an unpushed re-fire candidate over budget should take row 17's push leg, not the re-fire leg's budget stop" >&2
+  exit 1
+}
 # The #158 budget gate covers the new condition too: it starts a review cycle.
 python3 -c 'import json, sys
 probe = json.load(open(sys.argv[1]))
 probe["review_over_budget"] = True
-json.dump(probe, open(sys.argv[2], "w"))' "$probes_dir/row-17-repair-diff-trigger.json" "$tmp/repair-diff-over.json"
+json.dump(probe, open(sys.argv[2], "w"))' "$tmp/repair-diff-trigger-pushed.json" "$tmp/repair-diff-over.json"
 grep -Fq "phase: stop reason: row 17: review time is over budget" <<<"$(python3 "$run_state" phase --probe "$tmp/repair-diff-over.json")" || {
   echo "a P2-only repair re-firing on its own diff should hit the row-17 budget stop when over budget" >&2
   exit 1
@@ -2163,8 +2185,11 @@ grep -Fq "or defer the newest round's in-scope rows not yet queued" <<<"$over_re
   echo "row 16's budget stop should offer deferral, got: $over_reason" >&2
   exit 1
 }
+# Row 17's budget stop needs a pushed repair (#369); the unpushed fixture pushes.
 for gated in 10 11 17; do
-  gated_reason="$(python3 "$run_state" phase --probe "$probes_dir/row-$gated-over-budget.json")"
+  gated_fixture="row-$gated-over-budget"
+  [[ "$gated" == 17 ]] && gated_fixture="row-17-over-budget-pushed"
+  gated_reason="$(python3 "$run_state" phase --probe "$probes_dir/$gated_fixture.json")"
   if grep -Fq "defer" <<<"$gated_reason"; then
     echo "row $gated's budget stop has no unrepaired triage row to defer, yet offers it: $gated_reason" >&2
     exit 1

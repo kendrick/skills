@@ -1058,7 +1058,7 @@ def phase_of(probe):
     max_review_rounds = count(probe, "max_review_rounds")
     # #230: with the review loop on, no round is capped and the budget stop ends repair.
     at_review_cap = triage_rounds > 0 and triage_rounds >= max_review_rounds and not flag(probe, "review_loop")
-    # Rows 10, 11, 20, 16, and row 17's re-fire leg each start another review
+    # Rows 10, 11, 20, 16, and row 17's item-1 and re-fire legs each start another review
     # cycle, and only those are gated. Rows past them publish, reply to, or
     # report on work already done, and stopping there would strand it. On
     # cambium #23/#26, about 50 min of build drew about 5 h of review.
@@ -1344,11 +1344,15 @@ def phase_of(probe):
     # empty. `repair_ar_settled` is also true where the repair's own trigger
     # re-evaluation said `fired: no`, so a P1 repair with no trigger-table hit
     # doesn't wait on a review nobody will run.
+    # Like the item-1 leg, it needs the repair pushed (#369). Item 1 runs after
+    # item 2's push, so an unpushed candidate takes the push leg first, and a
+    # budget stop can't leave it unpushed.
     refire_pending = (
         pr_state == "OPEN"
         and flag(probe, "newest_repair_report")
         and (count(probe, "triage_blocking_rows") > 0 or flag(probe, "repair_diff_triggers"))
         and not flag(probe, "repair_ar_settled")
+        and not flag(probe, "ahead_of_origin")
     )
     if item1_pending or refire_pending:
         if item1_pending and flag(probe, "redteam_failed_twice"):
