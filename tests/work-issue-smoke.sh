@@ -6504,6 +6504,9 @@ require_text "$tmp/s477-step-5.md" "Then run VERIFY_CMD and read it by VERIFY_CM
 require_text "$tmp/s477-step-8.md" "2. Where local HEAD is ahead of origin: rebase"
 refute_text "$tmp/s477-step-5.md" "WORK_ISSUE_DEFER_LIVENESS"
 refute_text "$tmp/s477-step-8.md" "WORK_ISSUE_DEFER_LIVENESS"
+# Step 3 defines the deferred form, so naming it defers a gate without the token.
+refute_text "$tmp/s477-step-5.md" "deferred form"
+refute_text "$tmp/s477-step-8.md" "deferred form"
 # A copy with the deferred form in Step 8 item 2's verify has to trip the Step 8
 # refute, or that refute can't fail.
 python3 - work-issue/SKILL.md "$tmp/s477-skill.md" <<'PY'
@@ -6518,6 +6521,26 @@ require_text "$tmp/s477-step-8-copy.md" "verify to \`(export WORK_ISSUE_DEFER_LI
 if ( refute_text "$tmp/s477-step-8-copy.md" "WORK_ISSUE_DEFER_LIVENESS" ) 2>/dev/null; then
   cc_fail "the Step 8 refute passed on a copy whose item 2 defers liveness"
 fi
+# A second copy names the form in both push gates' verify without the token.
+python3 - work-issue/SKILL.md "$tmp/s477-form.md" <<'PY'
+import sys
+text = open(sys.argv[1]).read()
+for old, new in (
+    ("Then run VERIFY_CMD and read it by VERIFY_CMD green.", "Then run VERIFY_CMD in the deferred form and read it by VERIFY_CMD green."),
+    ("verify to VERIFY_CMD green, write `pushed_at`", "verify to VERIFY_CMD green in the deferred form, write `pushed_at`"),
+):
+    assert text.count(old) == 1, f"#477: push-gate clause is gone or repeated: {old}"
+    text = text.replace(old, new)
+open(sys.argv[2], "w").write(text)
+PY
+for s in 5 8; do
+  section "$tmp/s477-form.md" "## Step $s " >"$tmp/s477-form-$s.md"
+  require_text "$tmp/s477-form-$s.md" "in the deferred form"
+  refute_text "$tmp/s477-form-$s.md" "WORK_ISSUE_DEFER_LIVENESS"
+  if ( refute_text "$tmp/s477-form-$s.md" "deferred form" ) 2>/dev/null; then
+    cc_fail "the Step $s 'deferred form' refute passed on a copy whose push gate names the form"
+  fi
+done
 echo '{"model": "FAIL"}' >"$cc/model.json"
 before="$(cc_runs)"
 # The suite itself runs under a deferring gate, so the killed run clears the
