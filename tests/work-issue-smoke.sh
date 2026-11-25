@@ -89,6 +89,11 @@ require_file tests/fixtures/work-issue/probes/row-17-queued.json
 # and a red-team repair not yet re-verified, once sent to row 18's done and
 # later to row 17's Step 8, which never opens the pull request.
 require_file tests/fixtures/work-issue/probes/row-17-postpush.json
+# #369: Step 8 pushes a repair before item 1 red-teams it, so a stop between
+# the two leaves nothing owed under a pending or findings review, which rows
+# 14 and 15 would poll or triage past.
+require_file tests/fixtures/work-issue/probes/row-17-pushed-item1-pending.json
+require_file tests/fixtures/work-issue/probes/row-17-pushed-item1-findings.json
 require_file tests/fixtures/work-issue/probes/row-10-repair-unverified.json
 # A pre-PR repair, clean after its own round: Step 5 with the PR create, never
 # Step 8, which only pushes and replies.
@@ -1918,7 +1923,7 @@ probes_dir=tests/fixtures/work-issue/probes
 declare -a probe_cases=(
   "row-01:done" "row-01-queued:stop" "row-02:wait" "row-03:stop" "row-04:0" "row-05:0" "row-05-gated:0" "row-06:0"
   "row-07:2" "row-07-isolation-incomplete:1" "row-07-committed-unreported:stop" "row-07-committed-unreported-herdr:stop" "row-07-herdr-absent:2" "row-21:wait" "row-08:3" "row-09:3" "row-10:4" "row-11:4" "row-11-trigger-unrecorded:4" "row-12:5" "row-13:5"
-  "row-14:6" "row-15:6" "row-16:7" "row-17:8" "row-17-queued:8" "row-17-postpush:8"
+  "row-14:6" "row-15:6" "row-16:7" "row-17:8" "row-17-queued:8" "row-17-postpush:8" "row-17-pushed-item1-pending:8" "row-17-pushed-item1-findings:8"
   "row-10-repair-unverified:4" "row-10-repair-needed:4" "row-10-failed-twice:stop" "row-13-prepr-repair-clean:5" "row-16-earlier-queued:8" "row-17-review-repair-unpushed:8" "row-17-deferred-owed:8" "row-17-worker-queue:8" "row-18-answered:done" "row-18:done"
   "row-17-repair-advisory-only:8" "row-17-repair-blocking:8" "row-17-repair-blocking-settled:8" "row-17-repair-diff-trigger:8"
   "row-10-over-budget:stop" "row-11-over-budget:stop" "row-16-over-budget:stop" "row-16-over-budget-queued:8" "row-17-over-budget:stop"
@@ -2086,6 +2091,28 @@ grep -Fq "adversarial-review" <<<"$read_away_reason" && {
   echo "a candidate repair diff read away to fired: no must not re-enter adversarial-review, got: $read_away_reason" >&2
   exit 1
 }
+# #369: a pushed repair whose reproducer has not answered resumes at Step 8
+# item 1 and pushes nothing. The twins with repair_after_last_round false are
+# the same probes once item 1's round lands, and fall to row 14's poll and row
+# 15's triage.
+for item1 in pending:14 findings:15; do
+  item1_reason="$(python3 "$run_state" phase --probe "$probes_dir/row-17-pushed-item1-${item1%%:*}.json")"
+  grep -Fq "phase: 8 reason: row 17: no reproducer round is newer than the repair report" <<<"$item1_reason" \
+    && grep -Fq "item 2 pushes only where local HEAD is ahead of origin, so a pushed repair is not pushed again" <<<"$item1_reason" || {
+    echo "row-17-pushed-item1-${item1%%:*}.json should resume at Step 8 item 1 with no second push, got: $item1_reason" >&2
+    exit 1
+  }
+  python3 -c 'import json, sys
+probe = json.load(open(sys.argv[1]))
+assert probe["repair_after_last_round"] is True and probe["ahead_of_origin"] is False
+probe["repair_after_last_round"] = False
+json.dump(probe, open(sys.argv[2], "w"))' "$probes_dir/row-17-pushed-item1-${item1%%:*}.json" "$tmp/item1-answered.json"
+  answered_reason="$(python3 "$run_state" phase --probe "$tmp/item1-answered.json")"
+  grep -Fq "phase: 6 reason: row ${item1##*:}:" <<<"$answered_reason" || {
+    echo "row-17-pushed-item1-${item1%%:*}.json with item 1 answered should fall to row ${item1##*:}, got: $answered_reason" >&2
+    exit 1
+  }
+done
 # The #158 budget gate covers the new condition too: it starts a review cycle.
 python3 -c 'import json, sys
 probe = json.load(open(sys.argv[1]))
@@ -2687,7 +2714,7 @@ grep -Fqi "retry" <<<"$loop_block" && {
 # the file's time, because Step 8 edits the round after the push it answers.
 require_text work-issue/SKILL.md "# Triage round <k>, since <SINCE>"
 require_text work-issue/references/triage.md "# Triage round <k>, since <SINCE>"
-require_text work-issue/references/resume.md "| 15 | PR open; \`findings\`; no triage round recorded against the current SINCE | Step 6 triage |"
+require_text work-issue/references/resume.md "| 15 | PR open; \`findings\`; no triage round recorded against the current SINCE; no repair awaiting item 1's reproducer (row 17's item-1 leg) | Step 6 triage |"
 require_text _maintenance/work-issue/RATIONALE.md "Comparing a triage round's file time against \`pushed_at\`"
 refute_text work-issue/references/resume.md "compare its mtime against"
 refute_text work-issue/SKILL.md "compare its mtime against"
@@ -3709,9 +3736,10 @@ grep -qF 'Only an entry with `open: true`, or with no `open` field, also becomes
 require_text work-issue/SKILL.md 'or `worker` for a `plan_concerns` entry with `open: true` or no `open` field.'
 require_text work-issue/references/triage.md 'the literal `worker` for a `plan_concerns` entry with `open: true` (or no `open` field)'
 
-# repair_diff_triggers (#162, #137) reads the repair's own diff from
-# repair-base-<k> for the newest round k: the billing/README repo the block
-# above builds, rebuilt here.
+# repair_diff_triggers (#162, #137, #369) reads the repair's own diff from the
+# redteam/repair-diff-<k>.patch Step 8 saved for the newest round k, never a
+# live git diff: item 2 pushes, and may rebase, before item 1 reads it. The
+# billing/README repo the block above builds, rebuilt here.
 dt_repo="$tmp/probe-scope-repo"
 dt_run="$tmp/probe-scope-run"
 mkdir -p "$dt_run/redteam" "$dt_run/triage"
@@ -3727,21 +3755,41 @@ probe_git "$dt_repo" rev-parse HEAD >"$dt_run/redteam/repair-base-1"
 printf 'Run the tests before you push.\n' >"$dt_repo/README.md"
 probe_git "$dt_repo" add README.md
 probe_git "$dt_repo" commit -q -m repair
-expect_field "with the base at the branch tip" repair_diff_triggers false "$dt_run" "$dt_repo"
-probe_git "$dt_repo" merge-base main issue-1 >"$dt_run/redteam/repair-base-1"
-expect_field "with the base at the merge-base" repair_diff_triggers true "$dt_run" "$dt_repo"
-rm "$dt_run/redteam/repair-base-1"
-expect_field "with no repair-base file" repair_diff_triggers false "$dt_run" "$dt_repo"
-printf 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n' >"$dt_run/redteam/repair-base-1"
-expect_field "with a base SHA that does not resolve" repair_diff_triggers null "$dt_run" "$dt_repo"
-probe_git "$dt_repo" rev-parse issue-1~1 >"$dt_run/redteam/repair-base-1"
+dt_patch="$dt_run/redteam/repair-diff-1.patch"
+expect_field "with a repair-base and no patch" repair_diff_triggers false "$dt_run" "$dt_repo"
+probe_git "$dt_repo" diff "$(cat "$dt_run/redteam/repair-base-1")..HEAD" >"$dt_patch"
+expect_field "with a patch hitting no trigger row" repair_diff_triggers false "$dt_run" "$dt_repo"
+cp "$dt_patch" "$tmp/dt-quiet.patch"
+# The falsifier: the same repair, its patch now carrying an authz line, flips
+# the field. Only the patch changes, so the answer reads the patch.
+printf '+if user.is_admin:\n+    allow()\n' >>"$dt_patch"
+expect_field "with the patch carrying an authz line" repair_diff_triggers true "$dt_run" "$dt_repo"
+# A rebase that orphans repair-base-1 and moves HEAD leaves the answer alone:
+# the patch was saved before the push, so upstream lines never enter it.
 probe_git "$dt_repo" checkout -q main
-printf 'total = round(price * qty)\n' >"$dt_repo/invoice.py"
+printf 'if user.is_admin:\n    total = round(price * qty)\n' >"$dt_repo/invoice.py"
 probe_git "$dt_repo" add invoice.py
 probe_git "$dt_repo" commit -q -m upstream
 probe_git "$dt_repo" checkout -q issue-1
 probe_git "$dt_repo" rebase -q main
-expect_field "after a rebase orphans the base" repair_diff_triggers false "$dt_run" "$dt_repo"
+if probe_git "$dt_repo" merge-base --is-ancestor "$(cat "$dt_run/redteam/repair-base-1")" HEAD; then
+  echo "the rebase case should orphan repair-base-1 before the probe reads it" >&2; exit 1
+fi
+expect_field "after a rebase orphans the base, the authz patch unchanged" repair_diff_triggers true "$dt_run" "$dt_repo"
+cp "$tmp/dt-quiet.patch" "$dt_patch"
+expect_field "after a rebase orphans the base, the quiet patch unchanged" repair_diff_triggers false "$dt_run" "$dt_repo"
+rm "$dt_run/redteam/repair-base-1"
+expect_field "with a patch and no repair-base file" repair_diff_triggers false "$dt_run" "$dt_repo"
+rm "$dt_patch"
+expect_field "with neither file" repair_diff_triggers false "$dt_run" "$dt_repo"
+printf '+if user.is_admin:\n' >"$dt_patch"
+chmod 000 "$dt_patch"
+if [[ -r "$dt_patch" ]]; then
+  echo "skipping the unreadable-patch case: chmod 000 leaves the file readable here" >&2
+else
+  expect_field "with an unreadable patch" repair_diff_triggers null "$dt_run" "$dt_repo"
+fi
+chmod 600 "$dt_patch"
 
 # redteam_repair_diff_triggers (#362) reads a Step 4 red-team repair's own
 # diff from the newest redteam-repair-base-<k>, since the overlapped build
@@ -3912,10 +3960,11 @@ require_text work-issue/SKILL.md "or a repair report or an all-queued triage rou
 # The resume path reads references/resume.md, so its copy of the table is the
 # one that matters at run time, and it has to say the same thing.
 require_text work-issue/references/resume.md "or a repair report or an all-queued triage round with local ahead of origin"
-# Row 14's guard is what keeps a stop between the repair push and the replies
-# out of the poll. Both copies carry it.
-require_text work-issue/SKILL.md "| 14 | PR open; review \`pending\`; no triage row without a reply URL; no queue row missing from its comment | Step 6 poll |"
-require_text work-issue/references/resume.md "| 14 | PR open; review \`pending\`; no triage row without a reply URL; no queue row missing from its comment | Step 6 poll |"
+# Row 14's guards are what keep a stop between the repair push and the replies,
+# or between the push and item 1's reproducer (#369), out of the poll. Both
+# copies carry them.
+require_text work-issue/SKILL.md "| 14 | PR open; review \`pending\`; no triage row without a reply URL; no queue row missing from its comment; no repair awaiting item 1's reproducer (row 17's item-1 leg) | Step 6 poll |"
+require_text work-issue/references/resume.md "| 14 | PR open; review \`pending\`; no triage row without a reply URL; no queue row missing from its comment; no repair awaiting item 1's reproducer (row 17's item-1 leg) | Step 6 poll |"
 # The preamble is the only part of worker-prompt.md a worker sees, so the
 # nine-field contract has to be inside it, not only documented after it.
 require_text work-issue/references/worker-prompt.md "This shape replaces the six-field"
