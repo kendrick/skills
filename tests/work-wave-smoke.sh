@@ -2681,12 +2681,12 @@ cmp -s "$tmp/lp-issue-7.before" "$lp_wave/facts/issue-7.md" || {
 # The prose that carries the policy to every lane and its rulings back. Without
 # these pins the script passes every case above while no lane is handed a flag.
 require_text "$skill" "\`--auto-budget <ratio>\`, \`--defer-after <k>\`, and \`--repair-class <class>\` set the ruling policy every lane's \`work-issue\` invocation carries"
-require_text "$skill" "work-wave/scripts/lane-policy.py flags"
+require_text "$skill" "Before the resume probe, run \`work-wave/scripts/lane-policy.py flags\` with whichever of the three the user gave"
 require_text "$skill" "with \`--review-loop[=<comment>]\` and the policy \` --auto-budget 4.0 --defer-after 3 --repair-class unowned-write\` added"
 require_text "$skill" "work-wave/scripts/lane-policy.py facts --run-dir <run_dir> --wave-dir WAVE_DIR"
 require_text "$brief" "- \`{{POLICY}}\` —"
 require_text "$brief" "Fifteen substitutions. Fourteen stand for a single value"
-require_text work-wave/README.md "lane-policy.py"
+require_text work-wave/README.md "and \`lane-policy.py\` copies those lines into the wave's \`facts/wave.md\` as each lane reports"
 require_text work-wave/README.md "--auto-budget 4.0 --defer-after 3 --repair-class unowned-write"
 require_text "$ledger" "| 71 | Every lane's \`work-issue\` invocation carries \`--auto-budget 4.0 --defer-after 3 --repair-class unowned-write\`"
 

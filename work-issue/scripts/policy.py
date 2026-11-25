@@ -3,7 +3,7 @@
 
     work-issue/scripts/policy.py flags [--auto-budget R] [--repair-class C] [--defer-after K]
     work-issue/scripts/policy.py budget --timing RUN_DIR/timing.log --at 4|7|8 --run-dir RUN_DIR [--now T] [--auto-budget R]
-    work-issue/scripts/policy.py sort --kind triage|redteam --round-file FILE --round K --plan RUN_DIR/plan.md --run-dir RUN_DIR [--repair-class C] [--defer-after K]
+    work-issue/scripts/policy.py sort --kind triage|redteam --round-file FILE --round K --plan RUN_DIR/plan.md --run-dir RUN_DIR [--root WORKTREE] [--repair-class C] [--defer-after K]
 
 `flags` prints the flags it was given, normalized, in the fixed order
 `--auto-budget R --defer-after K --repair-class C`, or an empty line for none.
@@ -13,9 +13,10 @@ before it exits. `budget` and `sort` check the flags they take the same way.
 
 `budget` prints one ruling. `under`: not over at the current threshold, the
 log's last `budget-raised` value or 2.0. `ask`: over with no `--auto-budget`.
-`raise R`: over at a threshold below R, and `budget-raised R` is appended to
-the timing log, so the raise happens once by construction. `defer`: over at R
-or more with `--at 7`, the only stop with unqueued in-scope rows to defer
+`raise R`: over at a threshold below R and under at R, and `budget-raised R`
+is appended to the timing log, so the raise happens once by construction. A
+lane still over at R gets the raise appended and recorded too, then the ruling
+for over at R. `defer`: over at R or more with `--at 7`, the only stop with unqueued in-scope rows to defer
 (`run-state.py budget_stop`, #240). `ask` again: over at R or more at step 4 or
 8, since skipping a red-team round or a re-fired review would ship claims
 nobody reproduced. A missing timing log reads as under budget, as
@@ -36,19 +37,30 @@ missing plan or one with no `## Waves` task rows has no `owns` to sort
 against: every row is `keep` with `--repair-class` set, `defer` without.
 
 Red-team: with no `--repair-class`, with no `owns`, or once `policy.log`
-records a red-team ruling for an earlier round (the one granted round is
-spent), every finding is `ask`. Otherwise a finding naming a path outside
+records a red-team ruling for round K-1 (the failing streak's one granted
+round is spent), every finding is `ask`. A ruling for an older round belongs
+to an earlier streak, such as Step 4's when this is a Step 8 repair's
+red-team, so it leaves this stop its own grant. Otherwise a finding naming a path outside
 `owns` is `repair` and the rest `defer`, except that a citation with no path
 is `ask`, and one `ask` makes the whole round `ask`, so the stop fires.
 
-Heuristic: a finding names a path when a token of its text, backticks
-dropped, contains `/` or ends in a file extension. Prose like `and/or` or
-`e.g.` reads as a path, and a path with a space in it reads as two tokens. A
-red-team finding's text is its `claim`, `output` and `caller.output`, so a
-pasted output naming an unowned file sorts it `repair`. Both misreadings fall
-toward repair, never toward deferring a real unowned write. A path is outside
-`owns` when no `Files owned` entry equals it or, for an entry ending in `/`,
-prefixes it: `scoped-cmd`'s match, no globs.
+Heuristic: a finding names a path when a token of its text ends in a file
+extension, or contains `/` and is backticked, starts with `/`, `~` or `./`,
+ends in `/`, or holds a dot. So `and/or` is prose, and so are abbreviations
+like `e.g.` and `i.e.`. A red-team finding's text is its `claim`, `output` and
+`caller.output`, so a pasted output naming an unowned file sorts it `repair`.
+Pasted output is also full of paths no task writes, and three kinds are
+dropped: a Python traceback's `File "..."` path, a path under macOS's
+`/var/folders/` temp root, and one with a default `mktemp` component
+(`tmp.` and six or more letters or digits). An absolute path under `--root`,
+the work tree and by default the current directory, loses that prefix before
+the `owns` match, since the reproducer names owned files by absolute path. The
+misreadings run both ways: a bare repo-relative directory like src/lib, with
+no dot and no backticks, reads as prose and can defer a real unowned write,
+a one-letter name with a one-letter extension, like a.c, reads as an
+abbreviation, and a path with a space in it reads as two tokens. A path is outside `owns`
+when no `Files owned` entry equals it or, for an entry ending in `/`, prefixes
+it: `scoped-cmd`'s match, no globs.
 
 Every `raise`, `defer` and `repair` appends one line to RUN_DIR/policy.log,
 `- [wave] policy: <run> <stop>: <ruling> (<flag> <value>) — <evidence>`, unless
@@ -57,8 +69,9 @@ that exact line is already there, so a resumed ruling leaves one line.
 
 Exit codes: 0 with the ruling on stdout; 3 usage, a bad flag value, an
 unreadable or malformed timing log, round file or plan, a red-team round that
-is not JSON once one fence is stripped, or an unwritable log. Never 1: this
-rules a stop and gates nothing.
+is not JSON once one fence is stripped, or an unwritable log. Never 1: a
+refused flag is a usage error like any other, and every answer that isn't a
+refusal is a ruling on stdout.
 
 Stdlib only. It imports run-state.py by path rather than copying from it, so
 the budget threshold and the plan table parse can't drift from the probe's.
@@ -80,6 +93,9 @@ CITATION = "writes outside a task's files"
 EXTENSION = re.compile(r"\w\.[A-Za-z][A-Za-z0-9]{0,7}$")
 LOCATION = re.compile(r"(?::[0-9]+){1,2}$|#L[0-9]+(?:-L?[0-9]+)?$")
 REDTEAM_RULED = re.compile(r" red-team round ([0-9]+): (?:repair|defer) ")
+ABBREVIATION = re.compile(r"(?:[A-Za-z]\.)+[A-Za-z]?")
+TRACEBACK = re.compile(r'File "[^"\n]*"')
+SCRATCH = re.compile(r"^(?:/private)?/var/folders/|/tmp\.[A-Za-z0-9]{6,}(?:/|$)")
 
 
 class Usage(Exception):
@@ -125,16 +141,22 @@ def check_flags(args):
     return out
 
 
+def append_line(path, line, existing):
+    try:
+        with open(path, "a", encoding="utf-8") as handle:
+            if existing and not existing.endswith("\n"):
+                handle.write("\n")
+            handle.write(line + "\n")
+    except OSError as e:
+        raise Usage([f"policy: {e.filename or path}: {e.strerror or e}"])
+
+
 def record(run_dir, stop, ruling, flag, evidence):
     path = Path(run_dir) / "policy.log"
     line = f"- [wave] policy: {Path(run_dir).resolve().name} {stop}: {ruling} ({flag}) — {evidence}"
     existing = rs.read_or_none(path) or ""
-    if line in existing.split("\n"):
-        return
-    with open(path, "a", encoding="utf-8") as handle:
-        if existing and not existing.endswith("\n"):
-            handle.write("\n")
-        handle.write(line + "\n")
+    if line not in existing.split("\n"):
+        append_line(path, line, existing)
 
 
 def cmd_flags(args):
@@ -182,41 +204,52 @@ def cmd_budget(args):
     stop = f"budget at step {args.at}"
     flag = f"--auto-budget {target!r}"
     if threshold < target:
-        try:
-            with open(args.timing, "a", encoding="utf-8") as handle:
-                if text and not text.endswith("\n"):
-                    handle.write("\n")
-                handle.write(f"budget-raised {target!r}\n")
-            record(args.run_dir, stop, f"raise {target!r}", flag, evidence)
-        except OSError as e:
-            raise Usage([f"policy: {e.filename}: {e.strerror or e}"])
-        print(f"raise {target!r}")
-        return 0
+        append_line(args.timing, f"budget-raised {target!r}", text)
+        record(args.run_dir, stop, f"raise {target!r}", flag, evidence)
+        # A lane already past R at its first stop would otherwise spend a full
+        # repair cycle over budget before the next check defers it.
+        if not rs.budget_over(text, target, now)[2]:
+            print(f"raise {target!r}")
+            return 0
     if args.at == "7":
-        try:
-            record(args.run_dir, stop, "defer", flag, evidence)
-        except OSError as e:
-            raise Usage([f"policy: {e.filename}: {e.strerror or e}"])
+        record(args.run_dir, stop, "defer", flag, evidence)
         print("defer")
         return 0
     print("ask")
     return 0
 
 
-def named_paths(text):
-    """Tokens of `text` that read as paths, by the docstring's heuristic."""
+def named_paths(text, roots=()):
+    """Tokens of `text` that read as paths, by the docstring's heuristic.
+
+    `roots` are the work tree's absolute spellings, stripped from a path under
+    one so it meets `owns` repo-relative."""
     paths = []
-    for token in text.replace("`", " ").replace("’", "'").split():
-        token = token.lstrip("([{<\"'*").rstrip(")]}>\"'*.,;:!?")
-        if token.endswith("'s"):
-            token = token[:-2].rstrip(")]}>\"'*.,;:!?")
-        token = LOCATION.sub("", token)
-        if token.startswith("./"):
-            token = token[2:]
-        if not token or "://" in token:
-            continue
-        if "/" in token or EXTENSION.search(token):
-            paths.append(token)
+    # Odd-numbered pieces of a backtick split sit inside a code span.
+    for piece, part in enumerate(TRACEBACK.sub(" ", text.replace("’", "'")).split("`")):
+        for token in part.split():
+            token = token.lstrip("([{<\"'*").rstrip(")]}>\"'*.,;:!?")
+            if token.endswith("'s"):
+                token = token[:-2].rstrip(")]}>\"'*.,;:!?")
+            token = LOCATION.sub("", token)
+            if not token or "://" in token or ABBREVIATION.fullmatch(token):
+                continue
+            anchored = piece % 2 or token[0] in "/~" or token.endswith("/") or "." in token
+            if not (EXTENSION.search(token) or ("/" in token and anchored)):
+                continue
+            if token.startswith("/"):
+                for root in roots:
+                    if token.startswith(root + "/"):
+                        token = token[len(root) + 1:]
+                        break
+                # Strip the root first: a work tree under a temp dir would
+                # otherwise be dropped as scratch.
+                if SCRATCH.search(token):
+                    continue
+            if token.startswith("./"):
+                token = token[2:]
+            if token:
+                paths.append(token)
     return paths
 
 
@@ -309,12 +342,14 @@ def cmd_sort(args):
     else:
         findings = redteam_findings(args.round_file)
     owns = load_owns(args.plan)
+    root = Path(args.root or ".")
+    roots = sorted({str(root.absolute()), str(root.resolve())})
 
     rulings = []  # (id, ruling, paths for the evidence)
     if args.kind == "triage":
         after = flags.get("defer_after")
         for fid, text in findings:
-            paths = named_paths(text)
+            paths = named_paths(text, roots)
             outside = [] if owns is None else [p for p in paths if not is_owned(p, owns)]
             if after is None or k < after:
                 rulings.append((fid, "keep", []))
@@ -328,9 +363,9 @@ def cmd_sort(args):
                 rulings.append((fid, "defer", paths))
     else:
         log = rs.read_or_none(Path(args.run_dir) / "policy.log") or ""
-        spent = any(int(m.group(1)) < k for m in REDTEAM_RULED.finditer(log))
+        spent = any(int(m.group(1)) == k - 1 for m in REDTEAM_RULED.finditer(log))
         for fid, text in findings:
-            paths = named_paths(text)
+            paths = named_paths(text, roots)
             # The smoke test's scratch copy deletes this guard to prove a run with
             # no --repair-class asks.
             if not klass or spent or owns is None:
@@ -347,19 +382,16 @@ def cmd_sort(args):
             rulings = [(fid, "ask", []) for fid, _, _ in rulings]
 
     stop = f"{'triage' if args.kind == 'triage' else 'red-team'} round {k}"
-    try:
-        for ruling in ("repair", "defer"):
-            picked = [(fid, paths) for fid, r, paths in rulings if r == ruling]
-            if not picked:
-                continue
-            if ruling == "defer" and args.kind == "triage":
-                flag = f"--defer-after {flags.get('defer_after')}"
-            else:
-                flag = f"--repair-class {klass}"
-            evidence = "; ".join(f"{fid} {', '.join(paths)}" if paths else fid for fid, paths in picked)
-            record(args.run_dir, stop, ruling, flag, evidence)
-    except OSError as e:
-        raise Usage([f"policy: {e.filename}: {e.strerror or e}"])
+    for ruling in ("repair", "defer"):
+        picked = [(fid, paths) for fid, r, paths in rulings if r == ruling]
+        if not picked:
+            continue
+        if ruling == "defer" and args.kind == "triage":
+            flag = f"--defer-after {flags.get('defer_after')}"
+        else:
+            flag = f"--repair-class {klass}"
+        evidence = "; ".join(f"{fid} {', '.join(paths)}" if paths else fid for fid, paths in picked)
+        record(args.run_dir, stop, ruling, flag, evidence)
     for fid, ruling, _ in rulings:
         print(f"{fid} {ruling}")
     return 0
@@ -392,6 +424,7 @@ def parse_args(argv):
     s.add_argument("--round", required=True)
     s.add_argument("--plan", required=True)
     s.add_argument("--run-dir", required=True)
+    s.add_argument("--root")
     policy_flags(s, ("repair-class", "defer-after"))
     s.set_defaults(func=cmd_sort)
     return parser.parse_args(argv)

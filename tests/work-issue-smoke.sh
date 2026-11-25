@@ -6945,6 +6945,22 @@ pl_expect b-under 0 under "1:1 review to build should read under"
 printf 'garbage\n' >"$u/bad.log"
 pl_run b-bad budget --timing "$u/bad.log" --at 7 --run-dir "$u" --auto-budget 4.0
 [[ "$(cat "$pl/b-bad.status")" == 3 ]] || pl_fail b-bad "a malformed timing log should exit 3"
+# Already past 4.0 at the first stop (ratio 5.0): the raise lands, and the
+# same call rules as over at 4.0, so no repair cycle runs over budget.
+b5="$pl/issue-10"
+mkdir -p "$b5"
+pl_timing 150 >"$b5/timing.log"
+pl_run b-past7 budget --timing "$b5/timing.log" --at 7 --run-dir "$b5" --auto-budget 4.0
+pl_expect b-past7 0 defer "a first stop already past the raised ratio at step 7 should raise and defer in one call"
+[[ "$(tail -1 "$b5/timing.log")" == "budget-raised 4.0" ]] || pl_fail b-past7 "the raise should still append budget-raised 4.0"
+[[ "$(cat "$b5/policy.log")" == $'- [wave] policy: issue-10 budget at step 7: raise 4.0 (--auto-budget 4.0) — build: 30m review: 150m ratio: 5.00 over: yes\n- [wave] policy: issue-10 budget at step 7: defer (--auto-budget 4.0) — build: 30m review: 150m ratio: 5.00 over: yes' ]] \
+  || pl_fail b-past7 "the raise and the defer should each leave one policy line, got [$(cat "$b5/policy.log")]"
+b4="$pl/issue-11"
+mkdir -p "$b4"
+pl_timing 150 >"$b4/timing.log"
+pl_run b-past4 budget --timing "$b4/timing.log" --at 4 --run-dir "$b4" --auto-budget 4.0
+pl_expect b-past4 0 ask "a first stop already past the raised ratio at step 4 should raise and then ask"
+[[ "$(tail -1 "$b4/timing.log")" == "budget-raised 4.0" && "$(pl_log_lines "$b4")" == 1 ]] || pl_fail b-past4 "the raise should be appended and recorded before the ask"
 
 # Sorting. a.py and docs/ are owned; /tmp/peer/a1.txt is not. Row 2 is row 1
 # with an unowned path added, which is the fourth criterion's pair.
@@ -6983,6 +6999,18 @@ pl_run s-adopted-class sort --kind triage --round-file "$pl/triage/round-3.md" -
 pl_expect s-adopted-class 0 $'1 keep\n2 keep\n3 keep\n4 keep' "with no plan and a class set, every row should keep"
 pl_run s-adopted sort --kind triage --round-file "$pl/triage/round-3.md" --round 3 --plan "$pl/no-plan.md" --run-dir "$pl/t-adopted" --defer-after 3
 pl_expect s-adopted 0 $'1 defer\n2 defer\n3 defer\n4 defer' "with no plan and no class, every row should defer"
+# Prose that only looks like a path: a P0 naming no path defers, and a
+# repo-relative unowned path still repairs.
+cat >"$pl/triage/round-5.md" <<'EOF'
+| # | Source | Finding | Severity | Scope | Reply |
+|---|---|---|---|---|---|
+| 1 | codex | P0: fails on valid input, e.g. an empty heading | P0 | in scope | |
+| 2 | codex | P0: the parser crashes and/or hangs on valid input | P0 | in scope | |
+| 3 | codex | The fix also rewrites src/z.py | P0 | in scope | |
+EOF
+mkdir -p "$pl/t-prose"
+pl_run s-prose sort --kind triage --round-file "$pl/triage/round-5.md" --round 5 --plan "$pl/plan.md" --run-dir "$pl/t-prose" --repair-class unowned-write --defer-after 3
+pl_expect s-prose 0 $'1 defer\n2 defer\n3 repair' "e.g. and and/or should read as prose, src/z.py as an unowned path"
 [[ ! -e "$pl/t-r2/policy.log" && ! -e "$pl/t-noflag/policy.log" ]] || pl_fail s-triage-noflag "keep should record nothing"
 
 # Red-team: the round is saved fenced, as redteam.md has the reproducer answer.
@@ -7006,7 +7034,7 @@ pl_run s-red-again sort --kind redteam --round-file "$pl/redteam/round-2.json" -
 pl_expect s-red-again 0 "$(cat "$pl/s-red.out")" "re-ruling the same round should not spend the grant"
 [[ "$(pl_log_lines "$r")" == 2 ]] || pl_fail s-red-again "a re-run should add no policy line"
 pl_run s-red-spent sort --kind redteam --round-file "$pl/redteam/round-2.json" --round 3 --plan "$pl/plan.md" --run-dir "$r" --repair-class unowned-write
-pl_expect s-red-spent 0 $'1 ask\n2 ask\n3 ask' "a later round after a ruled one should ask, since the grant is spent"
+pl_expect s-red-spent 0 $'1 ask\n2 ask\n3 ask' "the round after a ruled one should ask, since the streak's grant is spent"
 pl_run s-red-noflag sort --kind redteam --round-file "$pl/redteam/round-2.json" --round 2 --plan "$pl/plan.md" --run-dir "$pl/r-noflag"
 pl_expect s-red-noflag 0 $'1 ask\n2 ask\n3 ask' "red-team with no --repair-class should ask"
 pl_run s-red-adopted sort --kind redteam --round-file "$pl/redteam/round-2.json" --round 2 --plan "$pl/no-plan.md" --run-dir "$pl/r-noflag" --repair-class unowned-write
@@ -7015,6 +7043,31 @@ printf '%s\n' '{"verdicts": [{"claim": "x", "output": "revert rewrote /tmp/peer/
 pl_run s-red-cite sort --kind redteam --round-file "$pl/redteam/round-cite.json" --round 2 --plan "$pl/plan.md" --run-dir "$pl/r-cite" --repair-class unowned-write
 pl_expect s-red-cite 0 $'1 ask\n2 ask' "a pathless citation should make the whole red-team round ask"
 [[ ! -e "$pl/r-noflag/policy.log" && ! -e "$pl/r-cite/policy.log" ]] || pl_fail s-red-cite "ask should record nothing"
+# A grant spent at an older round belongs to an earlier failing streak, so
+# round 4 rules even though round 2 was ruled; round 3 above asked.
+pl_run s-red-streak sort --kind redteam --round-file "$pl/redteam/round-2.json" --round 4 --plan "$pl/plan.md" --run-dir "$r" --repair-class unowned-write
+pl_expect s-red-streak 0 "$(cat "$pl/s-red.out")" "a ruling two rounds back should not spend this streak's grant"
+# Pasted output names paths no task writes. The reproducer prints owned files
+# by absolute path under the work tree (the current directory by default),
+# tracebacks name the interpreter's files, and fixtures sit in mktemp dirs.
+cat >"$pl/redteam/round-out.json" <<EOF
+{"verdicts": [
+  {"claim": "a.py keeps mode 0644", "output": "stat $PWD/a.py: mode 0755", "verdict": "NOT_REPRODUCED"},
+  {"claim": "the parser accepts an empty heading", "output": "Traceback (most recent call last):\\n  File \\"/usr/lib/python3.12/re.py\\", line 177, in compile", "verdict": "NOT_REPRODUCED"},
+  {"claim": "the fixture builds", "output": "wrote /tmp/tmp.Ab12cd34ef/out.txt", "verdict": "NOT_REPRODUCED"},
+  {"claim": "revert restores only owned files", "output": "revert rewrote /tmp/peer/a1.txt", "verdict": "NOT_REPRODUCED"}
+]}
+EOF
+mkdir -p "$pl/r-out" "$pl/r-root" "$pl/r-noroot"
+pl_run s-red-out sort --kind redteam --round-file "$pl/redteam/round-out.json" --round 2 --plan "$pl/plan.md" --run-dir "$pl/r-out" --repair-class unowned-write
+pl_expect s-red-out 0 $'1 defer\n2 defer\n3 defer\n4 repair' "an owned file by absolute path, a traceback path and a mktemp path should defer; the unowned write should repair"
+# /srv/wt, not a dir under $tmp: $TMPDIR is macOS's /var/folders, which the
+# sort drops as scratch, so the no-root case would defer for the wrong reason.
+printf '%s\n' '{"verdicts": [{"claim": "a.py keeps mode 0644", "output": "stat /srv/wt/a.py: mode 0755", "verdict": "NOT_REPRODUCED"}]}' >"$pl/redteam/round-root.json"
+pl_run s-red-root sort --kind redteam --round-file "$pl/redteam/round-root.json" --round 2 --plan "$pl/plan.md" --run-dir "$pl/r-root" --repair-class unowned-write --root /srv/wt
+pl_expect s-red-root 0 "1 defer" "--root should strip the work tree from an owned file's absolute path"
+pl_run s-red-noroot sort --kind redteam --round-file "$pl/redteam/round-root.json" --round 2 --plan "$pl/plan.md" --run-dir "$pl/r-noroot" --repair-class unowned-write
+pl_expect s-red-noroot 0 "1 repair" "without --root, a path under another tree should stay unowned"
 
 # Flags and unreadable input: every refusal is exit 3.
 pl_run f-ok flags --repair-class unowned-write --defer-after 3 --auto-budget 4

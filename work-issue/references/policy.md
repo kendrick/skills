@@ -23,7 +23,7 @@ work-issue/scripts/policy.py budget --timing RUN_DIR/timing.log --now "$(date -u
 `<step>` is the step the stop sits in: 4 for a Step 4 check and resume rows 10, 11, and 20; 7 for a Step 7 check and row 16; 8 for a Step 8 check and row 17. Act on the line it prints:
 
 - `under`: the threshold already stands raised. Continue.
-- `raise R`: the script appended `budget-raised R` to `timing.log`, so the raise happens once. Continue without a question.
+- `raise R`: the script appended `budget-raised R` to `timing.log`, so the raise happens once, and the run reads under at R. Continue without a question. A run already over at R at this stop gets the raise appended and recorded too, and the same call prints `defer` or `ask` instead.
 - `defer`: over at R or more at step 7. Write every in-scope row of the newest triage round not yet queued as `in scope; queued: policy: --auto-budget R spent` in its Scope cell and append it to `queue.md` with that reason as Outside-because, as Step 6's review round cap paragraph writes a deferral. Then re-probe: row 17's all-queued leg takes the run to Step 8, which posts the deferred-findings comment and ends at item 5's final report.
 - `ask`: the budget stop as today. Past the raised ratio at steps 4 and 8 there is no unqueued row to defer, and skipping a red-team round or a re-fired review would ship claims nobody reproduced.
 
@@ -32,12 +32,12 @@ work-issue/scripts/policy.py budget --timing RUN_DIR/timing.log --now "$(date -u
 Where two red-team rounds fail in a row, at Step 4 or at Step 8 item 1's red-team, run this on the second failed round k before stopping:
 
 ```
-work-issue/scripts/policy.py sort --kind redteam --round-file RUN_DIR/redteam/round-<k>.json --round k --plan RUN_DIR/plan.md --run-dir RUN_DIR [--repair-class C]
+work-issue/scripts/policy.py sort --kind redteam --round-file RUN_DIR/redteam/round-<k>.json --round k --plan RUN_DIR/plan.md --run-dir RUN_DIR --root WORKTREE [--repair-class C]
 ```
 
 It prints one `<id> <ruling>` line per finding: each `NOT_REPRODUCED` verdict, id its `n` or its 1-based position, and each `holds: false` left check as `left-<n>`.
 
-- Every line reads `ask`: stop with the evidence, as today. That's every run without `--repair-class`, a run with no plan, and a later round once `policy.log` records a red-team ruling for an earlier one, because the run gets one granted round.
+- Every line reads `ask`: stop with the evidence, as today. That's every run without `--repair-class`, a run with no plan, and round k once `policy.log` records a red-team ruling for round k-1, because each failing streak gets one granted round. A ruling for an older round belongs to an earlier streak, so a grant spent at Step 4 leaves Step 8's red-team stops their own.
 - `repair`: dispatch the repair for those findings as Step 4 item 4 does, then run round k+1 over them.
 - `defer`: append the finding to `queue.md` with Source `red-team`, Finding the claim quoted with its command, Outside because `policy: --repair-class C`, a `file-issue` Recommendation, and Status `queued`, and name it in the pull-request body's "Left out" section with its command. Where every line reads `defer`, the run goes on to Step 5.
 
@@ -46,7 +46,7 @@ It prints one `<id> <ruling>` line per finding: each `NOT_REPRODUCED` verdict, i
 Where the invocation carries `--defer-after K` and Step 6 writes triage round k with k at or above K, run this once the round's rows are written and before the review round cap reads them:
 
 ```
-work-issue/scripts/policy.py sort --kind triage --round-file RUN_DIR/triage/round-<k>.md --round k --plan RUN_DIR/plan.md --run-dir RUN_DIR [--repair-class C] [--defer-after K]
+work-issue/scripts/policy.py sort --kind triage --round-file RUN_DIR/triage/round-<k>.md --round k --plan RUN_DIR/plan.md --run-dir RUN_DIR --root WORKTREE [--repair-class C] [--defer-after K]
 ```
 
 It prints one line per in-scope row not yet queued, id the row's `#`.
@@ -59,7 +59,7 @@ A run with no plan, which an adopted run is, has no `owns` to sort against: ever
 
 ## The sort
 
-A finding is in the `unowned-write` class when it names a path outside `owns`. It names a path when a token of its text, backticks dropped, contains `/` or ends in a file extension. A red-team finding's text is its `claim`, `output`, and `caller.output`. A path is outside `owns` when no `Files owned` entry of the plan's `## Waves` table equals it or, for an entry ending in `/`, prefixes it: `scoped-cmd`'s match, no globs.
+A finding is in the `unowned-write` class when it names a path outside `owns`. It names a path when a token of its text ends in a file extension, or contains `/` and is backticked, starts with `/`, `~`, or `./`, ends in `/`, or holds a dot, so `and/or` and abbreviations such as `e.g.` read as prose. A red-team finding's text is its `claim`, `output`, and `caller.output`. Pasted output names paths no task writes, so the sort strips WORKTREE, given as `--root` and the current directory by default, from an absolute path under it, then drops a Python traceback's `File "..."` path, a path under macOS's `/var/folders/`, and a path with a default `mktemp` component (`tmp.` and six or more letters or digits). A path is outside `owns` when no `Files owned` entry of the plan's `## Waves` table equals it or, for an entry ending in `/`, prefixes it: `scoped-cmd`'s match, no globs.
 
 | Finding | Triage, from round K | Red-team, with `--repair-class` |
 | --- | --- | --- |
@@ -69,7 +69,7 @@ A finding is in the `unowned-write` class when it names a path outside `owns`. I
 
 A citation that names no path is the one finding the script can't sort, since only a reader can tell whether it describes lost data. It never resolves to `defer`: triage keeps it for repair, and the red-team stop asks.
 
-The path test is a heuristic, in the sense of the **Heuristic scripts.** rule: prose such as `and/or` reads as a path, and a path holding a space reads as two tokens. Both misreadings fall toward `repair`. A finding against the sort built on a constructed token is P1.
+The path test is a heuristic, in the sense of the **Heuristic scripts.** rule, and it misreads both ways: a bare repo-relative directory with no dot and no backticks, such as src/lib, reads as prose and can sort a real unowned write `defer`, a one-letter name with a one-letter extension such as a.c reads as an abbreviation, and a path holding a space reads as two tokens. Every `defer` still reaches the deferred-findings comment, where a human rules on it. A finding against the sort built on a constructed token is P1.
 
 ## `policy.log`
 
