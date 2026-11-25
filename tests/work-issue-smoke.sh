@@ -1114,7 +1114,6 @@ require_text work-issue/SKILL.md "With VERIFY_CMD \`absent\` nothing runs, and t
 require_text work-issue/SKILL.md "VERIFY_CMD green against the latest baseline at that SHA, or VERIFY_CMD \`absent\`;"
 require_text work-issue/SKILL.md "Then run VERIFY_CMD and read it by VERIFY_CMD green. Red here means the rebase brought a failure the latest baseline lacks:"
 require_text work-issue/SKILL.md "then VERIFY_CMD green—then commit."
-require_text work-issue/SKILL.md "over the repair's reported \`files_changed\`, VERIFY_CMD green, then \`code-review\` against BASE_SHA"
 require_text work-issue/SKILL.md "rebase, rewrite \`RUN_DIR/base_sha\`, verify to VERIFY_CMD green, write \`pushed_at\`, push"
 refute_text work-issue/SKILL.md "VERIFY_CMD green at that SHA"
 refute_text work-issue/SKILL.md "Red here after a green Step 4"
@@ -1125,11 +1124,61 @@ require_text _maintenance/work-issue/RATIONALE.md "| 150 | Once Step 2's first w
 # repair brought back still sat in the last wave file, so the later gate
 # passed the regression and the run pushed it.
 require_text work-issue/SKILL.md "Between that green run and the commit, save the run to \`RUN_DIR/baseline-repair-<n>.txt\` in \`baseline.txt\`'s format, \`exit: <status>\` and then the output tail, n one past the highest number already present, 1 where none is."
-require_text work-issue/SKILL.md "Every repair gate does this, Step 4's, Step 5 item 2's, and Step 7's included, and with VERIFY_CMD \`absent\` it writes nothing."
-require_text work-issue/SKILL.md "Save the green VERIFY_CMD run as the next \`baseline-repair-<n>.txt\`, as Step 3's repair gate does, then commit."
+require_text work-issue/SKILL.md "Every repair gate that runs the full VERIFY_CMD does this, Step 4's, Step 5 item 2's, and Step 7's included; the scoped gate Step 4 item 4 defines saves nothing, and with VERIFY_CMD \`absent\` no gate writes anything."
+require_text work-issue/SKILL.md "Save a green full VERIFY_CMD run as the next \`baseline-repair-<n>.txt\`, as Step 3's repair gate does, then commit."
 require_text work-issue/references/resume.md "It never reads \`baseline-repair-<n>.txt\` either"
 require_text work-issue/README.md "Each wave's gate and each repair's gate saves the verification run that passed it as the new baseline"
-require_text _maintenance/work-issue/RATIONALE.md "| 151 | Every repair gate that passes VERIFY_CMD green, at Steps 3, 4, 5 item 2, and 7, saves that run to \`baseline-repair-<n>.txt\` before its commit"
+require_text _maintenance/work-issue/RATIONALE.md "| 151 | Every repair gate that passes a full VERIFY_CMD run green, at Steps 3, 4, 5 item 2, and 7, saves that run to \`baseline-repair-<n>.txt\` before its commit, n one past the highest present. A scoped run at Step 4 or Step 7 saves none (row 217)."
+# Steps 4 and 7 gate a repair on the plan's done-when commands for the tasks
+# that own its files_changed, since the push re-runs the full VERIFY_CMD minutes
+# later anyway (#368). A scoped run covers part of the suite, so saving it as a
+# baseline would make the next full run read the rest as new failures.
+require_text work-issue/SKILL.md "Re-gate the repair as Step 3's repair is, with the **scoped gate** in place of its VERIFY_CMD run: \`work-issue/scripts/run-state.py scoped-cmd --plan RUN_DIR/plan.md --report RUN_DIR/reports/redteam-repair-<k>.json\`."
+require_text work-issue/SKILL.md "A task's command is the first backticked span in its Done when cell whose first word resolves on PATH."
+require_text work-issue/SKILL.md "One command prints as written, and two or more print as \`sh -c '<cmd>'\` joined by \` && \`, so the line fails whenever any task's command fails"
+require_text work-issue/SKILL.md "A scoped run saves no \`baseline-repair-<n>.txt\`, because its output covers a fraction of the suite"
+require_text work-issue/SKILL.md "a \`files_changed\` path no task owns, a matched task whose done-when names no command, a matched task whose Done when cell holds an unclosed backtick span because a \`|\` inside the span split the cell, a plan with no \`## Waves\` task rows, or an empty or missing \`files_changed\`. On exit 1, gate on VERIFY_CMD green and save \`baseline-repair-<n>.txt\` as Step 3 says."
+require_text work-issue/SKILL.md "An adopted run has no plan, so it never calls \`scoped-cmd\` and gates on VERIFY_CMD."
+require_text work-issue/SKILL.md "Exit 3 means the plan or report is unreadable or the report is not JSON: stop the run quoting its stderr."
+require_text work-issue/SKILL.md "The repair commit's body carries one \`Gate: <command>\` line naming the command the gate ran, the scoped command or VERIFY_CMD"
+require_text work-issue/SKILL.md "then Step 4 item 4's scoped gate with \`--report RUN_DIR/reports/repair-<k>.json\`, then \`code-review\` against BASE_SHA"
+require_text work-issue/SKILL.md "It falls back to VERIFY_CMD green when the latest baseline's \`exit:\` line reads anything but \`exit: 0\`, when a changed path is owned by no task, when a matched task's done-when names no command, when the run is adopted and has no plan, and on every other \`scoped-cmd\` exit 1. A scoped run saves no \`baseline-repair-<n>.txt\`."
+require_text work-issue/SKILL.md "each repair commit carries its \`Gate: <command>\` line, and each one gated on the full VERIFY_CMD has the \`baseline-repair-<n>.txt\` that gate saved"
+require_text work-issue/SKILL.md "\`work-issue/scripts/run-state.py scoped-cmd --plan PATH --report PATH\`"
+# The bare rule and its one exception travel together (#368 confirmation): a
+# squash-only run keeps the Gate: line, so neither half can move alone.
+require_text work-issue/SKILL.md "On \`bare\`, the message is one Conventional Commits subject in the repo's log style with no body, except that a Step 4 or Step 7 repair commit carries its \`Gate: <command>\` line as its only body line, and it skips \`technical-writing\`"
+require_text work-issue/references/resume.md "a repair gate that runs the full VERIFY_CMD saves one before its commit, a scoped one saves none"
+# A scoped pass on a red latest baseline could clear a failure without saving the
+# fix, so a later repair restoring it read green (PR #476, r4686697858).
+require_text work-issue/SKILL.md "Before calling \`scoped-cmd\`, read the latest baseline's \`exit:\` line. Where it reads anything but \`exit: 0\`, skip \`scoped-cmd\` and take its exit 1 fallback below, because a scoped pass that clears a failure that baseline holds saves no file recording the fix"
+require_text work-issue/SKILL.md "writes none and runs only on a latest baseline reading \`exit: 0\`"
+require_text work-issue/README.md "and the full suite when a changed file belongs to no task or the newest baseline is red."
+require_text _maintenance/work-issue/RATIONALE.md "They fall back to VERIFY_CMD on a latest baseline whose \`exit:\` line is not \`exit: 0\`, a changed path no task owns,"
+require_text work-issue/README.md "That narrower run saves no baseline, the repair commit's \`Gate:\` line names the command that ran, and the full suite still runs before the push."
+require_text _maintenance/work-issue/RATIONALE.md "| 217 | Step 4's and Step 7's repair gates run the command \`run-state.py scoped-cmd\` prints in place of VERIFY_CMD"
+require_text _maintenance/work-issue/RATIONALE.md "No run has been timed with the change, so this stays \`[P]\` until one is. | [P] |"
+# Step 7 no longer gates on VERIFY_CMD green unconditionally.
+step7_old="over the repair's reported \`files_changed\`, VERIFY_CMD green, then \`code-review\` against BASE_SHA"
+refute_text work-issue/SKILL.md "$step7_old"
+require_text _maintenance/work-issue/RATIONALE.md "| Step 7's repair gate requiring VERIFY_CMD green whatever the repair touched | Row 217."
+# A relative done-when span resolves against scoped-cmd's cwd, both for its PATH check and when run.
+require_text work-issue/SKILL.md "Run it, and the command it prints, from the work tree, where a relative path in a Done when span resolves."
+# The refute has to bite: restore the old Step 7 sentence in a scratch copy and
+# the Step 7 pins must fail on it.
+step7_new="over the repair's reported \`files_changed\`, then Step 4 item 4's scoped gate with \`--report RUN_DIR/reports/repair-<k>.json\`, then \`code-review\` against BASE_SHA"
+require_text work-issue/SKILL.md "$step7_new"
+step7_copy="$tmp/step7-old-SKILL.md"
+python3 -c 'import sys; s=open(sys.argv[1]).read(); assert s.count(sys.argv[2])==1; open(sys.argv[4],"w").write(s.replace(sys.argv[2],sys.argv[3]))' \
+  work-issue/SKILL.md "$step7_new" "$step7_old" "$step7_copy"
+if (refute_text "$step7_copy" "$step7_old") 2>/dev/null; then
+  echo "the Step 7 refute should fail on a SKILL.md copy with the old Step 7 sentence restored" >&2
+  exit 1
+fi
+if (require_text "$step7_copy" "$step7_new") 2>/dev/null; then
+  echo "the Step 7 scoped-gate pin should fail on a SKILL.md copy with the old Step 7 sentence restored" >&2
+  exit 1
+fi
 
 # --- The cut features. Each sounds reasonable on its own, and each has a row
 # in the RATIONALE ledger's Deliberately Not Built table. Applied across
@@ -5038,6 +5087,171 @@ vc_case "$vc_dir/missing.md"
 require_text work-issue/SKILL.md "run-state.py verify-cmd --plan"
 require_text work-issue/SKILL.md "where that exits 3, the plan is unreadable, so stop the run quoting the script's stderr"
 require_text work-issue/SKILL.md "an adopted run has no plan, so it never calls \`verify-cmd\` and harvests"
+
+# --- #368: scoped-cmd ---
+# A repair gate runs the done-when commands of the tasks owning the files the
+# repair changed, not the full VERIFY_CMD. Anything the script cannot place
+# falls back to exit 1, so a wrong guess costs a full run and never a skipped one.
+sc_plan() {
+  printf '# Plan\n\n## Waves\n\n| Wave | Task | Files owned | Model | Done when | Constraints |\n|---|---|---|---|---|---|\n'
+  printf '| 0 | one | a.py | sonnet | `bash tests/a.sh` exits 0 | none |\n'
+  printf '| 0 | two | docs/ | sonnet | `bash tests/d.sh` exits 0 | none |\n'
+  printf '%s\n' "$1"
+  printf '\n## After\n\n| 9 | late | z.py | sonnet | `bash tests/z.sh` | none |\n'
+}
+sc_case() {
+  set +e
+  python3 "$run_state" scoped-cmd --plan "$1" --report "$2" >"$sc_dir/out" 2>"$sc_dir/err"
+  sc_status=$?
+  set -e
+}
+sc_fail() {
+  echo "#368: $1, got status $sc_status: $(cat "$sc_dir/out" "$sc_dir/err")" >&2
+  exit 1
+}
+sc_expect_fallback() {
+  [[ "$sc_status" == "1" && ! -s "$sc_dir/out" && "$(wc -l <"$sc_dir/err" | tr -d ' ')" == "1" ]] \
+    && grep -q '^run-state: scoped-cmd:' "$sc_dir/err" || sc_fail "$1 should exit 1 with one scoped-cmd stderr line"
+}
+sc_dir="$(mktemp -d "$tmp/sc.XXXXXX")"
+sc_plan '' >"$sc_dir/plan.md"
+
+# 1. Two owning tasks print both commands once, in table order.
+printf '{"files_changed": ["docs/x.md", "a.py"]}\n' >"$sc_dir/r.json"
+sc_case "$sc_dir/plan.md" "$sc_dir/r.json"
+[[ "$sc_status" == "0" && "$(cat "$sc_dir/out")" == "sh -c 'bash tests/a.sh' && sh -c 'bash tests/d.sh'" ]] || sc_fail "two owners should print both commands in table order"
+
+# 2. A third task repeating the first's command is dropped.
+sc_plan '| 0 | three | b.py | sonnet | `bash tests/a.sh` exits 0 | none |' >"$sc_dir/plan3.md"
+printf '{"files_changed": ["a.py", "b.py"]}\n' >"$sc_dir/r3.json"
+sc_case "$sc_dir/plan3.md" "$sc_dir/r3.json"
+[[ "$sc_status" == "0" && "$(cat "$sc_dir/out")" == "bash tests/a.sh" ]] || sc_fail "a repeated command should print once"
+
+# 3. Falsifier, files side: one unowned path in files_changed flips exit 0 to 1.
+printf '{"files_changed": ["a.py", "z.py"]}\n' >"$sc_dir/r.json"
+sc_case "$sc_dir/plan.md" "$sc_dir/r.json"
+sc_expect_fallback "an unowned files_changed path"
+
+# 4. Falsifier, finding side: the files_changed of case 1 plus a finding, a
+# left entry and a summary that all name the unowned z.py leave the output as
+# case 1 printed it. The fields are present on purpose; omitting them would
+# pass a script that read them and ignored the result.
+printf '{"files_changed": ["a.py"], "finding": "z.py is broken", "summary": "fixed z.py", "left": [{"what": "z.py", "why": "z.py"}], "plan_concerns": [{"found": "z.py"}]}\n' >"$sc_dir/r.json"
+sc_case "$sc_dir/plan.md" "$sc_dir/r.json"
+[[ "$sc_status" == "0" && "$(cat "$sc_dir/out")" == "bash tests/a.sh" ]] || sc_fail "unowned files named outside files_changed should not move the command"
+
+# 5. A matched task whose done-when has no command falls back.
+sc_plan '| 0 | three | c.py | sonnet | `c.py` exists | none |' >"$sc_dir/plan5.md"
+printf '{"files_changed": ["c.py"]}\n' >"$sc_dir/r.json"
+sc_case "$sc_dir/plan5.md" "$sc_dir/r.json"
+sc_expect_fallback "a done-when with no command"
+
+# 5b. A row cut off before its Done when cell is still the owner, so the
+# fallback names the missing command rather than calling c.py unowned.
+sc_plan '| 0 | three | c.py |' >"$sc_dir/plan5b.md"
+sc_case "$sc_dir/plan5b.md" "$sc_dir/r.json"
+sc_expect_fallback "a row with no Done when cell"
+grep -q 'names no command' "$sc_dir/err" || sc_fail "a row with no Done when cell should name the missing command"
+
+# 5c. A slashless owner is the same directory as its slashed spelling (#162),
+# and still doesn't swallow a sibling that shares its prefix.
+sc_plan '| 0 | four | lib | sonnet | `bash tests/l.sh` exits 0 | none |' >"$sc_dir/plan5c.md"
+printf '{"files_changed": ["lib/x.py"]}\n' >"$sc_dir/r.json"
+sc_case "$sc_dir/plan5c.md" "$sc_dir/r.json"
+[[ "$sc_status" == "0" && "$(cat "$sc_dir/out")" == "bash tests/l.sh" ]] || sc_fail "a slashless owner should own the files under it"
+printf '{"files_changed": ["lib-extra/x.py"]}\n' >"$sc_dir/r.json"
+sc_case "$sc_dir/plan5c.md" "$sc_dir/r.json"
+sc_expect_fallback "a sibling sharing the owner's prefix"
+
+# 6. Empty and missing files_changed fall back.
+printf '{"files_changed": []}\n' >"$sc_dir/r.json"
+sc_case "$sc_dir/plan.md" "$sc_dir/r.json"
+sc_expect_fallback "an empty files_changed"
+printf '{"summary": "x"}\n' >"$sc_dir/r.json"
+sc_case "$sc_dir/plan.md" "$sc_dir/r.json"
+sc_expect_fallback "a missing files_changed"
+
+# 7. A plan with no ## Waves task rows falls back.
+printf '# Plan\n\n- Own only: a.py\n' >"$sc_dir/planx.md"
+printf '{"files_changed": ["a.py"]}\n' >"$sc_dir/r.json"
+sc_case "$sc_dir/planx.md" "$sc_dir/r.json"
+sc_expect_fallback "a plan with no Waves task rows"
+
+# 7b. The printed line fails whenever any task's check fails, whatever shell
+# operator a later span holds. Joined bare, `false && true ; true` and
+# `false && true &` exit 0. No `|` case: the Waves parser splits cells on
+# every `|`, so a `||` never reaches scoped-cmd.
+# Each case runs the line under sh -c, and under zsh and dash where they're on
+# PATH, since the gate runs it in whatever shell the orchestrator has. The
+# assertion is on each shell's exit, not on the script's spelling.
+sc_runs() {
+  printf '# Plan\n\n## Waves\n\n| Wave | Task | Files owned | Model | Done when | Constraints |\n|---|---|---|---|---|---|\n' >"$sc_dir/plan7b.md"
+  printf '| 0 | one | f.py | sonnet | `%s` | none |\n| 0 | two | g.py | sonnet | `%s` | none |\n' "$1" "$2" >>"$sc_dir/plan7b.md"
+  printf '{"files_changed": ["f.py", "g.py"]}\n' >"$sc_dir/r7b.json"
+  sc_case "$sc_dir/plan7b.md" "$sc_dir/r7b.json"
+  [[ "$sc_status" == "0" ]] || sc_fail "done-whens '$1' and '$2' should print a command"
+  for sc_sh in sh zsh dash; do
+    command -v "$sc_sh" >/dev/null || continue
+    set +e
+    "$sc_sh" -c "$(cat "$sc_dir/out")" >/dev/null 2>&1
+    sc_ran=$?
+    set -e
+    [[ "$sc_ran" == "$3" ]] || sc_fail "done-whens '$1' and '$2' printed a line that exited $sc_ran under $sc_sh -c, want $3"
+  done
+}
+sc_runs false 'true ; true' 1
+sc_runs false 'true &' 1
+sc_runs false 'true # note' 1
+sc_runs 'true ; false' true 1
+# dash and zsh ignore `set -e` inside a subshell left of `&&`, so this exited
+# 0 there when each span was wrapped as `(eval 'cmd')`.
+sc_runs 'true ; set -e ; false ; true' true 1
+# Falsifier: the wrapper must still pass when every check passes, or a
+# line that always fails would clear the cases above.
+sc_runs 'true ; true' 'true # note' 0
+# A lone command prints as written, so the Gate: line reads as the plan does.
+printf '# Plan\n\n## Waves\n\n| Wave | Task | Files owned | Model | Done when | Constraints |\n|---|---|---|---|---|---|\n| 0 | one | f.py | sonnet | `true ; true` | none |\n' >"$sc_dir/plan7c.md"
+printf '{"files_changed": ["f.py"]}\n' >"$sc_dir/r7c.json"
+sc_case "$sc_dir/plan7c.md" "$sc_dir/r7c.json"
+[[ "$sc_status" == "0" && "$(cat "$sc_dir/out")" == "true ; true" ]] || sc_fail "a lone command should print as written"
+
+# 7d. A `|` inside a span splits the Done when cell, so the span arrives cut.
+# The cut alone already names no command, which is why the cause is grepped.
+# The second plan is the falsifier: its whole first span would otherwise be
+# the command, and the cut span after it would go unrun.
+printf '{"files_changed": ["c.py"]}\n' >"$sc_dir/r7d.json"
+for sc_cell in '`true || false` exits 0' '`true` then `true | false` exits 0'; do
+  sc_plan "| 0 | three | c.py | sonnet | $sc_cell | none |" >"$sc_dir/plan7d.md"
+  sc_case "$sc_dir/plan7d.md" "$sc_dir/r7d.json"
+  sc_expect_fallback "a Done when cell cut by a | ($sc_cell)"
+  grep -q 'unclosed backtick span' "$sc_dir/err" || sc_fail "a Done when cell cut by a | ($sc_cell) should name the unclosed span"
+done
+
+# 8. Exit 3: an unreadable report, a non-JSON report, and an unreadable plan.
+sc_case "$sc_dir/plan.md" "$sc_dir/missing.json"
+[[ "$sc_status" == "3" && ! -s "$sc_dir/out" ]] || sc_fail "a missing report should exit 3"
+printf 'not json\n' >"$sc_dir/bad.json"
+sc_case "$sc_dir/plan.md" "$sc_dir/bad.json"
+[[ "$sc_status" == "3" && ! -s "$sc_dir/out" ]] || sc_fail "a non-JSON report should exit 3"
+sc_case "$sc_dir/missing.md" "$sc_dir/r.json"
+[[ "$sc_status" == "3" && ! -s "$sc_dir/out" ]] || sc_fail "a missing plan should exit 3"
+
+# 9. worker-prompt.md asks for one fenced json block saved verbatim, so a
+# fenced report is the well-formed case. Prose around the fence still exits 3,
+# as it stays null for a red-team round.
+printf '```json\n{"files_changed": ["a.py"]}\n```\n' >"$sc_dir/fenced.json"
+printf '```\n{"files_changed": ["a.py"]}\n```\n' >"$sc_dir/bare.json"
+for sc_r in fenced bare; do
+  sc_case "$sc_dir/plan.md" "$sc_dir/$sc_r.json"
+  [[ "$sc_status" == "0" && "$(cat "$sc_dir/out")" == "bash tests/a.sh" ]] || sc_fail "a $sc_r-fenced report should print the owning task's command"
+done
+# A raw tab from pasted output inside verify_output still parses.
+printf '{"files_changed": ["a.py"], "verify_output": "ok\t1"}\n' >"$sc_dir/ctrl.json"
+sc_case "$sc_dir/plan.md" "$sc_dir/ctrl.json"
+[[ "$sc_status" == "0" && "$(cat "$sc_dir/out")" == "bash tests/a.sh" ]] || sc_fail "a raw control char in verify_output should not stop the gate"
+printf 'Report:\n```json\n{"files_changed": ["a.py"]}\n```\n' >"$sc_dir/prose.json"
+sc_case "$sc_dir/plan.md" "$sc_dir/prose.json"
+[[ "$sc_status" == "3" && ! -s "$sc_dir/out" ]] || sc_fail "prose around a fenced report should exit 3"
 require_text work-issue/SKILL.md "Name VERIFY_CMD to \`divvy-up\` as the verify command, so its Step 3 skips its own repo-disk resolution and its Step 6 gate runs it."
 require_text work-issue/SKILL.md "name VERIFY_CMD to it again as the verify command at every wave it continues."
 require_text work-issue/SKILL.md "with \`--verify-cmd\` set to VERIFY_CMD."

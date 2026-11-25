@@ -9,6 +9,7 @@
     work-issue/scripts/run-state.py adopt M --pr-json FILE --bundle FILE --run-dir DIR --root ROOT --default DEFAULT --invoker LOGIN [--max-review-rounds R] [--dry-run]
     work-issue/scripts/run-state.py reuse-baseline --wave-baseline PATH --base-sha SHA --install CMD --verify CMD --out PATH
     work-issue/scripts/run-state.py verify-cmd --plan PATH
+    work-issue/scripts/run-state.py scoped-cmd --plan PATH --report PATH
 
 Neither `review` nor `phase` is a gate. `review` answers `findings`, `cleared`, or
 `pending` on its first stdout line, then lists every item that bore on the
@@ -68,11 +69,26 @@ grows from A+B to A+B+C leaves a lane's gate where it was. It exits 1 with one
 `run-state: verify-cmd:` stderr line when the plan has no such line or the line
 has no backticked span, and Step 1 falls back to the harvested VERIFY_CMD.
 
-Exit codes: 0 with an answer on stdout; 1 only from `adopt`, `reuse-baseline`
-and `verify-cmd`, as above; 3 usage, a `gh` failure, an unwritable `--save`
+`scoped-cmd` prints the done-when command of every `## Waves` task that owns a
+path in the repair report's `files_changed`, in table order, repeats dropped. One
+command prints as written; two or more print as `sh -c '<cmd>'` joined by
+` && `, so a `;`, `&` or `#` inside one task's span can't let the line pass
+after another task's check fails. A task's command is the first backticked
+span in its Done when cell whose first word resolves on PATH, so
+`` `a.py` exists `` names none. It reads `files_changed` and nothing else,
+never the finding or `left`, so a report that merely mentions an unowned
+file cannot move the answer. It exits 1 with one `run-state: scoped-cmd:`
+stderr line, and the gate runs VERIFY_CMD instead, when a changed path
+matches no task, a matched task names no command, a matched task's Done when
+cell has an unclosed backtick span (a `|` inside the span splits the cell),
+the plan has no task rows, or `files_changed` is empty or missing.
+
+Exit codes: 0 with an answer on stdout; 1 only from `adopt`, `reuse-baseline`,
+`verify-cmd` and `scoped-cmd`, as above; 3 usage, a `gh` failure, an unwritable `--save`
 path, a `reuse-baseline` --out with no directory, or input this script cannot
 read (an unparseable bundle, a bundle missing a top-level key, a probe missing
-a field, a wave baseline or plan that cannot be read). Argparse supplies 2 for a
+a field, a wave baseline, plan or report that cannot be read, or a report that is not JSON once one
+enclosing fence is stripped). Argparse supplies 2 for a
 mistyped flag, except under `probe` and `adopt`, where it is 3 too,
 because the issue that asked for `probe` asked for the validator convention.
 
@@ -83,6 +99,8 @@ import fnmatch
 import json
 import os
 import re
+import shlex
+import shutil
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -1595,10 +1613,11 @@ def owed_scope(text):
     return text.startswith("inscope") and not text.startswith("inscope;queued:")
 
 
-def waves_rows(ctx):
+def waves_rows(text):
     """The `## Waves` table's lines and no others. The table ends at its first
-    non-table line, where the vendored parser ends it."""
-    text = read_or_none(ctx.path("plan.md"))
+    non-table line, where the vendored parser ends it. Takes plan text rather
+    than ctx so `scoped-cmd`, which reads a plan path with no RUN_DIR, parses
+    the table the gatherers parse."""
     if text is None:
         return []
     rows = []
@@ -1618,18 +1637,20 @@ def waves_rows(ctx):
     return rows
 
 
-def wave_tasks_rows(ctx):
-    """`(wave, task, owned paths)` per task row, as the vendored parser reads
-    the first three cells: each loses only its outer spaces and tabs, so
-    `my task` and `docs/my notes.md` keep theirs, and paths split on commas."""
+def wave_tasks_rows(text):
+    """`(wave, task, owned paths, done when)` per task row, as the vendored
+    parser reads the cells: each loses only its outer spaces and tabs, so
+    `my task` and `docs/my notes.md` keep theirs, and paths split on commas.
+    A row with no Done when cell reads as an empty one."""
     tasks = []
-    for line in waves_rows(ctx):
+    for line in waves_rows(text):
         cells = [c.strip(" \t") for c in line.split("|")]
         wave = cells[1] if len(cells) > 1 else ""
         task = cells[2] if len(cells) > 2 else ""
         owned = re.sub(r"[ \t]*,[ \t]*", ",", cells[3] if len(cells) > 3 else "")
+        done = cells[5] if len(cells) > 5 else ""
         if re.fullmatch(r"[0-9]+", wave) and task:
-            tasks.append((wave, task, owned))
+            tasks.append((wave, task, owned, done))
     return tasks
 
 
@@ -1769,7 +1790,7 @@ def g_wave_tasks(ctx):
     next `## ` heading counted a numbered row under a `### ` heading inside the
     section. Whitespace-tolerant inside the row, for a compact
     `|0|one|a.py|sonnet|done||`, and ahead of it, for an indented table."""
-    return sum(1 for line in waves_rows(ctx) if NUMBERED_ROW.match(line))
+    return sum(1 for line in waves_rows(read_or_none(ctx.path("plan.md"))) if NUMBERED_ROW.match(line))
 
 
 @gatherer("wave_reports")
@@ -1787,7 +1808,7 @@ def g_wave_reports(ctx):
     has_gated = ctx.path("gated").is_dir()
     counted = 0
     failures = []
-    for wave, task, owned in wave_tasks_rows(ctx):
+    for wave, task, owned, _ in wave_tasks_rows(read_or_none(ctx.path("plan.md"))):
         if not reported(ctx, wave, task):
             continue
         paths = owned_paths(owned)
@@ -1831,7 +1852,7 @@ def g_wave_unreported_committed(ctx):
     base = chomp(read_text(base_file))
     counted = 0
     failures = []
-    for wave, task, owned in wave_tasks_rows(ctx):
+    for wave, task, owned, _ in wave_tasks_rows(read_or_none(ctx.path("plan.md"))):
         if not owned:
             continue
         paths = owned_paths(owned)
@@ -1873,16 +1894,14 @@ def g_redteam_rounds(ctx):
     return find_count(ctx.path("redteam"), "round-*.json")
 
 
-def round_failed(path):
-    # A whole-file regex read a verdict's quoted `output` as the verdict itself
-    # (#214), and wave 34-87-123-198 took false `row 10` stops from it. Walk the
-    # parsed fields instead of the text. The walk is keyless because rounds vary
-    # in shape: some carry `claims`, some `verdicts`, some only `left_checks`.
-    text = read_text(path)
+def unfence(text):
+    """Return `text` without one enclosing ``` or ```json fence, else unchanged."""
     # redteam.md tells the reproducer to answer in one fenced json block and
     # the orchestrator to save it verbatim, so a well-formed round starts with
-    # ```json; parsing it raw made every such round null (#220 review). Strip
-    # exactly one enclosing fence and nothing more. Prose around the fence
+    # ```json; parsing it raw made every such round null (#220 review). A
+    # worker report follows the same contract (worker-prompt.md), and a fenced
+    # one stopped scoped-cmd with exit 3 (#368 review). Strip exactly one
+    # enclosing fence and nothing more. Prose around the fence
     # still fails, since digging a block out of it would be tidying a verdict.
     # split("\n"), not splitlines(): the rejoin must leave the block's bytes,
     # including any raw line separator inside a string, exactly as read.
@@ -1890,7 +1909,16 @@ def round_failed(path):
     # block, so rstrip() both fence lines.
     lines = text.strip().split("\n")
     if len(lines) >= 2 and lines[0].rstrip() in ("```", "```json") and lines[-1].rstrip() == "```":
-        text = "\n".join(lines[1:-1])
+        return "\n".join(lines[1:-1])
+    return text
+
+
+def round_failed(path):
+    # A whole-file regex read a verdict's quoted `output` as the verdict itself
+    # (#214), and wave 34-87-123-198 took false `row 10` stops from it. Walk the
+    # parsed fields instead of the text. The walk is keyless because rounds vary
+    # in shape: some carry `claims`, some `verdicts`, some only `left_checks`.
+    text = unfence(read_text(path))
     try:
         # strict=False: pasted command output leaves raw control chars inside
         # strings, and issue-113's round-3.json was nulled by a raw newline
@@ -3119,6 +3147,85 @@ def cmd_verify_cmd(args):
     return 1
 
 
+def cmd_scoped_cmd(args):
+    """Print the done-when commands of the tasks that own the repair's files.
+
+    A repair touches a few files, and the full VERIFY_CMD the push runs again
+    re-proves all of them (#368). The plan's own done-when for the owning tasks
+    is the narrower check. Only `files_changed` is read: a finding or `left`
+    entry that names a file the repair never touched must not widen or narrow
+    the gate.
+
+    Exits 0 with the command printed as written when one task matches, and
+    with each command as `sh -c '<cmd>'` joined by ` && ` when several do.
+    Exits 1 with one stderr line where any fallback to the full VERIFY_CMD
+    applies, an unclosed backtick span in a matched Done when cell included,
+    and 3 on an unreadable plan or report, or a report that is not JSON once
+    `unfence` strips one enclosing fence.
+    """
+    try:
+        with open(args.plan, "rb") as f:
+            plan = f.read().decode("utf-8", "replace")
+        with open(args.report, "rb") as f:
+            raw = f.read().decode("utf-8", "replace")
+    except OSError as e:
+        sys.stderr.write(f"run-state: scoped-cmd: {e.filename}: {e.strerror or e}\n")
+        return 3
+    try:
+        # strict=False: a report's `verify_output` is pasted command output, and
+        # a raw control char there must not stop a gate that reads only
+        # `files_changed`.
+        report = json.loads(unfence(raw), strict=False)
+    except ValueError as e:
+        sys.stderr.write(f"run-state: scoped-cmd: {args.report}: not JSON: {e}\n")
+        return 3
+
+    def fallback(why):
+        sys.stderr.write(f"run-state: scoped-cmd: {why}; run VERIFY_CMD\n")
+        return 1
+
+    changed = report.get("files_changed") if isinstance(report, dict) else None
+    if not isinstance(changed, list) or not changed or not all(isinstance(c, str) and c for c in changed):
+        return fallback(f"{args.report}: files_changed is empty or missing")
+
+    tasks = [(owned_paths(owned), done) for _, _, owned, done in wave_tasks_rows(plan)]
+    if not tasks:
+        return fallback(f"{args.plan}: no ## Waves task rows")
+
+    def owns(owned, path):
+        # `docs` and `docs/` are one territory, as vendored paths_overlap reads them (#162).
+        return any(path == o.rstrip("/") or path.startswith(o.rstrip("/") + "/") for o in owned if o.rstrip("/"))
+
+    for path in changed:
+        if not any(owns(owned, path) for owned, _ in tasks):
+            return fallback(f"{path} is owned by no task")
+    commands = []
+    for owned, done in tasks:
+        if not any(owns(owned, path) for path in changed):
+            continue
+        # wave_tasks_rows splits cells on every `|`, so a span holding `||` or
+        # a pipe reaches here cut in two. An odd backtick count is that cut;
+        # gating on the span before it would skip the part of the check after it.
+        if done.count("`") % 2:
+            return fallback("a task owning a changed path has a Done when cell with an unclosed backtick span, which a `|` inside the span leaves")
+        cmd = next((s for s in re.findall(r"`([^`]+)`", done) if s.split() and shutil.which(s.split()[0])), None)
+        if cmd is None:
+            return fallback("a task owning a changed path has a done-when that names no command")
+        if cmd not in commands:
+            commands.append(cmd)
+    # Joined bare, `false && true ; true` exits 0: the `;` ends the AND-list,
+    # and a trailing `&` backgrounds it.
+    # Each command runs as its own `sh -c` process. Wrapped as `( cmd )`, a `#`
+    # comments out the `)`. Wrapped as `(eval 'cmd')`, dash and zsh ignore a
+    # `set -e` inside it, since it sits left of `&&`. A lone command prints
+    # bare: no `&&` surrounds it, so it keeps its errexit in the gate's shell.
+    if len(commands) == 1:
+        print(commands[0])
+    else:
+        print(" && ".join(f"sh -c {shlex.quote(c)}" for c in commands))
+    return 0
+
+
 def parse_args(argv=None):
     ap = argparse.ArgumentParser(
         description="Read a PR's review state, or map a resume probe to a phase."
@@ -3168,6 +3275,11 @@ def parse_args(argv=None):
     vc = sub.add_parser("verify-cmd", help="print the command the plan's '- Verify with:' line names")
     vc.add_argument("--plan", metavar="PATH", required=True, help="the issue's plan file")
     vc.set_defaults(func=cmd_verify_cmd)
+
+    sc = sub.add_parser("scoped-cmd", help="print the done-when commands of the plan tasks that own a repair's changed files")
+    sc.add_argument("--plan", metavar="PATH", required=True, help="the issue's plan file")
+    sc.add_argument("--report", metavar="PATH", required=True, help="the repair report; only files_changed is read")
+    sc.set_defaults(func=cmd_scoped_cmd)
 
     g = sub.add_parser("probe", help="gather the resume probe that phase reads")
     g.add_argument("--run-dir", metavar="DIR", required=True, help="RUN_DIR; read, never created")
