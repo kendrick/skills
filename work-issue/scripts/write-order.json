@@ -199,6 +199,8 @@
          "resume": {"phase": "7", "row": 16}, "cite": "resume.md row 16: no reports/repair-1.json for round 1"},
         {"step": 8, "subpath": "timing.log", "op": "append", "path": "timing.log", "content": "7 end 2026-01-01T12:00:00Z\n8 start 2026-01-01T12:00:00Z\n",
          "blind": "twenty minutes of review stays under the ratio"},
+        {"step": 8, "subpath": "redteam/repair-head-<k>", "op": "write", "path": "redteam/repair-head-1", "content": "{head}\n",
+         "resume": {"phase": "8", "row": 17}, "cite": "resume.md row 17: the item-1 leg, a repair report with no redteam/round-*.json newer than it, and local ahead of origin, so item 2 pushes first; the probe never reads repair-head-<k>"},
         {"step": 8, "subpath": "redteam/repair-diff-<k>.patch", "op": "write", "path": "redteam/repair-diff-1.patch", "content": "diff --git a/a.py b/a.py\n--- a/a.py\n+++ b/a.py\n@@ -1 +1,2 @@\n alpha = 1\n+guard = alpha\n",
          "resume": {"phase": "8", "row": 17}, "cite": "resume.md row 17: the item-1 leg, a repair report with no redteam/round-*.json newer than it, and local ahead of origin, so item 2 pushes first"},
         {"step": 8, "subpath": "origin", "op": "upstream", "file": "upstream.txt", "content": "one\ntwo\n",

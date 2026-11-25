@@ -2759,10 +2759,9 @@ refute_text work-issue/references/resume.md '[ -z "$p" ]; then continue; elif ! 
 # outright, so an edit that inlines Step 8's steps cannot drop it silently.
 require_text work-issue/SKILL.md "Written to \`RUN_DIR/base_sha\` by Step 1, and rewritten by Step 5 item 2 after each proven rebase, which Step 8 item 2 repeats; nothing else writes the file."
 require_text work-issue/SKILL.md 'm="$(git merge-base origin/DEFAULT issue-N)" && printf '"'"'%s\n'"'"' "$m" > RUN_DIR/base_sha'
-# Step 8 item 1 reads the repair's diff with the same ancestor check the
-# repair_diff_triggers probe runs, or a resume after item 2's rebase re-fires
-# adversarial-review over upstream code the probe already ignores.
-require_text work-issue/SKILL.md "A \`repair-base-<k>\` that is no longer an ancestor of HEAD leaves this condition unmet too"
+# Step 8 item 1 reads the patch saved before item 2's push (#369), so the
+# ancestor check that guarded a live diff from a rebased base is gone.
+refute_text work-issue/SKILL.md "A \`repair-base-<k>\` that is no longer an ancestor of HEAD leaves this condition unmet too"
 require_text work-issue/SKILL.md "rebase, rewrite \`RUN_DIR/base_sha\`, verify to VERIFY_CMD green, write \`pushed_at\`, push — Step 5 items 1 through 4, the \`base_sha\` rewrite in item 2 included."
 require_text work-issue/references/resume.md "answers \`stop\` naming the mismatch"
 require_text work-issue/SKILL.md "answers \`stop\` naming the mismatch"
@@ -4117,7 +4116,7 @@ require_text work-issue/SKILL.md "\"Left out\" names every finding \`adversarial
 # the whole branch.
 require_text work-issue/SKILL.md "Once the reproducer comes back clean, the trigger re-fires on either of two conditions."
 require_text work-issue/SKILL.md "**Severity:** that triage round held a row whose Severity is \`P0\`, \`P1\`, or \`blocking\`, and the full diff fires the trigger as Step 4 item 7 evaluates it."
-require_text work-issue/SKILL.md "**Repair diff:** run \`git diff \"\$(cat RUN_DIR/redteam/repair-base-<k>)\"..HEAD\` as its own command and check its exit, then pass its output to \`adversarial-review/scripts/match-triggers.py rows --only 1,2,4\`"
+require_text work-issue/SKILL.md "**Repair diff:** run \`adversarial-review/scripts/match-triggers.py rows --only 1,2,4 < RUN_DIR/redteam/repair-diff-<k>.patch\`, the patch the capture saved."
 # Piped straight into the matcher, a failing diff reads as "no row" (#162
 # review); Step 8 and the resume probe both run it apart and check its exit.
 refute_text work-issue/SKILL.md "HEAD | adversarial-review/scripts/match-triggers.py rows --only 1,2,4\`, prints a row"
@@ -4129,6 +4128,62 @@ require_text work-issue/SKILL.md "A repair whose round held no such row and whos
 # rewritten on resume would drop the commits an interrupted repair already made.
 require_text work-issue/SKILL.md "Before the dispatch, write \`git rev-parse HEAD\` to \`RUN_DIR/redteam/repair-base-<k>\`, k the triage round this repair answers, unless that file already exists. Write it once and never overwrite it"
 require_text _maintenance/work-issue/RATIONALE.md "The new condition reads the repair's own diff and never the whole branch."
+
+# --- #369: push before Step 8 item 1 ---
+# Step 8 pushes a repair before red-teaming it, so the reviewer works while the
+# reproducer does. Item numbers stayed, since they are cited everywhere, so the
+# order lives in one lead paragraph, and an edit that moves item 1 back ahead
+# of the push has to break one of these.
+s369_order="Run Step 8 in this order: the capture, then item 2's push, then item 1's checks, then items 3 through 5."
+s369_close="The round closes only when both item 1 and the reviewer have answered: item 1's last round is clean, and Step 6's next poll has a review of the pushed HEAD."
+s369_capture="Then run \`git diff \"\$(cat RUN_DIR/redteam/repair-base-<k>)\"..HEAD\` as its own command, check its exit, and write its output to \`RUN_DIR/redteam/repair-diff-<k>.patch\` through a temp file and \`mv\`, unless the patch already exists."
+s369_once="Write each file once and never overwrite it, as Step 7 writes \`repair-base-<k>\`: a resume after item 2's rebase would otherwise capture every upstream line the rebase brought in as the repair's own."
+s369_head="Write \`git rev-parse HEAD\` to \`RUN_DIR/redteam/repair-head-<k>\`, unless that file already exists."
+s369_base="else to \`HEAD~<n>\`, n from \`git rev-list --count \"\$(cat RUN_DIR/redteam/repair-base-<k>)\"..\"\$(cat RUN_DIR/redteam/repair-head-<k>)\"\`, since item 2's rebase replays the repair's commits last and in order"
+s369_missing="A missing \`repair-diff-<k>.patch\` leaves this condition unmet, so the repair rests on severity alone."
+s369_missing_old="A missing \`repair-base-<k>\` leaves this condition unmet, so a repair from before that file existed rests on severity alone. A \`repair-base-<k>\` that is no longer an ancestor of HEAD leaves this condition unmet too"
+s369_body="by editing the existing body, which needs no push."
+s369_body_old="by editing the existing body, before item 2 pushes."
+s369_loop="post the review request after the push and before the next \`poll start\`: post the request, run item 1, run items 3 and 4, close Step 8 with \`8 end\`"
+s369_loop_old="post the review request after the push and before the next \`poll start\`: run items 3 and 4, post the request, close Step 8 with \`8 end\`"
+for s369_pin in "$s369_order" "$s369_close" "$s369_capture" "$s369_once" "$s369_head" "$s369_base" "$s369_missing" "$s369_body" "$s369_loop"; do
+  require_text work-issue/SKILL.md "$s369_pin"
+done
+refute_text work-issue/SKILL.md "before item 2 pushes"
+refute_text work-issue/SKILL.md "$s369_loop_old"
+# The reproducer's verdicts still gate the final report; only their timing moved.
+require_text work-issue/SKILL.md "**Done when:** every triage row has a reply URL; every repair's claims carry reproducer verdicts;"
+require_text work-issue/references/redteam.md "The repair's diff is \`RUN_DIR/redteam/repair-diff-<k>.patch\`, which Step 8 saves before item 2's push"
+require_text _maintenance/work-issue/RATIONALE.md "| 218 | Step 8 pushes a review repair before item 1 red-teams it"
+require_text _maintenance/work-issue/RATIONALE.md "| 219 | Step 8's capture writes \`repair-head-<k>\` once, before the patch"
+# The pins have to bite: put item 1 back ahead of the push in a scratch copy
+# (no lead paragraph, the ancestor clause, the old body edit and loop order)
+# and every new pin must fail on it while each refute trips.
+s369_copy="$tmp/s369-old-SKILL.md"
+python3 - work-issue/SKILL.md "$s369_copy" "$s369_missing" "$s369_missing_old" "$s369_body" "$s369_body_old" "$s369_loop" "$s369_loop_old" <<'PY369'
+import re, sys
+src, dst, *pairs = sys.argv[1:]
+s = open(src).read()
+lead = re.findall(r"^Run Step 8 in this order:.*\n\n", s, re.M)
+assert len(lead) == 1, lead
+s = s.replace(lead[0], "")
+for new, old in zip(pairs[::2], pairs[1::2]):
+    assert s.count(new) == 1, new
+    s = s.replace(new, old)
+open(dst, "w").write(s)
+PY369
+for s369_pin in "$s369_order" "$s369_close" "$s369_capture" "$s369_missing" "$s369_body" "$s369_loop"; do
+  if (require_text "$s369_copy" "$s369_pin") 2>/dev/null; then
+    echo "#369: the pin should fail on a SKILL.md copy with item 1 back ahead of the push: $s369_pin" >&2
+    exit 1
+  fi
+done
+for s369_cut in "before item 2 pushes" "$s369_loop_old" "A \`repair-base-<k>\` that is no longer an ancestor of HEAD leaves this condition unmet too"; do
+  if (refute_text "$s369_copy" "$s369_cut") 2>/dev/null; then
+    echo "#369: the refute should fail on a SKILL.md copy with item 1 back ahead of the push: $s369_cut" >&2
+    exit 1
+  fi
+done
 require_text work-issue/SKILL.md "RUN_DIR/redteam/trigger-repair-<k>.txt"
 require_text work-issue/references/redteam.md "RUN_DIR/redteam/ar-state-repair-<k>.txt"
 require_text work-issue/references/triage.md "carries a \`Severity\` cell"
