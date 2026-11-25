@@ -6309,6 +6309,10 @@ cmp -s "$tmp/crash-shipped.out" "$tmp/crash-fixture.out" \
 # script has to miss when the script changes what it builds. An entry is
 # written only after python exits on its own, so a run the trap kills leaves
 # none. WORK_ISSUE_FULL_CHECKS=1 skips the read and still writes.
+#
+# #477: a gate that decides no push sets WORK_ISSUE_DEFER_LIVENESS=1 and skips
+# the 20-minute liveness search; the push gates run it in full, so a break it
+# would catch surfaces there. WORK_ISSUE_FULL_CHECKS=1 overrides the deferral.
 logic_cache="$(cd "$(git rev-parse --git-common-dir)" && pwd)/work-issue-smoke-cache"
 logic_key() {
   python3 - "$@" <<'PY'
@@ -6332,8 +6336,20 @@ for label, data in parts:
 print(digest.hexdigest())
 PY
 }
+# Keyed on the subcommand, not the script's name, so #433's stub checks.py
+# reaches the same branch the real resume_checks.py runs do.
+liveness_deferred() {
+  [[ "${WORK_ISSUE_DEFER_LIVENESS:-}" == 1 && "${WORK_ISSUE_FULL_CHECKS:-}" != 1 ]]
+}
 logic_run() {
   local status=0 key entry stage stale=0
+  # Before the key and the cache read: a deferred run neither reads nor writes
+  # an entry, so the push gate's full run is the one that fills it.
+  if [[ "$2" == liveness ]] && liveness_deferred; then
+    echo "work-issue smoke: liveness deferred"
+    echo deferred >"$4.status"
+    return 0
+  fi
   key="$(logic_key "$1" "$2" "$3")"
   entry="$logic_cache/$key"
   if [[ "${WORK_ISSUE_FULL_CHECKS:-}" != 1 && -f "$entry/status" && -f "$entry/out" && -f "$entry/err" ]]; then
@@ -6388,7 +6404,7 @@ export STUB_LOG="$cc/runs.log"
 cc_fail() { echo "#433: $*" >&2; exit 1; }
 cc_cache="$(git -C "$cc/cache-home" rev-parse --path-format=absolute --git-common-dir)/work-issue-smoke-cache"
 cc_run() { # tag; leaves the call's stdout in $cc/$tag.say
-  WORK_ISSUE_FULL_CHECKS="${cc_full:-}" logic_cache="${cc_use:-$cc_cache}" logic_run "$cc/work-issue/scripts/checks.py" liveness "$cc/model.json" "$cc/$1" >"$cc/$1.say"
+  WORK_ISSUE_FULL_CHECKS="${cc_full:-}" WORK_ISSUE_DEFER_LIVENESS="${cc_defer:-}" logic_cache="${cc_use:-$cc_cache}" logic_run "$cc/work-issue/scripts/checks.py" liveness "$cc/model.json" "$cc/$1" >"$cc/$1.say"
 }
 cc_runs() { wc -l <"$STUB_LOG" | tr -d ' '; }
 cc_key() { logic_key "$cc/work-issue/scripts/checks.py" liveness "$cc/model.json"; }
@@ -6436,9 +6452,48 @@ unset -f cp
 cc_run reread
 [[ "$(cc_runs)" == $((before + 1)) ]] && grep -Fq cached "$cc/reread.say" \
   || cc_fail "the entry rewritten after a failed read should hit"
+# --- #477: defer liveness at gates that decide no push ---
+# The plant is status 9 under a key run-state.py's bytes still match, so a
+# deferred run that read the cache would report 9, and one that wrote would
+# change the entry. The falsifier proves the case can fail: with the check
+# gone the stub starts.
+cc_defer_holds() { # tag; a deferred run starts nothing, reads nothing, prints one line
+  local n
+  n="$(cc_runs)"
+  cc_defer=1 cc_run "$1"
+  [[ "$(cc_runs)" == "$n" && "$(cat "$cc/$1.say")" == "work-issue smoke: liveness deferred" && "$(cat "$cc/$1.status")" == deferred ]]
+}
+echo 9 >"$(cc_entry)/status"
+cc_defer_holds deferred \
+  || cc_fail "a deferred liveness run should start nothing, print one deferred line and report status deferred, got $(cc_runs) runs and: $(cat "$cc/deferred.say") / $(cat "$cc/deferred.status")"
+[[ "$(cat "$(cc_entry)/status")" == 9 ]] \
+  || cc_fail "a deferred run should leave the planted entry alone, got status $(cat "$(cc_entry)/status")"
+before="$(cc_runs)"
+cc_full=1 cc_defer=1 cc_run deferfull
+[[ "$(cc_runs)" == $((before + 1)) && "$(cat "$cc/deferfull.status")" == 0 && ! -s "$cc/deferfull.say" && "$(cat "$(cc_entry)/status")" == 0 ]] \
+  || cc_fail "WORK_ISSUE_FULL_CHECKS=1 should override the deferral: run in full and rewrite the entry"
+before="$(cc_runs)"
+WORK_ISSUE_DEFER_LIVENESS=1 logic_cache="$cc_cache" logic_run "$cc/work-issue/scripts/checks.py" invariants "$cc/model.json" "$cc/inv"
+[[ "$(cc_runs)" == $((before + 1)) && "$(tail -n 1 "$STUB_LOG")" == invariants ]] \
+  || cc_fail "the deferral should never skip invariants"
+# A fresh cache, so a check that returned 1 starts the stub rather than hitting.
+if ( liveness_deferred() { return 1; }; cc_use="$cc/falsify-cache" cc_defer_holds falsified ); then
+  cc_fail "the deferred case passed with liveness_deferred returning 1, so it cannot fail"
+fi
+# Every direct liveness call opens with logic_run, so a later one can't skip the guard.
+unguarded_liveness() { # file; count of lines running liveness outside logic_run
+  { grep -F -- '"$crash_checks" '"liveness" "$1" || true; } | { grep -vc '^[[:space:]]*logic_run ' || true; }
+}
+[[ "$(unguarded_liveness "${BASH_SOURCE[0]}")" == 0 ]] \
+  || cc_fail "a line runs liveness without logic_run, so the deferral can't guard it"
+{ cat "${BASH_SOURCE[0]}"; echo 'python3 "$crash_checks" '"liveness --model x"; } >"$cc/smoke-copy.sh"
+[[ "$(unguarded_liveness "$cc/smoke-copy.sh")" == 1 ]] \
+  || cc_fail "the unguarded-liveness count should see a direct call added to a copy"
 echo '{"model": "FAIL"}' >"$cc/model.json"
 before="$(cc_runs)"
-bash -c "$(declare -f logic_key logic_run cc_run); logic_cache='$cc/kill-cache'; cc=$cc; STUB_SLEEP=30 logic_run '$cc/work-issue/scripts/checks.py' liveness '$cc/model.json' '$cc/killed'" 2>/dev/null &
+# The suite itself runs under a deferring gate, so the killed run clears the
+# variable or it would defer and the until loop below would never see a run.
+bash -c "$(declare -f logic_key logic_run liveness_deferred cc_run); logic_cache='$cc/kill-cache'; cc=$cc; WORK_ISSUE_DEFER_LIVENESS= STUB_SLEEP=30 logic_run '$cc/work-issue/scripts/checks.py' liveness '$cc/model.json' '$cc/killed'" 2>/dev/null &
 cc_pid=$!
 until [[ "$(cc_runs)" == $((before + 1)) ]]; do sleep 0.1; done
 # Reap python alone and let the job run on, as the EXIT trap's pkill -P does
@@ -6713,24 +6768,30 @@ bound_line="$(sed -nE 's/^resume_checks: run-state\.py line ([0-9]+): phase_of c
 }
 
 wait
-[[ "$(cat "$tmp/live-shipped.status")" == "0" ]] && [[ ! -s "$tmp/live-shipped.err" ]] \
-  && grep -Eqx 'paths: [0-9]+' "$tmp/live-shipped.out" || {
-  echo "#148: liveness on the shipped model should exit 0 with only a paths: line, got $(cat "$tmp/live-shipped.status"):" >&2
-  cat "$tmp/live-shipped.out" "$tmp/live-shipped.err" >&2
-  exit 1
-}
-[[ "$(cat "$tmp/live-step3.status")" == "1" ]] \
-  && grep -Eq '^cycle: (.* -> )?3 row [0-9]+ -> ' "$tmp/live-step3.err" || {
-  echo "#148: liveness with Step 3's effect a no-op should exit 1 with a cycle through 3, got $(cat "$tmp/live-step3.status"):" >&2
-  cat "$tmp/live-step3.out" "$tmp/live-step3.err" >&2
-  exit 1
-}
-[[ "$(cat "$tmp/live-step1.status")" == "1" ]] \
-  && grep -Eq '^impossible: 1 row [0-9]+ -> isolated on \{' "$tmp/live-step1.err" || {
-  echo "#148: liveness with Step 1 writing base_sha false should exit 1 naming the impossible isolated outcome, got $(cat "$tmp/live-step1.status"):" >&2
-  cat "$tmp/live-step1.out" "$tmp/live-step1.err" >&2
-  exit 1
-}
+if [[ "$(cat "$tmp/live-shipped.status")" != deferred ]]; then
+  [[ "$(cat "$tmp/live-shipped.status")" == "0" ]] && [[ ! -s "$tmp/live-shipped.err" ]] \
+    && grep -Eqx 'paths: [0-9]+' "$tmp/live-shipped.out" || {
+    echo "#148: liveness on the shipped model should exit 0 with only a paths: line, got $(cat "$tmp/live-shipped.status"):" >&2
+    cat "$tmp/live-shipped.out" "$tmp/live-shipped.err" >&2
+    exit 1
+  }
+fi
+if [[ "$(cat "$tmp/live-step3.status")" != deferred ]]; then
+  [[ "$(cat "$tmp/live-step3.status")" == "1" ]] \
+    && grep -Eq '^cycle: (.* -> )?3 row [0-9]+ -> ' "$tmp/live-step3.err" || {
+    echo "#148: liveness with Step 3's effect a no-op should exit 1 with a cycle through 3, got $(cat "$tmp/live-step3.status"):" >&2
+    cat "$tmp/live-step3.out" "$tmp/live-step3.err" >&2
+    exit 1
+  }
+fi
+if [[ "$(cat "$tmp/live-step1.status")" != deferred ]]; then
+  [[ "$(cat "$tmp/live-step1.status")" == "1" ]] \
+    && grep -Eq '^impossible: 1 row [0-9]+ -> isolated on \{' "$tmp/live-step1.err" || {
+    echo "#148: liveness with Step 1 writing base_sha false should exit 1 naming the impossible isolated outcome, got $(cat "$tmp/live-step1.status"):" >&2
+    cat "$tmp/live-step1.out" "$tmp/live-step1.err" >&2
+    exit 1
+  }
+fi
 
 # Rendered prompts live in RUN_DIR/prompts/ (outside the work tree, so Step 6
 # never counts one as an unowned write), and herdr keeps sending the prompt inline.
@@ -6761,14 +6822,16 @@ require_text work-issue/references/worker-prompt.md "In a repair round it judges
 # pooled, prints a different probe on the 4 row 10 cycle.
 merge_dir=tests/fixtures/work-issue/liveness
 logic_run "$crash_checks" liveness "$merge_dir/merge-limit.json" "$tmp/live-merge"
-[[ "$(cat "$tmp/live-merge.status")" == "1" ]] \
-  && cmp -s "$tmp/live-merge.out" "$merge_dir/merge-limit.out" \
-  && cmp -s "$tmp/live-merge.err" "$merge_dir/merge-limit.err" || {
-  echo "#436: liveness on merge-limit.json should exit 1 with the pinned output, got $(cat "$tmp/live-merge.status"):" >&2
-  diff "$merge_dir/merge-limit.out" "$tmp/live-merge.out" >&2 || true
-  diff "$merge_dir/merge-limit.err" "$tmp/live-merge.err" >&2 || true
-  exit 1
-}
+if [[ "$(cat "$tmp/live-merge.status")" != deferred ]]; then
+  [[ "$(cat "$tmp/live-merge.status")" == "1" ]] \
+    && cmp -s "$tmp/live-merge.out" "$merge_dir/merge-limit.out" \
+    && cmp -s "$tmp/live-merge.err" "$merge_dir/merge-limit.err" || {
+    echo "#436: liveness on merge-limit.json should exit 1 with the pinned output, got $(cat "$tmp/live-merge.status"):" >&2
+    diff "$merge_dir/merge-limit.out" "$tmp/live-merge.out" >&2 || true
+    diff "$merge_dir/merge-limit.err" "$tmp/live-merge.err" >&2 || true
+    exit 1
+  }
+fi
 # `split` finds every independent field in one pass, where it once peeled
 # one off and rescanned. Four models' output is too thin a check on that
 # shortcut, so this runs the peel loop beside it on seeded random components,
