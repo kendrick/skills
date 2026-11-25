@@ -61,7 +61,9 @@ def terminal_report(text, lane, phase):
         return None
     if not isinstance(report, dict):
         return None
-    if report.get("lane") != lane or report.get("phase") != phase or report.get("status") not in STATUSES:
+    # `status` is lane-supplied JSON: a list or object is unhashable, so `in STATUSES` would raise.
+    status = report.get("status")
+    if report.get("lane") != lane or report.get("phase") != phase or not isinstance(status, str) or status not in STATUSES:
         return None
     if not all(isinstance(report.get(k), str) and os.path.isabs(report[k]) for k in ("worktree", "run_dir")):
         return None
@@ -95,7 +97,8 @@ def main():
         print(f"handback: --lane must look like issue-N, got {args.lane}", file=sys.stderr)
         return 3
     try:
-        with open(args.text) as f:
+        # errors="replace": undecodable lane text is a hand-back, not a crash that exit 1 reads as the stop.
+        with open(args.text, errors="replace") as f:
             text = f.read()
     except OSError as e:
         print(f"handback: cannot read {args.text}: {e}", file=sys.stderr)

@@ -2378,6 +2378,37 @@ python3 "$handback" --wave-dir "$wd" --lane issue-7 --phase build --text "$tmp/r
   exit 1
 }
 
+# A non-string status (list or object) is unhashable; it used to raise and exit 1,
+# which Step 4 reads as the third-hand-back stop.
+for badstatus in '[]' '{}'; do
+  printf '```json\n{"lane":"issue-7","phase":"build","status":%s,"worktree":"/w/7","run_dir":"/r/7","head":"0123456789abcdef0123456789abcdef01234567"}\n```\n' "$badstatus" >"$tmp/badstatus.txt"
+  wd="$(mktemp -d "$tmp/hb-badstatus.XXXXXX")"
+  python3 "$handback" --wave-dir "$wd" --lane issue-7 --phase build --text "$tmp/badstatus.txt" >"$tmp/out"
+  [[ "$(cut -d' ' -f1 "$tmp/out")" == redispatch && ! -e "$wd/reports/issue-7-build.json" ]] || {
+    echo "a report with status $badstatus should be a hand-back, got: $(cat "$tmp/out")" >&2
+    exit 1
+  }
+  wd="$(mktemp -d "$tmp/hb-badstatus.XXXXXX")"
+  [[ "$(python3 "$handback" --wave-dir "$wd" --lane issue-7 --phase build --text "$tmp/badstatus.txt" --check)" == handback ]] || {
+    echo "--check on status $badstatus should print handback" >&2
+    exit 1
+  }
+done
+
+# Undecodable bytes in the lane's text used to raise UnicodeDecodeError and exit 1.
+printf '\xff\xfe bad' >"$tmp/badbytes.txt"
+wd="$(mktemp -d "$tmp/hb-badbytes.XXXXXX")"
+python3 "$handback" --wave-dir "$wd" --lane issue-7 --phase build --text "$tmp/badbytes.txt" >"$tmp/out"
+[[ "$(cut -d' ' -f1 "$tmp/out")" == redispatch && ! -e "$wd/reports/issue-7-build.json" ]] || {
+  echo "undecodable text should be a hand-back, got: $(cat "$tmp/out")" >&2
+  exit 1
+}
+wd="$(mktemp -d "$tmp/hb-badbytes.XXXXXX")"
+[[ "$(python3 "$handback" --wave-dir "$wd" --lane issue-7 --phase build --text "$tmp/badbytes.txt" --check)" == handback ]] || {
+  echo "--check on undecodable text should print handback" >&2
+  exit 1
+}
+
 # --check classifies and writes nothing, so Step 7 can take its hold before
 # the write without holding for a message that saves as a hand-back.
 check_run() {
