@@ -4290,6 +4290,10 @@ refute_text work-issue/SKILL.md "$s369_body_old"
 refute_text work-issue/SKILL.md "$s369_loop_old"
 # The reproducer's verdicts still gate the final report; only their timing moved.
 require_text work-issue/SKILL.md "**Done when:** every triage row has a reply URL; every repair's claims carry reproducer verdicts;"
+# A repair that commits nothing writes no capture, so Done-when has to let that
+# round close.
+require_text work-issue/SKILL.md "A no-change round, one whose repair committed nothing past \`repair-base-<k>\`, is never ahead of origin, so it captures nothing"
+require_text work-issue/SKILL.md "except on a no-change round or a run that pushed the repair before Step 8 captured it;"
 require_text work-issue/references/redteam.md "The repair's diff is \`RUN_DIR/redteam/repair-diff-<k>.patch\`, which Step 8 saves before item 2's push"
 require_text _maintenance/work-issue/RATIONALE.md "| 218 | Step 8 pushes a review repair before item 1 red-teams it"
 require_text _maintenance/work-issue/RATIONALE.md "| 219 | Step 8's capture writes \`repair-head-<k>\` once, before the patch"
