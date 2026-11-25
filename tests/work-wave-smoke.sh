@@ -2393,4 +2393,26 @@ grep -Fq "a terminal report should print terminal" "$tmp/mutant.err" || {
   exit 1
 }
 
+# The prose that sends every lane return through the script. Without these the
+# script passes every case above while Step 4 still saves prose verbatim as a
+# report and Step 5 gates it.
+require_text "$skill" "work-wave/scripts/handback.py --wave-dir WAVE_DIR --lane issue-N --phase build --text FILE"
+require_text "$skill" "Resume it without asking: continue that lane's own agent with the lane brief's resume line"
+require_text "$skill" "Stop the wave on that lane and quote the stderr line, which names every interim report."
+require_text "$skill" "Run every returned message through \`handback.py\` as Step 4 does, with \`--phase publish\`"
+require_text "$skill" "Run every returned message through \`handback.py\` as Step 4 does, with \`--phase repoll\`"
+require_text "$skill" "every report is on disk, written by \`handback.py\`, or the wave stopped on a lane's third hand-back with its interim reports named"
+# Question 1 of #460's plan: a hand-back and a malformed report look alike, so
+# the old re-prompt rule would have guessed which one a message is.
+refute_text "$skill" "re-prompted once with the contract restated"
+# The tracked herdr dispatch. issue-393's first hand-back sat on a herdr repair
+# prompt sent with nothing to wait on.
+require_text "$brief" "--wait --until done --until idle --until blocked --timeout <ms>\` in a background shell call, so its exit wakes you"
+require_text "$brief" "A herdr prompt sent without \`--wait\`, or in a foreground call, leaves you nothing to wait on."
+require_text "$brief" "## The resume line"
+require_text "$brief" "Your last turn ended without the report your brief asks for"
+require_text work-wave/README.md "handback.py"
+require_text "$ledger" "| 68 | Step 4 runs every message a lane returns through \`handback.py\`"
+require_text "$ledger" "| 69 | The lane brief names one tracked shape for every herdr prompt a lane sends"
+
 echo "work-wave smoke: OK"

@@ -92,7 +92,9 @@ Do not end your turn while any worker or repair dispatch you made is outstanding
 Ending your turn is your final report, so a turn that ends with a worker
 still running hands back a wave nobody gated. Where a dispatch returns at
 once as a background agent, wait for each one's completion notice before you
-gate, commit, or report. A running worker is not a stop: report only once
+gate, commit, or report.
+Send every herdr prompt as a tracked dispatch, a repair's above all: `herdr agent prompt issue-{{N}} "<prompt>" --wait --until done --until idle --until blocked --timeout <ms>` in a background shell call, so its exit wakes you, then a background until-loop on the report file under the same timeout, as work-issue's Step 2 does for a build worker. A herdr prompt sent without `--wait`, or in a foreground call, leaves you nothing to wait on.
+A running worker is not a stop: report only once
 work-issue reaches the Done-when of the last step this phase's grant allows,
 or stops on a refusal, a failed gate, or a question only the user can answer.
 
@@ -178,3 +180,13 @@ Each field answers a step that reads it:
 - `pr` — null on a build report; the pull-request URL once a publish report opens one. Step 5 stops the wave on a build report whose `pr` is non-null, and asks `gh pr list` as well, because the lane fills this field itself.
 - `detail` — quoted verbatim in the wave's final report for any lane that stops, fails, or is refused.
 - `question` — held for the user with the wave's next message; empty on `done`.
+
+## The resume line
+
+Step 4 sends this to a lane whose returned message `handback.py` saved as an interim report, continuing that lane's own agent. Substitute two values: `<INTERIM>`, the interim path `handback.py` printed, and `<PHASE>`, the phase the lane was dispatched in. Neither is a brief placeholder, so the brief's count stays as it is. Everything else goes across verbatim.
+
+```
+Your last turn ended without the report your brief asks for, so work-wave saved what you returned as an interim report at <INTERIM>. Your phase is unchanged: <PHASE>, under the same grant.
+
+First wait on every worker or repair dispatch you made that has not reported, each to its completion notice or its herdr call's exit. Then finish this phase through work-issue as your brief says, and end your turn on the report block your brief gives: exactly one fenced json block and nothing else.
+```

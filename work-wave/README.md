@@ -68,6 +68,7 @@ work-wave/
 └── scripts/
     ├── check-footprints.py     # proves every lane's footprint disjoint and lists the pairs to answer for coupling
     ├── check-worktrees.py      # Step 3's collision check: refuses a lane whose worktree path exists, but not a started lane's own tree, mid-rebase included
+    ├── handback.py             # saves what a lane returns as its report, or as an interim hand-back, and says whether to resume it
     ├── merge-test.py           # runs the merge test's seven steps in one call and writes the record and baseline.txt
     ├── order.py                # builds order.md from coupling.md, and holds every lane ordered after one that leaves
     ├── wave-state.py           # probe reads WAVE_DIR and git into JSON, phase answers which step to resume at
@@ -83,6 +84,7 @@ work-wave/
 - **Lanes build first and publish later, on the strength of a withheld grant.** The build dispatch tells each lane the push half is a no and passes `--no-publish`, which stops `work-issue` after its red-team with nothing pushed. Step 5 then asks GitHub whether a pull request exists on the lane's branch, whatever the report says. Either a pull-request URL in the build report or one from `gh pr list` stops the wave, and whether that pull request stays open is your call. A lane that drops the flag can still publish early, and GitHub sees that pull request only once it's open, so the wave stops after the fact.
 - **Coupling is the orchestrator's call.** The script proves the footprints disjoint. Whether two lanes are independent comes from the orchestrator reading two plans against each other, and the merge test is what catches a pair it called wrong. When the merge test goes red, the pair's row in `coupling.md` is corrected and the wave stops.
 - **A failed lane isn't retried or reverted.** Its writes sit on its own branch in its own worktree, so there's nothing to revert, and `work-issue` already retried inside the lane. It leaves the merge set, lanes ordered after it are held, and every other lane proceeds.
+- **A lane that hands back mid-run gets resumed, twice at most.** A lane's turn can end while a worker or repair it dispatched is still running, and then its message holds no report. `handback.py` saves that message as an interim report, and the wave resumes the lane without asking you. A third hand-back in the same phase stops the wave and names every interim report.
 - **A red merge test publishes nothing.** A conflict or a failing suite in the merge test before publishing stops the wave and names the branches involved, and the repair isn't routed back to a lane, because which issue owns it is your call.
 - **Lanes run on `opus` or `fable`, never lower.** A lane runs `divvy-up`'s gate, `code-review`, and a red-team on whatever model it was dispatched at, and those are judgment calls.
 - **It never merges.** The final report hands you the order. If a repair round moved the HEAD of any lane it's handing you after the last merge test, it runs the merge test again first, so the order you merge in was tested at the commits you'll merge.
