@@ -6336,15 +6336,15 @@ for label, data in parts:
 print(digest.hexdigest())
 PY
 }
-# Keyed on the subcommand, not the script's name, so #433's stub checks.py
-# reaches the same branch the real resume_checks.py runs do.
 liveness_deferred() {
   [[ "${WORK_ISSUE_DEFER_LIVENESS:-}" == 1 && "${WORK_ISSUE_FULL_CHECKS:-}" != 1 ]]
 }
 logic_run() {
   local status=0 key entry stage stale=0
   # Before the key and the cache read: a deferred run neither reads nor writes
-  # an entry, so the push gate's full run is the one that fills it.
+  # an entry, so the push gate's full run is the one that fills it. Keyed on the
+  # subcommand, not the script's name, so #433's stub checks.py reaches the same
+  # branch the real resume_checks.py runs do.
   if [[ "$2" == liveness ]] && liveness_deferred; then
     echo "work-issue smoke: liveness deferred"
     echo deferred >"$4.status"
@@ -6497,6 +6497,7 @@ section work-issue/SKILL.md "## Step 5 " >"$tmp/s477-step-5.md"
 section work-issue/SKILL.md "## Step 8 " >"$tmp/s477-step-8.md"
 require_text "$tmp/s477-step-3.md" '`(export WORK_ISSUE_DEFER_LIVENESS=1; <command>)`'
 require_text "$tmp/s477-step-3.md" "Four gates defer: the build wave gate, which is \`divvy-up\`'s Step 6 verification"
+require_text "$tmp/s477-step-3.md" "At the build wave gate, the session running \`divvy-up\`'s Step 6 runs the VERIFY_CMD it was handed in the deferred form"
 require_text "$tmp/s477-step-3.md" "Step 3's re-gate of a repair; Step 4 item 4's scoped gate and its VERIFY_CMD fallback; and Step 7's gate."
 require_text "$tmp/s477-step-3.md" "Step 5 item 2 and Step 8 item 2 decide a push, so every gate run under them runs its command bare"
 require_text "$tmp/s477-step-5.md" "Then run VERIFY_CMD and read it by VERIFY_CMD green."
