@@ -326,7 +326,9 @@
         {"step": 4, "subpath": "reports/redteam-repair-<k>.json", "op": "write", "path": "reports/redteam-repair-1.json", "content": "{\"task\": \"repair\", \"claims\": [{\"claim\": \"alpha is set\", \"path\": \"a.py\"}]}\n",
          "resume": {"phase": "4", "row": 10}, "cite": "resume.md row 10: the repair dispatch"},
         {"step": 4, "subpath": "redteam/round-<k>.json", "op": "write", "path": "redteam/round-2.json", "content": "{\"verdicts\": [{\"claim\": \"alpha is set\", \"verdict\": \"NOT_REPRODUCED\", \"reproduced_at\": null}]}\n",
-         "resume": {"phase": "4", "row": 10}, "cite": "resume.md row 10: a repair report followed the failed round, so round k+1"}
+         "resume": {"phase": "4", "row": 10}, "cite": "resume.md row 10: a repair report followed the failed round, so round k+1"},
+        {"step": 4, "subpath": "policy.log", "op": "append", "path": "policy.log", "content": "- [wave] policy: issue-1 red-team round 2: defer (--repair-class unowned-write) \u2014 1\n",
+         "blind": "probe never reads policy.log; a crash before this append resumes at the same row 10 stop, where policy.py re-rules the same round and appends the line it lost, never a second copy (references/policy.md)"}
       ],
       "end": {"phase": "stop", "row": 10}, "end_cite": "resume.md row 10: two failed rounds in a row stop with the evidence"
     },

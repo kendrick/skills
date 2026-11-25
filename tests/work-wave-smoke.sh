@@ -92,7 +92,7 @@ require_file "$fixtures/handback/midrun-build.txt"
 
 require_text "$skill" "name: work-wave"
 require_text "$skill" 'description: "Run N GitHub issues at once, one work-issue run per issue in its own worktree, with the footprints proved disjoint, the cross-lane coupling question answered and recorded, the merge order fixed, and the branches merged together and verified before any lane opens a pull request. Use ONLY when the user explicitly invokes work-wave. It never plans an issue, never merges one, and never advances a single issue: for one issue, use work-issue."'
-require_text "$skill" "argument-hint: '<issue> <issue> [<issue>...] [--plan N=PATH ...] [--lane-model opus|fable] [--review-loop[=<comment>]] [--dry-run]'"
+require_text "$skill" "argument-hint: '<issue> <issue> [<issue>...] [--plan N=PATH ...] [--lane-model opus|fable] [--review-loop[=<comment>]] [--auto-budget <ratio>] [--defer-after <k>] [--repair-class <class>] [--dry-run]'"
 require_text "$skill" "disable-model-invocation: true"
 
 # --- The steps. A dropped heading is a dropped step, and the resume table
@@ -272,7 +272,7 @@ require_text "$skill" "\"a human merges, in this order\""
 # --- The references. The brief is the whole prompt a lane receives, so every
 # placeholder, report field, and status the gate reads has to be in it. ---
 
-for placeholder in SIBLINGS ISSUE PLAN N WORKTREE RUN_DIR PHASE GRANT WAVE_DIR FACTS FACTS_PATH COUPLING ORDER REVIEW_LOOP; do
+for placeholder in SIBLINGS ISSUE PLAN N WORKTREE RUN_DIR PHASE GRANT WAVE_DIR FACTS FACTS_PATH COUPLING ORDER REVIEW_LOOP POLICY; do
   require_text "$brief" "- \`{{$placeholder}}\` —"
 done
 
@@ -295,8 +295,8 @@ require_text "$brief" "\`--isolate\` is not optional: your siblings are"
 require_text "$brief" "In the publish phase, exactly as:"
 # grep -F matches the build line as a substring, so pin the publish line whole.
 publish_line="$(grep -F -A2 "In the publish phase, exactly as:" "$brief" | tail -1)"
-[ "$publish_line" = "    work-issue {{N}} {{PLAN}} --isolate{{REVIEW_LOOP}}" ] || {
-  echo "publish line in $brief is not exactly: work-issue {{N}} {{PLAN}} --isolate{{REVIEW_LOOP}}" >&2
+[ "$publish_line" = "    work-issue {{N}} {{PLAN}} --isolate{{REVIEW_LOOP}}{{POLICY}}" ] || {
+  echo "publish line in $brief is not exactly: work-issue {{N}} {{PLAN}} --isolate{{REVIEW_LOOP}}{{POLICY}}" >&2
   exit 1
 }
 require_text "$skill" "again, with \`--no-publish\` dropped"
@@ -672,7 +672,7 @@ require_text "$merge_test" "a \`result: <green|red|conflict>\` line, and VERIFY_
 require_text "$merge_test" "\`exit: <status>\`, the same \`base:\` line, \`install: <INSTALL_CMD>\`, and \`verify: <VERIFY_CMD>\`"
 require_text "$skill" "saved to \`WAVE_DIR/baseline.txt\` with \`exit: <status>\`, the \`base:\` line, \`install: <INSTALL_CMD>\`, and \`verify: <VERIFY_CMD>\` ahead of its tail"
 require_text "$skill" "plus \`--wave-baseline <WAVE_DIR>/baseline.txt\`"
-require_text "$brief" "    work-issue {{N}} {{PLAN}} --isolate --no-publish --wave-baseline {{WAVE_DIR}}/baseline.txt{{REVIEW_LOOP}}"
+require_text "$brief" "    work-issue {{N}} {{PLAN}} --isolate --no-publish --wave-baseline {{WAVE_DIR}}/baseline.txt{{REVIEW_LOOP}}{{POLICY}}"
 require_text "$ledger" "| 60 | The no-branch baseline records \`exit:\`, \`base:\`, \`install:\` and \`verify:\` lines, and every build lane is handed it as \`--wave-baseline\`"
 require_text "$skill" "Then \`work-wave/scripts/wave-state.py probe --wave-dir WAVE_DIR --root ROOT --default DEFAULT [--pr-bundle FILE]\`"
 require_text "$skill" "Exit 1 is a stop: report its reason and every null field the probe's stderr names, and stop the wave."
@@ -2550,5 +2550,144 @@ require_text work-wave/README.md "handback.py"
 require_text "$ledger" "| 70 | \`handback.py\` checks \`worktree\`, \`run_dir\`, and \`head\` itself"
 require_text "$ledger" "| 68 | Step 4 runs every message a lane returns through \`handback.py\`"
 require_text "$ledger" "| 69 | The lane brief names one tracked shape for every herdr prompt a lane sends"
+
+# --- #461: lane policy. Nobody watches a lane, so the wave hands each one a
+# ruling policy for the budget and red-team stops, and the orchestrator copies
+# every ruling a lane made into facts/wave.md, the file it alone writes. ---
+
+lane_policy=work-wave/scripts/lane-policy.py
+require_file "$lane_policy"
+[[ -x "$lane_policy" ]] || {
+  echo "lane-policy.py is not executable: $lane_policy" >&2
+  exit 1
+}
+
+lp_run() {
+  set +e
+  python3 "$lane_policy" "$@" >"$tmp/out" 2>"$tmp/err"
+  status=$?
+  set -e
+  out="$(cat "$tmp/out")"
+  err="$(cat "$tmp/err")"
+}
+
+# The lane defaults, each applied only where the wave left the flag out.
+lp_run flags
+expect_status 0 "lane-policy.py flags with no flags"
+[[ "$out" == " --auto-budget 4.0 --defer-after 3 --repair-class unowned-write" ]] || {
+  echo "lane-policy.py flags with no flags should print the lane defaults, got: '$out'" >&2
+  exit 1
+}
+lp_run flags --repair-class unowned-write --defer-after 5 --auto-budget 6
+expect_status 0 "lane-policy.py flags with all three flags"
+[[ "$out" == " --auto-budget 6.0 --defer-after 5 --repair-class unowned-write" ]] || {
+  echo "lane-policy.py flags should print the wave's flags in fixed order, got: '$out'" >&2
+  exit 1
+}
+lp_run flags --defer-after 7
+expect_status 0 "lane-policy.py flags with one flag"
+[[ "$out" == " --auto-budget 4.0 --defer-after 7 --repair-class unowned-write" ]] || {
+  echo "lane-policy.py flags should default only the flags the wave left out, got: '$out'" >&2
+  exit 1
+}
+for bad in "--auto-budget 0" "--auto-budget nan" "--repair-class lossy" "--defer-after 0"; do
+  # shellcheck disable=SC2086
+  lp_run flags $bad
+  expect_status 3 "lane-policy.py flags $bad"
+  expect_line "$err" "lane-policy: ${bad/ /: }" "lane-policy.py flags $bad"
+done
+
+# The one place this suite runs work-issue's policy.py: the two scripts re-state
+# one set of flag rules, so they have to accept, refuse, and print each value
+# alike. The other two flags stay valid so no lane default fills in.
+wi_policy=work-issue/scripts/policy.py
+require_file "$wi_policy"
+lp_compare() {
+  local flag="$1" value="$2" lp_status wi_status lp_out wi_out
+  local -a args=(--auto-budget 5 --defer-after 2 --repair-class unowned-write)
+  case "$flag" in
+    --auto-budget) args[1]="$value" ;;
+    --defer-after) args[3]="$value" ;;
+    --repair-class) args[5]="$value" ;;
+  esac
+  set +e
+  lp_out="$(python3 "$lane_policy" flags "${args[@]}" 2>/dev/null)"
+  lp_status=$?
+  wi_out="$(python3 "$wi_policy" flags "${args[@]}" 2>/dev/null)"
+  wi_status=$?
+  set -e
+  [[ "$lp_status" == "$wi_status" ]] || {
+    echo "$flag $value: lane-policy.py exits $lp_status, policy.py exits $wi_status" >&2
+    exit 1
+  }
+  [[ "$lp_status" != 0 || "$lp_out" == " $wi_out" ]] || {
+    echo "$flag $value: lane-policy.py prints '$lp_out', policy.py prints '$wi_out'" >&2
+    exit 1
+  }
+}
+for value in 4 4.0 0.5 1e3 0 -1 nan inf 1e400 abc ""; do lp_compare --auto-budget "$value"; done
+for value in 1 3 03 0 -1 1.5 abc ""; do lp_compare --defer-after "$value"; done
+for value in unowned-write lossy Unowned-Write ""; do lp_compare --repair-class "$value"; done
+
+# facts: two policy.log lines land once each after the existing merge-test
+# line, a re-run adds nothing, and nothing else under facts/ changes.
+lp_wave="$tmp/lp-wave"
+lp_run_dir="$tmp/lp-run/issue-7"
+mkdir -p "$lp_wave/facts" "$lp_run_dir"
+printf -- '- [wave] merge test 1: green\n' >"$lp_wave/facts/wave.md"
+printf -- '- [issue-7] gh needs --repo here — gh pr list\n' >"$lp_wave/facts/issue-7.md"
+cp "$lp_wave/facts/issue-7.md" "$tmp/lp-issue-7.before"
+cat >"$lp_run_dir/policy.log" <<'LOG'
+- [wave] policy: issue-7 budget at step 7: raise 4.0 (--auto-budget 4.0) — build: 30m review: 90m ratio: 3.00 over: yes
+- [wave] policy: issue-7 red-team round 2: repair (--repair-class unowned-write) — 1 /tmp/peer/a1.txt
+LOG
+lp_run facts --run-dir "$lp_run_dir" --wave-dir "$lp_wave"
+expect_status 0 "lane-policy.py facts"
+[[ "$out" == "facts: 2 appended" ]] || {
+  echo "lane-policy.py facts should report two lines appended, got: $out" >&2
+  exit 1
+}
+{ printf -- '- [wave] merge test 1: green\n'; cat "$lp_run_dir/policy.log"; } >"$tmp/lp-wave.want"
+cmp -s "$tmp/lp-wave.want" "$lp_wave/facts/wave.md" || {
+  echo "facts/wave.md should hold the merge-test line, then both policy lines:" >&2
+  cat "$lp_wave/facts/wave.md" >&2
+  exit 1
+}
+lp_run facts --run-dir "$lp_run_dir" --wave-dir "$lp_wave"
+expect_status 0 "lane-policy.py facts, run again"
+[[ "$out" == "facts: 0 appended" ]] || {
+  echo "a second lane-policy.py facts should append nothing, got: $out" >&2
+  exit 1
+}
+cmp -s "$tmp/lp-wave.want" "$lp_wave/facts/wave.md" || {
+  echo "a second lane-policy.py facts changed facts/wave.md" >&2
+  exit 1
+}
+lp_run facts --run-dir "$tmp/lp-run/issue-8" --wave-dir "$lp_wave"
+expect_status 0 "lane-policy.py facts with no policy.log"
+cmp -s "$tmp/lp-wave.want" "$lp_wave/facts/wave.md" || {
+  echo "lane-policy.py facts with no policy.log changed facts/wave.md" >&2
+  exit 1
+}
+cmp -s "$tmp/lp-issue-7.before" "$lp_wave/facts/issue-7.md" || {
+  echo "lane-policy.py facts changed a lane's own facts file" >&2
+  exit 1
+}
+[[ "$(find "$lp_wave/facts" -type f | wc -l | tr -d ' ')" == "2" ]] || {
+  echo "lane-policy.py facts wrote a new file under facts/" >&2
+  exit 1
+}
+
+# The prose that carries the policy to every lane and its rulings back. Without
+# these pins the script passes every case above while no lane is handed a flag.
+require_text "$skill" "\`--auto-budget <ratio>\`, \`--defer-after <k>\`, and \`--repair-class <class>\` set the ruling policy every lane's \`work-issue\` invocation carries"
+require_text "$skill" "work-wave/scripts/lane-policy.py flags"
+require_text "$skill" "with \`--review-loop[=<comment>]\` and the policy \` --auto-budget 4.0 --defer-after 3 --repair-class unowned-write\` added"
+require_text "$skill" "work-wave/scripts/lane-policy.py facts --run-dir <run_dir> --wave-dir WAVE_DIR"
+require_text "$brief" "- \`{{POLICY}}\` —"
+require_text "$brief" "Fifteen substitutions. Fourteen stand for a single value"
+require_text work-wave/README.md "lane-policy.py"
+require_text work-wave/README.md "--auto-budget 4.0 --defer-after 3 --repair-class unowned-write"
+require_text "$ledger" "| 71 | Every lane's \`work-issue\` invocation carries \`--auto-budget 4.0 --defer-after 3 --repair-class unowned-write\`"
 
 echo "work-wave smoke: OK"

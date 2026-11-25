@@ -6,7 +6,7 @@ A lane is not a `divvy-up` worker. A worker writes files into a shared tree and 
 
 ## The brief
 
-Instantiate this once per lane, substituting the fourteen placeholders below. Everything else, fence included, goes across verbatim. This is the whole prompt a lane receives, so a paraphrase here is a paraphrase the lane never sees corrected.
+Instantiate this once per lane, substituting the fifteen placeholders below. Everything else, fence included, goes across verbatim. This is the whole prompt a lane receives, so a paraphrase here is a paraphrase the lane never sees corrected.
 
 ```
 You are one lane in a wave of parallel work-issue runs. {{SIBLINGS}}
@@ -16,11 +16,11 @@ Your plan, by absolute path: {{PLAN}}
 
 Invoke the `work-issue` skill by name. In the build phase, exactly as:
 
-    work-issue {{N}} {{PLAN}} --isolate --no-publish --wave-baseline {{WAVE_DIR}}/baseline.txt{{REVIEW_LOOP}}
+    work-issue {{N}} {{PLAN}} --isolate --no-publish --wave-baseline {{WAVE_DIR}}/baseline.txt{{REVIEW_LOOP}}{{POLICY}}
 
 In the publish phase, exactly as:
 
-    work-issue {{N}} {{PLAN}} --isolate{{REVIEW_LOOP}}
+    work-issue {{N}} {{PLAN}} --isolate{{REVIEW_LOOP}}{{POLICY}}
 
 In the repoll phase, run the publish-phase line above unchanged.
 
@@ -128,7 +128,7 @@ refused the plan or the cross-run check—put its stderr in `question`).
 
 ## Placeholders
 
-Fourteen substitutions. Thirteen stand for a single value; `{{GRANT}}` stands for one of two whole paragraphs.
+Fifteen substitutions. Fourteen stand for a single value; `{{GRANT}}` stands for one of two whole paragraphs.
 
 - `{{SIBLINGS}}` — one line naming the wave's other lanes: the rest of ISSUES and their titles, read off `lanes.md`. It puts the other issues in front of a lane before its first command, the way `{{ISSUE}}` puts its own.
 - `{{ISSUE}}` — `issue-<N>`, its title, and its URL, from the `gh issue view` call at Step 0.
@@ -144,6 +144,7 @@ Fourteen substitutions. Thirteen stand for a single value; `{{GRANT}}` stands fo
 - `{{COUPLING}}` — the `coupling.md` rows that name this lane, quoted.
 - `{{ORDER}}` — this lane's own row in `order.md`: its place in the merge order, or `held`, and what it waits on.
 - `{{REVIEW_LOOP}}` — empty, ` --review-loop`, or ` --review-loop="<comment>"`: the form the user gave work-wave, with one leading space so the invocation line ends cleanly where it is empty.
+- `{{POLICY}}` — the line `work-wave/scripts/lane-policy.py flags` printed for this invocation, leading space included: ` --auto-budget 4.0 --defer-after 3 --repair-class unowned-write` where the user gave no policy flag. It goes on every phase's line, so each `work-issue` run rules its own budget, triage, and red-team stops by it instead of stopping to ask, and writes each ruling to `{{RUN_DIR}}/policy.log`, which the orchestrator copies into `facts/wave.md`.
 
 ## The report contract
 

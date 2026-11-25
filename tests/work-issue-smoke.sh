@@ -189,7 +189,7 @@ require_text work-issue/SKILL.md "name: work-issue"
 # from siblings too—a wave reaches it once per lane. Refuted on the bare
 # key so `: false` fails here as loudly as `: true`.
 refute_text work-issue/SKILL.md "disable-model-invocation"
-require_text work-issue/SKILL.md "argument-hint: '<issue or pull request number or URL> [plan path] [--isolate | --no-isolate] [--deep] [--max-review-rounds N] [--review-loop[=<comment>]] [--no-publish] [--until-boundary] [--wave-baseline PATH] [--dry-run]'"
+require_text work-issue/SKILL.md "argument-hint: '<issue or pull request number or URL> [plan path] [--isolate | --no-isolate] [--deep] [--max-review-rounds N] [--review-loop[=<comment>]] [--no-publish] [--until-boundary] [--wave-baseline PATH] [--auto-budget R] [--repair-class C] [--defer-after K] [--dry-run]'"
 
 # A description that summarizes the steps becomes the shortcut the model takes
 # instead of reading the body, which is how a nine-step skill collapses into
@@ -7065,6 +7065,29 @@ grep -q ask "$pl/c-red.out" && pl_fail c-red "with the --repair-class guard cut,
 [[ "$(cat "$pl/c-red.status")" == 0 && -s "$pl/c-red.out" ]] || pl_fail c-red "the cut copy should still sort the red-team round"
 pl_run c-shipped budget --timing "$pl/copy-timing.log" --at 7 --run-dir "$pl/c-run"
 pl_expect c-shipped 0 ask "the shipped script should still ask on the no-flag budget case"
+
+# The prose that sends each stop through policy.py. Each pin names one stop's
+# hand-off, so dropping a sentence leaves that stop asking with the flag set.
+require_file work-issue/references/policy.md
+require_text work-issue/SKILL.md "\`--auto-budget <ratio>\` raises the budget ratio to \`<ratio>\` once at a budget stop and defers the round's open rows past it at Step 7"
+require_text work-issue/SKILL.md "\`--repair-class <class>\` repairs a finding in that class, \`unowned-write\` the only one, at the red-team stop and at triage from round \`--defer-after\` on, and defers the rest"
+require_text work-issue/SKILL.md "\`--defer-after <k>\` defers every in-scope row outside the repair class from triage round k on"
+require_text work-issue/SKILL.md "Step 0 runs \`work-issue/scripts/policy.py flags\` on the three before anything is written under RUN_DIR, and a non-zero exit refuses the run quoting its stderr"
+require_text work-issue/SKILL.md "the three bind only the invocation that carries them and are never written to RUN_DIR, like \`--wave-baseline\`, so \`work-issue N\` without them asks at every stop"
+require_text work-issue/SKILL.md "\`timing.log\`, \`policy.log\`, \`conflict.txt\`"
+require_text work-issue/SKILL.md "Where the invocation carries \`--auto-budget\`, run \`policy.py budget\` at each \`over: yes\` before asking"
+require_text work-issue/SKILL.md "That stop runs \`policy.py sort --kind redteam\` on the second failed round first, where the invocation carries \`--repair-class\`"
+require_text work-issue/SKILL.md "a round k at or above K runs \`policy.py sort --kind triage\` once its rows are written and before this cap reads them, and each row it rules \`defer\` is queued with \`policy: --defer-after K\`"
+require_text work-issue/SKILL.md "and from round \`--defer-after\` on every row \`policy.py sort\` ruled \`defer\` is queued with \`policy: --defer-after K\`; or \`pending\`"
+require_text work-issue/SKILL.md "An invocation carrying a policy flag whose probe answers \`stop\` rules that stop before asking."
+require_text work-issue/SKILL.md "A red-team ruling resumes only where it prints \`repair\` and no \`reports/redteam-repair-<k>.json\` exists for that round"
+require_text work-issue/SKILL.md "the lines of \`RUN_DIR/policy.log\` where it exists,"
+require_text work-issue/SKILL.md "[references/policy.md](references/policy.md) — read where the invocation carries"
+require_text work-issue/references/policy.md "A run with no policy flag asks at every one of these stops, as it did before these flags existed"
+require_text work-issue/references/policy.md "A finding is in the \`unowned-write\` class when it names a path outside \`owns\`."
+require_text work-issue/references/policy.md "A citation that names no path is the one finding the script can't sort"
+require_text work-issue/references/policy.md "- [wave] policy: <run> <stop>: <ruling> (<flag> <value>) — <evidence>"
+require_text work-issue/references/policy.md "Write every in-scope row of the newest triage round not yet queued as \`in scope; queued: policy: --auto-budget R spent\`"
 
 # --- liveness pooling at MERGE_ROWS ---
 # #436: a pool group stops taking merges at the move whose pooled rows would
