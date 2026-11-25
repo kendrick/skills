@@ -1267,12 +1267,16 @@ def phase_of(probe):
     # newer than its report, or a failed round whose routing hasn't finished,
     # under a `pending` or `findings` review with no reply owed. Rows 14 and 15
     # would poll or triage past it and nothing would red-team the repair, so
-    # row 17 takes it.
-    item1_pending = (
+    # row 17 takes it. The item-1 leg needs the repair pushed: an unpushed
+    # repair still owes Step 8's capture and push, which row 17's push leg
+    # below runs with no budget gate, so over budget it pushes before anything
+    # stops. Rows 14 and 15 skip both, or the poll strands an unpushed repair.
+    awaiting_item1 = (
         pr_state == "OPEN"
         and flag(probe, "newest_repair_report")
         and (flag(probe, "repair_after_last_round") or flag(probe, "redteam_last_failed"))
     )
+    item1_pending = awaiting_item1 and not flag(probe, "ahead_of_origin")
     # Step 8 pushes before it replies, so a stop between those two leaves rows
     # that still owe a reply under a review that now reads `pending`. Without
     # this guard the poll preempts row 17 and the old findings are never
@@ -1282,14 +1286,14 @@ def phase_of(probe):
         and review_state == "pending"
         and count(probe, "triage_rows_unanswered") == 0
         and not flag(probe, "deferred_comment_needed")
-        and not item1_pending
+        and not awaiting_item1
     ):
         return "6", "row 14: the PR is open and no review has landed since the last push; keep polling"
     if (
         pr_state == "OPEN"
         and review_state == "findings"
         and not flag(probe, "triage_newer_than_since")
-        and not item1_pending
+        and not awaiting_item1
     ):
         return "6", "row 15: the PR has findings and no triage round newer than SINCE"
     # Counted totals cannot say whether the newest round was repaired: an
@@ -1347,20 +1351,29 @@ def phase_of(probe):
         and not flag(probe, "repair_ar_settled")
     )
     if item1_pending or refire_pending:
-        if flag(probe, "redteam_failed_twice"):
+        if item1_pending and flag(probe, "redteam_failed_twice"):
             return "stop", "row 17: two red-team rounds in a row failed; stop and report with the evidence"
         if over_budget:
             return budget_stop(17)
-        no_push = (
+        push_guard_note = (
             "; item 2 pushes only where local HEAD is ahead of origin, so a "
             "pushed repair is not pushed again"
         )
         if not refire_pending:
+            # A failed round with no repair after it owes the repair dispatch,
+            # as row 10 says, since a second reproducer round would re-test the
+            # code the first round refuted.
+            if flag(probe, "redteam_last_failed") and not flag(probe, "repair_after_last_round"):
+                return (
+                    "8",
+                    "row 17: the pushed repair's newest reproducer round failed and "
+                    "no red-team repair has followed it; resume at Step 8 item 1 at "
+                    "the red-team repair dispatch" + push_guard_note,
+                )
             return (
                 "8",
-                "row 17: no reproducer round is newer than the repair report, or "
-                "the newest round failed and its routing has not finished; resume "
-                "at Step 8 item 1 at the reproducer" + no_push,
+                "row 17: the pushed repair has no reproducer round newer than its "
+                "report; resume at Step 8 item 1 at the reproducer" + push_guard_note,
             )
         return (
             "8",
@@ -1368,7 +1381,7 @@ def phase_of(probe):
             "or the repair's own diff hits a money, authz, or schema trigger row, "
             "and the repair's adversarial-review has not settled; resume at "
             "Step 8 item 1 from the reproducer where trigger-repair-<k>.txt is "
-            "absent, else at the adversarial-review invocation" + no_push,
+            "absent, else at the adversarial-review invocation" + push_guard_note,
         )
     # Post-PR only: Step 8 pushes and replies but never opens a pull request,
     # so a repair with no PR behind it belongs to row 10 (unverified) or row

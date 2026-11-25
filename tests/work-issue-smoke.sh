@@ -2097,7 +2097,7 @@ grep -Fq "adversarial-review" <<<"$read_away_reason" && {
 # 15's triage.
 for item1 in pending:14 findings:15; do
   item1_reason="$(python3 "$run_state" phase --probe "$probes_dir/row-17-pushed-item1-${item1%%:*}.json")"
-  grep -Fq "phase: 8 reason: row 17: no reproducer round is newer than the repair report" <<<"$item1_reason" \
+  grep -Fq "phase: 8 reason: row 17: the pushed repair has no reproducer round newer than its report; resume at Step 8 item 1 at the reproducer" <<<"$item1_reason" \
     && grep -Fq "item 2 pushes only where local HEAD is ahead of origin, so a pushed repair is not pushed again" <<<"$item1_reason" || {
     echo "row-17-pushed-item1-${item1%%:*}.json should resume at Step 8 item 1 with no second push, got: $item1_reason" >&2
     exit 1
@@ -2113,6 +2113,31 @@ json.dump(probe, open(sys.argv[2], "w"))' "$probes_dir/row-17-pushed-item1-${ite
     exit 1
   }
 done
+# A failed item-1 round with no red-team repair after it owes the repair
+# dispatch, as row 10 says, since another reproducer round re-tests refuted code.
+# Adopted, since row 10 catches the failed round first on a planned run.
+python3 -c 'import json, sys
+probe = json.load(open(sys.argv[1]))
+probe["repair_after_last_round"] = False
+probe["redteam_last_failed"] = True
+probe["adopted"] = True
+json.dump(probe, open(sys.argv[2], "w"))' "$probes_dir/row-17-pushed-item1-pending.json" "$tmp/item1-failed.json"
+grep -Fq "phase: 8 reason: row 17: the pushed repair's newest reproducer round failed and no red-team repair has followed it; resume at Step 8 item 1 at the red-team repair dispatch" <<<"$(python3 "$run_state" phase --probe "$tmp/item1-failed.json")" || {
+  echo "a failed item-1 round with no repair after it should resume at the red-team repair dispatch" >&2
+  exit 1
+}
+# The item-1 leg needs the repair pushed. An unpushed repair over budget takes
+# row 17's push leg, which has no budget gate, and pushes before anything stops.
+python3 -c 'import json, sys
+probe = json.load(open(sys.argv[1]))
+assert probe["ahead_of_origin"] is True
+probe["repair_after_last_round"] = True
+probe["review_over_budget"] = True
+json.dump(probe, open(sys.argv[2], "w"))' "$probes_dir/row-17-review-repair-unpushed.json" "$tmp/unpushed-over.json"
+grep -Fq "phase: 8 reason: row 17: the deferred-findings comment is owed, or a repair report or an all-queued or capped triage round leaves work unpushed" <<<"$(python3 "$run_state" phase --probe "$tmp/unpushed-over.json")" || {
+  echo "an unpushed repair over budget should take row 17's push leg, not the item-1 leg's budget stop" >&2
+  exit 1
+}
 # The #158 budget gate covers the new condition too: it starts a review cycle.
 python3 -c 'import json, sys
 probe = json.load(open(sys.argv[1]))
@@ -2714,7 +2739,7 @@ grep -Fqi "retry" <<<"$loop_block" && {
 # the file's time, because Step 8 edits the round after the push it answers.
 require_text work-issue/SKILL.md "# Triage round <k>, since <SINCE>"
 require_text work-issue/references/triage.md "# Triage round <k>, since <SINCE>"
-require_text work-issue/references/resume.md "| 15 | PR open; \`findings\`; no triage round recorded against the current SINCE; no repair awaiting item 1's reproducer (row 17's item-1 leg) | Step 6 triage |"
+require_text work-issue/references/resume.md "| 15 | PR open; \`findings\`; no triage round recorded against the current SINCE; no repair awaiting item 1's reproducer (row 17: its item-1 leg once the repair is pushed, its push leg before) | Step 6 triage |"
 require_text _maintenance/work-issue/RATIONALE.md "Comparing a triage round's file time against \`pushed_at\`"
 refute_text work-issue/references/resume.md "compare its mtime against"
 refute_text work-issue/SKILL.md "compare its mtime against"
@@ -3962,8 +3987,8 @@ require_text work-issue/references/resume.md "or a repair report or an all-queue
 # Row 14's guards are what keep a stop between the repair push and the replies,
 # or between the push and item 1's reproducer (#369), out of the poll. Both
 # copies carry them.
-require_text work-issue/SKILL.md "| 14 | PR open; review \`pending\`; no triage row without a reply URL; no queue row missing from its comment; no repair awaiting item 1's reproducer (row 17's item-1 leg) | Step 6 poll |"
-require_text work-issue/references/resume.md "| 14 | PR open; review \`pending\`; no triage row without a reply URL; no queue row missing from its comment; no repair awaiting item 1's reproducer (row 17's item-1 leg) | Step 6 poll |"
+require_text work-issue/SKILL.md "| 14 | PR open; review \`pending\`; no triage row without a reply URL; no queue row missing from its comment; no repair awaiting item 1's reproducer (row 17: its item-1 leg once the repair is pushed, its push leg before) | Step 6 poll |"
+require_text work-issue/references/resume.md "| 14 | PR open; review \`pending\`; no triage row without a reply URL; no queue row missing from its comment; no repair awaiting item 1's reproducer (row 17: its item-1 leg once the repair is pushed, its push leg before) | Step 6 poll |"
 # The preamble is the only part of worker-prompt.md a worker sees, so the
 # nine-field contract has to be inside it, not only documented after it.
 require_text work-issue/references/worker-prompt.md "This shape replaces the six-field"
@@ -4149,7 +4174,7 @@ s369_loop_old="post the review request after the push and before the next \`poll
 for s369_pin in "$s369_order" "$s369_close" "$s369_capture" "$s369_once" "$s369_head" "$s369_base" "$s369_missing" "$s369_body" "$s369_loop"; do
   require_text work-issue/SKILL.md "$s369_pin"
 done
-refute_text work-issue/SKILL.md "before item 2 pushes"
+refute_text work-issue/SKILL.md "$s369_body_old"
 refute_text work-issue/SKILL.md "$s369_loop_old"
 # The reproducer's verdicts still gate the final report; only their timing moved.
 require_text work-issue/SKILL.md "**Done when:** every triage row has a reply URL; every repair's claims carry reproducer verdicts;"
@@ -4178,7 +4203,7 @@ for s369_pin in "$s369_order" "$s369_close" "$s369_capture" "$s369_missing" "$s3
     exit 1
   fi
 done
-for s369_cut in "before item 2 pushes" "$s369_loop_old" "A \`repair-base-<k>\` that is no longer an ancestor of HEAD leaves this condition unmet too"; do
+for s369_cut in "$s369_body_old" "$s369_loop_old" "A \`repair-base-<k>\` that is no longer an ancestor of HEAD leaves this condition unmet too"; do
   if (refute_text "$s369_copy" "$s369_cut") 2>/dev/null; then
     echo "#369: the refute should fail on a SKILL.md copy with item 1 back ahead of the push: $s369_cut" >&2
     exit 1
