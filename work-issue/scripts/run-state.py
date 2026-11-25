@@ -1306,12 +1306,22 @@ def phase_of(probe):
         or redteam_refire_pending
         or (awaiting_item1 and not flag(probe, "ahead_of_origin"))
     )
+    # Defined here so rows 14 and 15 can skip it; row 17 explains it below.
+    refire_pending = (
+        open_repair
+        and (count(probe, "triage_blocking_rows") > 0 or flag(probe, "repair_diff_triggers"))
+        and not flag(probe, "repair_ar_settled")
+        and not flag(probe, "ahead_of_origin")
+    )
     # Rows 14 and 15 skip all of it, and an unpushed repair too: once the
     # re-fire settles, item 1's red-team repair is still ahead of origin with
-    # nothing awaiting item 1, and a poll would strand it unpushed.
+    # nothing awaiting item 1, and a poll would strand it unpushed. A pushed
+    # repair's own re-fire counts too: push-first lets the next review land
+    # before it settles, and a new triage round stops tracking it (#478).
     step8_owed = (
         awaiting_item1
         or redteam_refire_pending
+        or refire_pending
         or (open_repair and flag(probe, "ahead_of_origin"))
     )
     # Step 8 pushes before it replies, so a stop between those two leaves rows
@@ -1384,12 +1394,6 @@ def phase_of(probe):
     # Like the item-1 leg, it needs the repair pushed (#369). Item 1 runs after
     # item 2's push, so an unpushed candidate takes the push leg first, and a
     # budget stop can't leave it unpushed.
-    refire_pending = (
-        open_repair
-        and (count(probe, "triage_blocking_rows") > 0 or flag(probe, "repair_diff_triggers"))
-        and not flag(probe, "repair_ar_settled")
-        and not flag(probe, "ahead_of_origin")
-    )
     if item1_pending or refire_pending:
         if item1_pending and flag(probe, "redteam_failed_twice"):
             return "stop", "row 17: two red-team rounds in a row failed; stop and report with the evidence"
