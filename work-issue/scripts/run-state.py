@@ -1205,7 +1205,18 @@ def phase_of(probe):
         # round over it re-tests unchanged code. Two failed rounds in a row is
         # Step 4's stop, and a resume that kept cycling past it would never honor
         # the stop.
-        if flag(probe, "build_final") and flag(probe, "redteam_last_failed"):
+        # A failed round under an open PR's repair report is Step 8 item 1's,
+        # and row 17 resumes it inside Step 8 (#369). A rebase in progress
+        # keeps it here, since row 12 below would publish a refuted round.
+        if (
+            flag(probe, "build_final")
+            and flag(probe, "redteam_last_failed")
+            and not (
+                pr_state == "OPEN"
+                and flag(probe, "newest_repair_report")
+                and not (flag(probe, "conflict") or flag(probe, "rebase_in_progress"))
+            )
+        ):
             if flag(probe, "redteam_failed_twice"):
                 return "stop", "row 10: two red-team rounds in a row failed; stop and report with the evidence"
             if over_budget:
@@ -1271,12 +1282,18 @@ def phase_of(probe):
     # repair still owes Step 8's capture and push, which row 17's push leg
     # below runs with no budget gate, so over budget it pushes before anything
     # stops. Rows 14 and 15 skip both, or the poll strands an unpushed repair.
+    # A failed newest round means item 2 already pushed the repair, since
+    # Step 4 never finishes on one and item 1 runs only after the push. The
+    # round's red-team repair puts HEAD ahead of origin again, and pushing it
+    # before round k+1 answers ships code nobody verified, so the failed round
+    # outranks the push leg.
     awaiting_item1 = (
         pr_state == "OPEN"
         and flag(probe, "newest_repair_report")
         and (flag(probe, "repair_after_last_round") or flag(probe, "redteam_last_failed"))
     )
-    item1_pending = awaiting_item1 and not flag(probe, "ahead_of_origin")
+    item1_failed = awaiting_item1 and flag(probe, "redteam_last_failed")
+    item1_pending = item1_failed or (awaiting_item1 and not flag(probe, "ahead_of_origin"))
     # Step 8 pushes before it replies, so a stop between those two leaves rows
     # that still owe a reply under a review that now reads `pending`. Without
     # this guard the poll preempts row 17 and the old findings are never
@@ -1363,17 +1380,26 @@ def phase_of(probe):
             "; item 2 pushes only where local HEAD is ahead of origin, so a "
             "pushed repair is not pushed again"
         )
-        if not refire_pending:
+        # Item 1's failed round routes before the re-fire, so
+        # adversarial-review runs only over code a round has cleared.
+        if item1_failed:
             # A failed round with no repair after it owes the repair dispatch,
             # as row 10 says, since a second reproducer round would re-test the
             # code the first round refuted.
-            if flag(probe, "redteam_last_failed") and not flag(probe, "repair_after_last_round"):
+            if not flag(probe, "repair_after_last_round"):
                 return (
                     "8",
                     "row 17: the pushed repair's newest reproducer round failed and "
                     "no red-team repair has followed it; resume at Step 8 item 1 at "
                     "the red-team repair dispatch" + push_guard_note,
                 )
+            return (
+                "8",
+                "row 17: the pushed repair's newest reproducer round failed and a "
+                "red-team repair has followed it; resume at Step 8 item 1 at round "
+                "k+1, and push the red-team repair only once a round is clean",
+            )
+        if not refire_pending:
             return (
                 "8",
                 "row 17: the pushed repair has no reproducer round newer than its "

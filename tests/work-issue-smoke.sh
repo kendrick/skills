@@ -94,6 +94,7 @@ require_file tests/fixtures/work-issue/probes/row-17-postpush.json
 # 14 and 15 would poll or triage past.
 require_file tests/fixtures/work-issue/probes/row-17-pushed-item1-pending.json
 require_file tests/fixtures/work-issue/probes/row-17-pushed-item1-findings.json
+require_file tests/fixtures/work-issue/probes/row-17-item1-redteam-repaired.json
 require_file tests/fixtures/work-issue/probes/row-10-repair-unverified.json
 # A pre-PR repair, clean after its own round: Step 5 with the PR create, never
 # Step 8, which only pushes and replies.
@@ -1925,7 +1926,7 @@ probes_dir=tests/fixtures/work-issue/probes
 declare -a probe_cases=(
   "row-01:done" "row-01-queued:stop" "row-02:wait" "row-03:stop" "row-04:0" "row-05:0" "row-05-gated:0" "row-06:0"
   "row-07:2" "row-07-isolation-incomplete:1" "row-07-committed-unreported:stop" "row-07-committed-unreported-herdr:stop" "row-07-herdr-absent:2" "row-21:wait" "row-08:3" "row-09:3" "row-10:4" "row-11:4" "row-11-trigger-unrecorded:4" "row-12:5" "row-13:5"
-  "row-14:6" "row-15:6" "row-16:7" "row-17:8" "row-17-queued:8" "row-17-postpush:8" "row-17-pushed-item1-pending:8" "row-17-pushed-item1-findings:8"
+  "row-14:6" "row-15:6" "row-16:7" "row-17:8" "row-17-queued:8" "row-17-postpush:8" "row-17-pushed-item1-pending:8" "row-17-pushed-item1-findings:8" "row-17-item1-redteam-repaired:8"
   "row-10-repair-unverified:4" "row-10-repair-needed:4" "row-10-failed-twice:stop" "row-13-prepr-repair-clean:5" "row-16-earlier-queued:8" "row-17-review-repair-unpushed:8" "row-17-deferred-owed:8" "row-17-worker-queue:8" "row-18-answered:done" "row-18:done"
   "row-17-repair-advisory-only:8" "row-17-repair-blocking:8" "row-17-repair-blocking-settled:8" "row-17-repair-diff-trigger:8"
   "row-10-over-budget:stop" "row-11-over-budget:stop" "row-16-over-budget:stop" "row-16-over-budget-queued:8" "row-17-over-budget:8" "row-17-over-budget-pushed:stop"
@@ -2124,19 +2125,37 @@ json.dump(probe, open(sys.argv[2], "w"))' "$probes_dir/row-17-pushed-item1-${ite
     exit 1
   }
 done
-# A failed item-1 round with no red-team repair after it owes the repair
-# dispatch, as row 10 says, since another reproducer round re-tests refuted code.
-# Adopted, since row 10 catches the failed round first on a planned run.
-python3 -c 'import json, sys
+# A failed item-1 round marks a pushed repair whatever HEAD says, so it owns
+# the run on a planned or an adopted PR: row 10 leaves it to row 17. With no
+# red-team repair after it, the round owes the repair dispatch, as row 10 says,
+# since another reproducer round re-tests refuted code. With one committed,
+# HEAD is ahead of origin again, and the next step is round k+1, never the
+# push leg, and over budget it is the budget stop rather than a push (#369).
+for adopted in False True; do
+  for over in False True; do
+    for repaired in False True; do
+      python3 -c 'import json, sys
 probe = json.load(open(sys.argv[1]))
-probe["repair_after_last_round"] = False
-probe["redteam_last_failed"] = True
-probe["adopted"] = True
-json.dump(probe, open(sys.argv[2], "w"))' "$probes_dir/row-17-pushed-item1-pending.json" "$tmp/item1-failed.json"
-grep -Fq "phase: 8 reason: row 17: the pushed repair's newest reproducer round failed and no red-team repair has followed it; resume at Step 8 item 1 at the red-team repair dispatch" <<<"$(python3 "$run_state" phase --probe "$tmp/item1-failed.json")" || {
-  echo "a failed item-1 round with no repair after it should resume at the red-team repair dispatch" >&2
-  exit 1
-}
+assert probe["redteam_last_failed"] is True and probe["ahead_of_origin"] is True
+probe["adopted"] = sys.argv[3] == "True"
+probe["review_over_budget"] = sys.argv[4] == "True"
+probe["repair_after_last_round"] = sys.argv[5] == "True"
+json.dump(probe, open(sys.argv[2], "w"))' "$probes_dir/row-17-item1-redteam-repaired.json" "$tmp/item1-failed.json" "$adopted" "$over" "$repaired"
+      failed_reason="$(python3 "$run_state" phase --probe "$tmp/item1-failed.json")"
+      if [[ "$over" == True ]]; then
+        expected="phase: stop reason: row 17: review time is over budget"
+      elif [[ "$repaired" == True ]]; then
+        expected="phase: 8 reason: row 17: the pushed repair's newest reproducer round failed and a red-team repair has followed it; resume at Step 8 item 1 at round k+1, and push the red-team repair only once a round is clean"
+      else
+        expected="phase: 8 reason: row 17: the pushed repair's newest reproducer round failed and no red-team repair has followed it; resume at Step 8 item 1 at the red-team repair dispatch"
+      fi
+      grep -Fq "$expected" <<<"$failed_reason" || {
+        echo "a failed item-1 round (adopted $adopted, over budget $over, red-team repair $repaired) should give '$expected', got: $failed_reason" >&2
+        exit 1
+      }
+    done
+  done
+done
 # The item-1 leg needs the repair pushed. An unpushed repair over budget takes
 # row 17's push leg, which has no budget gate, and pushes before anything stops.
 python3 -c 'import json, sys

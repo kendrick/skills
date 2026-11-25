@@ -211,7 +211,7 @@
          "resume": {"phase": "stop", "row": null}, "cite": "resume.md: not-merge-base stops naming the mismatch; Step 8 item 2 repeats Step 5 item 2's rewrite after the rebase"},
         {"step": 8, "subpath": "pushed_at", "op": "write", "path": "pushed_at", "content": "2026-01-01T12:10:00Z\n",
          "resume": {"phase": "8", "row": 17}, "cite": "resume.md row 17: a repair report with local ahead of origin"},
-        {"step": 8, "subpath": "push", "op": "push", "force": true,
+        {"id": "repair-pushed", "step": 8, "subpath": "push", "op": "push", "force": true,
          "resume": {"phase": "8", "row": 17}, "cite": "resume.md row 17: still ahead of origin; the round is now stale against SINCE, which row 17's unanswered leg ignores"},
         {"step": 8, "subpath": "redteam/round-<k>.json", "op": "write", "path": "redteam/round-2.json", "content": "{\"verdicts\": [{\"claim\": \"guard reads alpha\", \"verdict\": \"REPRODUCED\", \"reproduced_at\": \"seam\"}], \"left_checks\": []}\n",
          "resume": {"phase": "8", "row": 17}, "cite": "resume.md row 17: the item-1 leg, pushed and no redteam/round-*.json newer than reports/repair-1.json, so Step 8 item 1 at the reproducer with nothing to push"},
@@ -331,6 +331,28 @@
       "end": {"phase": "stop", "row": 10}, "end_cite": "resume.md row 10: two failed rounds in a row stop with the evidence"
     },
     {
+      "name": "item1-fail",
+      "about": "#369: Step 8 item 2 pushes the triage repair, item 1's reproducer refutes it, a red-team repair commits, and round k+1 comes back clean. Each crash after the push resumes inside item 1, and the red-team repair stays unpushed until a round clears it.",
+      "run_dir": "issue-1",
+      "probe": {"issue": 1},
+      "prefix": {"sequence": "main", "through": "repair-pushed"},
+      "entries": [
+        {"step": 8, "subpath": "redteam/round-<k>.json", "op": "write", "path": "redteam/round-2.json", "content": "{\"verdicts\": [{\"claim\": \"guard reads alpha\", \"verdict\": \"NOT_REPRODUCED\", \"reproduced_at\": null}], \"left_checks\": []}\n",
+         "resume": {"phase": "8", "row": 17}, "cite": "resume.md row 17: the item-1 leg, pushed and no redteam/round-*.json newer than reports/repair-1.json, so Step 8 item 1 at the reproducer"},
+        {"step": 8, "subpath": "tree", "op": "edit", "file": "a.py", "content": "alpha = 1\nguard = alpha\nchecked = guard\n",
+         "resume": {"phase": "8", "row": 17}, "cite": "resume.md row 17: item 1's newest round failed with no red-team repair after it, so the red-team repair dispatch"},
+        {"step": 8, "subpath": "baseline-repair-<n>.txt", "op": "write", "path": "baseline-repair-2.txt", "content": "exit: 0\nok\n",
+         "blind": "resume.md's baseline field: the probe never reads baseline-repair-<n>.txt"},
+        {"step": 8, "subpath": "branch", "op": "commit", "paths": ["a.py"], "message": "fix: check the guard",
+         "resume": {"phase": "8", "row": 17}, "cite": "resume.md row 17: item 1's newest round failed with no red-team repair report after it, so the red-team repair dispatch"},
+        {"step": 8, "subpath": "reports/redteam-repair-<k>.json", "op": "write", "path": "reports/redteam-repair-2.json", "content": "{\"task\": \"repair\", \"claims\": [{\"claim\": \"guard reads alpha\", \"path\": \"a.py\"}]}\n",
+         "resume": {"phase": "8", "row": 17}, "cite": "resume.md row 17: the red-team repair is committed and ahead of origin, but item 1's failed round still owns the run, so the red-team repair dispatch and no push"},
+        {"step": 8, "subpath": "redteam/round-<k>.json", "op": "write", "path": "redteam/round-3.json", "content": "{\"verdicts\": [{\"claim\": \"guard reads alpha\", \"verdict\": \"REPRODUCED\", \"reproduced_at\": \"seam\"}], \"left_checks\": []}\n",
+         "resume": {"phase": "8", "row": 17}, "cite": "resume.md row 17: red-team repair committed, round k+1 not yet run, so Step 8 item 1 at round k+1 and no push"}
+      ],
+      "end": {"phase": "8", "row": 17}, "end_cite": "resume.md row 17: round k+1 is clean and the red-team repair is ahead of origin, so item 2 pushes it"
+    },
+    {
       "name": "overlap-refire",
       "about": "#362: Step 4's build review lands before round 1's file, as the overlap allows, round 1 fails, a red-team repair adds an authz line, round 2 comes back clean, and the repair's own re-fire runs to settled.",
       "run_dir": "issue-1",
@@ -436,6 +458,7 @@
     {"name": "over-budget-starts-no-review-cycle", "cite": "resume.md: Rows 10, 11, and 16, and row 17's item-1 and re-fire legs, answer the budget stop while `review_over_budget` is true; those legs are the points that start another review cycle: a red-team round or its repair (row 10, and item 1's reproducer at row 17), an `adversarial-review` run, a triage repair, a repair's re-fired review", "if": [["review_over_budget", "==", true]], "then": [["phase", "in", ["0", "1", "2", "3", "5", "6", "8", "done", "wait", "stop"]]]},
     {"name": "capped-round-never-repaired", "cite": "SKILL.md Step 7: A capped round (Step 6) skips this step: it gets no dispatch, no `repair-base-<k>`, and no `repair-<k>.json`; Step 6: Round k is capped once k reaches N; issue #230: `RUN_DIR/review_loop` lifts the cap", "if": [["triage_rounds", ">", 0], ["triage_rounds", ">=", {"field": "max_review_rounds"}], ["review_loop", "==", false]], "then": [["phase", "!=", "7"]]},
     {"name": "pushed-repair-red-teamed-before-poll", "cite": "resume.md rows 14 and 15: no repair awaiting item 1's reproducer (row 17: its item-1 leg once the repair is pushed, its push leg before); row 17: a `reports/repair-<k>.json` for the newest round k awaits item 1's reproducer, because no `redteam/round-*.json` is newer than it (`repair_after_last_round`); SKILL.md Step 8 Done when: every repair's claims carry reproducer verdicts", "if": [["pr_state", "==", "OPEN"], ["newest_repair_report", "==", true], ["repair_after_last_round", "==", true], ["review_over_budget", "==", false]], "then": [["phase", "!=", "6"]]},
+    {"name": "failed-item1-round-never-pushes", "cite": "resume.md row 17: a failed item-1 round, its red-team repair committed or not, resumes at Step 8 item 1 and pushes nothing until a round is clean; over budget it is the budget stop; SKILL.md Step 8 item 1: its rounds and re-fire finish before anything pushes again", "if": [["pr_state", "==", "OPEN"], ["newest_repair_report", "==", true], ["redteam_last_failed", "==", true], ["review_over_budget", "==", true]], "then": [["phase", "!=", "8"]]},
     {"name": "review-steps-need-open-pr", "cite": "resume.md rows 14, 15, and 17: PR open; SKILL.md Step 6 waits for the review on <PR>, Step 7 quotes each finding with its URL, and Step 8 replies on the pull request", "if": [["phase", "in", ["6", "7", "8"]]], "then": [["pr_state", "==", "OPEN"]]}
   ],
   "assumptions": [
