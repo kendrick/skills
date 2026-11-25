@@ -6489,6 +6489,34 @@ unguarded_liveness() { # file; count of lines running liveness outside logic_run
 { cat "${BASH_SOURCE[0]}"; echo 'python3 "$crash_checks" '"liveness --model x"; } >"$cc/smoke-copy.sh"
 [[ "$(unguarded_liveness "$cc/smoke-copy.sh")" == 1 ]] \
   || cc_fail "the unguarded-liveness count should see a direct call added to a copy"
+# Step 3 names the gates that defer. Steps 5 and 8 each hold a push gate, so the
+# variable stays out of both sections, and each require proves its cut reached
+# the push gate's own text, since an empty cut would pass the refute.
+section work-issue/SKILL.md "## Step 3 " >"$tmp/s477-step-3.md"
+section work-issue/SKILL.md "## Step 5 " >"$tmp/s477-step-5.md"
+section work-issue/SKILL.md "## Step 8 " >"$tmp/s477-step-8.md"
+require_text "$tmp/s477-step-3.md" '`(export WORK_ISSUE_DEFER_LIVENESS=1; <command>)`'
+require_text "$tmp/s477-step-3.md" "Four gates defer: the build wave gate, which is \`divvy-up\`'s Step 6 verification"
+require_text "$tmp/s477-step-3.md" "Step 3's re-gate of a repair; Step 4 item 4's scoped gate and its VERIFY_CMD fallback; and Step 7's gate."
+require_text "$tmp/s477-step-3.md" "Step 5 item 2 and Step 8 item 2 decide a push, so every gate run under them runs its command bare"
+require_text "$tmp/s477-step-5.md" "Then run VERIFY_CMD and read it by VERIFY_CMD green."
+require_text "$tmp/s477-step-8.md" "2. Where local HEAD is ahead of origin: rebase"
+refute_text "$tmp/s477-step-5.md" "WORK_ISSUE_DEFER_LIVENESS"
+refute_text "$tmp/s477-step-8.md" "WORK_ISSUE_DEFER_LIVENESS"
+# A copy with the deferred form in Step 8 item 2's verify has to trip the Step 8
+# refute, or that refute can't fail.
+python3 - work-issue/SKILL.md "$tmp/s477-skill.md" <<'PY'
+import sys
+text = open(sys.argv[1]).read()
+old = "verify to VERIFY_CMD green, write `pushed_at`"
+assert text.count(old) == 1, "#477: Step 8 item 2's verify clause is gone or repeated"
+open(sys.argv[2], "w").write(text.replace(old, "verify to `(export WORK_ISSUE_DEFER_LIVENESS=1; VERIFY_CMD)` green, write `pushed_at`"))
+PY
+section "$tmp/s477-skill.md" "## Step 8 " >"$tmp/s477-step-8-copy.md"
+require_text "$tmp/s477-step-8-copy.md" "verify to \`(export WORK_ISSUE_DEFER_LIVENESS=1; VERIFY_CMD)\` green"
+if ( refute_text "$tmp/s477-step-8-copy.md" "WORK_ISSUE_DEFER_LIVENESS" ) 2>/dev/null; then
+  cc_fail "the Step 8 refute passed on a copy whose item 2 defers liveness"
+fi
 echo '{"model": "FAIL"}' >"$cc/model.json"
 before="$(cc_runs)"
 # The suite itself runs under a deferring gate, so the killed run clears the
