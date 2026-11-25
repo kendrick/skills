@@ -1058,11 +1058,14 @@ def phase_of(probe):
     max_review_rounds = count(probe, "max_review_rounds")
     # #230: with the review loop on, no round is capped and the budget stop ends repair.
     at_review_cap = triage_rounds > 0 and triage_rounds >= max_review_rounds and not flag(probe, "review_loop")
-    # Rows 10, 11, 20, 16, and row 17's re-fire leg each start another review
+    # Rows 10, 11, 20, 16, and row 17's item-1 and re-fire legs each start another review
     # cycle, and only those are gated. Rows past them publish, reply to, or
     # report on work already done, and stopping there would strand it. On
     # cambium #23/#26, about 50 min of build drew about 5 h of review.
     over_budget = flag(probe, "review_over_budget")
+    # Step 7 has repaired the newest triage round, so Step 8 item 1 owes it a
+    # reproducer, a re-fire, or both (#369).
+    open_repair = pr_state == "OPEN" and flag(probe, "newest_repair_report")
 
     if herdr == "working":
         return "wait", "row 2: the herdr agent is working; wait and re-probe"
@@ -1205,7 +1208,17 @@ def phase_of(probe):
         # round over it re-tests unchanged code. Two failed rounds in a row is
         # Step 4's stop, and a resume that kept cycling past it would never honor
         # the stop.
-        if flag(probe, "build_final") and flag(probe, "redteam_last_failed"):
+        # A failed round under an open PR's repair report is Step 8 item 1's,
+        # and row 17 resumes it inside Step 8 (#369). A conflict or a rebase in
+        # progress keeps it here, since row 12 below would publish a refuted round.
+        if (
+            flag(probe, "build_final")
+            and flag(probe, "redteam_last_failed")
+            and not (
+                open_repair
+                and not (flag(probe, "conflict") or flag(probe, "rebase_in_progress"))
+            )
+        ):
             if flag(probe, "redteam_failed_twice"):
                 return "stop", "row 10: two red-team rounds in a row failed; stop and report with the evidence"
             if over_budget:
@@ -1262,6 +1275,55 @@ def phase_of(probe):
             and (pr_state is None or flag(probe, "ahead_of_origin"))
         ):
             return "5", "row 13: red-team is clean, the trigger is recorded, no triage round yet, and the branch is unpublished or ahead of origin"
+    # Step 8 item 2 pushes before item 1 red-teams the repair (#369), so a
+    # stop between the two leaves a pushed repair with no reproducer round
+    # newer than its report, or a failed round whose routing hasn't finished,
+    # under a `pending` or `findings` review with no reply owed. Rows 14 and 15
+    # would poll or triage past it and nothing would red-team the repair, so
+    # row 17 takes it. The item-1 leg needs the repair pushed: an unpushed
+    # repair still owes Step 8's capture and push, which row 17's push leg
+    # below runs with no budget gate, so over budget it pushes before anything
+    # stops. Rows 14 and 15 skip both, or the poll strands an unpushed repair.
+    # A failed newest round means item 2 already pushed the repair, since
+    # Step 4 never finishes on one and item 1 runs only after the push. The
+    # round's red-team repair puts HEAD ahead of origin again, and pushing it
+    # before round k+1 answers ships code nobody verified, so the failed round
+    # outranks the push leg.
+    awaiting_item1 = open_repair and (
+        flag(probe, "repair_after_last_round") or flag(probe, "redteam_last_failed")
+    )
+    item1_failed = awaiting_item1 and flag(probe, "redteam_last_failed")
+    # A clean round over item 1's red-team repair still owes Step 4 item 4's
+    # re-fire before anything pushes, ahead or not: item 2's rebase can orphan
+    # redteam-repair-base-<k>, and the field then reads false with the re-fire
+    # never run. The field reads a base older than the newest repair report as
+    # Step 4's, so only item 1's own base reaches here.
+    redteam_refire_pending = (
+        open_repair and redteam_clean and flag(probe, "redteam_repair_diff_triggers")
+    )
+    item1_pending = (
+        item1_failed
+        or redteam_refire_pending
+        or (awaiting_item1 and not flag(probe, "ahead_of_origin"))
+    )
+    # Defined here so rows 14 and 15 can skip it; row 17 explains it below.
+    refire_pending = (
+        open_repair
+        and (count(probe, "triage_blocking_rows") > 0 or flag(probe, "repair_diff_triggers"))
+        and not flag(probe, "repair_ar_settled")
+        and not flag(probe, "ahead_of_origin")
+    )
+    # Rows 14 and 15 skip all of it, and an unpushed repair too: once the
+    # re-fire settles, item 1's red-team repair is still ahead of origin with
+    # nothing awaiting item 1, and a poll would strand it unpushed. A pushed
+    # repair's own re-fire counts too: push-first lets the next review land
+    # before it settles, and a new triage round stops tracking it (#478).
+    step8_owed = (
+        awaiting_item1
+        or redteam_refire_pending
+        or refire_pending
+        or (open_repair and flag(probe, "ahead_of_origin"))
+    )
     # Step 8 pushes before it replies, so a stop between those two leaves rows
     # that still owe a reply under a review that now reads `pending`. Without
     # this guard the poll preempts row 17 and the old findings are never
@@ -1271,12 +1333,14 @@ def phase_of(probe):
         and review_state == "pending"
         and count(probe, "triage_rows_unanswered") == 0
         and not flag(probe, "deferred_comment_needed")
+        and not step8_owed
     ):
         return "6", "row 14: the PR is open and no review has landed since the last push; keep polling"
     if (
         pr_state == "OPEN"
         and review_state == "findings"
         and not flag(probe, "triage_newer_than_since")
+        and not step8_owed
     ):
         return "6", "row 15: the PR has findings and no triage round newer than SINCE"
     # Counted totals cannot say whether the newest round was repaired: an
@@ -1311,7 +1375,8 @@ def phase_of(probe):
             return budget_stop(16)
         else:
             return "7", "row 16: the newest triage round has in-scope rows and no repair report of its own"
-    # Step 8 item 1's re-fire leg, ahead of the push. A repair is a candidate
+    # Step 8 item 1's leg: the reproducer has not answered the repair
+    # (`item1_pending`), or its re-fire has not settled. A repair is a candidate
     # for adversarial-review when its triage round held a P0, P1, or blocking
     # row, or when its own diff hits a money, authz, or schema trigger row: a
     # reviewer can label a real blocker P2 (#162). Step 8 item 1's reading
@@ -1326,21 +1391,61 @@ def phase_of(probe):
     # empty. `repair_ar_settled` is also true where the repair's own trigger
     # re-evaluation said `fired: no`, so a P1 repair with no trigger-table hit
     # doesn't wait on a review nobody will run.
-    if (
-        pr_state == "OPEN"
-        and flag(probe, "newest_repair_report")
-        and (count(probe, "triage_blocking_rows") > 0 or flag(probe, "repair_diff_triggers"))
-        and not flag(probe, "repair_ar_settled")
-    ):
+    # Like the item-1 leg, it needs the repair pushed (#369). Item 1 runs after
+    # item 2's push, so an unpushed candidate takes the push leg first, and a
+    # budget stop can't leave it unpushed.
+    if item1_pending or refire_pending:
+        if item1_pending and flag(probe, "redteam_failed_twice"):
+            return "stop", "row 17: two red-team rounds in a row failed; stop and report with the evidence"
         if over_budget:
             return budget_stop(17)
+        push_guard_note = (
+            "; item 2 pushes only where local HEAD is ahead of origin, so a "
+            "pushed repair is not pushed again"
+        )
+        # Item 1's failed round routes before the re-fire, so
+        # adversarial-review runs only over code a round has cleared.
+        if item1_failed:
+            # A failed round with no repair after it owes the repair dispatch,
+            # as row 10 says, since a second reproducer round would re-test the
+            # code the first round refuted.
+            if not flag(probe, "repair_after_last_round"):
+                return (
+                    "8",
+                    "row 17: the pushed repair's newest reproducer round failed and "
+                    "no red-team repair has followed it; resume at Step 8 item 1 at "
+                    "the red-team repair dispatch" + push_guard_note,
+                )
+            return (
+                "8",
+                "row 17: the pushed repair's newest reproducer round failed and a "
+                "red-team repair has followed it; resume at Step 8 item 1 at round "
+                "k+1, and push the red-team repair only once a round is clean",
+            )
+        if redteam_refire_pending:
+            return (
+                "8",
+                "row 17: item 1's newest reproducer round is clean over a red-team "
+                "repair whose own diff from redteam-repair-base-<k> hits a money, "
+                "authz, or schema trigger row, and its re-fire has not settled; "
+                "resume at Step 8 item 1 at Step 4 item 4's repair re-fire, from the "
+                "matcher where trigger-redteam-repair-<k>.txt is absent, else at the "
+                "adversarial-review invocation, and push the red-team repair only "
+                "once the re-fire settles",
+            )
+        if not refire_pending:
+            return (
+                "8",
+                "row 17: the pushed repair has no reproducer round newer than its "
+                "report; resume at Step 8 item 1 at the reproducer" + push_guard_note,
+            )
         return (
             "8",
             "row 17: the repaired triage round held a P0, P1, or blocking row, "
             "or the repair's own diff hits a money, authz, or schema trigger row, "
             "and the repair's adversarial-review has not settled; resume at "
             "Step 8 item 1 from the reproducer where trigger-repair-<k>.txt is "
-            "absent, else at the adversarial-review invocation",
+            "absent, else at the adversarial-review invocation" + push_guard_note,
         )
     # Post-PR only: Step 8 pushes and replies but never opens a pull request,
     # so a repair with no PR behind it belongs to row 10 (unverified) or row
@@ -2254,22 +2359,15 @@ def g_review_over_budget(ctx):
         raise ProbeError("; ".join(e.problems))
 
 
-def _base_diff_triggers(ctx, base_file):
-    """The diff from the SHA in `base_file` to HEAD hits trigger row 1, 2, or
-    4. A base no longer an ancestor of HEAD is false, since a rebase orphans it
-    and a diff from it reads upstream lines as the repair's (#137). A diff or
-    matcher failure is null, never a quiet false."""
-    base = chomp(read_text(base_file))
-    if ctx.git("merge-base", "--is-ancestor", base, "HEAD").returncode == 1:
-        return False
-    diff = ctx.git("diff", f"{base}..HEAD")
-    if diff.returncode != 0:
-        raise ProbeError(git_failure(("diff",), diff))
+def _diff_triggers(diff_text):
+    """`diff_text` hits trigger row 1, 2, or 4 when `match-triggers.py rows
+    --only 1,2,4` reads it. A matcher failure, or no matcher, is null, never a
+    quiet false."""
     if not MATCH_TRIGGERS.is_file():
         raise ProbeError(f"no matcher at {MATCH_TRIGGERS}")
     matched = subprocess.run(
         [sys.executable, str(MATCH_TRIGGERS), "rows", "--only", "1,2,4"],
-        input=chomp(diff.stdout) + "\n",
+        input=chomp(diff_text) + "\n",
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -2281,21 +2379,39 @@ def _base_diff_triggers(ctx, base_file):
     return bool(chomp(matched.stdout))
 
 
+def _base_diff_triggers(ctx, base_file):
+    """The diff from the SHA in `base_file` to HEAD hits trigger row 1, 2, or
+    4. A base no longer an ancestor of HEAD is false, since a rebase orphans it
+    and a diff from it reads upstream lines as the repair's (#137). A diff or
+    matcher failure is null, never a quiet false."""
+    base = chomp(read_text(base_file))
+    if ctx.git("merge-base", "--is-ancestor", base, "HEAD").returncode == 1:
+        return False
+    diff = ctx.git("diff", f"{base}..HEAD")
+    if diff.returncode != 0:
+        raise ProbeError(git_failure(("diff",), diff))
+    return _diff_triggers(diff.stdout)
+
+
 @gatherer("repair_diff_triggers")
 def g_repair_diff_triggers(ctx):
-    """The repair's own diff, from the `repair-base-<k>` SHA Step 7 recorded to
-    HEAD, hits trigger row 1, 2, or 4 (money, authz, schema), since a reviewer
-    can label a real blocker P2. The repair's diff and never the branch's:
-    re-reading the branch after every repair re-fired every repair, the loop
-    #151 removed. No base file is false. A base no longer an ancestor of HEAD
-    is false too, since a rebase after Step 8 item 1 orphans it and a diff from
-    it reads upstream lines as the repair's (#137). A diff or matcher failure
-    is null, never a quiet false."""
+    """The repair's own diff, saved by Step 8 to `redteam/repair-diff-<k>.patch`
+    for the newest round k, hits trigger row 1, 2, or 4 (money, authz, schema),
+    since a reviewer can label a real blocker P2. The repair's diff and never
+    the branch's: re-reading the branch after every repair re-fired every
+    repair, the loop #151 removed. The saved patch and never a live `git diff`:
+    Step 8 item 2 pushes, and may rebase, before item 1 reads the diff, and a
+    diff from the orphaned `repair-base-<k>` reads upstream lines as the
+    repair's (#137, #369). No patch file is false, so the repair rests on
+    severity alone. An unreadable patch or a matcher failure is null, never a
+    quiet false."""
     newest = newest_round_by_k(ctx.path("triage"))
-    base_file = ctx.path("redteam", f"repair-base-{newest[0] if newest else ''}")
-    if not base_file.is_file():
+    if newest is None:
         return False
-    return _base_diff_triggers(ctx, base_file)
+    patch = read_or_none(ctx.path("redteam", f"repair-diff-{newest[0]}.patch"))
+    if patch is None:
+        return False
+    return _diff_triggers(patch)
 
 
 @gatherer("redteam_repair_diff_triggers")
@@ -2309,7 +2425,14 @@ def g_redteam_repair_diff_triggers(ctx):
     where Step 8 keeps `repair_ar_settled` apart, because Step 8's severity
     condition can fire with no trigger line and Step 4 has no such condition,
     so row 20 needs one field. No base, or a base a rebase orphaned, is false;
-    a diff or matcher failure is null (#362)."""
+    a diff or matcher failure is null (#362).
+
+    A base older than the newest `reports/repair-*.json` is false too. Step 8
+    item 1 writes its own base after Step 7's report, so an older one is a
+    Step 4 base from before the PR, and its diff to HEAD now carries the
+    triage repair's lines, which row 17's `repair_diff_triggers` already reads.
+    Without this, a pre-PR repair that printed no row and so wrote no
+    trigger file would re-fire after the PR (#369)."""
     bases = [
         (_round_number(p.name), p)
         for p in ctx.path("redteam").glob("redteam-repair-base-*")
@@ -2318,6 +2441,9 @@ def g_redteam_repair_diff_triggers(ctx):
     if not bases:
         return False
     k, base_file = max(bases, key=lambda b: b[0])
+    reports = newest_by_mtime(ctx.path("reports"), "repair-*.json")
+    if reports and base_file.stat().st_mtime_ns < reports[0].stat().st_mtime_ns:
+        return False
     if first_line(ctx.path("redteam", f"trigger-redteam-repair-{k}.txt")) == "fired: no":
         return False
     state = read_or_none(ctx.path("redteam", f"ar-state-redteam-repair-{k}.txt"))
