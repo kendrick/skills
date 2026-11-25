@@ -6,7 +6,8 @@ Usage: handback.py --wave-dir WAVE_DIR --lane issue-N --phase build|publish|repo
 Reads the lane's final message from FILE. A message that is a terminal report
 (exactly one fenced json block, or a bare JSON object, whose `lane` and `phase`
 are the ones passed, whose `status` is done, stopped, failed, or refused, whose
-`worktree` and `run_dir` are absolute paths, and whose `head` is a 40-hex SHA) is
+`worktree` and `run_dir` are absolute paths, whose `head` is a 40-hex SHA, and
+which carries every other field of the brief's contract with its stated type) is
 written to reports/issue-<N>-<phase>.json, and the script prints
 `terminal <path>`. Anything else is a hand-back: the lane's turn ended mid-run.
 It is written to reports/issue-<N>-<phase>-interim-<k>.json, k one past the
@@ -48,6 +49,12 @@ def terminal_report(text, lane, phase):
     so a re-prompt's answer hit the overwrite refusal and stopped the wave.
     The brief's contract requires all three fields in every phase and allows
     none of them null.
+
+    The remaining contract fields are checked too: a truncated report saved
+    as terminal is immutable, so the full report a resumed lane returns would
+    hit the overwrite refusal, and Step 5's contract-change gate would read
+    arrays that were never there. `head` stays non-null: a refused lane's
+    null head is for the merger to rule on, not for this script.
     """
     text = text.strip()
     blocks = FENCE.findall(text)
@@ -68,6 +75,15 @@ def terminal_report(text, lane, phase):
     if not all(isinstance(report.get(k), str) and os.path.isabs(report[k]) for k in ("worktree", "run_dir")):
         return None
     if not isinstance(report.get("head"), str) or not SHA.fullmatch(report["head"]):
+        return None
+    for k in ("files_changed", "contract_changed", "facts"):
+        v = report.get(k)
+        if not isinstance(v, list) or not all(isinstance(i, str) for i in v):
+            return None
+    # `pr` may be null, so absence has to be tested apart from the type.
+    if "pr" not in report or not isinstance(report["pr"], (str, type(None))):
+        return None
+    if not all(isinstance(report.get(k), str) for k in ("detail", "question")):
         return None
     return text, report
 

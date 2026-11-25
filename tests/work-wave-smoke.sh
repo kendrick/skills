@@ -259,7 +259,7 @@ require_text "$ledger" "**The published SHAs are rebased SHAs that no merge test
 # A report path the orchestrator cannot open costs a round trip, which is one
 # of #113's four measured losses. handback.py catches it before a report is
 # saved, since a saved one can't be replaced by a re-prompt's answer.
-require_text "$skill" "| \`worktree\` or \`run_dir\` not absolute, or \`head\` not a SHA | Never reaches this step: \`handback.py\` catches it at Step 4 and saves the message as a hand-back"
+require_text "$skill" "| A contract field missing or of the wrong type, \`worktree\` or \`run_dir\` not absolute, or \`head\` not a SHA | Never reaches this step: \`handback.py\` catches it at Step 4 and saves the message as a hand-back"
 
 # Fewer than two issues is work-issue's job, and a plan held only in the
 # conversation is unreachable from a fresh lane subagent.
@@ -2357,7 +2357,7 @@ fi
 # terminal can't be replaced, so the re-prompt's answer hit exit 3 and the
 # wave stopped. It has to land as a hand-back instead.
 rel_report() {
-  printf '```json\n{"lane":"issue-7","phase":"build","status":"done","worktree":"%s","run_dir":"%s","head":"%s"}\n```\n' "$1" "$2" "$3" >"$tmp/rel.txt"
+  printf '```json\n{"lane":"issue-7","phase":"build","status":"done","worktree":"%s","run_dir":"%s","head":"%s","files_changed":[],"contract_changed":[],"facts":[],"pr":null,"detail":"d","question":""}\n```\n' "$1" "$2" "$3" >"$tmp/rel.txt"
 }
 for bad in "rel/path /r/7 0123456789abcdef0123456789abcdef01234567" \
            "/w/7 rel 0123456789abcdef0123456789abcdef01234567" \
@@ -2408,6 +2408,38 @@ wd="$(mktemp -d "$tmp/hb-badbytes.XXXXXX")"
   echo "--check on undecodable text should print handback" >&2
   exit 1
 }
+
+# A truncated or mistyped report saved as terminal is immutable, so the
+# completed one the re-prompt returns would hit exit 3. Each contract field
+# dropped in turn, and one wrong type each, must land as a hand-back.
+contract_cases() {
+  python3 - "$fixtures/handback/terminal-build.txt" "$tmp" <<'PY'
+import json, re, sys
+src = open(sys.argv[1]).read()
+rep = json.loads(re.search(r"```json\n(.*?)\n```", src, re.S).group(1))
+cases = {}
+for k in ("files_changed", "contract_changed", "facts", "pr", "detail", "question"):
+    cases["drop-" + k] = {a: b for a, b in rep.items() if a != k}
+for k, v in (("files_changed", "a"), ("contract_changed", [1]), ("facts", None), ("pr", 3), ("detail", []), ("question", None)):
+    cases["type-" + k] = dict(rep, **{k: v})
+for name, r in cases.items():
+    open(f"{sys.argv[2]}/contract-{name}.txt", "w").write("```json\n" + json.dumps(r) + "\n```\n")
+    print(name)
+PY
+}
+for name in $(contract_cases); do
+  wd="$(mktemp -d "$tmp/hb-contract.XXXXXX")"
+  python3 "$handback" --wave-dir "$wd" --lane issue-7 --phase build --text "$tmp/contract-$name.txt" >"$tmp/out"
+  [[ "$(cut -d' ' -f1 "$tmp/out")" == redispatch && ! -e "$wd/reports/issue-7-build.json" ]] || {
+    echo "a report failing the contract ($name) should be a hand-back, got: $(cat "$tmp/out")" >&2
+    exit 1
+  }
+  wd="$(mktemp -d "$tmp/hb-contract.XXXXXX")"
+  [[ "$(python3 "$handback" --wave-dir "$wd" --lane issue-7 --phase build --text "$tmp/contract-$name.txt" --check)" == handback ]] || {
+    echo "--check on a report failing the contract ($name) should print handback" >&2
+    exit 1
+  }
+done
 
 # --check classifies and writes nothing, so Step 7 can take its hold before
 # the write without holding for a message that saves as a hand-back.
