@@ -5235,6 +5235,23 @@ sc_case "$sc_dir/plan.md" "$sc_dir/bad.json"
 [[ "$sc_status" == "3" && ! -s "$sc_dir/out" ]] || sc_fail "a non-JSON report should exit 3"
 sc_case "$sc_dir/missing.md" "$sc_dir/r.json"
 [[ "$sc_status" == "3" && ! -s "$sc_dir/out" ]] || sc_fail "a missing plan should exit 3"
+
+# 9. worker-prompt.md asks for one fenced json block saved verbatim, so a
+# fenced report is the well-formed case. Prose around the fence still exits 3,
+# as it stays null for a red-team round.
+printf '```json\n{"files_changed": ["a.py"]}\n```\n' >"$sc_dir/fenced.json"
+printf '```\n{"files_changed": ["a.py"]}\n```\n' >"$sc_dir/bare.json"
+for sc_r in fenced bare; do
+  sc_case "$sc_dir/plan.md" "$sc_dir/$sc_r.json"
+  [[ "$sc_status" == "0" && "$(cat "$sc_dir/out")" == "bash tests/a.sh" ]] || sc_fail "a $sc_r-fenced report should print the owning task's command"
+done
+# A raw tab from pasted output inside verify_output still parses.
+printf '{"files_changed": ["a.py"], "verify_output": "ok\t1"}\n' >"$sc_dir/ctrl.json"
+sc_case "$sc_dir/plan.md" "$sc_dir/ctrl.json"
+[[ "$sc_status" == "0" && "$(cat "$sc_dir/out")" == "bash tests/a.sh" ]] || sc_fail "a raw control char in verify_output should not stop the gate"
+printf 'Report:\n```json\n{"files_changed": ["a.py"]}\n```\n' >"$sc_dir/prose.json"
+sc_case "$sc_dir/plan.md" "$sc_dir/prose.json"
+[[ "$sc_status" == "3" && ! -s "$sc_dir/out" ]] || sc_fail "prose around a fenced report should exit 3"
 require_text work-issue/SKILL.md "Name VERIFY_CMD to \`divvy-up\` as the verify command, so its Step 3 skips its own repo-disk resolution and its Step 6 gate runs it."
 require_text work-issue/SKILL.md "name VERIFY_CMD to it again as the verify command at every wave it continues."
 require_text work-issue/SKILL.md "with \`--verify-cmd\` set to VERIFY_CMD."

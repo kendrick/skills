@@ -87,7 +87,8 @@ Exit codes: 0 with an answer on stdout; 1 only from `adopt`, `reuse-baseline`,
 `verify-cmd` and `scoped-cmd`, as above; 3 usage, a `gh` failure, an unwritable `--save`
 path, a `reuse-baseline` --out with no directory, or input this script cannot
 read (an unparseable bundle, a bundle missing a top-level key, a probe missing
-a field, a wave baseline, plan or report that cannot be read, or a report that is not JSON). Argparse supplies 2 for a
+a field, a wave baseline, plan or report that cannot be read, or a report that is not JSON once one
+enclosing fence is stripped). Argparse supplies 2 for a
 mistyped flag, except under `probe` and `adopt`, where it is 3 too,
 because the issue that asked for `probe` asked for the validator convention.
 
@@ -1893,16 +1894,14 @@ def g_redteam_rounds(ctx):
     return find_count(ctx.path("redteam"), "round-*.json")
 
 
-def round_failed(path):
-    # A whole-file regex read a verdict's quoted `output` as the verdict itself
-    # (#214), and wave 34-87-123-198 took false `row 10` stops from it. Walk the
-    # parsed fields instead of the text. The walk is keyless because rounds vary
-    # in shape: some carry `claims`, some `verdicts`, some only `left_checks`.
-    text = read_text(path)
+def unfence(text):
+    """Return `text` without one enclosing ``` or ```json fence, else unchanged."""
     # redteam.md tells the reproducer to answer in one fenced json block and
     # the orchestrator to save it verbatim, so a well-formed round starts with
-    # ```json; parsing it raw made every such round null (#220 review). Strip
-    # exactly one enclosing fence and nothing more. Prose around the fence
+    # ```json; parsing it raw made every such round null (#220 review). A
+    # worker report follows the same contract (worker-prompt.md), and a fenced
+    # one stopped scoped-cmd with exit 3 (#368 review). Strip exactly one
+    # enclosing fence and nothing more. Prose around the fence
     # still fails, since digging a block out of it would be tidying a verdict.
     # split("\n"), not splitlines(): the rejoin must leave the block's bytes,
     # including any raw line separator inside a string, exactly as read.
@@ -1910,7 +1909,16 @@ def round_failed(path):
     # block, so rstrip() both fence lines.
     lines = text.strip().split("\n")
     if len(lines) >= 2 and lines[0].rstrip() in ("```", "```json") and lines[-1].rstrip() == "```":
-        text = "\n".join(lines[1:-1])
+        return "\n".join(lines[1:-1])
+    return text
+
+
+def round_failed(path):
+    # A whole-file regex read a verdict's quoted `output` as the verdict itself
+    # (#214), and wave 34-87-123-198 took false `row 10` stops from it. Walk the
+    # parsed fields instead of the text. The walk is keyless because rounds vary
+    # in shape: some carry `claims`, some `verdicts`, some only `left_checks`.
+    text = unfence(read_text(path))
     try:
         # strict=False: pasted command output leaves raw control chars inside
         # strings, and issue-113's round-3.json was nulled by a raw newline
@@ -3152,7 +3160,8 @@ def cmd_scoped_cmd(args):
     with each command as `sh -c '<cmd>'` joined by ` && ` when several do.
     Exits 1 with one stderr line where any fallback to the full VERIFY_CMD
     applies, an unclosed backtick span in a matched Done when cell included,
-    and 3 on an unreadable plan or report, or a report that is not JSON.
+    and 3 on an unreadable plan or report, or a report that is not JSON once
+    `unfence` strips one enclosing fence.
     """
     try:
         with open(args.plan, "rb") as f:
@@ -3163,7 +3172,10 @@ def cmd_scoped_cmd(args):
         sys.stderr.write(f"run-state: scoped-cmd: {e.filename}: {e.strerror or e}\n")
         return 3
     try:
-        report = json.loads(raw)
+        # strict=False: a report's `verify_output` is pasted command output, and
+        # a raw control char there must not stop a gate that reads only
+        # `files_changed`.
+        report = json.loads(unfence(raw), strict=False)
     except ValueError as e:
         sys.stderr.write(f"run-state: scoped-cmd: {args.report}: not JSON: {e}\n")
         return 3
