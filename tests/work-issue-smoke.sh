@@ -6864,6 +6864,208 @@ require_text work-issue/references/redteam.md "A reason about the change is judg
 require_text work-issue/references/redteam.md "Where REPAIR_BASE is given above and the claim is about the repair itself (\"the repair\", \"only this line changed\"), the range is \`REPAIR_BASE..HEAD\`"
 require_text work-issue/references/worker-prompt.md "In a repair round it judges a reason or claim about the repair against \`git diff REPAIR_BASE..HEAD\`, so cite that range, not the whole branch."
 
+# --- #461: ruling policy ---
+# policy.py rules a budget or red-team stop, or a late triage round, from the
+# launch flags before the run asks. Each case pins stdout, the exit code and
+# the policy.log lines, since the final report reads its rulings from that log.
+# Each scenario gets its own run dir so its log count starts at zero.
+policy=work-issue/scripts/policy.py
+pl="$(mktemp -d "$tmp/pl.XXXXXX")"
+pl_run() { # name, then policy.py's args
+  local name="$1"
+  shift
+  set +e
+  python3 "${pl_script:-$policy}" "$@" >"$pl/$name.out" 2>"$pl/$name.err"
+  echo $? >"$pl/$name.status"
+  set -e
+}
+pl_fail() {
+  echo "#461: $1: $2, got status $(cat "$pl/$1.status") stdout [$(cat "$pl/$1.out")] stderr [$(cat "$pl/$1.err")]" >&2
+  exit 1
+}
+pl_expect() { # name, status, stdout, why
+  [[ "$(cat "$pl/$1.status")" == "$2" && "$(cat "$pl/$1.out")" == "$3" ]] || pl_fail "$1" "$4"
+}
+pl_log_lines() { # run dir; policy.log line count, 0 when absent
+  if [[ -f "$1/policy.log" ]]; then wc -l <"$1/policy.log" | tr -d ' '; else echo 0; fi
+}
+pl_plan() {
+  printf '# Plan\n\n## Waves\n\n| Wave | Task | Files owned | Model | Done when | Constraints |\n|---|---|---|---|---|---|\n'
+  printf '| 0 | one | a.py, docs/ | sonnet | `bash tests/a.sh` exits 0 | none |\n'
+}
+pl_timing() { # minutes of review after a 30-min build
+  printf '2 start 2026-01-01T00:00:00Z\n2 end 2026-01-01T00:15:00Z\n3 start 2026-01-01T00:15:00Z\n3 end 2026-01-01T00:30:00Z\n'
+  printf '4 start 2026-01-01T00:30:00Z\n4 end 2026-01-01T02:00:00Z\n'
+  [[ "$1" == 150 ]] && printf '6 start 2026-01-01T02:00:00Z\n6 end 2026-01-01T03:00:00Z\n'
+  return 0
+}
+
+# Budget: 30 min build, 90 min review reads over at 2.0.
+b="$pl/issue-9"
+mkdir -p "$b"
+pl_timing 90 >"$b/timing.log"
+[[ "$(python3 "$run_state" budget --timing "$b/timing.log")" == "build: 30m review: 90m ratio: 3.00 over: yes" ]] \
+  || { echo "#461: the budget fixture should read over at 2.0" >&2; exit 1; }
+cp "$b/timing.log" "$pl/timing.before"
+pl_run b-noflag budget --timing "$b/timing.log" --at 7 --run-dir "$b"
+pl_expect b-noflag 0 ask "over budget with no --auto-budget should ask"
+cmp -s "$b/timing.log" "$pl/timing.before" && [[ "$(pl_log_lines "$b")" == 0 ]] \
+  || pl_fail b-noflag "an ask should leave timing.log and policy.log alone"
+pl_run b-raise budget --timing "$b/timing.log" --at 7 --run-dir "$b" --auto-budget 4.0
+pl_expect b-raise 0 "raise 4.0" "over at 2.0 under --auto-budget 4.0 should raise"
+[[ "$(tail -1 "$b/timing.log")" == "budget-raised 4.0" ]] || pl_fail b-raise "the raise should append budget-raised 4.0 to timing.log"
+[[ "$(python3 "$run_state" budget --timing "$b/timing.log")" == *"over: no" ]] || pl_fail b-raise "run-state.py budget should read the raised log as under"
+[[ "$(cat "$b/policy.log")" == "- [wave] policy: issue-9 budget at step 7: raise 4.0 (--auto-budget 4.0) — build: 30m review: 90m ratio: 3.00 over: yes" ]] \
+  || pl_fail b-raise "the raise should leave exactly one policy line, got [$(cat "$b/policy.log")]"
+pl_run b-again budget --timing "$b/timing.log" --at 7 --run-dir "$b" --auto-budget 4.0
+pl_expect b-again 0 under "a re-run after the raise should read under"
+[[ "$(grep -c '^budget-raised' "$b/timing.log")" == 1 && "$(pl_log_lines "$b")" == 1 ]] || pl_fail b-again "a re-run should raise nothing and record nothing"
+# Review grows to 150 min: over at the raised 4.0.
+pl_timing 150 >"$b/timing.log"
+echo "budget-raised 4.0" >>"$b/timing.log"
+pl_run b-defer budget --timing "$b/timing.log" --at 7 --run-dir "$b" --auto-budget 4.0
+pl_expect b-defer 0 defer "over at the raised ratio at step 7 should defer"
+pl_run b-defer2 budget --timing "$b/timing.log" --at 7 --run-dir "$b" --auto-budget 4.0
+pl_expect b-defer2 0 defer "a re-run defer should still defer"
+[[ "$(pl_log_lines "$b")" == 2 && "$(tail -1 "$b/policy.log")" == "- [wave] policy: issue-9 budget at step 7: defer (--auto-budget 4.0) — build: 30m review: 150m ratio: 5.00 over: yes" ]] \
+  || pl_fail b-defer2 "defer should add one policy line, and its re-run none, got [$(cat "$b/policy.log")]"
+pl_run b-at4 budget --timing "$b/timing.log" --at 4 --run-dir "$b" --auto-budget 4.0
+pl_expect b-at4 0 ask "past the raised ratio at step 4 there is nothing to defer, so ask"
+pl_run b-at8 budget --timing "$b/timing.log" --at 8 --run-dir "$b" --auto-budget 4.0
+pl_expect b-at8 0 ask "past the raised ratio at step 8 should ask"
+pl_run b-noflag2 budget --timing "$b/timing.log" --at 7 --run-dir "$b"
+pl_expect b-noflag2 0 ask "over with no flag should ask at step 7"
+[[ "$(pl_log_lines "$b")" == 2 ]] || pl_fail b-noflag2 "an ask should record nothing"
+u="$pl/under"
+mkdir -p "$u"
+printf '2 start 2026-01-01T00:00:00Z\n2 end 2026-01-01T00:30:00Z\n4 start 2026-01-01T00:30:00Z\n4 end 2026-01-01T01:00:00Z\n' >"$u/timing.log"
+pl_run b-under budget --timing "$u/timing.log" --at 7 --run-dir "$u" --auto-budget 4.0
+pl_expect b-under 0 under "1:1 review to build should read under"
+[[ ! -e "$u/policy.log" ]] || pl_fail b-under "under should write no policy.log"
+printf 'garbage\n' >"$u/bad.log"
+pl_run b-bad budget --timing "$u/bad.log" --at 7 --run-dir "$u" --auto-budget 4.0
+[[ "$(cat "$pl/b-bad.status")" == 3 ]] || pl_fail b-bad "a malformed timing log should exit 3"
+
+# Sorting. a.py and docs/ are owned; /tmp/peer/a1.txt is not. Row 2 is row 1
+# with an unowned path added, which is the fourth criterion's pair.
+pl_plan >"$pl/plan.md"
+mkdir -p "$pl/triage" "$pl/redteam"
+cat >"$pl/triage/round-3.md" <<'EOF'
+# Triage round 3, since 2026-01-01T00:00:00Z
+
+| # | Source | Finding | Severity | Scope | Reply |
+|---|---|---|---|---|---|
+| 1 | codex | The restore drops a heading on an empty input | P0 | in scope | |
+| 2 | codex | The restore drops a heading on an empty input and rewrites `/tmp/peer/a1.txt` | P0 | in scope | |
+| 3 | codex | **Writes outside a task's files.** The revert loses the peer's work | P0 | in scope | |
+| 4 | codex | `a.py` loses its executable mode | P1 | in scope | |
+| 5 | codex | Queued already: /tmp/x/y.txt | P0 | in scope; queued: review round cap reached (2) | |
+| 6 | codex | Out of scope: z/q.txt | P2 | out of scope | |
+EOF
+t="$pl/t-class"
+mkdir -p "$t"
+pl_run s-triage sort --kind triage --round-file "$pl/triage/round-3.md" --round 3 --plan "$pl/plan.md" --run-dir "$t" --repair-class unowned-write --defer-after 3
+pl_expect s-triage 0 $'1 defer\n2 repair\n3 keep\n4 defer' "triage round 3 should defer the pathless P0, repair the unowned path, keep the pathless citation, defer the owned path"
+[[ "$(cat "$t/policy.log")" == $'- [wave] policy: t-class triage round 3: repair (--repair-class unowned-write) — 2 /tmp/peer/a1.txt\n- [wave] policy: t-class triage round 3: defer (--defer-after 3) — 1; 4 a.py' ]] \
+  || pl_fail s-triage "triage round 3 should leave one repair and one defer line, got [$(cat "$t/policy.log")]"
+pl_run s-triage-again sort --kind triage --round-file "$pl/triage/round-3.md" --round 3 --plan "$pl/plan.md" --run-dir "$t" --repair-class unowned-write --defer-after 3
+pl_expect s-triage-again 0 "$(cat "$pl/s-triage.out")" "a re-run should rule the same"
+[[ "$(pl_log_lines "$t")" == 2 ]] || pl_fail s-triage-again "a re-run should add no policy line"
+pl_run s-triage-r2 sort --kind triage --round-file "$pl/triage/round-3.md" --round 2 --plan "$pl/plan.md" --run-dir "$pl/t-r2" --repair-class unowned-write --defer-after 3
+pl_expect s-triage-r2 0 $'1 keep\n2 keep\n3 keep\n4 keep' "a round below --defer-after should keep every row"
+pl_run s-triage-noflag sort --kind triage --round-file "$pl/triage/round-3.md" --round 3 --plan "$pl/plan.md" --run-dir "$pl/t-noflag"
+pl_expect s-triage-noflag 0 $'1 keep\n2 keep\n3 keep\n4 keep' "triage with no flag should keep every row, as today"
+mkdir -p "$pl/t-noclass"
+pl_run s-triage-noclass sort --kind triage --round-file "$pl/triage/round-3.md" --round 3 --plan "$pl/plan.md" --run-dir "$pl/t-noclass" --defer-after 3
+pl_expect s-triage-noclass 0 $'1 defer\n2 defer\n3 keep\n4 defer' "--defer-after with no class should defer all but the pathless citation"
+mkdir -p "$pl/t-adopted"
+pl_run s-adopted-class sort --kind triage --round-file "$pl/triage/round-3.md" --round 3 --plan "$pl/no-plan.md" --run-dir "$pl/t-adopted" --repair-class unowned-write --defer-after 3
+pl_expect s-adopted-class 0 $'1 keep\n2 keep\n3 keep\n4 keep' "with no plan and a class set, every row should keep"
+pl_run s-adopted sort --kind triage --round-file "$pl/triage/round-3.md" --round 3 --plan "$pl/no-plan.md" --run-dir "$pl/t-adopted" --defer-after 3
+pl_expect s-adopted 0 $'1 defer\n2 defer\n3 defer\n4 defer' "with no plan and no class, every row should defer"
+[[ ! -e "$pl/t-r2/policy.log" && ! -e "$pl/t-noflag/policy.log" ]] || pl_fail s-triage-noflag "keep should record nothing"
+
+# Red-team: the round is saved fenced, as redteam.md has the reproducer answer.
+cat >"$pl/redteam/round-2.json" <<'EOF'
+```json
+{"verdicts": [
+  {"claim": "revert restores only owned files", "command": "bash t.sh", "output": "revert rewrote /tmp/peer/a1.txt", "verdict": "NOT_REPRODUCED", "reproduced_at": "seam", "caller": null},
+  {"claim": "a.py keeps mode 0644", "command": "stat a.py", "output": "mode is 0755", "verdict": "NOT_REPRODUCED", "reproduced_at": "seam", "caller": null},
+  {"claim": "docs/guide.md keeps its heading", "command": "grep", "output": "", "verdict": "NOT_REPRODUCED", "reproduced_at": "seam", "caller": null},
+  {"claim": "z/other.txt is untouched", "command": "true", "output": "", "verdict": "REPRODUCED", "reproduced_at": "seam", "caller": null}
+], "left_checks": [{"what": "nothing else", "holds": true, "evidence": ""}]}
+```
+EOF
+r="$pl/r-class"
+mkdir -p "$r"
+pl_run s-red sort --kind redteam --round-file "$pl/redteam/round-2.json" --round 2 --plan "$pl/plan.md" --run-dir "$r" --repair-class unowned-write
+pl_expect s-red 0 $'1 repair\n2 defer\n3 defer' "red-team: the unowned write should repair, the owned mode change and owned docs/ path defer"
+[[ "$(cat "$r/policy.log")" == $'- [wave] policy: r-class red-team round 2: repair (--repair-class unowned-write) — 1 /tmp/peer/a1.txt\n- [wave] policy: r-class red-team round 2: defer (--repair-class unowned-write) — 2 a.py; 3 docs/guide.md' ]] \
+  || pl_fail s-red "the red-team round should leave one repair and one defer line, got [$(cat "$r/policy.log")]"
+pl_run s-red-again sort --kind redteam --round-file "$pl/redteam/round-2.json" --round 2 --plan "$pl/plan.md" --run-dir "$r" --repair-class unowned-write
+pl_expect s-red-again 0 "$(cat "$pl/s-red.out")" "re-ruling the same round should not spend the grant"
+[[ "$(pl_log_lines "$r")" == 2 ]] || pl_fail s-red-again "a re-run should add no policy line"
+pl_run s-red-spent sort --kind redteam --round-file "$pl/redteam/round-2.json" --round 3 --plan "$pl/plan.md" --run-dir "$r" --repair-class unowned-write
+pl_expect s-red-spent 0 $'1 ask\n2 ask\n3 ask' "a later round after a ruled one should ask, since the grant is spent"
+pl_run s-red-noflag sort --kind redteam --round-file "$pl/redteam/round-2.json" --round 2 --plan "$pl/plan.md" --run-dir "$pl/r-noflag"
+pl_expect s-red-noflag 0 $'1 ask\n2 ask\n3 ask' "red-team with no --repair-class should ask"
+pl_run s-red-adopted sort --kind redteam --round-file "$pl/redteam/round-2.json" --round 2 --plan "$pl/no-plan.md" --run-dir "$pl/r-noflag" --repair-class unowned-write
+pl_expect s-red-adopted 0 $'1 ask\n2 ask\n3 ask' "red-team with no plan should ask"
+printf '%s\n' '{"verdicts": [{"claim": "x", "output": "revert rewrote /tmp/peer/a1.txt", "verdict": "NOT_REPRODUCED"}, {"claim": "**Writes outside a task'"'"'s files.** the revert loses the peer'"'"'s work", "output": "", "verdict": "NOT_REPRODUCED"}]}' >"$pl/redteam/round-cite.json"
+pl_run s-red-cite sort --kind redteam --round-file "$pl/redteam/round-cite.json" --round 2 --plan "$pl/plan.md" --run-dir "$pl/r-cite" --repair-class unowned-write
+pl_expect s-red-cite 0 $'1 ask\n2 ask' "a pathless citation should make the whole red-team round ask"
+[[ ! -e "$pl/r-noflag/policy.log" && ! -e "$pl/r-cite/policy.log" ]] || pl_fail s-red-cite "ask should record nothing"
+
+# Flags and unreadable input: every refusal is exit 3.
+pl_run f-ok flags --repair-class unowned-write --defer-after 3 --auto-budget 4
+pl_expect f-ok 0 "--auto-budget 4.0 --defer-after 3 --repair-class unowned-write" "a valid flag set should print back normalized, in fixed order"
+pl_run f-none flags
+pl_expect f-none 0 "" "no flags should print an empty line"
+for bad in "--auto-budget 0" "--auto-budget nan" "--repair-class lossy" "--defer-after 0"; do
+  # shellcheck disable=SC2086
+  pl_run f-bad flags $bad
+  [[ "$(cat "$pl/f-bad.status")" == 3 && "$(cat "$pl/f-bad.err")" == "policy: ${bad/ /: }" ]] || pl_fail f-bad "flags $bad should exit 3 naming the flag and value"
+done
+pl_run f-all flags --auto-budget 0 --repair-class lossy --defer-after 0
+[[ "$(cat "$pl/f-all.status")" == 3 && "$(wc -l <"$pl/f-all.err" | tr -d ' ')" == 3 ]] || pl_fail f-all "three bad values should give three stderr lines"
+pl_run e-missing sort --kind triage --round-file "$pl/triage/round-9.md" --round 9 --plan "$pl/plan.md" --run-dir "$pl/e" --defer-after 3
+[[ "$(cat "$pl/e-missing.status")" == 3 ]] || pl_fail e-missing "an unreadable round file should exit 3"
+printf 'not json\n' >"$pl/redteam/round-bad.json"
+pl_run e-json sort --kind redteam --round-file "$pl/redteam/round-bad.json" --round 2 --plan "$pl/plan.md" --run-dir "$pl/e" --repair-class unowned-write
+[[ "$(cat "$pl/e-json.status")" == 3 ]] || pl_fail e-json "a non-JSON red-team round should exit 3"
+
+# Scratch copy: the falsifier for "without a flag, it asks". Delete the two
+# flag guards from a copy and the no-flag cases stop printing ask. A flagged
+# case on the copy still rules, which proves the copy runs.
+pc="$pl/copy"
+mkdir -p "$pc"
+cp work-issue/scripts/run-state.py "$pc/run-state.py"
+python3 - "$policy" "$pc/policy.py" <<'EOF'
+import sys
+text = open(sys.argv[1], encoding="utf-8").read()
+for guard, cut in (
+    ('    if target is None:\n        print("ask")\n        return 0\n', ""),
+    ("if not klass or spent or owns is None:", "if spent or owns is None:"),
+):
+    assert text.count(guard) == 1, f"guard not found once: {guard!r}"
+    text = text.replace(guard, cut)
+open(sys.argv[2], "w", encoding="utf-8").write(text)
+EOF
+! cmp -s "$policy" "$pc/policy.py" && ! grep -Fq "if not klass or" "$pc/policy.py" && ! grep -Fq "if target is None:" "$pc/policy.py" \
+  || { echo "#461: the scratch copy should have both flag guards cut" >&2; exit 1; }
+pl_timing 90 >"$pl/copy-timing.log"
+mkdir -p "$pl/c-run"
+pl_script="$pc/policy.py" pl_run c-noflag budget --timing "$pl/copy-timing.log" --at 7 --run-dir "$pl/c-run"
+[[ "$(cat "$pl/c-noflag.out")" != ask ]] || pl_fail c-noflag "with the --auto-budget guard cut, the no-flag budget case should stop printing ask"
+pl_timing 90 >"$pl/copy-timing2.log"
+pl_script="$pc/policy.py" pl_run c-flag budget --timing "$pl/copy-timing2.log" --at 7 --run-dir "$pl/c-run" --auto-budget 4.0
+pl_expect c-flag 0 "raise 4.0" "the cut copy should still rule a flagged budget case"
+pl_script="$pc/policy.py" pl_run c-red sort --kind redteam --round-file "$pl/redteam/round-2.json" --round 2 --plan "$pl/plan.md" --run-dir "$pl/c-run"
+grep -q ask "$pl/c-red.out" && pl_fail c-red "with the --repair-class guard cut, the no-flag red-team case should stop printing ask"
+[[ "$(cat "$pl/c-red.status")" == 0 && -s "$pl/c-red.out" ]] || pl_fail c-red "the cut copy should still sort the red-team round"
+pl_run c-shipped budget --timing "$pl/copy-timing.log" --at 7 --run-dir "$pl/c-run"
+pl_expect c-shipped 0 ask "the shipped script should still ask on the no-flag budget case"
+
 # --- liveness pooling at MERGE_ROWS ---
 # #436: a pool group stops taking merges at the move whose pooled rows would
 # pass MERGE_ROWS, and starts a new group there. No other model here reaches
