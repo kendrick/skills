@@ -257,8 +257,9 @@ require_text "$skill" "A merge onto the current tip tests the combined tree the 
 require_text "$ledger" "**The published SHAs are rebased SHAs that no merge test recorded.**"
 
 # A report path the orchestrator cannot open costs a round trip, which is one
-# of #113's four measured losses.
-require_text "$skill" "| \`worktree\` or \`run_dir\` not absolute, or \`head\` not a SHA | Re-prompt once for the absolute form and the SHA."
+# of #113's four measured losses. handback.py catches it before a report is
+# saved, since a saved one can't be replaced by a re-prompt's answer.
+require_text "$skill" "| \`worktree\` or \`run_dir\` not absolute, or \`head\` not a SHA | Never reaches this step: \`handback.py\` catches it at Step 4 and saves the message as a hand-back"
 
 # Fewer than two issues is work-issue's job, and a plan held only in the
 # conversation is unreachable from a fresh lane subagent.
@@ -2352,6 +2353,56 @@ if compgen -G "$saved/reports/*interim*" >/dev/null; then
   exit 1
 fi
 
+# F-r1-authz-01: a report with a relative path or a short head saved as
+# terminal can't be replaced, so the re-prompt's answer hit exit 3 and the
+# wave stopped. It has to land as a hand-back instead.
+rel_report() {
+  printf '```json\n{"lane":"issue-7","phase":"build","status":"done","worktree":"%s","run_dir":"%s","head":"%s"}\n```\n' "$1" "$2" "$3" >"$tmp/rel.txt"
+}
+for bad in "rel/path /r/7 0123456789abcdef0123456789abcdef01234567" \
+           "/w/7 rel 0123456789abcdef0123456789abcdef01234567" \
+           "/w/7 /r/7 abc"; do
+  rel_report $bad
+  wd="$(mktemp -d "$tmp/hb-rel.XXXXXX")"
+  python3 "$handback" --wave-dir "$wd" --lane issue-7 --phase build --text "$tmp/rel.txt" >"$tmp/out"
+  [[ "$(cut -d' ' -f1 "$tmp/out")" == redispatch && ! -e "$wd/reports/issue-7-build.json" ]] || {
+    echo "a report with worktree/run_dir/head $bad should be a hand-back, got: $(cat "$tmp/out")" >&2
+    exit 1
+  }
+done
+rel_report /w/7 /r/7 0123456789abcdef0123456789abcdef01234567
+wd="$(mktemp -d "$tmp/hb-abs.XXXXXX")"
+python3 "$handback" --wave-dir "$wd" --lane issue-7 --phase build --text "$tmp/rel.txt" >"$tmp/out"
+[[ "$(cat "$tmp/out")" == "terminal $wd/reports/issue-7-build.json" ]] || {
+  echo "the same report with absolute paths and a 40-hex head should be terminal, got: $(cat "$tmp/out")" >&2
+  exit 1
+}
+
+# --check classifies and writes nothing, so Step 7 can take its hold before
+# the write without holding for a message that saves as a hand-back.
+check_run() {
+  local wd
+  wd="$(mktemp -d "$tmp/hb-check.XXXXXX")"
+  set +e
+  python3 "$handback" --wave-dir "$wd" --lane issue-7 --phase build --text "$1" --check >"$tmp/out"
+  status=$?
+  set -e
+  [[ "$status" == 0 && "$(cat "$tmp/out")" == "$2" ]] || {
+    echo "--check on $1 should print '$2' and exit 0, got $status: $(cat "$tmp/out")" >&2
+    exit 1
+  }
+  [[ -z "$(ls -A "$wd")" ]] || {
+    echo "--check wrote into WAVE_DIR: $(find "$wd" -mindepth 1)" >&2
+    exit 1
+  }
+}
+check_run "$fixtures/handback/terminal-build.txt" "terminal done"
+check_run "$fixtures/handback/midrun-build.txt" "handback"
+rel_report rel/path /r/7 0123456789abcdef0123456789abcdef01234567
+check_run "$tmp/rel.txt" "handback"
+sed 's/"status": "done"/"status": "failed"/' "$fixtures/handback/terminal-build.txt" >"$tmp/failed.txt"
+check_run "$tmp/failed.txt" "terminal failed"
+
 # An interim-only lane is still unreported to the probe (row 7), so a wave
 # re-invoked after the third-hand-back stop re-dispatches it once.
 iwd="$repo/.git/work-wave/wave-37-38"
@@ -2427,7 +2478,13 @@ require_text "$brief" "--wait --until done --until idle --until blocked --timeou
 require_text "$brief" "A herdr prompt sent without \`--wait\`, or in a foreground call, leaves you nothing to wait on."
 require_text "$brief" "## The resume line"
 require_text "$brief" "Your last turn ended without the report your brief asks for"
+require_text "$skill" "and ends on the line the state earns—or the wave stopped on a lane's third hand-back with its interim reports named."
+# F-r1-authz-02: order.py has no release, so a hold taken on a message that
+# then saves as a hand-back strands the successors.
+require_text "$skill" "Classify each message first: run the same command with \`--check\` added, which writes nothing and prints \`terminal <status>\` or \`handback\`."
+require_text "$skill" "so the hold lands before the report does and never lands for a message the script saves as a hand-back."
 require_text work-wave/README.md "handback.py"
+require_text "$ledger" "| 70 | \`handback.py\` checks \`worktree\`, \`run_dir\`, and \`head\` itself"
 require_text "$ledger" "| 68 | Step 4 runs every message a lane returns through \`handback.py\`"
 require_text "$ledger" "| 69 | The lane brief names one tracked shape for every herdr prompt a lane sends"
 

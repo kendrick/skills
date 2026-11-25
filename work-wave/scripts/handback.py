@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Save a lane's returned message as its report, or as an interim hand-back.
 
-Usage: handback.py --wave-dir WAVE_DIR --lane issue-N --phase build|publish|repoll --text FILE
+Usage: handback.py --wave-dir WAVE_DIR --lane issue-N --phase build|publish|repoll --text FILE [--check]
 
 Reads the lane's final message from FILE. A message that is a terminal report
 (exactly one fenced json block, or a bare JSON object, whose `lane` and `phase`
-are the ones passed and whose `status` is done, stopped, failed, or refused) is
+are the ones passed, whose `status` is done, stopped, failed, or refused, whose
+`worktree` and `run_dir` are absolute paths, and whose `head` is a 40-hex SHA) is
 written to reports/issue-<N>-<phase>.json, and the script prints
 `terminal <path>`. Anything else is a hand-back: the lane's turn ended mid-run.
 It is written to reports/issue-<N>-<phase>-interim-<k>.json, k one past the
@@ -15,7 +16,11 @@ a saved one. The first two (by interim files on disk) print
 stdout, and on stderr a `handback: <lane> <phase>: <n> hand-backs without a
 terminal report:` line naming the same paths.
 
-Exit codes: 0 terminal or redispatch, 1 third hand-back (the wave stops on the
+--check classifies without writing anything: it prints `terminal <status>` or
+`handback`. Step 7 runs it first so it can hold a failed lane's successors
+before the report lands, and only for a message the write will save as a report.
+
+Exit codes: 0 terminal, redispatch, or any --check verdict, 1 third hand-back (the wave stops on the
 lane), 3 usage, unreadable FILE, or a terminal report already on disk for this
 lane and phase (nothing is written, so a saved report is never clobbered).
 """
@@ -28,16 +33,21 @@ import sys
 import tempfile
 
 STATUSES = {"done", "stopped", "failed", "refused"}
+SHA = re.compile(r"[0-9a-f]{40}")
 MAX_REDISPATCH = 2
 FENCE = re.compile(r"```(?:json)?[ \t]*\n(.*?)\n[ \t]*```", re.S)
 
 
 def terminal_report(text, lane, phase):
-    """The JSON text if `text` is this lane's terminal report for this phase, else None.
+    """The parsed report if `text` is this lane's terminal report for this phase, else None.
 
     This is the one check that keeps a finished lane from being re-dispatched:
     a report for another lane or phase is somebody else's, so it counts as a
-    hand-back here.
+    hand-back here. The path and SHA checks live here too (F-r1-authz-01): a
+    report saved as terminal with a relative worktree could never be replaced,
+    so a re-prompt's answer hit the overwrite refusal and stopped the wave.
+    The brief's contract requires all three fields in every phase and allows
+    none of them null.
     """
     text = text.strip()
     blocks = FENCE.findall(text)
@@ -51,9 +61,13 @@ def terminal_report(text, lane, phase):
         return None
     if not isinstance(report, dict):
         return None
-    if report.get("lane") == lane and report.get("phase") == phase and report.get("status") in STATUSES:
-        return text
-    return None
+    if report.get("lane") != lane or report.get("phase") != phase or report.get("status") not in STATUSES:
+        return None
+    if not all(isinstance(report.get(k), str) and os.path.isabs(report[k]) for k in ("worktree", "run_dir")):
+        return None
+    if not isinstance(report.get("head"), str) or not SHA.fullmatch(report["head"]):
+        return None
+    return text, report
 
 
 def write_atomic(path, content):
@@ -71,6 +85,7 @@ def main():
     ap.add_argument("--lane", required=True)
     ap.add_argument("--phase", required=True, choices=["build", "publish", "repoll"])
     ap.add_argument("--text", required=True)
+    ap.add_argument("--check", action="store_true")
     try:
         args = ap.parse_args()
     except SystemExit:
@@ -92,11 +107,14 @@ def main():
     if os.path.exists(final):
         print(f"handback: {final} already exists; refusing to overwrite a saved report", file=sys.stderr)
         return 3
-    os.makedirs(reports, exist_ok=True)
 
     report = terminal_report(text, args.lane, args.phase)
+    if args.check:
+        print(f"terminal {report[1]['status']}" if report else "handback")
+        return 0
+    os.makedirs(reports, exist_ok=True)
     if report is not None:
-        write_atomic(final, report + "\n")
+        write_atomic(final, report[0] + "\n")
         print(f"terminal {final}")
         return 0
 
