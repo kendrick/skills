@@ -77,6 +77,9 @@ require_file "$fixtures/runs/closed/issue-9/plan.md"
 # The footprint Step 1 derives from runs-tableless/issue-8/plan.md's `Files:`
 # line when issue-8 is an already-started lane whose copy has no table yet.
 require_file "$fixtures/copy-issue-8.md"
+require_file work-wave/scripts/handback.py
+require_file "$fixtures/handback/terminal-build.txt"
+require_file "$fixtures/handback/midrun-build.txt"
 
 [[ "$(find work-wave -maxdepth 1 -type f | wc -l | tr -d ' ')" == "2" ]] || {
   echo "work-wave/ must ship only SKILL.md and README.md at top level" >&2
@@ -2236,5 +2239,158 @@ for f in "$skill" "$oscript"; do
   refute_text "$f" "whose \`After\` names"
   refute_text "$f" "renumber"
 done
+
+# --- #460: lane hand-backs. A lane whose worker outlives its turn returns
+# prose instead of its report, and handback.py is what tells the two apart. ---
+
+handback=work-wave/scripts/handback.py
+[[ -x "$handback" ]] || {
+  echo "handback.py is not executable: $handback" >&2
+  exit 1
+}
+
+# Runs the script at $1 over a fresh WAVE_DIR and fails unless a terminal
+# report prints terminal, lands as issue-7-build.json, and leaves no interim
+# file. The mutation below runs this on a copy with the check removed.
+assert_terminal_report() {
+  local script="$1" wd out
+  wd="$(mktemp -d "$tmp/hb-terminal.XXXXXX")"
+  out="$(python3 "$script" --wave-dir "$wd" --lane issue-7 --phase build --text "$fixtures/handback/terminal-build.txt")" || {
+    echo "a terminal report should exit 0, got: $out" >&2
+    return 1
+  }
+  [[ "$out" == "terminal $wd/reports/issue-7-build.json" ]] || {
+    echo "a terminal report should print terminal, got: $out" >&2
+    return 1
+  }
+  [[ -f "$wd/reports/issue-7-build.json" ]] || {
+    echo "a terminal report should be saved as issue-7-build.json" >&2
+    return 1
+  }
+  if compgen -G "$wd/reports/*interim*" >/dev/null; then
+    echo "a terminal report should write no interim file" >&2
+    return 1
+  fi
+}
+assert_terminal_report "$handback"
+
+hb="$tmp/hb-wave"
+mkdir -p "$hb"
+hb_run() {
+  set +e
+  python3 "$handback" --wave-dir "$1" --lane issue-7 --phase build --text "$fixtures/handback/midrun-build.txt" >"$tmp/out" 2>"$tmp/err"
+  status=$?
+  set -e
+  out="$(cat "$tmp/out")"
+  err="$(cat "$tmp/err")"
+}
+
+hb_run "$hb"
+expect_status 0 "the first hand-back"
+[[ "$out" == "redispatch 1 $hb/reports/issue-7-build-interim-1.json" ]] || {
+  echo "the first hand-back should print redispatch 1, got: $out" >&2
+  exit 1
+}
+[[ ! -e "$hb/reports/issue-7-build.json" ]] || {
+  echo "a hand-back must not write the terminal report" >&2
+  exit 1
+}
+python3 - "$hb/reports/issue-7-build-interim-1.json" "$fixtures/handback/midrun-build.txt" <<'PY' || exit 1
+import json, sys
+interim = json.load(open(sys.argv[1]))
+if interim.get("text") != open(sys.argv[2]).read():
+    sys.exit("the interim report should hold the returned text verbatim")
+if "status" in interim:
+    sys.exit("the interim report must carry no status key, or it reads as a report")
+PY
+hb_run "$hb"
+expect_status 0 "the second hand-back"
+[[ "$out" == "redispatch 2 $hb/reports/issue-7-build-interim-2.json" ]] || {
+  echo "the second hand-back should print redispatch 2, got: $out" >&2
+  exit 1
+}
+hb_run "$hb"
+expect_status 1 "the third hand-back"
+for k in 1 2 3; do
+  for stream in "$out" "$err"; do
+    grep -Fq "$hb/reports/issue-7-build-interim-$k.json" <<<"$stream" || {
+      echo "the third hand-back should name interim-$k on stdout and stderr, got: $out / $err" >&2
+      exit 1
+    }
+  done
+done
+[[ "$out" == "stop "* ]] || {
+  echo "the third hand-back should print stop, got: $out" >&2
+  exit 1
+}
+
+# A report for another phase or lane isn't this lane's report for this phase.
+mismatch_run() {
+  local wd
+  wd="$(mktemp -d "$tmp/hb-mismatch.XXXXXX")"
+  python3 "$handback" --wave-dir "$wd" --lane "$1" --phase "$2" --text "$fixtures/handback/terminal-build.txt" >"$tmp/out"
+  [[ "$(cut -d' ' -f1,2 "$tmp/out")" == "redispatch 1" && ! -e "$wd/reports/issue-7-build.json" ]] || {
+    echo "terminal-build.txt run as $1 $2 should be a hand-back, got: $(cat "$tmp/out")" >&2
+    exit 1
+  }
+}
+mismatch_run issue-7 publish
+mismatch_run issue-8 build
+
+# A saved report is never overwritten, even by a later hand-back.
+saved="$(mktemp -d "$tmp/hb-saved.XXXXXX")"
+python3 "$handback" --wave-dir "$saved" --lane issue-7 --phase build --text "$fixtures/handback/terminal-build.txt" >/dev/null
+cp "$saved/reports/issue-7-build.json" "$tmp/saved-before.json"
+hb_run "$saved"
+expect_status 3 "a hand-back over a saved report"
+cmp "$tmp/saved-before.json" "$saved/reports/issue-7-build.json" || {
+  echo "handback.py overwrote a saved report" >&2
+  exit 1
+}
+if compgen -G "$saved/reports/*interim*" >/dev/null; then
+  echo "handback.py wrote an interim file beside a saved report" >&2
+  exit 1
+fi
+
+# An interim-only lane is still unreported to the probe (row 7), so a wave
+# re-invoked after the third-hand-back stop re-dispatches it once.
+iwd="$repo/.git/work-wave/wave-37-38"
+mkdir -p "$iwd/reports"
+printf '| Order | Lane | After | Why |\n|---|---|---|---|\n| 1 | issue-37 | — | no coupling; number order |\n| 2 | issue-38 | — | no coupling; number order |\n' >"$iwd/order.md"
+printf '{"lane": "issue-38", "phase": "build", "status": "done"}\n' >"$iwd/reports/issue-38-build.json"
+cp "$hb/reports/issue-7-build-interim-1.json" "$iwd/reports/issue-37-build-interim-1.json"
+wave_state probe --wave-dir "$iwd" --root "$repo" --default main
+expect_status 0 "probe over an interim-only WAVE_DIR"
+python3 - "$tmp/out" <<'PY' || exit 1
+import json, sys
+probe = json.load(open(sys.argv[1]))
+if probe["unheld_unreported"] != 1:
+    sys.exit(f"an interim report should leave issue-37 unreported, got {probe['unheld_unreported']!r}")
+PY
+
+# The falsifier. With the terminal-report check gone, every message is a
+# hand-back, so a finished lane would be re-dispatched, and the assertion has
+# to notice. The copy loses the real check; the assertion stays whole.
+mutant="$tmp/handback-mutant.py"
+python3 - "$handback" "$mutant" <<'PY' || exit 1
+import sys
+src = open(sys.argv[1]).read()
+head = "def terminal_report(text, lane, phase):"
+start = src.index(head)
+end = src.index("\ndef write_atomic", start)
+open(sys.argv[2], "w").write(src[:start] + head + "\n    return None\n\n" + src[end:])
+PY
+if cmp -s "$handback" "$mutant"; then
+  echo "the mutation left handback.py unchanged" >&2
+  exit 1
+fi
+if (assert_terminal_report "$mutant") 2>"$tmp/mutant.err"; then
+  echo "the terminal assertion passed with the terminal-report check removed" >&2
+  exit 1
+fi
+grep -Fq "a terminal report should print terminal" "$tmp/mutant.err" || {
+  echo "the mutant should fail on the terminal verdict, got: $(cat "$tmp/mutant.err")" >&2
+  exit 1
+}
 
 echo "work-wave smoke: OK"
