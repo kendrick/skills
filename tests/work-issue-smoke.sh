@@ -95,6 +95,9 @@ require_file tests/fixtures/work-issue/probes/row-17-postpush.json
 require_file tests/fixtures/work-issue/probes/row-17-pushed-item1-pending.json
 require_file tests/fixtures/work-issue/probes/row-17-pushed-item1-findings.json
 require_file tests/fixtures/work-issue/probes/row-17-item1-redteam-repaired.json
+require_file tests/fixtures/work-issue/probes/row-17-item1-redteam-refire.json
+require_file tests/fixtures/work-issue/probes/row-10-item1-failed-conflict.json
+require_file tests/fixtures/work-issue/probes/row-10-item1-failed-rebase.json
 require_file tests/fixtures/work-issue/probes/row-10-repair-unverified.json
 # A pre-PR repair, clean after its own round: Step 5 with the PR create, never
 # Step 8, which only pushes and replies.
@@ -1926,7 +1929,7 @@ probes_dir=tests/fixtures/work-issue/probes
 declare -a probe_cases=(
   "row-01:done" "row-01-queued:stop" "row-02:wait" "row-03:stop" "row-04:0" "row-05:0" "row-05-gated:0" "row-06:0"
   "row-07:2" "row-07-isolation-incomplete:1" "row-07-committed-unreported:stop" "row-07-committed-unreported-herdr:stop" "row-07-herdr-absent:2" "row-21:wait" "row-08:3" "row-09:3" "row-10:4" "row-11:4" "row-11-trigger-unrecorded:4" "row-12:5" "row-13:5"
-  "row-14:6" "row-15:6" "row-16:7" "row-17:8" "row-17-queued:8" "row-17-postpush:8" "row-17-pushed-item1-pending:8" "row-17-pushed-item1-findings:8" "row-17-item1-redteam-repaired:8"
+  "row-14:6" "row-15:6" "row-16:7" "row-17:8" "row-17-queued:8" "row-17-postpush:8" "row-17-pushed-item1-pending:8" "row-17-pushed-item1-findings:8" "row-17-item1-redteam-repaired:8" "row-17-item1-redteam-refire:8" "row-10-item1-failed-conflict:4" "row-10-item1-failed-rebase:4"
   "row-10-repair-unverified:4" "row-10-repair-needed:4" "row-10-failed-twice:stop" "row-13-prepr-repair-clean:5" "row-16-earlier-queued:8" "row-17-review-repair-unpushed:8" "row-17-deferred-owed:8" "row-17-worker-queue:8" "row-18-answered:done" "row-18:done"
   "row-17-repair-advisory-only:8" "row-17-repair-blocking:8" "row-17-repair-blocking-settled:8" "row-17-repair-diff-trigger:8"
   "row-10-over-budget:stop" "row-11-over-budget:stop" "row-16-over-budget:stop" "row-16-over-budget-queued:8" "row-17-over-budget:8" "row-17-over-budget-pushed:stop"
@@ -2155,6 +2158,53 @@ json.dump(probe, open(sys.argv[2], "w"))' "$probes_dir/row-17-item1-redteam-repa
       }
     done
   done
+done
+# A clean round over item 1's red-team repair owes Step 4 item 4's re-fire
+# before anything pushes, ahead or not, and rows 14 and 15 never poll past it.
+# Over budget it is the budget stop; once settled, the field reads false and
+# the unpushed red-team repair takes the push leg (#369).
+for ahead in False True; do
+  for review in pending findings; do
+    for over in False True; do
+      for settled in False True; do
+        python3 -c 'import json, sys
+probe = json.load(open(sys.argv[1]))
+assert probe["redteam_last_failed"] is False and probe["redteam_repair_diff_triggers"] is True
+probe["ahead_of_origin"] = sys.argv[3] == "True"
+probe["review_state"] = sys.argv[4]
+probe["review_over_budget"] = sys.argv[5] == "True"
+probe["redteam_repair_diff_triggers"] = sys.argv[6] != "True"
+json.dump(probe, open(sys.argv[2], "w"))' "$probes_dir/row-17-item1-redteam-refire.json" "$tmp/rr-refire.json" "$ahead" "$review" "$over" "$settled"
+        refire_reason="$(python3 "$run_state" phase --probe "$tmp/rr-refire.json")"
+        if [[ "$settled" == True && "$ahead" == True ]]; then
+          expected="phase: 8 reason: row 17: the deferred-findings comment is owed, or a repair report or an all-queued or capped triage round leaves work unpushed"
+        elif [[ "$settled" == True ]]; then
+          expected="phase: 6 reason: row 1"
+        elif [[ "$over" == True ]]; then
+          expected="phase: stop reason: row 17: review time is over budget"
+        else
+          expected="phase: 8 reason: row 17: item 1's newest reproducer round is clean over a red-team repair whose own diff from redteam-repair-base-<k> hits a money, authz, or schema trigger row, and its re-fire has not settled; resume at Step 8 item 1 at Step 4 item 4's repair re-fire"
+        fi
+        grep -Fq "$expected" <<<"$refire_reason" || {
+          echo "item 1's red-team re-fire (ahead $ahead, review $review, over budget $over, settled $settled) should give '$expected', got: $refire_reason" >&2
+          exit 1
+        }
+      done
+    done
+  done
+done
+# A conflict or a rebase in progress keeps a failed item-1 round on row 10, so
+# row 12 can't publish over a refuted round; with neither, row 17 owns it.
+for marker in conflict rebase_in_progress; do
+  python3 -c 'import json, sys
+probe = json.load(open(sys.argv[1]))
+assert probe["redteam_last_failed"] is True and probe["conflict"] is False and probe["rebase_in_progress"] is False
+probe[sys.argv[3]] = True
+json.dump(probe, open(sys.argv[2], "w"))' "$probes_dir/row-17-item1-redteam-repaired.json" "$tmp/item1-marker.json" "$marker"
+  grep -Fq "phase: 4 reason: row 10: the newest red-team round failed and a repair followed it; run round k+1" <<<"$(python3 "$run_state" phase --probe "$tmp/item1-marker.json")" || {
+    echo "a failed item-1 round with $marker set should stay on row 10" >&2
+    exit 1
+  }
 done
 # The item-1 leg needs the repair pushed. An unpushed repair over budget takes
 # row 17's push leg, which has no budget gate, and pushes before anything stops.
@@ -2783,7 +2833,7 @@ grep -Fqi "retry" <<<"$loop_block" && {
 # the file's time, because Step 8 edits the round after the push it answers.
 require_text work-issue/SKILL.md "# Triage round <k>, since <SINCE>"
 require_text work-issue/references/triage.md "# Triage round <k>, since <SINCE>"
-require_text work-issue/references/resume.md "| 15 | PR open; \`findings\`; no triage round recorded against the current SINCE; no repair awaiting item 1's reproducer (row 17: its item-1 leg once the repair is pushed, its push leg before) | Step 6 triage |"
+require_text work-issue/references/resume.md "| 15 | PR open; \`findings\`; no triage round recorded against the current SINCE; no repair awaiting item 1's reproducer or its red-team re-fire, and no repair report with local HEAD ahead of origin (row 17: its item-1 leg, else its push leg for an unpushed repair) | Step 6 triage |"
 require_text _maintenance/work-issue/RATIONALE.md "Comparing a triage round's file time against \`pushed_at\`"
 refute_text work-issue/references/resume.md "compare its mtime against"
 refute_text work-issue/SKILL.md "compare its mtime against"
@@ -3897,6 +3947,17 @@ printf 'fired: yes\n' >"$rr_run/redteam/trigger-redteam-repair-1.txt"
 printf '.adversarial-review/runs/2\nblocking (REPRODUCED): 0 UNVERIFIED: 0\n' >"$rr_run/redteam/ar-state-redteam-repair-1.txt"
 expect_field "with the re-fire's review settled" redteam_repair_diff_triggers false "$rr_run" "$rr_repo"
 rm "$rr_run/redteam/ar-state-redteam-repair-1.txt"
+# #369: a base older than the newest triage repair report is Step 4's, from
+# before the PR, and its diff now carries the triage repair's lines, so it
+# reads false; item 1's own base, written after the report, still reads.
+mkdir -p "$rr_run/reports"
+printf '{}\n' >"$rr_run/reports/repair-1.json"
+touch -t 202601010000 "$rr_run/redteam/redteam-repair-base-1"
+touch -t 202601010100 "$rr_run/reports/repair-1.json"
+expect_field "with the base older than the newest repair report" redteam_repair_diff_triggers false "$rr_run" "$rr_repo"
+touch -t 202601010200 "$rr_run/redteam/redteam-repair-base-1"
+expect_field "with the base newer than the newest repair report" redteam_repair_diff_triggers true "$rr_run" "$rr_repo"
+rm "$rr_run/reports/repair-1.json"
 printf 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n' >"$rr_run/redteam/redteam-repair-base-1"
 expect_field "with a base SHA that does not resolve" redteam_repair_diff_triggers null "$rr_run" "$rr_repo"
 
@@ -4031,8 +4092,15 @@ require_text work-issue/references/resume.md "or a repair report or an all-queue
 # Row 14's guards are what keep a stop between the repair push and the replies,
 # or between the push and item 1's reproducer (#369), out of the poll. Both
 # copies carry them.
-require_text work-issue/SKILL.md "| 14 | PR open; review \`pending\`; no triage row without a reply URL; no queue row missing from its comment; no repair awaiting item 1's reproducer (row 17: its item-1 leg once the repair is pushed, its push leg before) | Step 6 poll |"
-require_text work-issue/references/resume.md "| 14 | PR open; review \`pending\`; no triage row without a reply URL; no queue row missing from its comment; no repair awaiting item 1's reproducer (row 17: its item-1 leg once the repair is pushed, its push leg before) | Step 6 poll |"
+# #369: row 10 leaves a failed item-1 round to row 17 unless a conflict or a
+# rebase is in progress, and row 17's item-1 leg owns item 1's red-team re-fire.
+for f in work-issue/SKILL.md work-issue/references/resume.md; do
+  require_text "$f" "except a failed round under an open PR whose newest triage round has its \`reports/repair-<k>.json\`, with neither \`conflict.txt\` nor a rebase in progress: that round is Step 8 item 1's, and row 17 takes it"
+  require_text "$f" "or the newest round is clean over item 1's own red-team repair whose diff from \`redteam-repair-base-<k>\` hits trigger row 1, 2, or 4 with its re-fire not settled (\`redteam_repair_diff_triggers\`), ahead of origin or not"
+  require_text "$f" "so this leg takes it ahead of row 10 where neither \`conflict.txt\` nor a rebase is in progress"
+done
+require_text work-issue/SKILL.md "| 14 | PR open; review \`pending\`; no triage row without a reply URL; no queue row missing from its comment; no repair awaiting item 1's reproducer or its red-team re-fire, and no repair report with local HEAD ahead of origin (row 17: its item-1 leg, else its push leg for an unpushed repair) | Step 6 poll |"
+require_text work-issue/references/resume.md "| 14 | PR open; review \`pending\`; no triage row without a reply URL; no queue row missing from its comment; no repair awaiting item 1's reproducer or its red-team re-fire, and no repair report with local HEAD ahead of origin (row 17: its item-1 leg, else its push leg for an unpushed repair) | Step 6 poll |"
 # The preamble is the only part of worker-prompt.md a worker sees, so the
 # nine-field contract has to be inside it, not only documented after it.
 require_text work-issue/references/worker-prompt.md "This shape replaces the six-field"
