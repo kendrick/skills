@@ -16,10 +16,11 @@ With `WORK_ISSUE_REPRODUCER` unset or empty, one fresh general-purpose subagent 
 - REPAIR_BASE, in a repair round only: the SHA HEAD stood at before the repair whose report this round checks. A build round has none
 - the absolute path of the tree
 - `RUN_DIR/baseline.txt`, so a failure that was already failing before this run is recognized rather than attributed. A file reading `absent` means the repo has no verification command, so nothing ran before this run and nothing was already failing
+- `RUN_DIR/plan.md` as `cat -n RUN_DIR/plan.md` prints it, or `none` where the run has no plan, as on an adopted run. A worker may cite a `plan.md` line in a `left` reason, and the numbered copy is what that citation is checked against. It goes in inline, never as a path: a path names RUN_DIR, and `RUN_DIR/reports/` holds the worker's `summary`
 
 ### What it never receives
 
-The worker's reasoning, its `summary`, and any fix it proposed. `adversarial-review` states the rule this copies: "A verifier that shares context with the finder is the same mistake as running several review personas in one window: the reasoning that produced the claim is sitting right there, and agreeing with it is the path of least resistance." It puts the sharpest case on the proposed fix, which "is the finder's reasoning in disguise: a proposed fix tells you what the finder believed the bug was, and a verifier who reads it inherits the belief it was supposed to test independently."
+The worker's reasoning, its `summary`, and any fix it proposed. `adversarial-review` states the rule this copies: "A verifier that shares context with the finder is the same mistake as running several review personas in one window: the reasoning that produced the claim is sitting right there, and agreeing with it is the path of least resistance." It puts the sharpest case on the proposed fix, which "is the finder's reasoning in disguise: a proposed fix tells you what the finder believed the bug was, and a verifier who reads it inherits the belief it was supposed to test independently." The plan is none of these: it is the spec the worker built against, not its reasoning.
 
 A claim is that same object pointed the other way. The worker believed the change works; the reproducer's job is to find out whether the command it ran shows that, and the worker's account of why it works is the one input that would tell it what to conclude.
 
@@ -84,6 +85,16 @@ The suite's output before any of this work began, for telling a pre-existing
 failure from a new one:
 
 {{BASELINE}}
+
+The run's plan, numbered as `cat -n` prints it, or `none` where the run has
+no plan:
+
+{{PLAN}}
+
+A `left` reason that cites a `plan.md` line holds only where that line exists
+in the numbered plan and says what the reason claims. A line number past the
+end, or a line that says something else, is `holds: false`, and the evidence
+quotes what the plan holds at that number or says the plan ends before it.
 
 Claims to break. Each one is a hypothesis, and your stance is refutation:
 
@@ -160,7 +171,7 @@ Your final message is exactly one fenced json block and nothing else.
 
 `REPRODUCED` with `reproduced_at: seam` is the weaker of the two: the seam held against an input the reproducer built, and no production caller built that input for it. Step 5's verification section marks that claim seam only and names which of the cases above it was.
 
-`holds` is the reproducer's read of a `left` entry's stated reason against the code. A reason about the change is judged against `git diff REPAIR_BASE..HEAD` where REPAIR_BASE was given, and against `git diff BASE_SHA..HEAD` where it wasn't, so a reason true of the repair alone is not read as false of the whole branch. A reason that cites text the reproducer didn't receive, a dispatch's Done-when for one, comes back `holds: false` with that as its evidence. `false` with evidence is a finding, and it routes like a `NOT_REPRODUCED` claim.
+`holds` is the reproducer's read of a `left` entry's stated reason against the code. A reason about the change is judged against `git diff REPAIR_BASE..HEAD` where REPAIR_BASE was given, and against `git diff BASE_SHA..HEAD` where it wasn't, so a reason true of the repair alone is not read as false of the whole branch. A reason that cites text the reproducer didn't receive, a dispatch's Done-when for one, comes back `holds: false` with that as its evidence. A reason that cites a `plan.md` line holds only where that line exists in the numbered plan and says what the reason claims; a line number past the end, or a line saying something else, is `holds: false` with what the plan holds there as its evidence. `false` with evidence is a finding, and it routes like a `NOT_REPRODUCED` claim.
 
 Saved verbatim to `RUN_DIR/redteam/round-<k>.json`. A verdict file you tidied is a verdict file you partly authored. The codex path below amends what verbatim means there.
 
@@ -219,7 +230,7 @@ All parts run in one background command, as `( … ) & ( … ) & wait`, the way 
 
 **The split.** A round with more than 8 claims runs as two parts. Part 1 takes the first ceil(n/2) claims in report order and every `left` entry. Part 2 takes the rest, with `{{LEFT}}` filled as `none`. A round with 8 or fewer claims has only part 1. Each part's verdicts file is `RUN_DIR/redteam/round-<k>.part-<p>.verdicts.jsonl`.
 
-**The prompt file**, `RUN_DIR/redteam/round-<k>.part-<p>.prompt.md`, holds what a subagent dispatch carries for that part: the prompt above filled in from `claims-<k>.json`, so each claim and `left` object keeps its `n`, and REPAIR_BASE filled in or `none`, then the verdict JSON shape. After both comes the codex addendum below, with `{{VERDICTS_FILE}}` filled as the part's verdicts file by absolute path. The prompt files sit beside the round they fill, under `redteam/`, because the reproducer prompt never passes through `render-prompt.py` and `prompts/` is that script's.
+**The prompt file**, `RUN_DIR/redteam/round-<k>.part-<p>.prompt.md`, holds what a subagent dispatch carries for that part: the prompt above filled in from `claims-<k>.json`, so each claim and `left` object keeps its `n`, and REPAIR_BASE filled in or `none`, and `{{PLAN}}` filled in or `none`, then the verdict JSON shape. After both comes the codex addendum below, with `{{VERDICTS_FILE}}` filled as the part's verdicts file by absolute path. The prompt files sit beside the round they fill, under `redteam/`, because the reproducer prompt never passes through `render-prompt.py` and `prompts/` is that script's.
 
 **Saved verbatim, on this path**, means `round-<k>.json` is what `merge-verdicts.py` assembled, every element field-for-field from a verdict line or from the fallback's block. The script exists so that no one, the orchestrator included, edits those elements by hand.
 

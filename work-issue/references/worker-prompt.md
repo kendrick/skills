@@ -41,7 +41,7 @@ check; a silent one is a hole nobody finds until review.
 
 Each `left` reason cites only a `plan.md` line, a path at HEAD, or a commit
 range. The reproducer that checks it receives your `claims` and `left`, the
-commit range, `baseline.txt`, and the tree, and nothing else, so a reason
+commit range, `baseline.txt`, `plan.md`, and the tree, and nothing else, so a reason
 resting on text it never saw, such as a dispatch's Done-when, comes back as a
 finding. In a repair round, a reason or claim about
 the repair itself is judged against the repair's own commit range, so name that
