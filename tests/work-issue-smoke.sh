@@ -7201,6 +7201,9 @@ if (require_text "$plan_copy" "$step4_inputs") 2>/dev/null; then
   echo "the Step 4 input pin should fail on a SKILL.md copy with the plan cut from the list" >&2
   exit 1
 fi
+# ...and the ledger's own input list has to keep matching the Step 4 list.
+require_text _maintenance/work-issue/RATIONALE.md "(plus REPAIR_BASE in a repair round, row 207, and \`plan.md\`, row 223)"
+require_text _maintenance/work-issue/RATIONALE.md "| 223 | The reproducer receives \`RUN_DIR/plan.md\`"
 
 # --- liveness pooling at MERGE_ROWS ---
 # #436: a pool group stops taking merges at the move whose pooled rows would
