@@ -259,7 +259,7 @@ require_text "$ledger" "**The published SHAs are rebased SHAs that no merge test
 # A report path the orchestrator cannot open costs a round trip, which is one
 # of #113's four measured losses. handback.py catches it before a report is
 # saved, since a saved one can't be replaced by a re-prompt's answer.
-require_text "$skill" "| A contract field missing or of the wrong type, \`worktree\` or \`run_dir\` not absolute, or \`head\` not a SHA | Never reaches this step: \`handback.py\` catches it at Step 4 and saves the message as a hand-back"
+require_text "$skill" "| A contract field missing or of the wrong type, \`worktree\` or \`run_dir\` not absolute, or \`head\` not a SHA on a status other than \`refused\` or \`failed\` | Never reaches this step: \`handback.py\` catches it at Step 4 and saves the message as a hand-back"
 
 # Fewer than two issues is work-issue's job, and a plan held only in the
 # conversation is unreachable from a fresh lane subagent.
@@ -2826,5 +2826,19 @@ if [[ "$(id -u)" != 0 ]]; then
   hb480_mutant oserror ro-terminal 'except OSError as e:(\n\s+print\(f"handback: cannot save)' 'except ZeroDivisionError as e:\1'
   hb480_mutant oserror ro-handback 'except OSError as e:(\n\s+print\(f"handback: cannot save)' 'except ZeroDivisionError as e:\1'
 fi
+
+# Prose pins for the same rule. The head and worktree lines sit in both report
+# blocks of the brief, so each is counted twice.
+require_text "$skill" "- Exit 3 — a usage error, an unreadable FILE, a terminal report already on disk that the script refused to overwrite, or a report or hand-back it could not save."
+require_text "$brief" "null only when \`status\` is \`refused\` or \`failed\` and you have none"
+require_text "$brief" "absolute path, or null when \`status\` is \`refused\` or \`failed\` and work-issue made none"
+for want in 'null only when `status` is `refused` or `failed` and you have none' 'absolute path, or null when `status` is `refused` or `failed` and work-issue made none'; do
+  if [[ "$(grep -cF "$want" "$brief")" != 2 ]]; then
+    echo "$brief must carry '$want' in both report blocks" >&2
+    exit 1
+  fi
+done
+require_text "$ledger" "| 72 | A \`refused\` or \`failed\` report may carry a null \`head\`"
+require_text "$ledger" "(except as row 72 allows)"
 
 echo "work-wave smoke: OK"
