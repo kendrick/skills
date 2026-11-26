@@ -7235,7 +7235,7 @@ s358_sentences() {
 s358_render_case() {
   local skill="$1" d s2 s3 f v
   local -a a2=() a3=()
-  d="$(mktemp -d)"
+  d="$(mktemp -d "$tmp/s358.XXXXXX")"
   s2="$(section "$skill" "## Step 2 " | s358_sentences '`render-prompt.py`')"
   s3="$(section "$skill" "## Step 3 " | s358_sentences 'Render it as Step 2 renders a task')"
   [[ "$(printf '%s\n' "$s2" | grep -c .)" == 1 ]] || { echo "s358_render_case: Step 2 render sentence not found exactly once" >&2; return 1; }
@@ -7274,7 +7274,7 @@ case "$s358_err" in
 esac
 require_text work-issue/SKILL.md "goes inline too and is not rendered, as Step 7's repair does"
 require_text work-issue/SKILL.md "divvy-up/scripts/check-waves.py owners RUN_DIR/plan.md --wave <wave> --task <task>"
-row195="$(grep '^| 195 ' _maintenance/work-issue/RATIONALE.md)"
+row195="$(grep '^| 195 ' _maintenance/work-issue/RATIONALE.md || true)"
 [[ "$row195" == *"| [P] |" && "$row195" != *"[E]"* ]] || { echo "row 195 should be tiered [P] and carry no [E]" >&2; exit 1; }
 require_text _maintenance/work-issue/RATIONALE.md "The evidence is scenario 31's \`divvy-up\` run"
 require_text _maintenance/work-issue/RATIONALE.md "| 224 | \`tests/work-issue-smoke.sh\` reads the render flags"
