@@ -1866,7 +1866,7 @@ snap_case_readlink_mutation
 # render-prompt.py overwrites --out, so a retry rendered to the Step 5 path
 # erases the record of what the first worker received. The retry path is read
 # out of Step 6 rather than hard-coded, so renaming it there breaks this case.
-retry_tpl="$(grep -o 'PROMPT_DIR/N-LABEL\.retry-<k>\.md' divvy-up/SKILL.md | head -n 1)"
+retry_tpl="$(grep -o 'PROMPT_DIR/N-LABEL\.retry-<k>\.md' divvy-up/SKILL.md | head -n 1 || true)"
 [[ -n "$retry_tpl" ]] || {
   echo "divvy-up/SKILL.md Step 6 names no PROMPT_DIR/N-LABEL.retry-<k>.md path" >&2
   exit 1
