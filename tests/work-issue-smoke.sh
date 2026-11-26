@@ -7202,7 +7202,10 @@ if (require_text "$plan_copy" "$step4_inputs") 2>/dev/null; then
   exit 1
 fi
 # ...and the ledger's own input list has to keep matching the Step 4 list.
-require_text _maintenance/work-issue/RATIONALE.md "(plus REPAIR_BASE in a repair round, row 207, and \`plan.md\`, row 223)"
+require_text _maintenance/work-issue/RATIONALE.md "(plus \`plan.md\` on every round, row 223, and REPAIR_BASE in a repair round, row 207)"
+# The inline-not-path sentence is what keeps the worker's summary away from the reproducer.
+require_text work-issue/references/redteam.md "It goes in inline, never as a path: a path names RUN_DIR, and \`RUN_DIR/reports/\` holds the worker's \`summary\`"
+require_text work-issue/README.md "the baseline, and the numbered plan, and nothing else"
 require_text _maintenance/work-issue/RATIONALE.md "| 223 | The reproducer receives \`RUN_DIR/plan.md\`"
 
 # --- liveness pooling at MERGE_ROWS ---
