@@ -189,7 +189,7 @@ require_text work-issue/SKILL.md "name: work-issue"
 # from siblings too—a wave reaches it once per lane. Refuted on the bare
 # key so `: false` fails here as loudly as `: true`.
 refute_text work-issue/SKILL.md "disable-model-invocation"
-require_text work-issue/SKILL.md "argument-hint: '<issue or pull request number or URL> [plan path] [--isolate | --no-isolate] [--deep] [--max-review-rounds N] [--review-loop[=<comment>]] [--no-publish] [--until-boundary] [--wave-baseline PATH] [--dry-run]'"
+require_text work-issue/SKILL.md "argument-hint: '<issue or pull request number or URL> [plan path] [--isolate | --no-isolate] [--deep] [--max-review-rounds N] [--review-loop[=<comment>]] [--no-publish] [--until-boundary] [--wave-baseline PATH] [--auto-budget R] [--repair-class C] [--defer-after K] [--dry-run]'"
 
 # A description that summarizes the steps becomes the shortcut the model takes
 # instead of reading the body, which is how a nine-step skill collapses into
@@ -6863,6 +6863,298 @@ require_text work-issue/SKILL.md "write \`git rev-parse HEAD\` to \`RUN_DIR/redt
 require_text work-issue/references/redteam.md "A reason about the change is judged against \`git diff REPAIR_BASE..HEAD\` where REPAIR_BASE was given, and against \`git diff BASE_SHA..HEAD\` where it wasn't"
 require_text work-issue/references/redteam.md "Where REPAIR_BASE is given above and the claim is about the repair itself (\"the repair\", \"only this line changed\"), the range is \`REPAIR_BASE..HEAD\`"
 require_text work-issue/references/worker-prompt.md "In a repair round it judges a reason or claim about the repair against \`git diff REPAIR_BASE..HEAD\`, so cite that range, not the whole branch."
+
+# --- #461: ruling policy ---
+# policy.py rules a budget or red-team stop, or a late triage round, from the
+# launch flags before the run asks. Each case pins stdout, the exit code and
+# the policy.log lines, since the final report reads its rulings from that log.
+# Each scenario gets its own run dir so its log count starts at zero.
+policy=work-issue/scripts/policy.py
+pl="$(mktemp -d "$tmp/pl.XXXXXX")"
+pl_run() { # name, then policy.py's args
+  local name="$1"
+  shift
+  set +e
+  python3 "${pl_script:-$policy}" "$@" >"$pl/$name.out" 2>"$pl/$name.err"
+  echo $? >"$pl/$name.status"
+  set -e
+}
+pl_fail() {
+  echo "#461: $1: $2, got status $(cat "$pl/$1.status") stdout [$(cat "$pl/$1.out")] stderr [$(cat "$pl/$1.err")]" >&2
+  exit 1
+}
+pl_expect() { # name, status, stdout, why
+  [[ "$(cat "$pl/$1.status")" == "$2" && "$(cat "$pl/$1.out")" == "$3" ]] || pl_fail "$1" "$4"
+}
+pl_log_lines() { # run dir; policy.log line count, 0 when absent
+  if [[ -f "$1/policy.log" ]]; then wc -l <"$1/policy.log" | tr -d ' '; else echo 0; fi
+}
+pl_plan() {
+  printf '# Plan\n\n## Waves\n\n| Wave | Task | Files owned | Model | Done when | Constraints |\n|---|---|---|---|---|---|\n'
+  printf '| 0 | one | a.py, docs/ | sonnet | `bash tests/a.sh` exits 0 | none |\n'
+}
+pl_timing() { # minutes of review after a 30-min build
+  printf '2 start 2026-01-01T00:00:00Z\n2 end 2026-01-01T00:15:00Z\n3 start 2026-01-01T00:15:00Z\n3 end 2026-01-01T00:30:00Z\n'
+  printf '4 start 2026-01-01T00:30:00Z\n4 end 2026-01-01T02:00:00Z\n'
+  [[ "$1" == 150 ]] && printf '6 start 2026-01-01T02:00:00Z\n6 end 2026-01-01T03:00:00Z\n'
+  return 0
+}
+
+# Budget: 30 min build, 90 min review reads over at 2.0.
+b="$pl/issue-9"
+mkdir -p "$b"
+pl_timing 90 >"$b/timing.log"
+[[ "$(python3 "$run_state" budget --timing "$b/timing.log")" == "build: 30m review: 90m ratio: 3.00 over: yes" ]] \
+  || { echo "#461: the budget fixture should read over at 2.0" >&2; exit 1; }
+cp "$b/timing.log" "$pl/timing.before"
+pl_run b-noflag budget --timing "$b/timing.log" --at 7 --run-dir "$b"
+pl_expect b-noflag 0 ask "over budget with no --auto-budget should ask"
+cmp -s "$b/timing.log" "$pl/timing.before" && [[ "$(pl_log_lines "$b")" == 0 ]] \
+  || pl_fail b-noflag "an ask should leave timing.log and policy.log alone"
+pl_run b-raise budget --timing "$b/timing.log" --at 7 --run-dir "$b" --auto-budget 4.0
+pl_expect b-raise 0 "raise 4.0" "over at 2.0 under --auto-budget 4.0 should raise"
+[[ "$(tail -1 "$b/timing.log")" == "budget-raised 4.0" ]] || pl_fail b-raise "the raise should append budget-raised 4.0 to timing.log"
+[[ "$(python3 "$run_state" budget --timing "$b/timing.log")" == *"over: no" ]] || pl_fail b-raise "run-state.py budget should read the raised log as under"
+[[ "$(cat "$b/policy.log")" == "- [wave] policy: issue-9 budget at step 7: raise 4.0 (--auto-budget 4.0) — build: 30m review: 90m ratio: 3.00 over: yes" ]] \
+  || pl_fail b-raise "the raise should leave exactly one policy line, got [$(cat "$b/policy.log")]"
+pl_run b-again budget --timing "$b/timing.log" --at 7 --run-dir "$b" --auto-budget 4.0
+pl_expect b-again 0 under "a re-run after the raise should read under"
+[[ "$(grep -c '^budget-raised' "$b/timing.log")" == 1 && "$(pl_log_lines "$b")" == 1 ]] || pl_fail b-again "a re-run should raise nothing and record nothing"
+# Review grows to 150 min: over at the raised 4.0.
+pl_timing 150 >"$b/timing.log"
+echo "budget-raised 4.0" >>"$b/timing.log"
+pl_run b-defer budget --timing "$b/timing.log" --at 7 --run-dir "$b" --auto-budget 4.0
+pl_expect b-defer 0 defer "over at the raised ratio at step 7 should defer"
+pl_run b-defer2 budget --timing "$b/timing.log" --at 7 --run-dir "$b" --auto-budget 4.0
+pl_expect b-defer2 0 defer "a re-run defer should still defer"
+[[ "$(pl_log_lines "$b")" == 2 && "$(tail -1 "$b/policy.log")" == "- [wave] policy: issue-9 budget at step 7: defer (--auto-budget 4.0) — build: 30m review: 150m ratio: 5.00 over: yes" ]] \
+  || pl_fail b-defer2 "defer should add one policy line, and its re-run none, got [$(cat "$b/policy.log")]"
+pl_run b-at4 budget --timing "$b/timing.log" --at 4 --run-dir "$b" --auto-budget 4.0
+pl_expect b-at4 0 ask "past the raised ratio at step 4 there is nothing to defer, so ask"
+pl_run b-at8 budget --timing "$b/timing.log" --at 8 --run-dir "$b" --auto-budget 4.0
+pl_expect b-at8 0 ask "past the raised ratio at step 8 should ask"
+pl_run b-noflag2 budget --timing "$b/timing.log" --at 7 --run-dir "$b"
+pl_expect b-noflag2 0 ask "over with no flag should ask at step 7"
+[[ "$(pl_log_lines "$b")" == 2 ]] || pl_fail b-noflag2 "an ask should record nothing"
+u="$pl/under"
+mkdir -p "$u"
+printf '2 start 2026-01-01T00:00:00Z\n2 end 2026-01-01T00:30:00Z\n4 start 2026-01-01T00:30:00Z\n4 end 2026-01-01T01:00:00Z\n' >"$u/timing.log"
+pl_run b-under budget --timing "$u/timing.log" --at 7 --run-dir "$u" --auto-budget 4.0
+pl_expect b-under 0 under "1:1 review to build should read under"
+[[ ! -e "$u/policy.log" ]] || pl_fail b-under "under should write no policy.log"
+printf 'garbage\n' >"$u/bad.log"
+pl_run b-bad budget --timing "$u/bad.log" --at 7 --run-dir "$u" --auto-budget 4.0
+[[ "$(cat "$pl/b-bad.status")" == 3 ]] || pl_fail b-bad "a malformed timing log should exit 3"
+# Already past 4.0 at the first stop (ratio 5.0): the raise lands, and the
+# same call rules as over at 4.0, so no repair cycle runs over budget.
+b5="$pl/issue-10"
+mkdir -p "$b5"
+pl_timing 150 >"$b5/timing.log"
+pl_run b-past7 budget --timing "$b5/timing.log" --at 7 --run-dir "$b5" --auto-budget 4.0
+pl_expect b-past7 0 defer "a first stop already past the raised ratio at step 7 should raise and defer in one call"
+[[ "$(tail -1 "$b5/timing.log")" == "budget-raised 4.0" ]] || pl_fail b-past7 "the raise should still append budget-raised 4.0"
+[[ "$(cat "$b5/policy.log")" == $'- [wave] policy: issue-10 budget at step 7: raise 4.0 (--auto-budget 4.0) — build: 30m review: 150m ratio: 5.00 over: yes\n- [wave] policy: issue-10 budget at step 7: defer (--auto-budget 4.0) — build: 30m review: 150m ratio: 5.00 over: yes' ]] \
+  || pl_fail b-past7 "the raise and the defer should each leave one policy line, got [$(cat "$b5/policy.log")]"
+b4="$pl/issue-11"
+mkdir -p "$b4"
+pl_timing 150 >"$b4/timing.log"
+pl_run b-past4 budget --timing "$b4/timing.log" --at 4 --run-dir "$b4" --auto-budget 4.0
+pl_expect b-past4 0 ask "a first stop already past the raised ratio at step 4 should raise and then ask"
+[[ "$(tail -1 "$b4/timing.log")" == "budget-raised 4.0" && "$(pl_log_lines "$b4")" == 1 ]] || pl_fail b-past4 "the raise should be appended and recorded before the ask"
+
+# Sorting. a.py and docs/ are owned; /tmp/peer/a1.txt is not. Row 2 is row 1
+# with an unowned path added, which is the fourth criterion's pair.
+pl_plan >"$pl/plan.md"
+mkdir -p "$pl/triage" "$pl/redteam"
+cat >"$pl/triage/round-3.md" <<'EOF'
+# Triage round 3, since 2026-01-01T00:00:00Z
+
+| # | Source | Finding | Severity | Scope | Reply |
+|---|---|---|---|---|---|
+| 1 | codex | The restore drops a heading on an empty input | P0 | in scope | |
+| 2 | codex | The restore drops a heading on an empty input and rewrites `/tmp/peer/a1.txt` | P0 | in scope | |
+| 3 | codex | **Writes outside a task's files.** The revert loses the peer's work | P0 | in scope | |
+| 4 | codex | `a.py` loses its executable mode | P1 | in scope | |
+| 5 | codex | Queued already: /tmp/x/y.txt | P0 | in scope; queued: review round cap reached (2) | |
+| 6 | codex | Out of scope: z/q.txt | P2 | out of scope | |
+EOF
+t="$pl/t-class"
+mkdir -p "$t"
+pl_run s-triage sort --kind triage --round-file "$pl/triage/round-3.md" --round 3 --plan "$pl/plan.md" --run-dir "$t" --repair-class unowned-write --defer-after 3
+pl_expect s-triage 0 $'1 defer\n2 repair\n3 keep\n4 defer' "triage round 3 should defer the pathless P0, repair the unowned path, keep the pathless citation, defer the owned path"
+[[ "$(cat "$t/policy.log")" == $'- [wave] policy: t-class triage round 3: repair (--repair-class unowned-write) — 2 /tmp/peer/a1.txt\n- [wave] policy: t-class triage round 3: defer (--defer-after 3) — 1; 4 a.py' ]] \
+  || pl_fail s-triage "triage round 3 should leave one repair and one defer line, got [$(cat "$t/policy.log")]"
+pl_run s-triage-again sort --kind triage --round-file "$pl/triage/round-3.md" --round 3 --plan "$pl/plan.md" --run-dir "$t" --repair-class unowned-write --defer-after 3
+pl_expect s-triage-again 0 "$(cat "$pl/s-triage.out")" "a re-run should rule the same"
+[[ "$(pl_log_lines "$t")" == 2 ]] || pl_fail s-triage-again "a re-run should add no policy line"
+pl_run s-triage-r2 sort --kind triage --round-file "$pl/triage/round-3.md" --round 2 --plan "$pl/plan.md" --run-dir "$pl/t-r2" --repair-class unowned-write --defer-after 3
+pl_expect s-triage-r2 0 $'1 keep\n2 keep\n3 keep\n4 keep' "a round below --defer-after should keep every row"
+pl_run s-triage-noflag sort --kind triage --round-file "$pl/triage/round-3.md" --round 3 --plan "$pl/plan.md" --run-dir "$pl/t-noflag"
+pl_expect s-triage-noflag 0 $'1 keep\n2 keep\n3 keep\n4 keep' "triage with no flag should keep every row, as today"
+mkdir -p "$pl/t-noclass"
+pl_run s-triage-noclass sort --kind triage --round-file "$pl/triage/round-3.md" --round 3 --plan "$pl/plan.md" --run-dir "$pl/t-noclass" --defer-after 3
+pl_expect s-triage-noclass 0 $'1 defer\n2 defer\n3 keep\n4 defer' "--defer-after with no class should defer all but the pathless citation"
+mkdir -p "$pl/t-adopted"
+pl_run s-adopted-class sort --kind triage --round-file "$pl/triage/round-3.md" --round 3 --plan "$pl/no-plan.md" --run-dir "$pl/t-adopted" --repair-class unowned-write --defer-after 3
+pl_expect s-adopted-class 0 $'1 keep\n2 keep\n3 keep\n4 keep' "with no plan and a class set, every row should keep"
+pl_run s-adopted sort --kind triage --round-file "$pl/triage/round-3.md" --round 3 --plan "$pl/no-plan.md" --run-dir "$pl/t-adopted" --defer-after 3
+pl_expect s-adopted 0 $'1 defer\n2 defer\n3 defer\n4 defer' "with no plan and no class, every row should defer"
+# Prose that only looks like a path: a P0 naming no path defers, and a
+# repo-relative unowned path still repairs.
+cat >"$pl/triage/round-5.md" <<'EOF'
+| # | Source | Finding | Severity | Scope | Reply |
+|---|---|---|---|---|---|
+| 1 | codex | P0: fails on valid input, e.g. an empty heading | P0 | in scope | |
+| 2 | codex | P0: the parser crashes and/or hangs on valid input | P0 | in scope | |
+| 3 | codex | The fix also rewrites src/z.py | P0 | in scope | |
+EOF
+mkdir -p "$pl/t-prose"
+pl_run s-prose sort --kind triage --round-file "$pl/triage/round-5.md" --round 5 --plan "$pl/plan.md" --run-dir "$pl/t-prose" --repair-class unowned-write --defer-after 3
+pl_expect s-prose 0 $'1 defer\n2 defer\n3 repair' "e.g. and and/or should read as prose, src/z.py as an unowned path"
+[[ ! -e "$pl/t-r2/policy.log" && ! -e "$pl/t-noflag/policy.log" ]] || pl_fail s-triage-noflag "keep should record nothing"
+
+# Red-team: the round is saved fenced, as redteam.md has the reproducer answer.
+cat >"$pl/redteam/round-2.json" <<'EOF'
+```json
+{"verdicts": [
+  {"claim": "revert restores only owned files", "command": "bash t.sh", "output": "revert rewrote /tmp/peer/a1.txt", "verdict": "NOT_REPRODUCED", "reproduced_at": "seam", "caller": null},
+  {"claim": "a.py keeps mode 0644", "command": "stat a.py", "output": "mode is 0755", "verdict": "NOT_REPRODUCED", "reproduced_at": "seam", "caller": null},
+  {"claim": "docs/guide.md keeps its heading", "command": "grep", "output": "", "verdict": "NOT_REPRODUCED", "reproduced_at": "seam", "caller": null},
+  {"claim": "z/other.txt is untouched", "command": "true", "output": "", "verdict": "REPRODUCED", "reproduced_at": "seam", "caller": null}
+], "left_checks": [{"what": "nothing else", "holds": true, "evidence": ""}]}
+```
+EOF
+r="$pl/r-class"
+mkdir -p "$r"
+pl_run s-red sort --kind redteam --round-file "$pl/redteam/round-2.json" --round 2 --plan "$pl/plan.md" --run-dir "$r" --repair-class unowned-write
+pl_expect s-red 0 $'1 repair\n2 defer\n3 defer' "red-team: the unowned write should repair, the owned mode change and owned docs/ path defer"
+[[ "$(cat "$r/policy.log")" == $'- [wave] policy: r-class red-team round 2: repair (--repair-class unowned-write) — 1 /tmp/peer/a1.txt\n- [wave] policy: r-class red-team round 2: defer (--repair-class unowned-write) — 2 a.py; 3 docs/guide.md' ]] \
+  || pl_fail s-red "the red-team round should leave one repair and one defer line, got [$(cat "$r/policy.log")]"
+pl_run s-red-again sort --kind redteam --round-file "$pl/redteam/round-2.json" --round 2 --plan "$pl/plan.md" --run-dir "$r" --repair-class unowned-write
+pl_expect s-red-again 0 "$(cat "$pl/s-red.out")" "re-ruling the same round should not spend the grant"
+[[ "$(pl_log_lines "$r")" == 2 ]] || pl_fail s-red-again "a re-run should add no policy line"
+pl_run s-red-spent sort --kind redteam --round-file "$pl/redteam/round-2.json" --round 3 --plan "$pl/plan.md" --run-dir "$r" --repair-class unowned-write
+pl_expect s-red-spent 0 $'1 ask\n2 ask\n3 ask' "the round after a ruled one should ask, since the streak's grant is spent"
+pl_run s-red-noflag sort --kind redteam --round-file "$pl/redteam/round-2.json" --round 2 --plan "$pl/plan.md" --run-dir "$pl/r-noflag"
+pl_expect s-red-noflag 0 $'1 ask\n2 ask\n3 ask' "red-team with no --repair-class should ask"
+pl_run s-red-adopted sort --kind redteam --round-file "$pl/redteam/round-2.json" --round 2 --plan "$pl/no-plan.md" --run-dir "$pl/r-noflag" --repair-class unowned-write
+pl_expect s-red-adopted 0 $'1 ask\n2 ask\n3 ask' "red-team with no plan should ask"
+printf '%s\n' '{"verdicts": [{"claim": "x", "output": "revert rewrote /tmp/peer/a1.txt", "verdict": "NOT_REPRODUCED"}, {"claim": "**Writes outside a task'"'"'s files.** the revert loses the peer'"'"'s work", "output": "", "verdict": "NOT_REPRODUCED"}]}' >"$pl/redteam/round-cite.json"
+pl_run s-red-cite sort --kind redteam --round-file "$pl/redteam/round-cite.json" --round 2 --plan "$pl/plan.md" --run-dir "$pl/r-cite" --repair-class unowned-write
+pl_expect s-red-cite 0 $'1 ask\n2 ask' "a pathless citation should make the whole red-team round ask"
+[[ ! -e "$pl/r-noflag/policy.log" && ! -e "$pl/r-cite/policy.log" ]] || pl_fail s-red-cite "ask should record nothing"
+# A grant spent at an older round belongs to an earlier failing streak, so
+# round 4 rules even though round 2 was ruled; round 3 above asked.
+pl_run s-red-streak sort --kind redteam --round-file "$pl/redteam/round-2.json" --round 4 --plan "$pl/plan.md" --run-dir "$r" --repair-class unowned-write
+pl_expect s-red-streak 0 "$(cat "$pl/s-red.out")" "a ruling two rounds back should not spend this streak's grant"
+# Pasted output names paths no task writes. The reproducer prints owned files
+# by absolute path under the work tree (the current directory by default),
+# tracebacks name the interpreter's files, and fixtures sit in mktemp dirs.
+cat >"$pl/redteam/round-out.json" <<EOF
+{"verdicts": [
+  {"claim": "a.py keeps mode 0644", "output": "stat $PWD/a.py: mode 0755", "verdict": "NOT_REPRODUCED"},
+  {"claim": "the parser accepts an empty heading", "output": "Traceback (most recent call last):\\n  File \\"/usr/lib/python3.12/re.py\\", line 177, in compile", "verdict": "NOT_REPRODUCED"},
+  {"claim": "the fixture builds", "output": "wrote /tmp/tmp.Ab12cd34ef/out.txt", "verdict": "NOT_REPRODUCED"},
+  {"claim": "revert restores only owned files", "output": "revert rewrote /tmp/peer/a1.txt", "verdict": "NOT_REPRODUCED"}
+]}
+EOF
+mkdir -p "$pl/r-out" "$pl/r-root" "$pl/r-noroot"
+pl_run s-red-out sort --kind redteam --round-file "$pl/redteam/round-out.json" --round 2 --plan "$pl/plan.md" --run-dir "$pl/r-out" --repair-class unowned-write
+pl_expect s-red-out 0 $'1 defer\n2 defer\n3 defer\n4 repair' "an owned file by absolute path, a traceback path and a mktemp path should defer; the unowned write should repair"
+# /srv/wt, not a dir under $tmp: $TMPDIR is macOS's /var/folders, which the
+# sort drops as scratch, so the no-root case would defer for the wrong reason.
+printf '%s\n' '{"verdicts": [{"claim": "a.py keeps mode 0644", "output": "stat /srv/wt/a.py: mode 0755", "verdict": "NOT_REPRODUCED"}]}' >"$pl/redteam/round-root.json"
+pl_run s-red-root sort --kind redteam --round-file "$pl/redteam/round-root.json" --round 2 --plan "$pl/plan.md" --run-dir "$pl/r-root" --repair-class unowned-write --root /srv/wt
+pl_expect s-red-root 0 "1 defer" "--root should strip the work tree from an owned file's absolute path"
+pl_run s-red-noroot sort --kind redteam --round-file "$pl/redteam/round-root.json" --round 2 --plan "$pl/plan.md" --run-dir "$pl/r-noroot" --repair-class unowned-write
+pl_expect s-red-noroot 0 "1 repair" "without --root, a path under another tree should stay unowned"
+
+# Flags and unreadable input: every refusal is exit 3.
+pl_run f-ok flags --repair-class unowned-write --defer-after 3 --auto-budget 4
+pl_expect f-ok 0 "--auto-budget 4.0 --defer-after 3 --repair-class unowned-write" "a valid flag set should print back normalized, in fixed order"
+pl_run f-none flags
+pl_expect f-none 0 "" "no flags should print an empty line"
+for bad in "--auto-budget 0" "--auto-budget nan" "--repair-class lossy" "--defer-after 0"; do
+  # shellcheck disable=SC2086
+  pl_run f-bad flags $bad
+  [[ "$(cat "$pl/f-bad.status")" == 3 && "$(cat "$pl/f-bad.err")" == "policy: ${bad/ /: }" ]] || pl_fail f-bad "flags $bad should exit 3 naming the flag and value"
+done
+pl_run f-all flags --auto-budget 0 --repair-class lossy --defer-after 0
+[[ "$(cat "$pl/f-all.status")" == 3 && "$(wc -l <"$pl/f-all.err" | tr -d ' ')" == 3 ]] || pl_fail f-all "three bad values should give three stderr lines"
+pl_run e-missing sort --kind triage --round-file "$pl/triage/round-9.md" --round 9 --plan "$pl/plan.md" --run-dir "$pl/e" --defer-after 3
+[[ "$(cat "$pl/e-missing.status")" == 3 ]] || pl_fail e-missing "an unreadable round file should exit 3"
+printf 'not json\n' >"$pl/redteam/round-bad.json"
+pl_run e-json sort --kind redteam --round-file "$pl/redteam/round-bad.json" --round 2 --plan "$pl/plan.md" --run-dir "$pl/e" --repair-class unowned-write
+[[ "$(cat "$pl/e-json.status")" == 3 ]] || pl_fail e-json "a non-JSON red-team round should exit 3"
+
+# Scratch copy: the falsifier for "without a flag, it asks". Delete the two
+# flag guards from a copy and the no-flag cases stop printing ask. A flagged
+# case on the copy still rules, which proves the copy runs.
+pc="$pl/copy"
+mkdir -p "$pc"
+cp work-issue/scripts/run-state.py "$pc/run-state.py"
+python3 - "$policy" "$pc/policy.py" <<'EOF'
+import sys
+text = open(sys.argv[1], encoding="utf-8").read()
+for guard, cut in (
+    ('    if target is None:\n        print("ask")\n        return 0\n', ""),
+    ("if not klass or spent or owns is None:", "if spent or owns is None:"),
+):
+    assert text.count(guard) == 1, f"guard not found once: {guard!r}"
+    text = text.replace(guard, cut)
+open(sys.argv[2], "w", encoding="utf-8").write(text)
+EOF
+! cmp -s "$policy" "$pc/policy.py" && ! grep -Fq "if not klass or" "$pc/policy.py" && ! grep -Fq "if target is None:" "$pc/policy.py" \
+  || { echo "#461: the scratch copy should have both flag guards cut" >&2; exit 1; }
+pl_timing 90 >"$pl/copy-timing.log"
+mkdir -p "$pl/c-run"
+pl_script="$pc/policy.py" pl_run c-noflag budget --timing "$pl/copy-timing.log" --at 7 --run-dir "$pl/c-run"
+[[ "$(cat "$pl/c-noflag.out")" != ask ]] || pl_fail c-noflag "with the --auto-budget guard cut, the no-flag budget case should stop printing ask"
+pl_timing 90 >"$pl/copy-timing2.log"
+pl_script="$pc/policy.py" pl_run c-flag budget --timing "$pl/copy-timing2.log" --at 7 --run-dir "$pl/c-run" --auto-budget 4.0
+pl_expect c-flag 0 "raise 4.0" "the cut copy should still rule a flagged budget case"
+pl_script="$pc/policy.py" pl_run c-red sort --kind redteam --round-file "$pl/redteam/round-2.json" --round 2 --plan "$pl/plan.md" --run-dir "$pl/c-run"
+grep -q ask "$pl/c-red.out" && pl_fail c-red "with the --repair-class guard cut, the no-flag red-team case should stop printing ask"
+[[ "$(cat "$pl/c-red.status")" == 0 && -s "$pl/c-red.out" ]] || pl_fail c-red "the cut copy should still sort the red-team round"
+pl_run c-shipped budget --timing "$pl/copy-timing.log" --at 7 --run-dir "$pl/c-run"
+pl_expect c-shipped 0 ask "the shipped script should still ask on the no-flag budget case"
+
+# The prose that sends each stop through policy.py. Each pin names one stop's
+# hand-off, so dropping a sentence leaves that stop asking with the flag set.
+require_file work-issue/references/policy.md
+require_text work-issue/SKILL.md "\`--auto-budget <ratio>\` raises the budget ratio to \`<ratio>\` once at a budget stop and defers the round's open rows past it at Step 7"
+require_text work-issue/SKILL.md "\`--repair-class <class>\` repairs a finding in that class, \`unowned-write\` the only one, at the red-team stop and at triage from round \`--defer-after\` on, and defers the rest"
+require_text work-issue/SKILL.md "\`--defer-after <k>\` defers every in-scope row outside the repair class from triage round k on"
+require_text work-issue/SKILL.md "Step 0 runs \`work-issue/scripts/policy.py flags\` on the three before anything is written under RUN_DIR, and a non-zero exit refuses the run quoting its stderr"
+require_text work-issue/SKILL.md "the three bind only the invocation that carries them and are never written to RUN_DIR, like \`--wave-baseline\`, so \`work-issue N\` without them asks at every stop"
+require_text work-issue/SKILL.md "\`timing.log\`, \`policy.log\`, \`conflict.txt\`"
+require_text work-issue/SKILL.md "Where the invocation carries \`--auto-budget\`, run \`policy.py budget\` at each \`over: yes\` before asking"
+require_text work-issue/SKILL.md "That stop runs \`policy.py sort --kind redteam\` on the second failed round first, where the invocation carries \`--repair-class\`"
+require_text work-issue/SKILL.md "a round k at or above K runs \`policy.py sort --kind triage\` once its rows are written and before this cap reads them, and each row it rules \`defer\` is queued with \`policy: --defer-after K\`"
+require_text work-issue/SKILL.md "and from round \`--defer-after\` on every row \`policy.py sort\` ruled \`defer\` is queued with \`policy: --defer-after K\`, and a row it ruled \`repair\` in a capped round met the cap as any in-scope row does; or \`pending\`"
+require_text work-issue/SKILL.md "An invocation carrying a policy flag whose probe answers \`stop\` rules that stop before asking."
+require_text work-issue/SKILL.md "A red-team ruling resumes only where it prints \`repair\` and no \`reports/redteam-repair-<k>.json\` exists for that round"
+require_text work-issue/SKILL.md "the lines of \`RUN_DIR/policy.log\` where it exists,"
+require_text work-issue/SKILL.md "[references/policy.md](references/policy.md) — read where the invocation carries"
+require_text work-issue/references/policy.md "A run with no policy flag asks at every one of these stops, as it did before these flags existed"
+require_text work-issue/references/policy.md "A finding is in the \`unowned-write\` class when it names a path outside \`owns\`."
+require_text work-issue/references/policy.md "A citation that names no path is the one finding the script can't sort"
+require_text work-issue/references/policy.md "- [wave] policy: <run> <stop>: <ruling> (<flag> <value>) — <evidence>"
+require_text work-issue/references/policy.md "Write every in-scope row of the newest triage round not yet queued as \`in scope; queued: policy: --auto-budget R spent\`"
+# PR #484 review: a capped round is never repaired, and run-state.py's phase_of
+# stops on its in-scope P0 whatever policy.log says, so the policy's repair
+# ruling has to yield to the cap or the lane stops for a human anyway.
+require_text work-issue/references/policy.md "In a capped round the review round cap rules first and the \`repair\` ruling changes nothing: a \`P0\` or \`blocking\` row stops the run for a human, and any other is queued with \`review round cap reached (N)\`."
+require_text work-issue/SKILL.md "A row it rules \`repair\` goes to Step 7 only in a round below the cap or while \`RUN_DIR/review_loop\` exists; in a capped round this cap rules it as any in-scope row."
+refute_text work-issue/references/policy.md "as it would a row of an uncapped round"
+# PR #484 review: Step 8 pushes the repair before item 1 red-teams it, so an
+# all-defer round there that went on to Step 5 pushed again and skipped the
+# round's replies.
+require_text work-issue/references/policy.md "Where every line reads \`defer\` at Step 8 item 1, the run goes back to Step 8's own flow: item 2 under its ahead-of-origin guard, so nothing pushes when origin already holds HEAD, then items 3 and 4."
+refute_text work-issue/references/policy.md "Where every line reads \`defer\`, the run goes on to Step 5."
+# A no-path citation is a keep row, and a keep row meets the cap like any other.
+require_text work-issue/references/policy.md "triage rules it \`keep\`, so it routes as any in-scope row does, the review round cap included"
+refute_text work-issue/references/policy.md "triage keeps it for repair"
 
 # --- liveness pooling at MERGE_ROWS ---
 # #436: a pool group stops taking merges at the move whose pooled rows would
