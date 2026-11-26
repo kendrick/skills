@@ -2840,6 +2840,10 @@ for want in 'null only when `status` is `refused` or `failed` and you have none'
   fi
 done
 require_text "$ledger" "| 72 | A \`refused\` or \`failed\` report may carry a null \`head\`"
-require_text "$ledger" "(except as row 72 allows)"
+# Rows 16 and 70 both carry the clause; a bare grep -Fq passes on either alone.
+if [[ "$(grep -cF "(except as row 72 allows)" "$ledger")" != 2 ]]; then
+  echo "$ledger must carry '(except as row 72 allows)' in rows 16 and 70" >&2
+  exit 1
+fi
 
 echo "work-wave smoke: OK"
