@@ -1866,7 +1866,8 @@ snap_case_readlink_mutation
 # render-prompt.py overwrites --out, so a retry rendered to the Step 5 path
 # erases the record of what the first worker received. The retry path is read
 # out of Step 6 rather than hard-coded, so renaming it there breaks this case.
-retry_tpl="$(grep -o 'PROMPT_DIR/N-LABEL\.retry-<k>\.md' divvy-up/SKILL.md | head -n 1 || true)"
+step6="$(awk '/^## Step 6 /{f=1; next} /^## /{f=0} f' divvy-up/SKILL.md)"
+retry_tpl="$(grep -o 'PROMPT_DIR/N-LABEL\.retry-<k>\.md' <<<"$step6" | head -n 1 || true)"
 [[ -n "$retry_tpl" ]] || {
   echo "divvy-up/SKILL.md Step 6 names no PROMPT_DIR/N-LABEL.retry-<k>.md path" >&2
   exit 1
@@ -1895,6 +1896,9 @@ python3 "$render" "$rplan" --wave 1 --task api --prior "$rd/prior.md" --out "$rd
   exit 1
 }
 require_text divvy-up/SKILL.md 'PROMPT_DIR/N-LABEL.retry-<k>.prior.md'
+require_text divvy-up/SKILL.md 'one more than the highest `PROMPT_DIR/N-LABEL.retry-<k>.md` that already exists'
+refute_text divvy-up/SKILL.md 'counting `<k>` from 1 across every re-dispatch'
+require_text divvy-up/references/worker-prompt.md 'The `{{TASK}}` fill inside caller notes is the other'
 require_text divvy-up/references/worker-prompt.md 'File inputs lose their trailing newlines'
 require_text divvy-up/references/worker-prompt.md '`--contract`, `--baseline`, `--prior`, and `--caller-notes`'
 require_text _maintenance/divvy-up/RATIONALE.md '| 48 | Step 6 renders each re-dispatch to'
