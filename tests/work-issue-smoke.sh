@@ -7211,6 +7211,74 @@ require_text work-issue/README.md "the baseline, and the numbered plan, and noth
 require_text work-issue/references/redteam.md "Every placeholder in the prompt is filled in one pass over the template, for a subagent dispatch and a codex prompt file alike, so text a filled value carries, such as a plan that quotes \`{{LEFT}}\`, reaches the reproducer as written and is never filled again"
 require_text _maintenance/work-issue/RATIONALE.md "| 223 | The reproducer receives \`RUN_DIR/plan.md\`"
 
+# --- #358: render flags, Step 3 inline repairs, row 195 ---
+# Reads the flags out of the two SKILL.md sentences that name them and renders
+# with them, so a renamed flag fails here instead of in a live lane. argparse
+# takes any unambiguous prefix (`--caller-note` for `--caller-notes`), so the
+# exact-name table below is what rejects a misspelling; the script alone won't.
+s358_flag_value() {
+  case "$1" in
+    --caller-notes) echo "$2/caller.md" ;;
+    --verify-cmd) echo "true" ;;
+    --wave) echo "1" ;;
+    --task) echo "api" ;;
+    --prior) echo "$2/prior.md" ;;
+    --out) echo "$3" ;;
+    *) echo "s358_render_case: flag $1 is not an exact name render-prompt.py takes" >&2; return 1 ;;
+  esac
+}
+# A paragraph is one line here, so cut it to sentences: the rest of each step
+# also names --until-boundary, --wait, and --fix, which render-prompt.py lacks.
+s358_sentences() {
+  python3 -c 'import re,sys; print("\n".join(x for x in re.split(r"(?<=[.;:]) ", sys.stdin.read()) if sys.argv[1] in x))' "$1"
+}
+s358_render_case() {
+  local skill="$1" d s2 s3 f v
+  local -a a2=() a3=()
+  d="$(mktemp -d)"
+  s2="$(section "$skill" "## Step 2 " | s358_sentences '`render-prompt.py`')"
+  s3="$(section "$skill" "## Step 3 " | s358_sentences 'Render it as Step 2 renders a task')"
+  [[ "$(printf '%s\n' "$s2" | grep -c .)" == 1 ]] || { echo "s358_render_case: Step 2 render sentence not found exactly once" >&2; return 1; }
+  [[ "$(printf '%s\n' "$s3" | grep -c .)" == 1 ]] || { echo "s358_render_case: Step 3 render sentence not found exactly once" >&2; return 1; }
+  printf 'CALLER-MARKER-358\n' >"$d/caller.md"
+  printf 'PRIOR-MARKER-358\n' >"$d/prior.md"
+  # Step 2's sentence leaves --wave, --task, and --out to divvy-up's Step 5.
+  a2=(--wave 1 --task api --out "$d/1-api.md")
+  for f in $(printf '%s\n' "$s2" | grep -o '`--[a-z][a-z-]*' | tr -d '`'); do
+    v="$(s358_flag_value "$f" "$d" "$d/1-api.md")" || return 1
+    a2+=("$f" "$v")
+  done
+  # After the table, so a misspelling is named as one rather than as a gap.
+  printf '%s\n' "$s2" | grep -o '`--[a-z][a-z-]*' | grep -qx '`--caller-notes' || { echo "s358_render_case: Step 2 yields no --caller-notes" >&2; return 1; }
+  a3=(--caller-notes "$d/caller.md" --verify-cmd true)
+  for f in $(printf '%s\n' "$s3" | grep -o '`--[a-z][a-z-]*' | tr -d '`'); do
+    v="$(s358_flag_value "$f" "$d" "$d/fix-1.md")" || return 1
+    a3+=("$f" "$v")
+  done
+  python3 divvy-up/scripts/render-prompt.py tests/fixtures/divvy-up/render-plan.md "${a2[@]}" >/dev/null || { echo "s358_render_case: Step 2 render failed" >&2; return 1; }
+  grep -Fq CALLER-MARKER-358 "$d/1-api.md" || { echo "s358_render_case: caller-notes text missing from the build prompt" >&2; return 1; }
+  python3 divvy-up/scripts/render-prompt.py tests/fixtures/divvy-up/render-plan.md "${a3[@]}" >/dev/null || { echo "s358_render_case: Step 3 render failed" >&2; return 1; }
+  { grep -Fq CALLER-MARKER-358 "$d/fix-1.md" && grep -Fq PRIOR-MARKER-358 "$d/fix-1.md"; } || { echo "s358_render_case: fix prompt lacks caller or prior text" >&2; return 1; }
+  rm -rf "$d"
+}
+s358_render_case work-issue/SKILL.md
+s358_copy="$tmp/358-SKILL.md"
+python3 -c 'import sys; s=open(sys.argv[1]).read(); a="`--caller-notes`"; i=s.index("## Step 2 "); j=s.index(a,i); open(sys.argv[2],"w").write(s[:j]+"`--caller-note`"+s[j+len(a):])' work-issue/SKILL.md "$s358_copy"
+if s358_err="$( (s358_render_case "$s358_copy") 2>&1 )"; then
+  echo "s358_render_case should fail on a SKILL.md copy with --caller-note in Step 2" >&2
+  exit 1
+fi
+case "$s358_err" in
+  *"flag --caller-note is not an exact name"*) ;;
+  *) echo "the --caller-note copy failed somewhere other than the exact-name table: $s358_err" >&2; exit 1 ;;
+esac
+require_text work-issue/SKILL.md "goes inline too and is not rendered, as Step 7's repair does"
+require_text work-issue/SKILL.md "divvy-up/scripts/check-waves.py owners RUN_DIR/plan.md --wave <wave> --task <task>"
+row195="$(grep '^| 195 ' _maintenance/work-issue/RATIONALE.md)"
+[[ "$row195" == *"| [P] |" && "$row195" != *"[E]"* ]] || { echo "row 195 should be tiered [P] and carry no [E]" >&2; exit 1; }
+require_text _maintenance/work-issue/RATIONALE.md "The evidence is scenario 31's \`divvy-up\` run"
+require_text _maintenance/work-issue/RATIONALE.md "| 224 | \`tests/work-issue-smoke.sh\` reads the render flags"
+
 # --- liveness pooling at MERGE_ROWS ---
 # #436: a pool group stops taking merges at the move whose pooled rows would
 # pass MERGE_ROWS, and starts a new group there. No other model here reaches
