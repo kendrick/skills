@@ -105,8 +105,8 @@ preamble, no summary paragraph. This shape:
   "lane": "issue-{{N}}",
   "phase": "{{PHASE}}",
   "status": "done",
-  "head": "the SHA of issue-{{N}} at the moment you report, from git -C <worktree> rev-parse HEAD",
-  "worktree": "absolute path",
+  "head": "the SHA of issue-{{N}} at the moment you report, from git -C <worktree> rev-parse HEAD; null only when `status` is `refused` or `failed` and you have none",
+  "worktree": "absolute path, or null when `status` is `refused` or `failed` and work-issue made none",
   "run_dir": "absolute path",
   "files_changed": ["repo-relative paths, the union across every wave you ran"],
   "contract_changed": ["the subset of files_changed that a wave-0 task of your ## Waves table owned"],
@@ -155,8 +155,8 @@ The lane's final message is the fenced block inside the brief above, reproduced 
   "lane": "issue-{{N}}",
   "phase": "{{PHASE}}",
   "status": "done",
-  "head": "the SHA of issue-{{N}} at the moment you report, from git -C <worktree> rev-parse HEAD",
-  "worktree": "absolute path",
+  "head": "the SHA of issue-{{N}} at the moment you report, from git -C <worktree> rev-parse HEAD; null only when `status` is `refused` or `failed` and you have none",
+  "worktree": "absolute path, or null when `status` is `refused` or `failed` and work-issue made none",
   "run_dir": "absolute path",
   "files_changed": ["repo-relative paths, the union across every wave you ran"],
   "contract_changed": ["the subset of files_changed that a wave-0 task of your ## Waves table owned"],
@@ -173,8 +173,8 @@ Each field answers a step that reads it:
 
 - `lane`, `phase` — which lane and which dispatch this report answers.
 - `status` — Step 5's route table.
-- `head` — checked against the newest merge test's SHAs at Step 8 to decide whether a repair round moved a lane past its last-tested commit.
-- `worktree`, `run_dir` — absolute paths the orchestrator reads directly and hands to a resumed `work-issue`.
+- `head` — checked against the newest merge test's SHAs at Step 8 to decide whether a repair round moved a lane past its last-tested commit. Null on a `refused` or `failed` report that has none.
+- `worktree`, `run_dir` — absolute paths the orchestrator reads directly and hands to a resumed `work-issue`. `worktree` is null on a `refused` or `failed` report where work-issue made none; `run_dir` is always absolute.
 - `files_changed` — read at Step 5 item 3: any path in it under CONTRACT_PATHS triggers the contract-change merge test. The footprint re-check at Step 5 item 2 reads the lane's `RUN_DIR/plan.md` table, never this field.
 - `contract_changed` — read at Step 5 item 3 beside `files_changed`: any path in it triggers the same merge test, because the lane knows which paths its wave-0 tasks owned and CONTRACT_PATHS is only the orchestrator's pre-dispatch reading of the plans.
 - `facts` — checked against `{{WAVE_DIR}}/facts/issue-{{N}}.md`; where the two differ, the file the lane wrote as it went is the one that wins.

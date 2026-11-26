@@ -259,7 +259,8 @@ require_text "$ledger" "**The published SHAs are rebased SHAs that no merge test
 # A report path the orchestrator cannot open costs a round trip, which is one
 # of #113's four measured losses. handback.py catches it before a report is
 # saved, since a saved one can't be replaced by a re-prompt's answer.
-require_text "$skill" "| A contract field missing or of the wrong type, \`worktree\` or \`run_dir\` not absolute, or \`head\` not a SHA | Never reaches this step: \`handback.py\` catches it at Step 4 and saves the message as a hand-back"
+require_text "$skill" "| A contract field missing (\`facts\` excepted) or of the wrong type, \`worktree\` or \`run_dir\` not absolute, or \`head\` not a SHA, where only a \`refused\` or \`failed\` report may leave \`worktree\` and \`head\` null | Never reaches this step: \`handback.py\` catches it at Step 4 and saves the message as a hand-back"
+require_text "$skill" "a \`refused\` or \`failed\` report may carry a null \`worktree\`, which reports no location"
 
 # Fewer than two issues is work-issue's job, and a plan held only in the
 # conversation is unreachable from a fresh lane subagent.
@@ -2418,7 +2419,7 @@ import json, re, sys
 src = open(sys.argv[1]).read()
 rep = json.loads(re.search(r"```json\n(.*?)\n```", src, re.S).group(1))
 cases = {}
-for k in ("files_changed", "contract_changed", "facts", "pr", "detail", "question"):
+for k in ("files_changed", "contract_changed", "pr", "detail", "question"):
     cases["drop-" + k] = {a: b for a, b in rep.items() if a != k}
 for k, v in (("files_changed", "a"), ("contract_changed", [1]), ("facts", None), ("pr", 3), ("detail", []), ("question", None)):
     cases["type-" + k] = dict(rep, **{k: v})
@@ -2689,5 +2690,166 @@ require_text "$brief" "Fifteen substitutions. Fourteen stand for a single value"
 require_text work-wave/README.md "and \`lane-policy.py\` copies those lines into the wave's \`facts/wave.md\` as each lane reports"
 require_text work-wave/README.md "--auto-budget 4.0 --defer-after 3 --repair-class unowned-write"
 require_text "$ledger" "| 71 | Every lane's \`work-issue\` invocation carries \`--auto-budget 4.0 --defer-after 3 --repair-class unowned-write\`"
+
+# --- #480: null head on a refused or failed lane. A Step 0 refusal makes no
+# worktree, so its honest report carries a null head and worktree. Read as a
+# hand-back, it was resumed twice and stopped the whole wave on the third. ---
+
+# The issue's repro, byte for byte.
+printf '%s' '{"lane":"issue-7","phase":"build","status":"refused","worktree":null,"run_dir":"/tmp/x/.git/work-issue/issue-7","head":null,"pr":null,"files_changed":[],"contract_changed":[],"facts":[],"detail":"refused at Step 0","question":"plan fails check-plan"}' >"$tmp/hb480-repro.txt"
+# The Falsifier: `status` alone decides, so each variant changes one field.
+sed 's/"status":"refused"/"status":"done"/' "$tmp/hb480-repro.txt" >"$tmp/hb480-done.txt"
+sed 's/"status":"refused"/"status":"stopped"/' "$tmp/hb480-repro.txt" >"$tmp/hb480-stopped.txt"
+sed 's/"status":"refused"/"status":"failed"/; s|"worktree":null|"worktree":"/w/7"|' "$tmp/hb480-repro.txt" >"$tmp/hb480-failed.txt"
+sed 's/"detail":"refused at Step 0"/"detail":"done"/' "$tmp/hb480-repro.txt" >"$tmp/hb480-detail.txt"
+sed 's/"question":"plan fails check-plan"/"question":""/' "$tmp/hb480-repro.txt" >"$tmp/hb480-question.txt"
+# A lane that sends a head meant it to be read, so a short one stays a hand-back.
+sed 's/"head":null/"head":"abc"/' "$tmp/hb480-repro.txt" >"$tmp/hb480-shorthead.txt"
+python3 - "$fixtures/handback/terminal-build.txt" "$tmp" <<'PY' || exit 1
+import json, re, sys
+# Null is allowed on a refused head, absence isn't: a truncated report saved as terminal can never be replaced.
+for key in ("worktree", "head"):
+    cut = json.load(open(f"{sys.argv[2]}/hb480-repro.txt"))
+    del cut[key]
+    json.dump(cut, open(f"{sys.argv[2]}/hb480-no{key}.txt", "w"))
+rep = json.loads(re.search(r"```json\n(.*?)\n```", open(sys.argv[1]).read(), re.S).group(1))
+open(f"{sys.argv[2]}/hb480-nofacts.txt", "w").write("```json\n" + json.dumps({k: v for k, v in rep.items() if k != "facts"}) + "\n```\n")
+open(f"{sys.argv[2]}/hb480-factsx.txt", "w").write("```json\n" + json.dumps(dict(rep, facts="x")) + "\n```\n")
+open(f"{sys.argv[2]}/hb480-deep.txt", "w").write('{"a":' + "[" * 200000 + "]" * 200000 + "}")
+PY
+for f in done stopped failed detail question shorthead noworktree nohead; do
+  cmp -s "$tmp/hb480-repro.txt" "$tmp/hb480-$f.txt" && {
+    echo "the #480 $f variant is identical to the repro; its sed missed" >&2
+    exit 1
+  }
+done
+
+# Runs script $1 on text $2 over WAVE_DIR $3, with extra args after.
+hb480() {
+  local script="$1" text="$2" wd="$3"
+  shift 3
+  set +e
+  python3 "$script" --wave-dir "$wd" --lane issue-7 --phase build --text "$text" "$@" >"$tmp/hb480.out" 2>"$tmp/hb480.err"
+  status=$?
+  set -e
+  out="$(cat "$tmp/hb480.out")"
+  err="$(cat "$tmp/hb480.err")"
+}
+
+# Returns non-zero on the wrong verdict, so the same case runs against the
+# real script and against each mutant below.
+hb480_case() {
+  local script="$1" name="$2" wd text want check
+  wd="$(mktemp -d "$tmp/hb480-$name.XXXXXX")"
+  case "$name" in
+    repro | failed | detail | question | nofacts)
+      text="$tmp/hb480-$name.txt"; want=terminal ;;
+    done | stopped | shorthead | factsx | deep | noworktree | nohead)
+      text="$tmp/hb480-$name.txt"; want=redispatch ;;
+    ro-terminal)
+      text="$tmp/hb480-repro.txt"; want=readonly ;;
+    ro-handback)
+      text="$fixtures/handback/midrun-build.txt"; want=readonly ;;
+  esac
+  if [[ "$want" == readonly ]]; then
+    mkdir -p "$wd/reports"
+    chmod 555 "$wd/reports"
+    hb480 "$script" "$text" "$wd"
+    chmod 755 "$wd/reports"
+    local saving="$wd/reports/issue-7-build.json"
+    [[ "$name" == ro-handback ]] && saving="$wd/reports/issue-7-build-interim-1.json"
+    [[ "$status" == 3 && "$err" == *"$saving"* && "$err" != *Traceback* ]] || {
+      echo "#480 $name: a read-only reports/ should exit 3 naming $saving with no traceback, got $status: $err" >&2
+      return 1
+    }
+    return 0
+  fi
+  hb480 "$script" "$text" "$wd"
+  if [[ "$want" == terminal ]]; then
+    [[ "$status" == 0 && "$out" == "terminal $wd/reports/issue-7-build.json" ]] || {
+      echo "#480 $name should print terminal and exit 0, got $status: $out $err" >&2
+      return 1
+    }
+    if compgen -G "$wd/reports/*interim*" >/dev/null; then
+      echo "#480 $name should write no interim file" >&2
+      return 1
+    fi
+    check="terminal $(python3 -c 'import json,re,sys; t=open(sys.argv[1]).read(); m=re.search(r"```json\n(.*?)\n```", t, re.S); print(json.loads(m.group(1) if m else t)["status"])' "$text")"
+  else
+    [[ "$status" == 0 && "$out" == "redispatch 1 $wd/reports/issue-7-build-interim-1.json" ]] || {
+      echo "#480 $name should print redispatch 1 and exit 0, got $status: $out $err" >&2
+      return 1
+    }
+    [[ ! -e "$wd/reports/issue-7-build.json" ]] || {
+      echo "#480 $name must not write the terminal report" >&2
+      return 1
+    }
+    check=handback
+  fi
+  wd="$(mktemp -d "$tmp/hb480-$name-check.XXXXXX")"
+  hb480 "$script" "$text" "$wd" --check
+  [[ "$status" == 0 && "$out" == "$check" ]] || {
+    echo "#480 $name: --check should print '$check' and exit 0, got $status: $out $err" >&2
+    return 1
+  }
+}
+
+hb480_cases="repro failed detail question nofacts done stopped shorthead factsx deep noworktree nohead"
+# Root ignores the mode bits, so the read-only cases can't fail as root.
+if [[ "$(id -u)" == 0 ]]; then
+  echo "work-wave smoke: running as root, skipping the #480 read-only reports/ cases"
+else
+  hb480_cases="$hb480_cases ro-terminal ro-handback"
+fi
+for name in $hb480_cases; do
+  hb480_case "$handback" "$name" || exit 1
+done
+
+# Each mutant reverts one fix and has to fail that fix's case, or the case
+# pins nothing.
+hb480_mutant() {
+  local name="$1" case="$2" from="$3" to="$4" copy="$tmp/hb480-$1.py"
+  python3 - "$handback" "$copy" "$from" "$to" <<'PY' || exit 1
+import re, sys
+src = open(sys.argv[1]).read()
+open(sys.argv[2], "w").write(re.sub(sys.argv[3], sys.argv[4], src))
+PY
+  if cmp -s "$handback" "$copy"; then
+    echo "the #480 $name mutant left handback.py unchanged" >&2
+    exit 1
+  fi
+  if hb480_case "$copy" "$case" 2>/dev/null; then
+    echo "the #480 $case case passed against the $name mutant" >&2
+    exit 1
+  fi
+}
+hb480_mutant null-head repro 'NULL_HEAD = \{"refused", "failed"\}' 'NULL_HEAD = set()'
+hb480_mutant null-head-all done 'NULL_HEAD = \{"refused", "failed"\}' 'NULL_HEAD = STATUSES'
+hb480_mutant facts nofacts 'report\.get\(k, \[\] if k == "facts" else None\)' 'report.get(k)'
+hb480_mutant facts-any factsx 'for k in \("files_changed", "contract_changed", "facts"\):' 'for k in ("files_changed", "contract_changed"):'
+hb480_mutant recursion deep 'except \(ValueError, RecursionError\):' 'except ValueError:'
+hb480_mutant presence nohead '\n *if "worktree" not in report or "head" not in report:\n *return None' ''
+if [[ "$(id -u)" != 0 ]]; then
+  hb480_mutant oserror ro-terminal 'except OSError as e:(\n\s+print\(f"handback: cannot save)' 'except ZeroDivisionError as e:\1'
+  hb480_mutant oserror ro-handback 'except OSError as e:(\n\s+print\(f"handback: cannot save)' 'except ZeroDivisionError as e:\1'
+fi
+
+# Prose pins for the same rule. The head and worktree lines sit in both report
+# blocks of the brief, so each is counted twice.
+require_text "$skill" "- Exit 3 — a usage error, an unreadable FILE, a terminal report already on disk that the script refused to overwrite, or a report or hand-back it could not save."
+require_text "$brief" "null only when \`status\` is \`refused\` or \`failed\` and you have none"
+require_text "$brief" "absolute path, or null when \`status\` is \`refused\` or \`failed\` and work-issue made none"
+for want in 'null only when `status` is `refused` or `failed` and you have none' 'absolute path, or null when `status` is `refused` or `failed` and work-issue made none'; do
+  if [[ "$(grep -cF "$want" "$brief")" != 2 ]]; then
+    echo "$brief must carry '$want' in both report blocks" >&2
+    exit 1
+  fi
+done
+require_text "$ledger" "| 72 | A \`refused\` or \`failed\` report may carry a null \`head\`"
+# Rows 16 and 70 both carry the clause; a bare grep -Fq passes on either alone.
+if [[ "$(grep -cF "(except as row 72 allows)" "$ledger")" != 2 ]]; then
+  echo "$ledger must carry '(except as row 72 allows)' in rows 16 and 70" >&2
+  exit 1
+fi
 
 echo "work-wave smoke: OK"
