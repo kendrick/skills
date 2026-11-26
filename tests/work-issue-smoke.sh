@@ -7131,7 +7131,7 @@ require_text work-issue/SKILL.md "\`timing.log\`, \`policy.log\`, \`conflict.txt
 require_text work-issue/SKILL.md "Where the invocation carries \`--auto-budget\`, run \`policy.py budget\` at each \`over: yes\` before asking"
 require_text work-issue/SKILL.md "That stop runs \`policy.py sort --kind redteam\` on the second failed round first, where the invocation carries \`--repair-class\`"
 require_text work-issue/SKILL.md "a round k at or above K runs \`policy.py sort --kind triage\` once its rows are written and before this cap reads them, and each row it rules \`defer\` is queued with \`policy: --defer-after K\`"
-require_text work-issue/SKILL.md "and from round \`--defer-after\` on every row \`policy.py sort\` ruled \`defer\` is queued with \`policy: --defer-after K\`; or \`pending\`"
+require_text work-issue/SKILL.md "and from round \`--defer-after\` on every row \`policy.py sort\` ruled \`defer\` is queued with \`policy: --defer-after K\`, and a row it ruled \`repair\` in a capped round met the cap as any in-scope row does; or \`pending\`"
 require_text work-issue/SKILL.md "An invocation carrying a policy flag whose probe answers \`stop\` rules that stop before asking."
 require_text work-issue/SKILL.md "A red-team ruling resumes only where it prints \`repair\` and no \`reports/redteam-repair-<k>.json\` exists for that round"
 require_text work-issue/SKILL.md "the lines of \`RUN_DIR/policy.log\` where it exists,"
@@ -7141,6 +7141,12 @@ require_text work-issue/references/policy.md "A finding is in the \`unowned-writ
 require_text work-issue/references/policy.md "A citation that names no path is the one finding the script can't sort"
 require_text work-issue/references/policy.md "- [wave] policy: <run> <stop>: <ruling> (<flag> <value>) — <evidence>"
 require_text work-issue/references/policy.md "Write every in-scope row of the newest triage round not yet queued as \`in scope; queued: policy: --auto-budget R spent\`"
+# PR #484 review: a capped round is never repaired, and run-state.py's phase_of
+# stops on its in-scope P0 whatever policy.log says, so the policy's repair
+# ruling has to yield to the cap or the lane stops for a human anyway.
+require_text work-issue/references/policy.md "In a capped round the review round cap rules first and the \`repair\` ruling changes nothing: a \`P0\` or \`blocking\` row stops the run for a human, and any other is queued with \`review round cap reached (N)\`."
+require_text work-issue/SKILL.md "A row it rules \`repair\` goes to Step 7 only in a round below the cap or while \`RUN_DIR/review_loop\` exists; in a capped round this cap rules it as any in-scope row."
+refute_text work-issue/references/policy.md "as it would a row of an uncapped round"
 
 # --- liveness pooling at MERGE_ROWS ---
 # #436: a pool group stops taking merges at the move whose pooled rows would

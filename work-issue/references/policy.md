@@ -7,7 +7,7 @@ A run with no policy flag asks at every one of these stops, as it did before the
 ## The flags
 
 - `--auto-budget <ratio>`: a finite number above 0. At a budget stop, raise the ratio to it once, and past it defer at Step 7.
-- `--repair-class <class>`: `unowned-write`, the one class. A finding sorted into it is repaired rather than asked about or deferred.
+- `--repair-class <class>`: `unowned-write`, the one class. A finding sorted into it is repaired rather than asked about or deferred, except in a capped round, where the review round cap rules first.
 - `--defer-after <k>`: a positive integer. From triage round k on, an in-scope row outside the repair class is deferred rather than repaired.
 
 Step 0 runs `work-issue/scripts/policy.py flags [--auto-budget R] [--repair-class C] [--defer-after K]` before anything is written under RUN_DIR. Exit 0 prints the flags normalized. Exit 3 prints one `policy: --<flag>: <value>` line per bad value: refuse the run quoting them. The flags bind the invocation that carries them and are never written to RUN_DIR, so a resume without them asks at every stop.
@@ -52,7 +52,7 @@ work-issue/scripts/policy.py sort --kind triage --round-file RUN_DIR/triage/roun
 It prints one line per in-scope row not yet queued, id the row's `#`.
 
 - `keep`: the row routes as today, the review round cap included.
-- `repair`: the row stays `in scope`, and Step 7 repairs it, as it would a row of an uncapped round.
+- `repair`: the row stays `in scope`. Step 7 repairs it in a round below the cap, or with `RUN_DIR/review_loop` present, since then no round is capped. In a capped round the review round cap rules first and the `repair` ruling changes nothing: a `P0` or `blocking` row stops the run for a human, and any other is queued with `review round cap reached (N)`. The `repair` line in `policy.log` then records the ruling, not a repair.
 - `defer`: write `in scope; queued: policy: --defer-after K` in its Scope cell and append it to `queue.md` with that reason as Outside-because. Step 8 answers it like any other queued row.
 
 A run with no plan, which an adopted run is, has no `owns` to sort against: every row is `keep` with `--repair-class` set, and `defer` without it.
