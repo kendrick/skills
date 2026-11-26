@@ -159,6 +159,8 @@ Leave `question` empty except for `stopped` or `failed`.
 
 ## Placeholders
 
+File inputs lose their trailing newlines, so a file's last line break doesn't become a blank line in the prompt. That covers `--contract`, `--baseline`, `--prior`, and `--caller-notes`, and it is one of two places the "verbatim" in the bullets below falls short. The `{{TASK}}` fill inside caller notes is the other.
+
 - `{{TASK}}` — the task's label from the wave table's Task column, verbatim. It appears twice: once in the instructions and once inside the JSON contract, so the returned report identifies itself without the orchestrator having to track which prompt went to which subagent.
 - `{{OWNS}}` — the task's Files owned entries from the wave table, one path per line. This is the exact list the orchestrator's script checks the diff against, so it needs to match verbatim rather than as a paraphrase.
 - `{{CONTRACT}}` — the shared types, interface, schema, or migration a wave-0 task already landed, quoted inline or named by path. `none recorded` goes in when no earlier wave landed one. A worker left to infer the contract will guess at something plausible and wrong; quoting or naming the real thing is what lets every task in the wave agree on the same shape without talking to each other.
