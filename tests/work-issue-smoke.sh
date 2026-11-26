@@ -7156,6 +7156,61 @@ refute_text work-issue/references/policy.md "Where every line reads \`defer\`, t
 require_text work-issue/references/policy.md "triage rules it \`keep\`, so it routes as any in-scope row does, the review round cap included"
 refute_text work-issue/references/policy.md "triage keeps it for repair"
 
+# --- #483: the reproducer receives plan.md ---
+# Workers are told a `left` reason may cite a `plan.md` line, and #460 and #477
+# each lost a red-team round to plan citations the reproducer was never handed.
+# The whole-sentence pin holds the plan's place in the list and the closing
+# "and nothing else" together.
+step4_inputs="Either way, the reproducer receives the claims, BASE_SHA, HEAD, the tree path, \`baseline.txt\`, and \`RUN_DIR/plan.md\` as \`cat -n\` prints it, or \`none\` where the run has no plan, plus REPAIR_BASE in a repair round, and nothing else"
+require_text work-issue/SKILL.md "$step4_inputs"
+# Line 128's "all the reproducer receives" stays word for word, so each kind it
+# lets a worker cite has to be an input the Step 4 list names.
+require_text work-issue/references/worker-prompt.md "Every worker, build or repair, cites only a \`plan.md\` line, a path at HEAD, or a commit range in a \`left\` reason, because that is all the reproducer receives."
+for kind in "\`RUN_DIR/plan.md\`" "the tree path" "BASE_SHA, HEAD"; do
+  grep -Fq -- "$kind" <<<"$step4_inputs" || {
+    echo "Step 4's input list no longer names $kind, which worker-prompt.md tells workers they may cite" >&2
+    exit 1
+  }
+done
+require_text work-issue/references/worker-prompt.md "commit range, \`baseline.txt\`, \`plan.md\`, and the tree, and nothing else"
+require_text work-issue/references/redteam.md "- \`RUN_DIR/plan.md\` as \`cat -n RUN_DIR/plan.md\` prints it, or \`none\` where the run has no plan"
+require_text work-issue/references/redteam.md "The plan is none of these: it is the spec the worker built against, not its reasoning."
+plan_rule="cites a \`plan.md\` line holds only where that line exists in the numbered plan and says what the reason claims"
+holds_para="$(grep -F -- '`holds` is the reproducer' work-issue/references/redteam.md)"
+grep -Fq -- "$plan_rule" <<<"$holds_para" || {
+  echo "work-issue/references/redteam.md: the holds paragraph no longer says how a plan.md citation is judged" >&2
+  exit 1
+}
+require_text work-issue/references/redteam.md "and REPAIR_BASE filled in or \`none\`, and \`{{PLAN}}\` filled in or \`none\`, then the verdict JSON shape"
+# Same extraction as prompt_block above: a prose copy outside the fence must
+# not satisfy these.
+plan_prompt="$(sed -n '/^### The prompt$/,$p' work-issue/references/redteam.md | sed '1,/^```$/d' | sed '/^```$/,$d' | tr '\n' ' ' | tr -s ' ')"
+for want in "{{PLAN}}" "$plan_rule" "A \`left\` reason that cites text you were not given"; do
+  grep -Fq -- "$want" <<<"$plan_prompt" || {
+    echo "work-issue/references/redteam.md: the prompt block is missing: $want" >&2
+    exit 1
+  }
+done
+# The pin has to bite: cut the plan from the list in a scratch copy and the
+# Step 4 pin must fail there.
+plan_clause="\`baseline.txt\`, and \`RUN_DIR/plan.md\` as \`cat -n\` prints it, or \`none\` where the run has no plan,"
+plan_copy="$tmp/483-SKILL.md"
+python3 -c 'import sys; s=open(sys.argv[1]).read(); assert s.count(sys.argv[2])==1; open(sys.argv[4],"w").write(s.replace(sys.argv[2],sys.argv[3]))' \
+  work-issue/SKILL.md "$plan_clause" "and \`baseline.txt\`," "$plan_copy"
+if (require_text "$plan_copy" "$step4_inputs") 2>/dev/null; then
+  echo "the Step 4 input pin should fail on a SKILL.md copy with the plan cut from the list" >&2
+  exit 1
+fi
+# ...and the ledger's own input list has to keep matching the Step 4 list.
+require_text _maintenance/work-issue/RATIONALE.md "(plus \`plan.md\` on every round, row 223, and REPAIR_BASE in a repair round, row 207)"
+# The inline-not-path sentence is what keeps the worker's summary away from the reproducer.
+require_text work-issue/references/redteam.md "It goes in inline, never as a path: a path names RUN_DIR, and \`RUN_DIR/reports/\` holds the worker's \`summary\`"
+require_text work-issue/README.md "the baseline, and the numbered plan, and nothing else"
+# Round 1 of #483 filled {{PLAN}} before {{CLAIMS}} and {{LEFT}}, so those later
+# replaces rewrote the placeholders the plan quotes and spliced JSON into it.
+require_text work-issue/references/redteam.md "Every placeholder in the prompt is filled in one pass over the template, for a subagent dispatch and a codex prompt file alike, so text a filled value carries, such as a plan that quotes \`{{LEFT}}\`, reaches the reproducer as written and is never filled again"
+require_text _maintenance/work-issue/RATIONALE.md "| 223 | The reproducer receives \`RUN_DIR/plan.md\`"
+
 # --- liveness pooling at MERGE_ROWS ---
 # #436: a pool group stops taking merges at the move whose pooled rows would
 # pass MERGE_ROWS, and starts a new group there. No other model here reaches
