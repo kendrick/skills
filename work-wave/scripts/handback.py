@@ -6,8 +6,10 @@ Usage: handback.py --wave-dir WAVE_DIR --lane issue-N --phase build|publish|repo
 Reads the lane's final message from FILE. A message that is a terminal report
 (exactly one fenced json block, or a bare JSON object, whose `lane` and `phase`
 are the ones passed, whose `status` is done, stopped, failed, or refused, whose
-`worktree` and `run_dir` are absolute paths, whose `head` is a 40-hex SHA, and
-which carries every other field of the brief's contract with its stated type) is
+`run_dir` is an absolute path, whose `worktree` is an absolute path and `head` a
+40-hex SHA (either may be null on a refused or failed report), and which carries
+every other field of the brief's contract with its stated type, a missing
+`facts` reading as empty) is
 written to reports/issue-<N>-<phase>.json, and the script prints
 `terminal <path>`. Anything else is a hand-back: the lane's turn ended mid-run.
 It is written to reports/issue-<N>-<phase>-interim-<k>.json, k one past the
@@ -22,8 +24,10 @@ terminal report:` line naming the same paths.
 before the report lands, and only for a message the write will save as a report.
 
 Exit codes: 0 terminal, redispatch, or any --check verdict, 1 third hand-back (the wave stops on the
-lane), 3 usage, unreadable FILE, or a terminal report already on disk for this
-lane and phase (nothing is written, so a saved report is never clobbered).
+lane), 3 usage, unreadable FILE, a report or hand-back that couldn't be saved,
+or a terminal report already on disk for this lane and phase (nothing is
+written, so a saved report is never clobbered). Exit 1 means only the third
+hand-back, so every other failure has to land on 3.
 """
 
 import argparse
@@ -34,6 +38,7 @@ import sys
 import tempfile
 
 STATUSES = {"done", "stopped", "failed", "refused"}
+NULL_HEAD = {"refused", "failed"}
 SHA = re.compile(r"[0-9a-f]{40}")
 MAX_REDISPATCH = 2
 FENCE = re.compile(r"```(?:json)?[ \t]*\n(.*?)\n[ \t]*```", re.S)
@@ -47,14 +52,18 @@ def terminal_report(text, lane, phase):
     hand-back here. The path and SHA checks live here too (F-r1-authz-01): a
     report saved as terminal with a relative worktree could never be replaced,
     so a re-prompt's answer hit the overwrite refusal and stopped the wave.
-    The brief's contract requires all three fields in every phase and allows
-    none of them null.
+    The brief's contract requires all three fields in every phase. A
+    refused or failed report may leave `worktree` and `head` null (#480): a
+    Step 0 refusal makes no worktree, so its null head is honest, and reading
+    it as a hand-back resumed the lane twice and stopped the wave on the
+    third. A value that is present is still checked, since Step 8 would read
+    a short SHA as a real one.
 
     The remaining contract fields are checked too: a truncated report saved
     as terminal is immutable, so the full report a resumed lane returns would
     hit the overwrite refusal, and Step 5's contract-change gate would read
-    arrays that were never there. `head` stays non-null: a refused lane's
-    null head is for the merger to rule on, not for this script.
+    arrays that were never there. A missing `facts` is the exception: a wave
+    started before #460 holds finished reports without one.
     """
     text = text.strip()
     blocks = FENCE.findall(text)
@@ -64,7 +73,8 @@ def terminal_report(text, lane, phase):
         return None
     try:
         report = json.loads(text)
-    except ValueError:
+    # RecursionError: deep nesting raised past this and exited 1, the third-hand-back code.
+    except (ValueError, RecursionError):
         return None
     if not isinstance(report, dict):
         return None
@@ -72,12 +82,16 @@ def terminal_report(text, lane, phase):
     status = report.get("status")
     if report.get("lane") != lane or report.get("phase") != phase or not isinstance(status, str) or status not in STATUSES:
         return None
-    if not all(isinstance(report.get(k), str) and os.path.isabs(report[k]) for k in ("worktree", "run_dir")):
+    if not isinstance(report.get("run_dir"), str) or not os.path.isabs(report["run_dir"]):
         return None
-    if not isinstance(report.get("head"), str) or not SHA.fullmatch(report["head"]):
+    nullable = status in NULL_HEAD
+    worktree, head = report.get("worktree"), report.get("head")
+    if not (nullable and worktree is None) and not (isinstance(worktree, str) and os.path.isabs(worktree)):
+        return None
+    if not (nullable and head is None) and not (isinstance(head, str) and SHA.fullmatch(head)):
         return None
     for k in ("files_changed", "contract_changed", "facts"):
-        v = report.get(k)
+        v = report.get(k, [] if k == "facts" else None)
         if not isinstance(v, list) or not all(isinstance(i, str) for i in v):
             return None
     # `pr` may be null, so absence has to be tested apart from the type.
@@ -131,9 +145,17 @@ def main():
     if args.check:
         print(f"terminal {report[1]['status']}" if report else "handback")
         return 0
-    os.makedirs(reports, exist_ok=True)
+    try:
+        os.makedirs(reports, exist_ok=True)
+    except OSError as e:
+        print(f"handback: cannot save {reports}: {e}", file=sys.stderr)
+        return 3
     if report is not None:
-        write_atomic(final, report[0] + "\n")
+        try:
+            write_atomic(final, report[0] + "\n")
+        except OSError as e:
+            print(f"handback: cannot save {final}: {e}", file=sys.stderr)
+            return 3
         print(f"terminal {final}")
         return 0
 
@@ -145,7 +167,11 @@ def main():
     count = len(have) + 1
     path = os.path.join(reports, f"{base}-interim-{k}.json")
     # No `status` key, so nothing downstream can read a hand-back as a report.
-    write_atomic(path, json.dumps({"lane": args.lane, "phase": args.phase, "handback": k, "text": text}) + "\n")
+    try:
+        write_atomic(path, json.dumps({"lane": args.lane, "phase": args.phase, "handback": k, "text": text}) + "\n")
+    except OSError as e:
+        print(f"handback: cannot save {path}: {e}", file=sys.stderr)
+        return 3
     if count <= MAX_REDISPATCH:
         print(f"redispatch {k} {path}")
         return 0
