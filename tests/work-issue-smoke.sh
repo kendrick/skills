@@ -7147,6 +7147,14 @@ require_text work-issue/references/policy.md "Write every in-scope row of the ne
 require_text work-issue/references/policy.md "In a capped round the review round cap rules first and the \`repair\` ruling changes nothing: a \`P0\` or \`blocking\` row stops the run for a human, and any other is queued with \`review round cap reached (N)\`."
 require_text work-issue/SKILL.md "A row it rules \`repair\` goes to Step 7 only in a round below the cap or while \`RUN_DIR/review_loop\` exists; in a capped round this cap rules it as any in-scope row."
 refute_text work-issue/references/policy.md "as it would a row of an uncapped round"
+# PR #484 review: Step 8 pushes the repair before item 1 red-teams it, so an
+# all-defer round there that went on to Step 5 pushed again and skipped the
+# round's replies.
+require_text work-issue/references/policy.md "Where every line reads \`defer\` at Step 8 item 1, the run goes back to Step 8's own flow: item 2 under its ahead-of-origin guard, so nothing pushes when origin already holds HEAD, then items 3 and 4."
+refute_text work-issue/references/policy.md "Where every line reads \`defer\`, the run goes on to Step 5."
+# A no-path citation is a keep row, and a keep row meets the cap like any other.
+require_text work-issue/references/policy.md "triage rules it \`keep\`, so it routes as any in-scope row does, the review round cap included"
+refute_text work-issue/references/policy.md "triage keeps it for repair"
 
 # --- liveness pooling at MERGE_ROWS ---
 # #436: a pool group stops taking merges at the move whose pooled rows would

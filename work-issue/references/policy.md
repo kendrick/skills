@@ -39,7 +39,7 @@ It prints one `<id> <ruling>` line per finding: each `NOT_REPRODUCED` verdict, i
 
 - Every line reads `ask`: stop with the evidence, as today. That's every run without `--repair-class`, a run with no plan, and round k once `policy.log` records a red-team ruling for round k-1, because each failing streak gets one granted round. A ruling for an older round belongs to an earlier streak, so a grant spent at Step 4 leaves Step 8's red-team stops their own.
 - `repair`: dispatch the repair for those findings as Step 4 item 4 does, then run round k+1 over them.
-- `defer`: append the finding to `queue.md` with Source `red-team`, Finding the claim quoted with its command, Outside because `policy: --repair-class C`, a `file-issue` Recommendation, and Status `queued`, and name it in the pull-request body's "Left out" section with its command. Where every line reads `defer`, the run goes on to Step 5.
+- `defer`: append the finding to `queue.md` with Source `red-team`, Finding the claim quoted with its command, Outside because `policy: --repair-class C`, a `file-issue` Recommendation, and Status `queued`, and name it in the pull-request body's "Left out" section with its command. Where every line reads `defer` at Step 4, the run goes on to Step 5. Where every line reads `defer` at Step 8 item 1, the run goes back to Step 8's own flow: item 2 under its ahead-of-origin guard, so nothing pushes when origin already holds HEAD, then items 3 and 4. Step 8 pushed the repair before item 1 red-teamed it, so Step 5 would push again and skip the round's replies.
 
 ## Triage from round k
 
@@ -67,7 +67,7 @@ A finding is in the `unowned-write` class when it names a path outside `owns`. I
 | cites "Writes outside a task's files" and names no path | `keep` | `ask`, and the whole round asks |
 | anything else, a `P0` naming no path or a mode change on an owned file included | `defer` | `defer` |
 
-A citation that names no path is the one finding the script can't sort, since only a reader can tell whether it describes lost data. It never resolves to `defer`: triage keeps it for repair, and the red-team stop asks.
+A citation that names no path is the one finding the script can't sort, since only a reader can tell whether it describes lost data. It never resolves to `defer`: triage rules it `keep`, so it routes as any in-scope row does, the review round cap included, and the red-team stop asks.
 
 The path test is a heuristic, in the sense of the **Heuristic scripts.** rule, and it misreads both ways: a bare repo-relative directory with no dot and no backticks, such as src/lib, reads as prose and can sort a real unowned write `defer`, a one-letter name with a one-letter extension such as a.c reads as an abbreviation, and a path holding a space reads as two tokens. Every `defer` still reaches the deferred-findings comment, where a human rules on it. A finding against the sort built on a constructed token is P1.
 
