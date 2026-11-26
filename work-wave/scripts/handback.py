@@ -9,9 +9,8 @@ are the ones passed, whose `status` is done, stopped, failed, or refused, whose
 `run_dir` is an absolute path, whose `worktree` is an absolute path and `head` a
 40-hex SHA (either may be null on a refused or failed report), and which carries
 every other field of the brief's contract with its stated type, a missing
-`facts` reading as empty) is
-written to reports/issue-<N>-<phase>.json, and the script prints
-`terminal <path>`. Anything else is a hand-back: the lane's turn ended mid-run.
+`facts` reading as empty) is written to reports/issue-<N>-<phase>.json, and the
+script prints `terminal <path>`. Anything else is a hand-back: the lane's turn ended mid-run.
 It is written to reports/issue-<N>-<phase>-interim-<k>.json, k one past the
 highest interim number already there, so a gap never lets a hand-back overwrite
 a saved one. The first two (by interim files on disk) print

@@ -259,7 +259,8 @@ require_text "$ledger" "**The published SHAs are rebased SHAs that no merge test
 # A report path the orchestrator cannot open costs a round trip, which is one
 # of #113's four measured losses. handback.py catches it before a report is
 # saved, since a saved one can't be replaced by a re-prompt's answer.
-require_text "$skill" "| A contract field missing or of the wrong type, \`worktree\` or \`run_dir\` not absolute, or \`head\` not a SHA on a status other than \`refused\` or \`failed\` | Never reaches this step: \`handback.py\` catches it at Step 4 and saves the message as a hand-back"
+require_text "$skill" "| A contract field missing (\`facts\` excepted) or of the wrong type, \`worktree\` or \`run_dir\` not absolute, or \`head\` not a SHA, where only a \`refused\` or \`failed\` report may leave \`worktree\` and \`head\` null | Never reaches this step: \`handback.py\` catches it at Step 4 and saves the message as a hand-back"
+require_text "$skill" "a \`refused\` or \`failed\` report may carry a null \`worktree\`, which reports no location"
 
 # Fewer than two issues is work-issue's job, and a plan held only in the
 # conversation is unreachable from a fresh lane subagent.
