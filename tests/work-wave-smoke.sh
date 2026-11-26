@@ -2707,12 +2707,17 @@ sed 's/"question":"plan fails check-plan"/"question":""/' "$tmp/hb480-repro.txt"
 sed 's/"head":null/"head":"abc"/' "$tmp/hb480-repro.txt" >"$tmp/hb480-shorthead.txt"
 python3 - "$fixtures/handback/terminal-build.txt" "$tmp" <<'PY' || exit 1
 import json, re, sys
+# Null is allowed on a refused head, absence isn't: a truncated report saved as terminal can never be replaced.
+for key in ("worktree", "head"):
+    cut = json.load(open(f"{sys.argv[2]}/hb480-repro.txt"))
+    del cut[key]
+    json.dump(cut, open(f"{sys.argv[2]}/hb480-no{key}.txt", "w"))
 rep = json.loads(re.search(r"```json\n(.*?)\n```", open(sys.argv[1]).read(), re.S).group(1))
 open(f"{sys.argv[2]}/hb480-nofacts.txt", "w").write("```json\n" + json.dumps({k: v for k, v in rep.items() if k != "facts"}) + "\n```\n")
 open(f"{sys.argv[2]}/hb480-factsx.txt", "w").write("```json\n" + json.dumps(dict(rep, facts="x")) + "\n```\n")
 open(f"{sys.argv[2]}/hb480-deep.txt", "w").write('{"a":' + "[" * 200000 + "]" * 200000 + "}")
 PY
-for f in done stopped failed detail question shorthead; do
+for f in done stopped failed detail question shorthead noworktree nohead; do
   cmp -s "$tmp/hb480-repro.txt" "$tmp/hb480-$f.txt" && {
     echo "the #480 $f variant is identical to the repro; its sed missed" >&2
     exit 1
@@ -2739,7 +2744,7 @@ hb480_case() {
   case "$name" in
     repro | failed | detail | question | nofacts)
       text="$tmp/hb480-$name.txt"; want=terminal ;;
-    done | stopped | shorthead | factsx | deep)
+    done | stopped | shorthead | factsx | deep | noworktree | nohead)
       text="$tmp/hb480-$name.txt"; want=redispatch ;;
     ro-terminal)
       text="$tmp/hb480-repro.txt"; want=readonly ;;
@@ -2789,7 +2794,7 @@ hb480_case() {
   }
 }
 
-hb480_cases="repro failed detail question nofacts done stopped shorthead factsx deep"
+hb480_cases="repro failed detail question nofacts done stopped shorthead factsx deep noworktree nohead"
 # Root ignores the mode bits, so the read-only cases can't fail as root.
 if [[ "$(id -u)" == 0 ]]; then
   echo "work-wave smoke: running as root, skipping the #480 read-only reports/ cases"
@@ -2823,6 +2828,7 @@ hb480_mutant null-head-all done 'NULL_HEAD = \{"refused", "failed"\}' 'NULL_HEAD
 hb480_mutant facts nofacts 'report\.get\(k, \[\] if k == "facts" else None\)' 'report.get(k)'
 hb480_mutant facts-any factsx 'for k in \("files_changed", "contract_changed", "facts"\):' 'for k in ("files_changed", "contract_changed"):'
 hb480_mutant recursion deep 'except \(ValueError, RecursionError\):' 'except ValueError:'
+hb480_mutant presence nohead '\n *if "worktree" not in report or "head" not in report:\n *return None' ''
 if [[ "$(id -u)" != 0 ]]; then
   hb480_mutant oserror ro-terminal 'except OSError as e:(\n\s+print\(f"handback: cannot save)' 'except ZeroDivisionError as e:\1'
   hb480_mutant oserror ro-handback 'except OSError as e:(\n\s+print\(f"handback: cannot save)' 'except ZeroDivisionError as e:\1'

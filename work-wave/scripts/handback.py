@@ -83,6 +83,9 @@ def terminal_report(text, lane, phase):
         return None
     if not isinstance(report.get("run_dir"), str) or not os.path.isabs(report["run_dir"]):
         return None
+    # .get reads a missing key as null, which would save a truncated refused report as terminal.
+    if "worktree" not in report or "head" not in report:
+        return None
     nullable = status in NULL_HEAD
     worktree, head = report.get("worktree"), report.get("head")
     if not (nullable and worktree is None) and not (isinstance(worktree, str) and os.path.isabs(worktree)):
