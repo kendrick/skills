@@ -7206,6 +7206,9 @@ require_text _maintenance/work-issue/RATIONALE.md "(plus \`plan.md\` on every ro
 # The inline-not-path sentence is what keeps the worker's summary away from the reproducer.
 require_text work-issue/references/redteam.md "It goes in inline, never as a path: a path names RUN_DIR, and \`RUN_DIR/reports/\` holds the worker's \`summary\`"
 require_text work-issue/README.md "the baseline, and the numbered plan, and nothing else"
+# Round 1 of #483 filled {{PLAN}} after {{LEFT}} and {{CLAIMS}}, and the plan's own
+# quoted placeholders reached the reproducer spliced with JSON.
+require_text work-issue/references/redteam.md "Every placeholder in the prompt is filled in one pass over the template, for a subagent dispatch and a codex prompt file alike, so text a filled value carries, such as a plan that quotes \`{{LEFT}}\`, reaches the reproducer as written and is never filled again"
 require_text _maintenance/work-issue/RATIONALE.md "| 223 | The reproducer receives \`RUN_DIR/plan.md\`"
 
 # --- liveness pooling at MERGE_ROWS ---

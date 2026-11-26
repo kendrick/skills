@@ -16,7 +16,7 @@ With `WORK_ISSUE_REPRODUCER` unset or empty, one fresh general-purpose subagent 
 - REPAIR_BASE, in a repair round only: the SHA HEAD stood at before the repair whose report this round checks. A build round has none
 - the absolute path of the tree
 - `RUN_DIR/baseline.txt`, so a failure that was already failing before this run is recognized rather than attributed. A file reading `absent` means the repo has no verification command, so nothing ran before this run and nothing was already failing
-- `RUN_DIR/plan.md` as `cat -n RUN_DIR/plan.md` prints it, or `none` where the run has no plan, as on an adopted run. A worker may cite a `plan.md` line in a `left` reason, and the numbered copy is what that citation is checked against. It goes in inline, never as a path: a path names RUN_DIR, and `RUN_DIR/reports/` holds the worker's `summary`
+- `RUN_DIR/plan.md` as `cat -n RUN_DIR/plan.md` prints it, or `none` where the run has no plan, as on an adopted run. A worker may cite a `plan.md` line in a `left` reason, and the numbered copy is what that citation is checked against. It goes in inline, never as a path: a path names RUN_DIR, and `RUN_DIR/reports/` holds the worker's `summary`. Every placeholder in the prompt is filled in one pass over the template, for a subagent dispatch and a codex prompt file alike, so text a filled value carries, such as a plan that quotes `{{LEFT}}`, reaches the reproducer as written and is never filled again
 
 ### What it never receives
 
