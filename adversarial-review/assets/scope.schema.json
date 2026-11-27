@@ -74,7 +74,7 @@
           },
           "classes": {
             "type": "array",
-            "description": "The union of suspicion classes this territory's files triggered. A file that is both money and authz keeps both lenses.",
+            "description": "The union of trigger-table row names (money, authz, general) this territory's files matched, in table order. A file that is both money and authz keeps both lenses.",
             "items": { "type": "string" }
           },
           "model_tier": {
@@ -95,6 +95,7 @@
           "file": { "type": "string" },
           "matched_rows": {
             "type": "array",
+            "description": "The trigger-table row names this file matched, in table order, with general last. These are the rows match-triggers.py rows prints for the file's own diff, plus general.",
             "items": { "type": "string" }
           },
           "territory": { "type": "string" }

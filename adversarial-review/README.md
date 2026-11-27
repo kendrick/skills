@@ -69,7 +69,7 @@ adversarial-review/
 ├── assets/                 # the three JSON schemas the scripts enforce
 └── scripts/
     ├── check-territories.py  # proves territories disjoint; intersects a fix diff
-    ├── match-triggers.py     # matches a diff's changed lines to trigger-table rows
+    ├── match-triggers.py     # matches a diff's changed lines to trigger-table rows; derives Step 2's territories
     └── ledger.py             # imports findings, appends events, derives state, prints verifier input and the report skeleton
 ```
 

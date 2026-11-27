@@ -39,19 +39,27 @@ Everything here fails in front of the user. A bad ref discovered inside six para
 
 The contract is written to disk before anything fans out. It is what makes two runs on the same diff produce the same territories, and what a reader consults later to see what nobody was asked to look at.
 
-Read [references/trigger-table.md](references/trigger-table.md) and follow its derivation algorithm. In outline: pipe each changed file's hunks through the table's matcher (`git diff <merge_base_sha>..HEAD -- <file> | adversarial-review/scripts/match-triggers.py rows`) to get the rows they match, assign each file to a territory named for its first matching row, and give each territory the union of its files' suspicion classes. Disjoint ownership, layered lenses—a file that is both money and authz keeps both hunts, and exactly one owner.
+Derive the territories with the script, which computes the algorithm in [references/trigger-table.md](references/trigger-table.md) the same way on every run:
+
+```
+adversarial-review/scripts/match-triggers.py derive <merge_base_sha> --exclude RUN_DIR/excluded.txt
+```
+
+Add `--depth 0` under `--fast` and `--depth 2` under `--deep`. Run it from the repo's work tree. It prints one JSON object holding `changed_files`, `depth`, `territories`, and `derivation`: copy those four fields into the `scope.json` you write. Each file goes to the territory named for its first matching row, and each territory's `classes` holds trigger-table row names. Disjoint ownership, layered lenses—a file that is both money and authz keeps both hunts, and exactly one owner. Exit 1 means the trigger table no longer parses, and exit 3 means a usage error or unreadable input, including an `excluded.txt` that does not exist. Either one stops the run. Where exclusions leave `changed_files` empty, it prints Depth 0 and no territories, and there is nothing to review.
 
 Collect the **out-of-scope list** from the user and the conversation: settled decisions, deliberate renames, prose-only changes. This list goes to every finder verbatim, and reporting an item on it is a false positive by definition.
 
-Assign **depth**, which governs what the run costs:
+`derive` assigns **depth**, which governs what the run costs. It reads the rows top-down, after the flags, and takes the first one that fires, so a diff of more than 40 files that matches nothing above `general` is Depth 0:
 
 | Depth | Fires when | Shape |
 |---|---|---|
 | 0 | `--fast`, or no row above `general` matched anywhere in the diff | ≤2 territories, sonnet finders, one batched verifier |
 | 1 | the default | ≤4 territories, tiers per the trigger table, opus verifier |
-| 2 | `--deep`, or three or more distinct high-stakes rows matched, or the diff exceeds ~40 files | ≤6 territories, opus on money/authz/state, one verifier per finding |
+| 2 | `--deep`, or all three high-stakes rows, rows 1 to 3 (`money`, `authz`, `state`), matched, or there are more than 40 entries in `changed_files` after exclusions | ≤6 territories, opus on money/authz/state, one verifier per finding |
 
-Write `scope.json` (shape: [assets/scope.schema.json](assets/scope.schema.json)), including the `derivation` record for every file, then run:
+Exactly 40 files stays at Depth 1. A `--depth` flag pins the depth and skips this read.
+
+Write `scope.json` (shape: [assets/scope.schema.json](assets/scope.schema.json)) with `derive`'s four fields in it, then run:
 
 ```
 adversarial-review/scripts/check-territories.py validate RUN_DIR/scope.json
@@ -59,7 +67,7 @@ adversarial-review/scripts/check-territories.py validate RUN_DIR/scope.json
 
 `validate` also checks the derivation record: every changed file has exactly one record, every record names a changed file, and the territory a record names owns that file. A non-zero exit is a hard stop, not a warning. Overlapping territories remove the property the whole design rests on: verification replaces cross-reviewer agreement precisely because no two finders were looking at the same code.
 
-Ask once, in one question, before any subagent spends a token: print the depth line—`Depth 1: 3 territories (money, authz, general), opus verifier.`—with the out-of-scope list as collected, and ask whether to fan out. That question is the user's correction point for the depth, the territories, and the list, and a waived run (below) never reaches it. An answer that changes any of them goes into `scope.json`, and `validate` runs again before Step 3.
+Ask once, in one question, before any subagent spends a token: print the depth line—`Depth 1: 3 territories (money, authz, general), opus verifier.`—with the out-of-scope list as collected, and ask whether to fan out. That question is the user's correction point for the depth, the territories, and the list, and a waived run (below) never reaches it. An answer that changes the depth re-runs `derive` with `--depth`, and an answer that changes the territories or the list goes into `scope.json`. `validate` runs again before Step 3.
 
 A wrapping skill's confirmation answers that question on the user's behalf only where it put this review to the user at a depth at or above the one this step derived. Read that depth from the wrapper confirmation line handed over at invocation—`work-issue` hands over its Step 0 red-team mode line, such as `reproduce claims, then adversarial-review (money; depth 1 forecast)`—and from that line alone, since a resumed wrapper run has no conversation holding the yes. An invocation that handed over no line showed no depth. A yes to a cheaper forecast is no yes to a costlier run, so a confirmation that showed a lower depth, or no depth, answers nothing, and the question is asked. Where the confirmation does answer it, this skill still prints the depth line and the out-of-scope list itself, marked as answered—`Depth 1: 3 territories (money, authz, general), opus verifier. Answered by work-issue's confirmation (depth 1 forecast).`—and continues without waiting.
 

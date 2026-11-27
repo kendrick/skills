@@ -20,19 +20,19 @@
     {
       "name": "money",
       "entries": ["src/billing/invoice.py", "src/billing/tax.py"],
-      "classes": ["arithmetic", "test-coverage"],
+      "classes": ["money", "general"],
       "model_tier": "opus"
     },
     {
       "name": "tenancy",
       "entries": ["src/api/tenancy.py"],
-      "classes": ["authz", "test-coverage"],
+      "classes": ["authz", "general"],
       "model_tier": "opus"
     },
     {
       "name": "general",
       "entries": ["tests/test_invoice.py"],
-      "classes": ["test-coverage"],
+      "classes": ["general"],
       "model_tier": "haiku"
     }
   ],
@@ -49,7 +49,7 @@
     },
     {
       "file": "src/api/tenancy.py",
-      "matched_rows": ["tenancy", "general"],
+      "matched_rows": ["authz", "general"],
       "territory": "tenancy"
     },
     {
