@@ -35,8 +35,8 @@ passes, since `--show-toplevel` fails there.
 
 Exit codes: 0 success; 1 a git command failed, a manifest blob is missing,
 the plan's Waves table is malformed, the task is not in the wave, or --out is
-inside the work tree, with one line per problem on stderr; 3 usage or an
-unreadable snapshot file. Argparse supplies 2 for a mistyped flag.
+inside the work tree, with one line per problem on stderr; 3 usage (a mistyped flag included) or an
+unreadable snapshot file.
 
 Stdlib only. check-waves.py is loaded by path, as render-prompt.py loads it,
 so ownership has one rule.
@@ -270,8 +270,16 @@ def cmd_revert(args):
     return 1 if problems else 0
 
 
+class Parser(argparse.ArgumentParser):
+    # argparse exits 2 on bad usage; the repo's validator convention is 3.
+    def error(self, message):
+        self.print_usage(sys.stderr)
+        print(f"{self.prog}: error: {message}", file=sys.stderr)
+        sys.exit(3)
+
+
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="Record, diff, and revert a divvy-up wave snapshot.")
+    ap = Parser(description="Record, diff, and revert a divvy-up wave snapshot.")
     sub = ap.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("record", help="write WAVE_BASE and the untracked manifest")
     r.add_argument("--out", required=True, metavar="FILE")

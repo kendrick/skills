@@ -37,6 +37,7 @@ refute_text() {
 
 require_file divvy-up/SKILL.md
 require_file divvy-up/README.md
+require_file divvy-up/AGENTS.md
 require_file divvy-up/references/worker-prompt.md
 require_file divvy-up/scripts/check-waves.py
 require_file divvy-up/scripts/wave-snapshot.py
@@ -47,10 +48,14 @@ require_file tests/fixtures/divvy-up/waves-overlap.md
 require_file tests/fixtures/divvy-up/waves-glob.md
 require_file tests/fixtures/divvy-up/waves-model.md
 
-[[ "$(find divvy-up -maxdepth 1 -type f | wc -l | tr -d ' ')" == "2" ]] || {
-  echo "divvy-up/ must ship only SKILL.md and README.md at top level" >&2
+[[ "$(find divvy-up -maxdepth 1 -type f | wc -l | tr -d ' ')" == "3" ]] || {
+  echo "divvy-up/ must ship only SKILL.md, README.md, and AGENTS.md at top level" >&2
   exit 1
 }
+
+# The nested file carries the review rule Codex reads on a changed divvy-up path.
+require_text divvy-up/AGENTS.md "## Code Review Rules"
+require_text divvy-up/AGENTS.md "\`wave-snapshot.py revert --task\` writes, deletes, or replaces a link only at a changed path that task owns"
 
 # Frontmatter. Model-invocation is deliberate and load-bearing: `work-issue`
 # reaches this skill at its own Step 0, and a user-invoked skill is one no

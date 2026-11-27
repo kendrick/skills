@@ -24,7 +24,7 @@ catching it is worth nothing unless it stops the run. `--task` names the one tas
 Exit codes: 0 pass; 1 semantic failure (missing or malformed table, in-wave
 overlap, malformed entry, unknown model, non-contiguous waves, unowned or
 multiply-owned path, wave over --max, path owned by another --task) with one line per problem on stderr; 3 usage, missing file,
-unreadable input, --max below 1, --task naming no task in the wave. Argparse supplies 2 for a mistyped flag.
+unreadable input, --max below 1, --task naming no task in the wave, a mistyped flag.
 
 Stdlib only, so the skill stays copy-in portable.
 """
@@ -168,7 +168,7 @@ def path_within(path, prefix):
 
 
 # ---------------------------------------------------------------------------
-# End vendored block.
+# end vendored
 # ---------------------------------------------------------------------------
 
 MODELS = ("haiku", "sonnet", "opus", "fable")
@@ -516,8 +516,16 @@ def cmd_owners(args):
     return 0
 
 
+class Parser(argparse.ArgumentParser):
+    # argparse exits 2 on bad usage; the repo's validator convention is 3.
+    def error(self, message):
+        self.print_usage(sys.stderr)
+        print(f"{self.prog}: error: {message}", file=sys.stderr)
+        sys.exit(3)
+
+
 def parse_args(argv=None):
-    ap = argparse.ArgumentParser(
+    ap = Parser(
         description="Validate a plan's waves, or name the owner of a written path."
     )
     sub = ap.add_subparsers(dest="command", required=True)
