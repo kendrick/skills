@@ -452,6 +452,14 @@ def tick_mask(text):
     return mask
 
 
+# The decoration a marker match can leave behind: `:**` after `**Files owned`,
+# `**:` after `Files owned**`. A `**` counts only beside the colon or before
+# whitespace, and nothing else is stripped, because a blanket strip of `*` ate
+# the glob in `Files: *.py`, printed `.py`, and the proof passed a lane it never
+# saw. What follows is ownership text, left for owns_entry_problem to judge.
+MARKER_CLOSE = re.compile(r"(?:\*\*(?=:))?:?(?:\*\*(?=\s|$))?[ \t]*")
+
+
 def marker_end(line):
     """Where the first marker outside a backtick span ends, or None.
 
@@ -551,7 +559,8 @@ def extract(path):
             continue
         markers += 1
         sources = []
-        rest = line[end:].lstrip(" \t:*")
+        rest = line[end:]
+        rest = rest[MARKER_CLOSE.match(rest).end() :]
         if rest.strip():
             sources.append((line, rest))
         while i < len(lines):

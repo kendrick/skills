@@ -759,6 +759,30 @@ expect_status 1 "--extract on bare text ending in a period"
 expect_line "$err" "check-footprints: unparsed: Files: src/a.py." "--extract on bare text ending in a period"
 expect_out "" "--extract on bare text ending in a period"
 
+# PR #492 review: stripping every leading `*` after the marker turned the glob
+# in `Files: *.py` into `.py`, which owns_entry_problem accepts, and the proof
+# passed. Only the marker's own `**` and colon go; the bold forms still read.
+printf 'Files: *.py\n' >"$tmp/extract-glob.md"
+footprints --extract "$tmp/extract-glob.md"
+expect_status 1 "--extract on a bare glob after the marker"
+expect_line "$err" "check-footprints: malformed: *.py: glob character '*'; an entry is a literal path, and a pattern here would own nothing" "--extract on a bare glob after the marker"
+expect_out "" "--extract on a bare glob after the marker"
+
+printf '**Files:** `a.py`\n' >"$tmp/extract-bold.md"
+footprints --extract "$tmp/extract-bold.md"
+expect_status 0 "--extract after a bold marker"
+expect_out "a.py" "--extract after a bold marker"
+
+printf 'Files: src/a.py\n' >"$tmp/extract-bare.md"
+footprints --extract "$tmp/extract-bare.md"
+expect_status 0 "--extract on a bare path"
+expect_out "src/a.py" "--extract on a bare path"
+
+printf '**Files owned:** `b.py`\n' >"$tmp/extract-bold-owned.md"
+footprints --extract "$tmp/extract-bold-owned.md"
+expect_status 0 "--extract after a bold Files owned marker"
+expect_out "b.py" "--extract after a bold Files owned marker"
+
 # Every wave 3 plan's task block. Read as bare text it is a path that matches
 # nothing, and the proof passes over the lane.
 printf '### Task 1\n\n**Files:** the owned files above.\n' >"$tmp/extract-prose.md"
