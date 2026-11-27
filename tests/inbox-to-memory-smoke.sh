@@ -5340,6 +5340,7 @@ nr_refuse "unknown flag" "$nr_rl" --type Decision --slug cap-retries --note Nr0N
 nr_refuse "--journal without --source-scope" "$nr_rl" --journal --slug cap-retries --note Nr0Note001
 nr_refuse "--journal with --type" "$nr_rl" --journal --type Decision --slug cap-retries --note Nr0Note001 --source-scope 'x/y'
 nr_refuse "--journal with --status" "$nr_rl" --journal --status accepted --slug cap-retries --note Nr0Note001 --source-scope 'x/y'
+[[ "$nr_rc" == 3 ]] || nr_fail "--journal with --status exited $nr_rc, not 3"
 
 # A scope with neither a bank nor a mode line has no folder to pick.
 nr_nomode="$nr_tmp/s/no-mode"
@@ -5379,6 +5380,37 @@ nr_keep_ids=1
 nr_refuse "existing target path" "$nr_occ" --type Decision --slug cap-retries --note Nr0Note001
 nr_keep_ids=
 [[ "$(cat "$nr_occ/_memory/decisions/cap-retries-Nr5Occup01.md")" == "prior bytes" ]] || nr_fail "an existing record was overwritten"
+
+# A record that appears after the exists check loses to noclobber. The race is
+# forced by a mkdir shim, since mkdir is the one call between the bank write and
+# the record write. A bank this call wrote is removed; one that was there stays.
+mkdir -p "$nr_tmp/racebin"
+cat >"$nr_tmp/racebin/mkdir" <<'SHIM'
+#!/usr/bin/env bash
+/bin/mkdir "$@"
+/bin/mkdir -p "$(dirname "$NR_RACE")"
+printf 'racer bytes\n' >"$NR_RACE"
+SHIM
+chmod +x "$nr_tmp/racebin/mkdir"
+nr_race() { # scope target
+  nr_rc=0
+  PATH="$nr_tmp/racebin:$nr_tmp/bin:$PATH" NR_IDS="$nr_tmp/ids" NR_RACE="$1/$2" bash "$nr" "$1" --type Decision --slug cap-retries --note Nr0Note001 >/dev/null 2>&1 || nr_rc=$?
+}
+nr_rnew="$nr_tmp/s/race-new-bank"
+nr_scope "$nr_rnew" lightweight
+nr_ids Nr5Race001
+nr_race "$nr_rnew" _memory/decisions/cap-retries-Nr5Race001.md
+[[ "$nr_rc" == 1 ]] || nr_fail "a lost record race exited $nr_rc, not 1"
+[[ ! -e "$nr_rnew/memory-bank.yaml" ]] || nr_fail "a lost record race left the bank this call wrote"
+[[ "$(cat "$nr_rnew/_memory/decisions/cap-retries-Nr5Race001.md")" == "racer bytes" ]] || nr_fail "a lost record race overwrote the other writer's record"
+nr_rold="$nr_tmp/s/race-old-bank"
+nr_scope "$nr_rold" lightweight
+printf 'schema: 1\nname: race-old-bank\nfacet_prefixes: [topic]\nfolders: {PolicyRule: _memory/rules}\n' >"$nr_rold/memory-bank.yaml"
+nr_rold_sum="$(cksum <"$nr_rold/memory-bank.yaml")"
+nr_ids Nr5Race002
+nr_race "$nr_rold" _memory/decisions/cap-retries-Nr5Race002.md
+[[ "$nr_rc" == 1 ]] || nr_fail "a lost record race beside an existing bank exited $nr_rc, not 1"
+[[ "$(cksum <"$nr_rold/memory-bank.yaml" 2>/dev/null)" == "$nr_rold_sum" ]] || nr_fail "a lost record race removed or changed a bank it did not write"
 
 # No argument at all is a usage error, which is exit 3 across this repo's scripts.
 nr_rc=0
