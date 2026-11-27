@@ -62,7 +62,7 @@ case "${1:-}" in
 esac
 scope="${1%/}"
 shift
-journal=0 type="" slug="" note="" status="" source_scope="" status_set=0 bank_created=0
+journal=0 type="" slug="" note="" status="" source_scope="" status_set=0
 while [[ $# -gt 0 ]]; do
   if [[ "$1" == --journal ]]; then
     journal=1
@@ -219,15 +219,16 @@ if [[ $journal -eq 0 && ! -f "$bank" ]]; then
     echo "memory-bank.yaml appeared while writing, refusing to overwrite: $bank" >&2
     exit 1
   fi
-  bank_created=1
+  # Exit 1 promises that nothing was written, so any exit before the record
+  # lands deletes the bank, including one that set -e forces. The trap is set
+  # only after this call's noclobber write succeeds, so a bank that was
+  # already there survives.
+  trap 'rm -f "$bank"' EXIT
 fi
 mkdir -p "$(dirname "$target")"
 if ! printf '%s' "$content" >"$target" 2>/dev/null; then
-  # Exit 1 promises that nothing was written, so delete the bank this call wrote.
-  # bank_created is set only after a noclobber write succeeds, so a bank that
-  # was already there survives.
-  [[ $bank_created -eq 0 ]] || rm -f "$bank"
   echo "already exists, refusing to overwrite: $target" >&2
   exit 1
 fi
+trap - EXIT
 printf '%s\n' "$rel"

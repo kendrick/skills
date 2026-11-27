@@ -5412,6 +5412,14 @@ nr_race "$nr_rold" _memory/decisions/cap-retries-Nr5Race002.md
 [[ "$nr_rc" == 1 ]] || nr_fail "a lost record race beside an existing bank exited $nr_rc, not 1"
 [[ "$(cksum <"$nr_rold/memory-bank.yaml" 2>/dev/null)" == "$nr_rold_sum" ]] || nr_fail "a lost record race removed or changed a bank it did not write"
 
+# The record folder's mkdir fails under set -e after the bank is written, not
+# through the guarded record write, so only the EXIT trap removes that bank.
+nr_mkfail="$nr_tmp/s/mkdir-fails"
+nr_scope "$nr_mkfail" lightweight
+mkdir -p "$nr_mkfail/_memory"
+printf 'not a folder\n' >"$nr_mkfail/_memory/decisions"
+nr_refuse "a record folder mkdir fails after the bank write" "$nr_mkfail" --type Decision --slug cap-retries --note Nr0Note001
+
 # No argument at all is a usage error, which is exit 3 across this repo's scripts.
 nr_rc=0
 PATH="$nr_tmp/bin:$PATH" NR_IDS="$nr_tmp/ids" bash "$nr" >/dev/null 2>&1 || nr_rc=$?
