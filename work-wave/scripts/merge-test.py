@@ -7,9 +7,9 @@
 
 Prints the path of the record it wrote. Exit 0 on `result: green`, 1 on `red`
 or `conflict` with the record written, 3 on usage or a git failure before any
-merge, with nothing written under merge-test/. A git failure once merging has
-started writes a red record with a `git failed:` line and exits 1. Argparse's
-own 2 covers a mistyped flag.
+merge, with nothing written under merge-test/. A mistyped flag is a usage error
+too. A git failure once merging has started writes a red record with a
+`git failed:` line and exits 1.
 
 The script is the procedure and nothing else. Reading a red result against
 coupling.md, writing facts/wave.md and deciding to stop stay with the conductor.
@@ -167,8 +167,16 @@ def merge_and_verify(args, tree, base, base_line, shas, head):
     return head, result, status, tail, base_line
 
 
+class Parser(argparse.ArgumentParser):
+    # argparse exits 2 on bad usage; the repo's validator convention is 3.
+    def error(self, message):
+        self.print_usage(sys.stderr)
+        print(f"{self.prog}: error: {message}", file=sys.stderr)
+        sys.exit(3)
+
+
 def main(argv=None):
-    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap = Parser(description=__doc__.split("\n")[0])
     ap.add_argument("--wave-dir", required=True, type=Path)
     ap.add_argument("--root", required=True, type=Path)
     ap.add_argument("--default", required=True)
