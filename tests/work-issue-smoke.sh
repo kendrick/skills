@@ -7279,6 +7279,93 @@ row195="$(grep '^| 195 ' _maintenance/work-issue/RATIONALE.md || true)"
 require_text _maintenance/work-issue/RATIONALE.md "The evidence is scenario 31's \`divvy-up\` run"
 require_text _maintenance/work-issue/RATIONALE.md "| 224 | \`tests/work-issue-smoke.sh\` reads the render flags"
 
+# --- #360: repair dispatches verify with the scoped command ---
+# A repair worker that runs the full VERIFY_CMD repeats the suites its gate runs
+# next, close to half an hour on #369's fix-1. The case renders a repair prompt
+# with the command scoped-cmd prints and checks that its verification block
+# holds the repaired task's suite and no other one.
+s360_dir="$(mktemp -d "$tmp/s360.XXXXXX")"
+{
+  printf '# Plan\n\n## Waves\n\n| Wave | Task | Files owned | Model | Done when | Constraints |\n|---|---|---|---|---|---|\n'
+  printf '| 0 | one | a.py | sonnet | `bash tests/a-smoke.sh` exits 0 | none |\n'
+  printf '| 0 | two | docs/ | sonnet | `bash tests/b-smoke.sh` exits 0 | none |\n'
+} >"$s360_dir/plan.md"
+printf '{"files_changed": ["a.py"]}\n' >"$s360_dir/0-one.json"
+# Read out of SKILL.md so the case renders the line Step 3 actually prescribes.
+s360_override="$(grep -o '\*\*repair override\*\* line, which the template places directly above its verification paragraph: `[^`]*`' work-issue/SKILL.md | sed 's/.*paragraph: `//; s/`$//' || true)"
+[[ -n "$s360_override" ]] || { echo "#360: work-issue/SKILL.md Step 3 should quote the repair override line" >&2; exit 1; }
+printf 'PRIOR-MARKER-360\n%s\n' "$s360_override" >"$s360_dir/prior.md"
+s360_scoped="$(python3 "$run_state" scoped-cmd --plan "$s360_dir/plan.md" --report "$s360_dir/0-one.json")" \
+  || { echo "#360: scoped-cmd should exit 0 on the fixture plan" >&2; exit 1; }
+[[ "$s360_scoped" == "bash tests/a-smoke.sh" ]] || { echo "#360: scoped-cmd printed '$s360_scoped', not bash tests/a-smoke.sh" >&2; exit 1; }
+# Keyed on the template's own text, so a missing paragraph empties the cut and
+# fails the positive check below instead of passing the negative one.
+s360_verify_block() {
+  python3 divvy-up/scripts/render-prompt.py "$s360_dir/plan.md" --wave 0 --task one \
+    --verify-cmd "$1" --prior "$s360_dir/prior.md" --out "$s360_dir/fix-1.md" >/dev/null \
+    || { echo "#360: render failed" >&2; return 1; }
+  awk '/^Before you report/ { on = 1 } on { print } on && /^Say in `verify_output` which of the two you ran\./ { exit }' "$s360_dir/fix-1.md"
+}
+s360_block="$(s360_verify_block "$s360_scoped")"
+[[ "$s360_block" == *"bash tests/a-smoke.sh"* && "$s360_block" != *"bash tests/b-smoke.sh"* ]] \
+  || { echo "#360: the repair's verification block should hold bash tests/a-smoke.sh and not bash tests/b-smoke.sh:" >&2; echo "$s360_block" >&2; exit 1; }
+# Bite check: the full VERIFY_CMD puts the other suite in the same cut, so the
+# negative assertion above can fail.
+s360_full="$(s360_verify_block 'bash tests/a-smoke.sh && bash tests/b-smoke.sh')"
+[[ "$s360_full" == *"bash tests/b-smoke.sh"* ]] \
+  || { echo "#360: the bite check should find bash tests/b-smoke.sh in a block rendered with the full VERIFY_CMD" >&2; exit 1; }
+# PR #489 r4715914195: with a.py owned in two waves, scoped-cmd prints both
+# tasks' checks, but the template tells the worker to run its own done-when's
+# command first. The override line has to land right above that instruction
+# for the worker to run the second check.
+{
+  printf '# Plan\n\n## Waves\n\n| Wave | Task | Files owned | Model | Done when | Constraints |\n|---|---|---|---|---|---|\n'
+  printf '| 0 | one | a.py | sonnet | `bash tests/a-smoke.sh` exits 0 | none |\n'
+  printf '| 1 | three | a.py | sonnet | `bash tests/c-smoke.sh` exits 0 | none |\n'
+} >"$s360_dir/plan2.md"
+s360_two="$(python3 "$run_state" scoped-cmd --plan "$s360_dir/plan2.md" --report "$s360_dir/0-one.json")" \
+  || { echo "#360: scoped-cmd should exit 0 on the two-wave plan" >&2; exit 1; }
+[[ "$s360_two" == "sh -c 'bash tests/a-smoke.sh' && sh -c 'bash tests/c-smoke.sh'" ]] \
+  || { echo "#360: scoped-cmd printed '$s360_two' on the two-wave plan" >&2; exit 1; }
+python3 divvy-up/scripts/render-prompt.py "$s360_dir/plan2.md" --wave 0 --task one \
+  --verify-cmd "$s360_two" --prior "$s360_dir/prior.md" --out "$s360_dir/fix-2.md" >/dev/null \
+  || { echo "#360: two-wave render failed" >&2; exit 1; }
+s360_above="$(awk '/^Before you report/ { print last; exit } NF { last = $0 }' "$s360_dir/fix-2.md")"
+[[ "$s360_above" == "$s360_override" ]] \
+  || { echo "#360: the line above 'Before you report' should be the repair override, got: $s360_above" >&2; exit 1; }
+s360_block2="$(awk '/^Before you report/ { on = 1 } on { print } on && /^Say in `verify_output` which of the two you ran\./ { exit }' "$s360_dir/fix-2.md")"
+[[ "$s360_block2" == *"sh -c 'bash tests/a-smoke.sh' && sh -c 'bash tests/c-smoke.sh'"* ]] \
+  || { echo "#360: the two-wave verification block should carry both checks:" >&2; echo "$s360_block2" >&2; exit 1; }
+rm -rf "$s360_dir"
+
+s360_render_new="(\`--wave\` and \`--task\` of that task), with \`--verify-cmd\` set to the repair's verify command in place of VERIFY_CMD"
+# The old clause sent a Step 3 repair out with Step 2's --verify-cmd VERIFY_CMD.
+s360_render_old="(\`--wave\` and \`--task\` of that task), with \`--prior RUN_DIR/prompts/fix-<n>.prior.md\`"
+require_text work-issue/SKILL.md "$s360_render_new"
+refute_text work-issue/SKILL.md "$s360_render_old"
+require_text work-issue/SKILL.md "\`work-issue/scripts/run-state.py scoped-cmd --plan RUN_DIR/plan.md --report <scope>\`"
+require_text work-issue/SKILL.md "\`RUN_DIR/prompts/<repair>.scope.json\`"
+require_text work-issue/SKILL.md "a repair worker runs the repair's verify command plain too."
+require_text work-issue/SKILL.md "so every repair prompt, rendered or inline, ends its \`{{PRIOR}}\` with this **repair override** line"
+require_text work-issue/SKILL.md "\`This is a repair: run the command in the verification block below, not the one your definition of done names.\`"
+require_text work-issue/SKILL.md "otherwise a fresh subagent with the build report followed by the repair override line as \`{{PRIOR}}\`,"
+require_text work-issue/SKILL.md "reads \`none: an adopted pull request has no build report\`, then the repair override line Step 3 gives."
+require_text work-issue/SKILL.md "The dispatch fills \`{{VERIFY_CMD}}\` with the repair's verify command Step 3 defines, its scope file \`RUN_DIR/prompts/redteam-repair-<k>.scope.json\` listing each failed claim's \`path\`."
+require_text work-issue/SKILL.md "The dispatch fills \`{{VERIFY_CMD}}\` with the repair's verify command Step 3 defines, its scope file \`RUN_DIR/prompts/repair-<k>.scope.json\` listing each path the in-scope findings name."
+s360_copy="$tmp/360-SKILL.md"
+python3 -c 'import sys; s=open(sys.argv[1]).read(); assert s.count(sys.argv[2]) == 1; open(sys.argv[4],"w").write(s.replace(sys.argv[2], sys.argv[3]))' \
+  work-issue/SKILL.md "$s360_render_new, " "(\`--wave\` and \`--task\` of that task), with " "$s360_copy"
+if (refute_text "$s360_copy" "$s360_render_old") 2>/dev/null; then
+  echo "#360: the old-clause refute should fail on a SKILL.md copy with the old Step 3 sentence back" >&2
+  exit 1
+fi
+# Criterion 7: both places that hand VERIFY_CMD to divvy-up's gate point at the deferred form.
+section work-issue/SKILL.md "## Step 0 " >"$tmp/s360-step-0.md"
+section work-issue/SKILL.md "## Step 2 " >"$tmp/s360-step-2.md"
+require_text "$tmp/s360-step-0.md" "Its Step 6 gate runs it in the deferred form Step 3's **Deferred liveness** paragraph gives."
+require_text "$tmp/s360-step-2.md" "\`divvy-up\`'s Step 6 gate runs it in the deferred form Step 3's **Deferred liveness** paragraph gives."
+require_text _maintenance/work-issue/RATIONALE.md "| 225 | Every repair dispatch's verify command is the repair's verify command"
+
 # --- liveness pooling at MERGE_ROWS ---
 # #436: a pool group stops taking merges at the move whose pooled rows would
 # pass MERGE_ROWS, and starts a new group there. No other model here reaches

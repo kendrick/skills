@@ -96,16 +96,20 @@ and the orchestrator reads your report against it.
 {{CALLER_NOTES}}
 {{PRIOR}}
 
-Before you report, run the repo's verification command and record what it
+Before you report, run the command your definition of done names and
+record what it actually prints. Where your definition of done names no
+command, run the repo's verification command and record what it
 actually prints:
 
     {{VERIFY_CMD}}
+
+Say in `verify_output` which of the two you ran.
 
 Where that command reads `absent`, this repo has no verification command:
 run nothing, write `absent` in `verify_output`, and set `status` by the
 task's done-when alone.
 
-If that command writes files—a format or `--fix` step chained ahead of its
+If the command you run writes files—a format or `--fix` step chained ahead of its
 checks—the rule against writing outside your own files wins. Run its
 check-only form, or its checks without the fix step, and say which you ran
 in `verify_output`. Where the formatter takes paths, run it on your own
@@ -166,7 +170,7 @@ File inputs lose their trailing newlines, so a file's last line break doesn't be
 - `{{CONTRACT}}` — the shared types, interface, schema, or migration a wave-0 task already landed, quoted inline or named by path. `none recorded` goes in when no earlier wave landed one. A worker left to infer the contract will guess at something plausible and wrong; quoting or naming the real thing is what lets every task in the wave agree on the same shape without talking to each other.
 - `{{DONE_WHEN}}` — the wave table's Done when cell for this task, verbatim. It is the only acceptance bar the worker gets, so copying it exactly matters more than making it read smoothly.
 - `{{CONSTRAINTS}}` — the task's Constraints cell from the wave table, verbatim. An empty cell substitutes the literal `none recorded`, so the template goes across unchanged rather than growing a conditional paragraph the dispatcher has to decide about.
-- `{{VERIFY_CMD}}` — the repo's verification command (test suite, linter, build—whatever this repo runs). The literal `absent` goes in when Step 3 found no command, and the paragraph after the command block tells the worker to run nothing then, the way `{{CONSTRAINTS}}` gets `none recorded` rather than a dropped block. The worker runs the command before reporting and records what it printed, so a report with no `verify_output` is a worker that skipped this line, not a gap in the contract. A failure in a file the worker does not own goes in `verify_output` without deciding its `status`, because a peer may still be writing that file mid-wave, and Step 6's gate runs the same command once every task has landed. Substitute a form that writes nothing where the repo has one (`prettier --check`, `cargo fmt --check`, `ruff format --check`, a lint script without `--fix`). Every worker in the wave runs this at once, so a command that writes is a tree-wide write six times over; a worker handed one falls back to its checks, and Step 6's format pass does what the fix step would have.
+- `{{VERIFY_CMD}}` — the repo's verification command (test suite, linter, build—whatever this repo runs). The literal `absent` goes in when Step 3 found no command, and the paragraph after the command block tells the worker to run nothing then, the way `{{CONSTRAINTS}}` gets `none recorded` rather than a dropped block. The worker runs the command before reporting and records what it printed, where its done-when names no command of its own, and says in `verify_output` which it ran, so a report with no `verify_output` is a worker that skipped this line, not a gap in the contract. A failure in a file the worker does not own goes in `verify_output` without deciding its `status`, because a peer may still be writing that file mid-wave, and Step 6's gate runs the same command once every task has landed. Substitute a form that writes nothing where the repo has one (`prettier --check`, `cargo fmt --check`, `ruff format --check`, a lint script without `--fix`). Every worker whose done-when names no command runs this at once, so a command that writes is a tree-wide write six times over; a worker handed one falls back to its checks, and Step 6's format pass does what the fix step would have.
 - `{{BASELINE}}` — BASELINE as it stands when the wave dispatches: a first line `exit: <n>` with its exit status, then its output tail verbatim. For wave 0 that is the Step 3 capture or the file a wrapping skill named, and for every later wave it is the refresh Step 6 made from the last passing wave's verification. The literal `absent` goes in when VERIFY_CMD is `absent`. It is what lets a worker tell a failure it caused from one the tree already had, so a pre-existing red suite cannot fail every task in the wave.
 - `{{CALLER_NOTES}}` — empty on a direct run. A wrapping skill that dispatches through divvy-up supplies its own preamble here, verbatim, and it goes across ahead of everything else the caller could not otherwise say. Only `{{TASK}}` is filled inside the notes; every other `{{...}}` in them crosses verbatim, since notes quote issue text.
 - `{{PRIOR}}` — empty on a first dispatch. On a re-dispatch after a failure, it carries the previous attempt's report, what the gate found wrong with it, and, if the failure was a constraint violation, which constraint was broken—a worker who does not know which shortcut was refused will reach for it again.

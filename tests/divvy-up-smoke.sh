@@ -1904,4 +1904,34 @@ require_text divvy-up/references/worker-prompt.md '`--contract`, `--baseline`, `
 require_text _maintenance/divvy-up/RATIONALE.md '| 48 | Step 6 renders each re-dispatch to'
 # --- end #358 ---
 
+# --- #360: a worker runs its done-when's command ---
+# A worker that runs the full VERIFY_CMD pays the whole suite once per task
+# (about 20 min on this repo) for a result Step 6's gate recomputes anyway.
+require_text divvy-up/references/worker-prompt.md 'Before you report, run the command your definition of done names and'
+require_text divvy-up/references/worker-prompt.md 'command, run the repo'"'"'s verification command and record what it'
+require_text divvy-up/references/worker-prompt.md 'Say in `verify_output` which of the two you ran.'
+refute_text divvy-up/references/worker-prompt.md 'Before you report, run the repo'"'"'s verification command and record what it'
+# Falsifier: put the old paragraph back in a scratch copy and both pins must fail.
+f360="$(mktemp -d "$tmp/f360.XXXXXX")"
+python3 - "$f360/worker-prompt.md" <<'PY'
+import sys
+src = open("divvy-up/references/worker-prompt.md").read()
+start = src.index("Before you report, run the command your definition of done names")
+end = src.index("Where that command reads `absent`")
+old = ("Before you report, run the repo's verification command and record what it\n"
+       "actually prints:\n\n    {{VERIFY_CMD}}\n\n")
+assert src.count(src[start:end]) == 1
+open(sys.argv[1], "w").write(src[:start] + old + src[end:])
+PY
+if (refute_text "$f360/worker-prompt.md" 'Before you report, run the repo'"'"'s verification command and record what it') 2>/dev/null; then
+  echo "#360 falsifier: refute_text passed on the restored old paragraph" >&2
+  exit 1
+fi
+if (require_text "$f360/worker-prompt.md" 'Before you report, run the command your definition of done names and') 2>/dev/null; then
+  echo "#360 falsifier: require_text passed on the restored old paragraph" >&2
+  exit 1
+fi
+require_text _maintenance/divvy-up/RATIONALE.md '| 49 | A worker runs the command its done-when names'
+# --- end #360 ---
+
 echo "divvy-up smoke: OK"
