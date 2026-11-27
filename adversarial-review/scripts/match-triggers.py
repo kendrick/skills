@@ -481,12 +481,18 @@ def cmd_derive(args):
 
     sha = args.merge_base_sha
     try:
-        names = _git(["diff", "--name-only", f"{sha}..HEAD"]).splitlines()
+        # --name-only prints root-relative names but pathspecs resolve against
+        # cwd, so from a subdirectory each per-file diff came back empty and
+        # every file fell to general. Anchor every query at the top level.
+        top = ["-C", _git(["rev-parse", "--show-toplevel"]).rstrip("\n")]
+        # -z: without it git C-quotes a name holding a tab or newline, and the
+        # quoted spelling names no real file. core.quotePath=false doesn't help.
+        names = _git(top + ["diff", "--name-only", "-z", f"{sha}..HEAD"]).split("\0")
         changed_files = [p for p in names if p and not ct.is_excluded(p, excludes)]
         # One diff per file, so each file's rows are exactly what
         # `git diff <sha>..HEAD -- <file> | match-triggers.py rows` prints.
         file_diffs = {
-            p: _git(["diff", "--no-color", "--no-ext-diff", f"{sha}..HEAD", "--", p])
+            p: _git(top + ["diff", "--no-color", "--no-ext-diff", f"{sha}..HEAD", "--", p])
             for p in changed_files
         }
     except OSError as e:

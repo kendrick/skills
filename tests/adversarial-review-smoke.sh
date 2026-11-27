@@ -2021,6 +2021,47 @@ ar_case_derive_exit_codes() {
   ar_expect_derive_exit "--only" 3 "$ar_main" "$ar_main_base" --exclude "$ar_main_ex" --only 1
 }
 
+# Step 2 lets derive run anywhere in the work tree. From a subdirectory the
+# root-relative names, read as cwd-relative pathspecs, matched nothing and
+# every file fell to general, which quietly dropped lenses and depth.
+ar_case_derive_subdirectory() {
+  local repo="$tmp/derive-subdir" base ex="$tmp/derive-subdir-excluded.txt" f want root_out
+  base="$(ar_derive_repo "$repo")"
+  printf '%s\n' $'src/bill.py\tcents = 1' $'root.py\ttenant = 1' | ar_derive_commit "$repo"
+  : >"$ex"
+  want="$(cd "$repo" && for f in src/bill.py root.py; do
+    printf '%s\t%s\n' "$f" "$(git diff "$base..HEAD" -- "$f" | python3 "$repo_root/$match_py" rows | cut -d' ' -f2 | tr '\n' ' ')general"
+  done)"
+  ar_derive_ok "$repo" "$base" --exclude "$ex"
+  root_out="$AR_OUT"
+  ar_derive_ok "$repo/src" "$base" --exclude "$ex"
+  ar_derive_assert "derive from a subdirectory must match the rows rows prints from the root" '
+want = dict(l.split("\t") for l in args[0].splitlines())
+got = {r["file"]: " ".join(r["matched_rows"]) for r in scope["derivation"]}
+assert got == {k: v.strip() for k, v in want.items()}, (got, want)
+assert all(v.split() != ["general"] for v in want.values()), "fixture must match rows"
+assert scope == json.loads(args[1]), "subdirectory and root runs must agree"
+' "$want" "$root_out"
+}
+
+# Without -z git C-quotes a name holding a tab, and derive owned the quoted
+# spelling, a file that doesn't exist, with only general matched.
+ar_case_derive_tab_name() {
+  local repo="$tmp/derive-tab" base ex="$tmp/derive-tab-excluded.txt" name want
+  name="$(printf 'tab\tfile.py')"
+  base="$(ar_derive_repo "$repo")"
+  printf 'sentinel = 1\n' >"$repo/$name"
+  (cd "$repo" && git add -A -f && ar_git commit -q -m change)
+  : >"$ex"
+  want="$(cd "$repo" && git diff "$base..HEAD" -- "$name" | python3 "$repo_root/$match_py" rows | cut -d' ' -f2 | tr '\n' ' ')general"
+  ar_derive_ok "$repo" "$base" --exclude "$ex"
+  ar_derive_assert "a tab-named file must appear under its real name with its content's rows" '
+assert [r["file"] for r in scope["derivation"]] == [args[0]], scope["derivation"]
+assert scope["derivation"][0]["matched_rows"] == args[1].split(), (scope["derivation"], args[1])
+assert args[1].split() != ["general"], "fixture must match rows"
+' "$name" "$want"
+}
+
 ar_case_derive_matched_rows
 ar_case_derive_classes_union
 ar_case_derive_deterministic
@@ -2031,5 +2072,7 @@ ar_case_derive_cap_depth1
 ar_case_derive_tiers
 ar_case_derive_depth_boundaries
 ar_case_derive_exit_codes
+ar_case_derive_subdirectory
+ar_case_derive_tab_name
 
 echo "adversarial-review smoke: OK"
