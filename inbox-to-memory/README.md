@@ -58,6 +58,7 @@ inbox-to-memory/
 │   ├── collapse-vtt.sh     # merges VTT cues into speaker turns
 │   ├── bench-fixture.sh    # builds a qmd bench fixture from accepted records
 │   ├── find-candidates.sh  # merges grep and qmd vec hits for phase 2.5
+│   ├── normalize-entities.sh  # maps phase 2.5's entities through the scope's and client root's alias tables
 │   ├── reflow-raw.sh       # repairs transcripts groomed before turns were blank-line separated
 │   ├── split-raw.sh        # moves a note's raw text into its notes/raw/ sidecar
 │   ├── dispose-source.sh   # writes an input's raw sidecar, then deletes or files the input once the sidecar checks out
