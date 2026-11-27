@@ -61,7 +61,7 @@ def usage():
     sys.exit(2)
 
 
-# Vendored verbatim from bench-fixture.sh (unquote through md_files),
+# Vendored verbatim from inbox-to-memory/scripts/bench-fixture.sh (unquote through md_files),
 # 2026-11-16. Upstream is authoritative: fix a bug there first, then re-copy.
 def unquote(v):
     v = v.strip()
@@ -204,6 +204,7 @@ def md_files(root, skip_top=None):
             if fn.endswith(".md"):
                 out.append(os.path.join(dp, fn))
     return sorted(out)
+# end vendored
 
 
 ISO = re.compile(r"^\d{4}-\d{2}-\d{2}$")

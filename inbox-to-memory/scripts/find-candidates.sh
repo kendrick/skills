@@ -80,6 +80,7 @@ def die(msg):
 def scope_name(root: Path) -> str:
     return re.sub(r"[^a-z0-9]+", "-", root.name.lower()).strip("-")
 # ---------------------------------------------------------------------------
+# end vendored
 
 
 # ---------------------------------------------------------------------------
@@ -116,6 +117,7 @@ def changed_since(folder: Path, pattern: str, since: int | None) -> bool:
             continue
     return False
 # ---------------------------------------------------------------------------
+# end vendored
 
 
 def read_lines(path, what):
