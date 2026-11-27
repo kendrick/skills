@@ -12,13 +12,13 @@
     {
       "name": "money",
       "entries": ["src/billing/"],
-      "classes": ["arithmetic"],
+      "classes": ["money"],
       "model_tier": "opus"
     },
     {
       "name": "invoicing",
       "entries": ["src/billing/invoice.py"],
-      "classes": ["state-machine"],
+      "classes": ["state"],
       "model_tier": "sonnet"
     }
   ],

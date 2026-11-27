@@ -14,18 +14,26 @@ to it shares one matcher.
 
     match-triggers.py rows [--only 1,2,4] [--table PATH] < diff
     match-triggers.py lines [--only 1,2,4] [--table PATH] < diff
+    match-triggers.py derive <merge_base_sha> --exclude PATH [--depth 0|1|2]
+                             [--table PATH]
 
 `rows` prints `<n> <name>` once per matched row. `lines` prints the evidence
 behind it, one `<n> <name>\t<path>\t<signal>\t<sign><body>` line per matched
-row per changed line, for a caller that has to read each match (#120).
+row per changed line, for a caller that has to read each match (#120). `derive`, run from the
+repo's work tree, prints the `changed_files`, `depth`, `territories`, and
+`derivation` fields of adversarial-review's scope.json as one JSON object
+(#406): Step 2's territories, computed once instead of by hand each run.
 
 Exit codes: 0 with matches printed (possibly none), 1 on a table it can't
 parse, 3 on usage or unreadable input—the convention check-territories.py
 sets in this same directory.
 """
 import argparse
+import importlib.util
+import json
 import os
 import re
+import subprocess
 import sys
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -52,6 +60,7 @@ HUNK_RE = re.compile(r"^@@ -\d+(?:,(\d+))? \+\d+(?:,(\d+))? @@")
 ANSI_CSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
 HEADER_RE = re.compile(r"^\|\s*#\s*\|\s*Row\s*\|", re.IGNORECASE)
+TIER_HEADING_RE = re.compile(r"^##\s+Model tier\s*$", re.IGNORECASE)
 SEPARATOR_RE = re.compile(r"^\|[\s:-]+\|")
 BACKTICK_RE = re.compile(r"`([^`]+)`")
 
@@ -300,6 +309,198 @@ def cmd_lines(args):
     return 0
 
 
+# Roster cap per depth, from the trigger table's "Cap the roster" step.
+DEPTH_CAPS = {0: 2, 1: 4, 2: 6}
+# Rows 1 to 3 are the high-stakes rows (#406, settled answer 2): the rows the
+# tier table puts on opus and that Depth 2 "raises".
+HIGH_STAKES_NUMBERS = {1, 2, 3}
+# Depth 2's file-count trigger fires on more than this many changed files
+# after exclusions (#406, settled answer 1).
+DEPTH2_FILE_COUNT = 40
+
+
+def parse_tiers(text):
+    """{class name: base tier} from the first table under `## Model tier`.
+    Each first cell lists row names separated by commas; `general alone`
+    means the name `general`. Raises TableError if the section or its table
+    is missing, since `derive` has no other source for a tier."""
+    lines = text.splitlines()
+    start = next(
+        (i for i, line in enumerate(lines) if TIER_HEADING_RE.match(line)), None
+    )
+    if start is None:
+        raise TableError("no '## Model tier' section found")
+    table = []
+    for line in lines[start + 1 :]:
+        if line.startswith("## "):
+            break
+        if line.strip().startswith("|"):
+            table.append(line.strip())
+        elif table:
+            break
+    if len(table) < 3 or not SEPARATOR_RE.match(table[1]):
+        raise TableError("'## Model tier' has no header, separator, and rows")
+    tiers = {}
+    for line in table[2:]:
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        if len(cells) < 2 or not cells[1]:
+            raise TableError(f"tier row has no tier: {line!r}")
+        for name in cells[0].split(","):
+            name = re.sub(r"\s+alone$", "", name.strip())
+            if name:
+                tiers[name] = cells[1]
+    return tiers
+
+
+def load_check_territories():
+    """check-territories.py, loaded as a module so `derive` excludes exactly
+    what `intersect --exclude` does. Its hyphenated name rules out a plain
+    import, and it runs main() only under __main__, so loading it is inert."""
+    path = os.path.join(SCRIPT_DIR, "check-territories.py")
+    spec = importlib.util.spec_from_file_location("check_territories", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _git(argv):
+    """git's stdout, or raise OSError carrying git's stderr."""
+    try:
+        proc = subprocess.run(
+            ["git", "-c", "core.quotePath=false", "--literal-pathspecs"] + argv,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+    except OSError as e:
+        raise OSError(f"git: {e}")
+    if proc.returncode != 0:
+        raise OSError(proc.stderr.strip() or f"git exited {proc.returncode}")
+    return proc.stdout
+
+
+def derive_scope(rows, tiers, changed_files, file_diffs, depth_override):
+    """The four scope.json fields as a dict. `file_diffs` maps each changed
+    file to its own `git diff <sha>..HEAD -- <file>` text."""
+    general = next((r for r in rows if r["name"] == "general"), None)
+    if general is None:
+        raise TableError("no 'general' row found")
+    number = {r["name"]: r["number"] for r in rows}
+    missing = [r["name"] for r in rows if r["name"] not in tiers]
+    if missing:
+        raise TableError(f"no model tier for row(s): {', '.join(missing)}")
+
+    derivation = []
+    for path in changed_files:
+        hits = [r for r in matched_rows(rows, diff_content_lines(file_diffs[path]))
+                if r is not general]
+        derivation.append({
+            "file": path,
+            "matched_rows": [r["name"] for r in hits] + ["general"],
+            # First match in table order is the whole determinism mechanism
+            # (ledger row 21); match count never enters into it.
+            "territory": hits[0]["name"] if hits else "general",
+        })
+
+    hit_numbers = {number[m] for rec in derivation for m in rec["matched_rows"]}
+    if depth_override is not None:
+        depth = depth_override
+    elif hit_numbers <= {general["number"]}:
+        # Read top-down, Depth 0's row wins over Depth 2's file count: a big
+        # diff with nothing above general has nothing to suspect.
+        depth = 0
+    elif (len(changed_files) > DEPTH2_FILE_COUNT
+          or HIGH_STAKES_NUMBERS <= hit_numbers):
+        depth = 2
+    else:
+        depth = 1
+
+    owners = {}
+    for rec in derivation:
+        owners.setdefault(rec["territory"], []).append(rec)
+    roster = [{"name": name, "files": recs}
+              for name, recs in sorted(owners.items(), key=lambda kv: number[kv[0]])]
+    # Over the cap, the highest-numbered territory merges into the one just
+    # below it (#406, settled answer 3). The survivor keeps its name.
+    while len(roster) > DEPTH_CAPS[depth]:
+        last = roster.pop()
+        roster[-1]["files"].extend(last["files"])
+
+    order = {path: i for i, path in enumerate(changed_files)}
+    territories = []
+    for t in roster:
+        files = sorted(t["files"], key=lambda rec: order[rec["file"]])
+        for rec in files:
+            rec["territory"] = t["name"]
+        classes = sorted({m for rec in files for m in rec["matched_rows"]},
+                         key=lambda name: number[name])
+        tier = tiers[classes[0]]
+        if depth == 0 and tier == "opus":
+            tier = "sonnet"
+        elif depth == 2 and number[classes[0]] in HIGH_STAKES_NUMBERS:
+            tier = "opus"
+        territories.append({
+            "name": t["name"],
+            "entries": [rec["file"] for rec in files],
+            "classes": classes,
+            "model_tier": tier,
+        })
+
+    return {
+        "changed_files": changed_files,
+        "depth": depth,
+        "territories": territories,
+        "derivation": derivation,
+    }
+
+
+def cmd_derive(args):
+    try:
+        with open(args.table, encoding="utf-8") as f:
+            table_text = f.read()
+    except OSError as e:
+        sys.stderr.write(f"match-triggers: {args.table}: {e}\n")
+        return 3
+    try:
+        rows = parse_table(table_text)
+        tiers = parse_tiers(table_text)
+    except TableError as e:
+        sys.stderr.write(f"match-triggers: {args.table}: {e}\n")
+        return 1
+
+    # Step 1 always writes excluded.txt, so a missing one at Step 2 is a wrong
+    # path. Read as empty, as `intersect` reads it, it would let dist/ in.
+    if not os.path.isfile(args.exclude):
+        sys.stderr.write(f"match-triggers: --exclude: no such file: "
+                         f"{args.exclude}\n")
+        return 3
+    ct = load_check_territories()
+    excludes = ct.load_excludes(args.exclude)
+
+    sha = args.merge_base_sha
+    try:
+        names = _git(["diff", "--name-only", f"{sha}..HEAD"]).splitlines()
+        changed_files = [p for p in names if p and not ct.is_excluded(p, excludes)]
+        # One diff per file, so each file's rows are exactly what
+        # `git diff <sha>..HEAD -- <file> | match-triggers.py rows` prints.
+        file_diffs = {
+            p: _git(["diff", "--no-color", "--no-ext-diff", f"{sha}..HEAD", "--", p])
+            for p in changed_files
+        }
+    except OSError as e:
+        sys.stderr.write(f"match-triggers: {e}\n")
+        return 3
+
+    try:
+        scope = derive_scope(rows, tiers, changed_files, file_diffs, args.depth)
+    except TableError as e:
+        sys.stderr.write(f"match-triggers: {args.table}: {e}\n")
+        return 1
+    print(json.dumps(scope, indent=2))
+    return 0
+
+
 class _Parser(argparse.ArgumentParser):
     # argparse exits 2 on a usage error, and the validator convention says 3.
     # add_subparsers builds each subparser from type(self), so `rows --bogus`
@@ -335,6 +536,19 @@ def parse_args(argv=None):
             help=f"trigger table to read (default: {DEFAULT_TABLE_PATH})",
         )
         cmd.set_defaults(func=func)
+
+    # Outside the loop so it takes no --only: a narrowed table would move
+    # files to a different owner.
+    derive = sub.add_parser(
+        "derive", help="print scope.json's territories for <sha>..HEAD")
+    derive.add_argument("merge_base_sha")
+    derive.add_argument("--exclude", required=True, metavar="PATH",
+                        help="Step 1's excluded.txt; must exist")
+    derive.add_argument("--depth", type=int, choices=(0, 1, 2),
+                        help="pin the depth (--fast is 0, --deep is 2)")
+    derive.add_argument("--table", metavar="PATH", default=DEFAULT_TABLE_PATH,
+                        help=f"trigger table to read (default: {DEFAULT_TABLE_PATH})")
+    derive.set_defaults(func=cmd_derive)
 
     return ap.parse_args(argv)
 

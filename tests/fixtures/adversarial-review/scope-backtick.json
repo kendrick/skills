@@ -12,7 +12,7 @@
     {
       "name": "money",
       "entries": ["`src/billing/invoice.py`"],
-      "classes": ["arithmetic"],
+      "classes": ["money"],
       "model_tier": "opus"
     }
   ],

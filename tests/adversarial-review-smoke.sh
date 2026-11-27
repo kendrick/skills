@@ -1686,4 +1686,336 @@ ar_case_derivation_wrong_owner
 ar_case_derivation_renamed_territory
 ar_case_derivation_docs
 
+# match-triggers.py derive (#406). Every case builds its own throwaway repo
+# under $tmp and runs derive there, never against this checkout, whose diff
+# moves under every commit. Expected values come from the requirement or from
+# another consumer (`rows`, `validate`), never from derive's own logic.
+ar_git() {
+  git -c user.name=smoke -c user.email=smoke@example.invalid -c commit.gpgsign=false "$@"
+}
+
+# Fresh repo at $1 with an empty base commit; prints the base SHA.
+ar_derive_repo() {
+  rm -rf "$1"
+  mkdir -p "$1"
+  (cd "$1" && git init -q && ar_git commit -q --allow-empty -m base && git rev-parse HEAD)
+}
+
+# Writes `path<TAB>line` pairs from stdin as files in repo $1, then commits.
+ar_derive_commit() {
+  local repo="$1" path line
+  while IFS=$'\t' read -r path line; do
+    mkdir -p "$repo/$(dirname "$path")"
+    printf '%s\n' "$line" >>"$repo/$path"
+  done
+  # -f: a global excludesfile that ignores dist/ would keep the excluded-file
+  # fixture out of the diff, and the exclusion case would pass on nothing.
+  (cd "$repo" && git add -A -f && ar_git commit -q -m change)
+}
+
+# Runs derive in repo $1 with the remaining args; sets AR_OUT and AR_STATUS.
+ar_derive() {
+  local repo="$1"
+  shift
+  AR_STATUS=0
+  AR_OUT="$(cd "$repo" && python3 "$repo_root/$match_py" derive "$@" 2>"$tmp/derive-err")" || AR_STATUS=$?
+}
+
+# Runs a python check over AR_OUT (as `scope`); its argv follows the code.
+ar_derive_assert() {
+  local label="$1" code="$2"
+  shift 2
+  printf '%s' "$AR_OUT" | python3 -c "import json, sys
+scope = json.load(sys.stdin)
+args = sys.argv[1:]
+$code" "$@" || {
+    echo "derive: $label" >&2
+    printf '%s\n' "$AR_OUT" >&2
+    exit 1
+  }
+}
+
+ar_derive_ok() {
+  ar_derive "$@"
+  [[ "$AR_STATUS" == 0 ]] || {
+    echo "derive $* must exit 0, got $AR_STATUS: $(cat "$tmp/derive-err")" >&2
+    exit 1
+  }
+}
+
+# The main fixture: one file per kind, a test file, and an excluded dist/ file
+# carrying a money signal so its exclusion is visible in every field.
+ar_derive_main_repo() {
+  ar_main="$tmp/derive-main"
+  ar_main_base="$(ar_derive_repo "$ar_main")"
+  printf '%s\n' \
+    $'src/billing/invoice.py\ttotal = round(amount, 2)' \
+    $'src/billing/invoice.py\tif user_id == owner: pass' \
+    $'src/api/tenancy.py\tq = db.query(tenant)' \
+    $'src/jobs/runner.py\tsentinel = None' \
+    $'docs/notes.md\thello' \
+    $'tests/test_invoice.py\tassert invoice' \
+    $'dist/app.js\tvar cents = 1' | ar_derive_commit "$ar_main"
+  (cd "$ar_main" && git diff --name-only "$ar_main_base..HEAD") | grep -qx 'dist/app.js' || {
+    echo "the derive fixture must commit dist/app.js for its exclusion to mean anything" >&2
+    exit 1
+  }
+  ar_main_ex="$tmp/derive-main-excluded.txt"
+  printf 'dist/\n' >"$ar_main_ex"
+}
+
+ar_case_derive_matched_rows() {
+  ar_derive_main_repo
+  ar_derive_ok "$ar_main" "$ar_main_base" --exclude "$ar_main_ex"
+  # Expected rows per file from the `rows` subcommand on that file's own diff.
+  local f want="{}"
+  want="$(cd "$ar_main" && for f in $(git diff --name-only "$ar_main_base..HEAD" | grep -v '^dist/'); do
+    printf '%s\t%s\n' "$f" "$(git diff "$ar_main_base..HEAD" -- "$f" | python3 "$repo_root/$match_py" rows | cut -d' ' -f2 | tr '\n' ' ')general"
+  done)"
+  ar_derive_assert "each changed file must appear once in derivation with rows' rows plus general" '
+want = dict(l.split("\t") for l in args[0].splitlines())
+files = [r["file"] for r in scope["derivation"]]
+assert sorted(files) == sorted(want) and len(files) == len(set(files)), files
+assert scope["changed_files"] == files, scope["changed_files"]
+for r in scope["derivation"]:
+    assert r["matched_rows"] == want[r["file"]].split(), (r, want[r["file"]])
+assert want["src/billing/invoice.py"].split() != ["general"], "fixture must match rows"
+' "$want"
+  ar_derive_assert "dist/ must be absent from every field" '
+assert "dist/app.js" not in json.dumps(scope), "dist/app.js leaked"
+'
+}
+
+ar_case_derive_classes_union() {
+  ar_derive_main_repo
+  local depth
+  for depth in "" 0; do
+    ar_derive_ok "$ar_main" "$ar_main_base" --exclude "$ar_main_ex" ${depth:+--depth "$depth"}
+    ar_derive_assert "classes must be the union of member matched_rows (depth '${depth:-auto}')" '
+recs = {r["file"]: r for r in scope["derivation"]}
+for t in scope["territories"]:
+    union = {m for f in t["entries"] for m in recs[f]["matched_rows"]}
+    assert set(t["classes"]) == union and len(t["classes"]) == len(union), t
+    for f in t["entries"]:
+        assert recs[f]["territory"] == t["name"], (f, t["name"])
+owned = [f for t in scope["territories"] for f in t["entries"]]
+assert sorted(owned) == sorted(scope["changed_files"]), owned
+'
+  done
+}
+
+ar_case_derive_deterministic() {
+  ar_derive_main_repo
+  ar_derive_ok "$ar_main" "$ar_main_base" --exclude "$ar_main_ex"
+  local first="$AR_OUT"
+  ar_derive_ok "$ar_main" "$ar_main_base" --exclude "$ar_main_ex"
+  [[ "$AR_OUT" == "$first" ]] || {
+    echo "two derive runs on one diff must print identical bytes" >&2
+    exit 1
+  }
+}
+
+# The consumer is validate: derive's four fields merged over a real contract.
+ar_case_derive_validates() {
+  ar_derive_main_repo
+  local depth
+  for depth in "" 0 1; do
+    ar_derive_ok "$ar_main" "$ar_main_base" --exclude "$ar_main_ex" ${depth:+--depth "$depth"}
+    printf '%s' "$AR_OUT" | python3 -c '
+import json, sys
+s = json.load(open(sys.argv[1]))
+s.update(json.load(sys.stdin))
+s["rounds"][0]["territories"] = [t["name"] for t in s["territories"]]
+json.dump(s, open(sys.argv[2], "w"))
+' "$fixtures/scope-good.json" "$tmp/derive-merged.json"
+    python3 "$territories" validate "$tmp/derive-merged.json" >/dev/null || {
+      echo "derive's fields merged into scope-good.json must pass validate (depth '${depth:-auto}')" >&2
+      exit 1
+    }
+  done
+}
+
+# The Rule and its two falsifiers from #406: ownership keys on table order,
+# never on match count.
+ar_case_derive_first_match() {
+  local d="$tmp/derive-falsify" base ex="$tmp/derive-empty.txt" swapped="$tmp/derive-swapped-table.md"
+  : >"$ex"
+  base="$(ar_derive_repo "$d")"
+  printf '%s\n' $'src/mixed.py\tcents = 1' $'src/mixed.py\ttenant = 1' | ar_derive_commit "$d"
+  ar_derive_ok "$d" "$base" --exclude "$ex"
+  ar_derive_assert "a money+authz file must land in money" '
+assert scope["derivation"][0]["territory"] == "money", scope["derivation"]
+'
+  # Swap rows 1 and 2's names and signals, keeping the numbers in order.
+  python3 - adversarial-review/references/trigger-table.md "$swapped" <<'PY'
+import sys
+lines = open(sys.argv[1]).read().split("\n")
+i = next(n for n, l in enumerate(lines) if l.startswith("| 1 | money |"))
+assert lines[i + 1].startswith("| 2 | authz |")
+a, b = lines[i].split("|", 2), lines[i + 1].split("|", 2)
+lines[i], lines[i + 1] = "|".join(a[:2] + [b[2]]), "|".join(b[:2] + [a[2]])
+open(sys.argv[2], "w").write("\n".join(lines))
+PY
+  grep -Fq '| 1 | authz |' "$swapped" || {
+    echo "the swapped table must put authz first" >&2
+    exit 1
+  }
+  ar_derive_ok "$d" "$base" --exclude "$ex" --table "$swapped"
+  ar_derive_assert "swapping money and authz must move the file to authz" '
+assert scope["derivation"][0]["territory"] == "authz", scope["derivation"]
+'
+  printf '%s\n' $'src/mixed.py\tuser_id = org_id' $'src/mixed.py\tis_admin = role' | ar_derive_commit "$d"
+  local authz_hits money_hits
+  authz_hits="$(cd "$d" && git diff "$base..HEAD" -- src/mixed.py | python3 "$repo_root/$match_py" lines --only 2 | wc -l)"
+  money_hits="$(cd "$d" && git diff "$base..HEAD" -- src/mixed.py | python3 "$repo_root/$match_py" lines --only 1 | wc -l)"
+  (( authz_hits > money_hits )) || {
+    echo "the count falsifier needs more authz hits than money hits, got $authz_hits vs $money_hits" >&2
+    exit 1
+  }
+  ar_derive_ok "$d" "$base" --exclude "$ex"
+  ar_derive_assert "more authz hits than money hits must leave the file in money" '
+assert scope["derivation"][0]["territory"] == "money", scope["derivation"]
+'
+}
+
+# Depth 0 caps at 2: general (row 7) merges into authz (row 2), the next-lower
+# survivor, and the tiers stay at or below sonnet.
+ar_case_derive_cap_depth0() {
+  local d="$tmp/derive-cap0" base ex="$tmp/derive-empty.txt"
+  : >"$ex"
+  base="$(ar_derive_repo "$d")"
+  printf '%s\n' $'a/money.py\tcents = 1' $'b/authz.py\ttenant = 1' $'c/plain.md\thello' | ar_derive_commit "$d"
+  ar_derive_ok "$d" "$base" --exclude "$ex" --depth 0
+  ar_derive_assert "Depth 0 must cap money/authz/general at money and authz, general's file in authz" '
+t = {x["name"]: x for x in scope["territories"]}
+assert [x["name"] for x in scope["territories"]] == ["money", "authz"], list(t)
+assert t["money"]["entries"] == ["a/money.py"], t["money"]
+assert t["authz"]["entries"] == ["b/authz.py", "c/plain.md"], t["authz"]
+assert {r["file"]: r["territory"] for r in scope["derivation"]}["c/plain.md"] == "authz"
+assert scope["depth"] == 0
+assert all(x["model_tier"] in ("haiku", "sonnet") for x in t.values()), t
+'
+}
+
+# Depth 1 (two high-stakes rows, six files) caps six territories at four:
+# general merges into representation, then representation into budget.
+ar_case_derive_cap_depth1() {
+  local d="$tmp/derive-cap1" base ex="$tmp/derive-empty.txt"
+  : >"$ex"
+  base="$(ar_derive_repo "$d")"
+  printf '%s\n' $'a.py\tcents = 1' $'b.py\ttenant = 1' $'c.py\tbackfill = 1' \
+    $'d.py\tquota = 1' $'e.py\topacity = 1' $'f.md\thello' | ar_derive_commit "$d"
+  ar_derive_ok "$d" "$base" --exclude "$ex"
+  ar_derive_assert "six territories at Depth 1 must merge down to four by highest row number" '
+assert scope["depth"] == 1, scope["depth"]
+t = [(x["name"], x["entries"]) for x in scope["territories"]]
+assert t == [("money", ["a.py"]), ("authz", ["b.py"]), ("schema", ["c.py"]),
+             ("budget", ["d.py", "e.py", "f.md"])], t
+budget = scope["territories"][3]
+assert budget["classes"] == ["budget", "representation", "general"], budget
+assert budget["model_tier"] == "sonnet", budget
+'
+}
+
+ar_case_derive_tiers() {
+  local d="$tmp/derive-tiers" base ex="$tmp/derive-empty.txt" depth
+  : >"$ex"
+  base="$(ar_derive_repo "$d")"
+  printf '%s\n' $'docs/a.md\thello' $'docs/b.md\tworld' | ar_derive_commit "$d"
+  for depth in 1 2; do
+    ar_derive_ok "$d" "$base" --exclude "$ex" --depth "$depth"
+    ar_derive_assert "a general-only territory must get haiku at Depth $depth" '
+assert [(x["classes"], x["model_tier"]) for x in scope["territories"]] == [(["general"], "haiku")]
+'
+  done
+  ar_derive_main_repo
+  ar_derive_ok "$ar_main" "$ar_main_base" --exclude "$ar_main_ex"
+  ar_derive_assert "money, authz, and state territories must be opus above Depth 0" '
+t = {x["name"]: x["model_tier"] for x in scope["territories"]}
+assert t["money"] == t["authz"] == t["state"] == "opus", t
+'
+  ar_derive_ok "$ar_main" "$ar_main_base" --exclude "$ar_main_ex" --depth 0
+  ar_derive_assert "no territory may exceed sonnet at Depth 0" '
+assert {x["model_tier"] for x in scope["territories"]} <= {"haiku", "sonnet"}, scope["territories"]
+'
+}
+
+# Builds a repo of $2 files, the first carrying line $3 and the rest plain.
+ar_derive_count_repo() {
+  local d="$1" n="$2" first="$3" i
+  ar_count_base="$(ar_derive_repo "$d")"
+  {
+    printf 'f/0.py\t%s\n' "$first"
+    for ((i = 1; i < n; i++)); do printf 'f/%d.md\thello\n' "$i"; done
+  } | ar_derive_commit "$d"
+}
+
+ar_expect_depth() {
+  local label="$1" want="$2" d="$3"
+  shift 3
+  ar_derive_ok "$d" "$@"
+  ar_derive_assert "$label must derive Depth $want" 'assert scope["depth"] == int(args[0]), scope["depth"]' "$want"
+}
+
+ar_case_derive_depth_boundaries() {
+  local ex="$tmp/derive-empty.txt"
+  : >"$ex"
+  ar_derive_count_repo "$tmp/derive-40" 40 "opacity = 1"
+  ar_expect_depth "40 files" 1 "$tmp/derive-40" "$ar_count_base" --exclude "$ex"
+  ar_derive_count_repo "$tmp/derive-41" 41 "opacity = 1"
+  ar_expect_depth "41 files" 2 "$tmp/derive-41" "$ar_count_base" --exclude "$ex"
+  # Read top-down, Depth 0's row fires before Depth 2's file count.
+  ar_derive_count_repo "$tmp/derive-41-general" 41 "hello"
+  ar_expect_depth "41 general-only files" 0 "$tmp/derive-41-general" "$ar_count_base" --exclude "$ex"
+  local d="$tmp/derive-stakes" base
+  base="$(ar_derive_repo "$d")"
+  printf '%s\n' $'a.py\tcents = 1' $'b.py\ttenant = 1' | ar_derive_commit "$d"
+  ar_expect_depth "two high-stakes rows" 1 "$d" "$base" --exclude "$ex"
+  printf '%s\n' $'c.py\tsentinel = 1' | ar_derive_commit "$d"
+  ar_expect_depth "three high-stakes rows" 2 "$d" "$base" --exclude "$ex"
+}
+
+ar_expect_derive_exit() {
+  local label="$1" want="$2"
+  shift 2
+  ar_derive "$@"
+  [[ "$AR_STATUS" == "$want" && -z "$AR_OUT" ]] || {
+    echo "derive on $label must exit $want with no stdout, got $AR_STATUS: $AR_OUT $(cat "$tmp/derive-err")" >&2
+    exit 1
+  }
+}
+
+ar_case_derive_exit_codes() {
+  ar_derive_main_repo
+  local no_header="$tmp/derive-no-header.md" no_tiers="$tmp/derive-no-tiers.md"
+  grep -v '^| # | Row |' adversarial-review/references/trigger-table.md >"$no_header"
+  sed '/^## Model tier/,/^## Adding a row/d' adversarial-review/references/trigger-table.md >"$no_tiers"
+  ! grep -q '^| # | Row |' "$no_header" || {
+    echo "the no-header table must have lost its row header" >&2
+    exit 1
+  }
+  refute_text "$no_tiers" "| general alone | haiku |"
+  ar_expect_derive_exit "a table with no row header" 1 "$ar_main" "$ar_main_base" --exclude "$ar_main_ex" --table "$no_header"
+  ar_expect_derive_exit "a table with no tier table" 1 "$ar_main" "$ar_main_base" --exclude "$ar_main_ex" --table "$no_tiers"
+  ar_expect_derive_exit "a bad SHA" 3 "$ar_main" 0000000000000000000000000000000000000000 --exclude "$ar_main_ex"
+  ar_expect_derive_exit "a missing --exclude file" 3 "$ar_main" "$ar_main_base" --exclude "$tmp/derive-no-such.txt"
+  grep -Fq "derive-no-such.txt" "$tmp/derive-err" || {
+    echo "a missing --exclude file must be named on stderr" >&2
+    exit 1
+  }
+  ar_expect_derive_exit "--depth 3" 3 "$ar_main" "$ar_main_base" --exclude "$ar_main_ex" --depth 3
+  ar_expect_derive_exit "--only" 3 "$ar_main" "$ar_main_base" --exclude "$ar_main_ex" --only 1
+}
+
+ar_case_derive_matched_rows
+ar_case_derive_classes_union
+ar_case_derive_deterministic
+ar_case_derive_validates
+ar_case_derive_first_match
+ar_case_derive_cap_depth0
+ar_case_derive_cap_depth1
+ar_case_derive_tiers
+ar_case_derive_depth_boundaries
+ar_case_derive_exit_codes
+
 echo "adversarial-review smoke: OK"
