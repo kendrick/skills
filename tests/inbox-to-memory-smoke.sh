@@ -3565,6 +3565,7 @@ require_text "$fc" 'def changed_since(folder: Path, pattern: str, since: int | N
 # A drifted scope name reads as an unregistered collection and says nothing else.
 require_text "$fc" 're.sub(r"[^a-z0-9]+", "-", root.name.lower()).strip("-")'
 require_text memory-index/scripts/memory-index.py 're.sub(r"[^a-z0-9]+", "-", root.name.lower()).strip("-")'
+require_text inbox-to-memory/scripts/new-record.sh 're.sub(r"[^a-z0-9]+", "-", root.name.lower()).strip("-")'
 
 # Each cut has a Deliberately Not Built row in _maintenance/inbox-to-memory/RATIONALE.md.
 refute_text "$fc" '--budget'
@@ -3669,7 +3670,13 @@ lm_fill() {
     -e "s/{{note-id}}/Lm0BilRev0/" -e "s/^applies_to: \[\]/applies_to: [topic:billing]/" \
     "inbox-to-memory/assets/records/$1.template.md"
 }
-require_text inbox-to-memory/SKILL.md "Before the first record lands in a scope whose root has no \`memory-bank.yaml\`, write one from [assets/memory-bank.template.yaml]"
+# Phase 5 hands the nanoid, folder, bank, and placeholder steps to the script.
+awk '/^### Phase 5 /{f=1;next} /^### /{f=0} f' inbox-to-memory/SKILL.md >"$lm_dir/phase5-text.md"
+[[ -s "$lm_dir/phase5-text.md" ]] || {
+  echo "could not cut phase 5 out of inbox-to-memory/SKILL.md" >&2
+  exit 1
+}
+require_text "$lm_dir/phase5-text.md" 'scripts/new-record.sh'
 lm_p5="$lm_dir/phase5"
 mkdir -p "$lm_p5"
 cp -R "$lm_fixture/." "$lm_p5/"
@@ -5080,5 +5087,448 @@ out="$(bash "$ds" dispose "$s" _inbox/deck.pdf --note "$ds_note" 2>/dev/null)" |
   ds_fail "SKILL.md phase 4 still carries the hand check"
 rm -rf "$ds_tmp"
 [[ "$ds_bad" == 0 ]] || exit 1
+
+# ---------------------------------------------------------------------------
+# new-record.sh: phase 5 builds a record, and the bank it needs, in one call (#411)
+# ---------------------------------------------------------------------------
+
+# Every assertion reads what a consumer produced: the exit code, the printed
+# path, the files on disk, and yq on the bank and the frontmatter. Stderr wording
+# is not pinned. A pin that only grepped the script's own text would pass with the
+# folder logic broken, so the behavior is exercised against real scratch scopes.
+nr=inbox-to-memory/scripts/new-record.sh
+require_file "$nr"
+[[ -x "$nr" ]] || {
+  echo "$nr must be executable" >&2
+  exit 1
+}
+bash -n "$nr" || {
+  echo "$nr does not parse" >&2
+  exit 1
+}
+# grep on a missing file exits 2, which refute_text reads as "absent", so the
+# require_file above has to come first or this refute passes with no script.
+# `ltm propose` pushes a branch, which breaks "Stage, never auto-commit".
+refute_text "$nr" "ltm propose"
+
+nr_tmp="$(mktemp -d "${TMPDIR:-/tmp}/i2m-newrec.XXXXXX")"
+nr_today="$(date +%F)"
+nr_bad=0
+nr_fail() {
+  echo "new-record.sh: $1" >&2
+  nr_bad=1
+}
+
+# nanoid hands out ids from a list, one per call. `Nr0-Hyph01` carries a hyphen
+# so a basename check can't pass by splitting on the last hyphen.
+mkdir -p "$nr_tmp/bin"
+cat >"$nr_tmp/bin/nanoid" <<'SHIM'
+#!/usr/bin/env bash
+id="$(head -n1 "$NR_IDS")"
+sed '1d' "$NR_IDS" >"$NR_IDS.next"
+mv "$NR_IDS.next" "$NR_IDS"
+printf '%s\n' "$id"
+SHIM
+chmod +x "$nr_tmp/bin/nanoid"
+nr_ids() {
+  printf '%s\n' "$@" >"$nr_tmp/ids"
+}
+
+# Sets nr_rc and nr_out (stdout only).
+nr_call() {
+  nr_rc=0
+  nr_out="$(PATH="$nr_tmp/bin:$PATH" NR_IDS="$nr_tmp/ids" bash "$nr" "$@" 2>/dev/null)" || nr_rc=$?
+}
+
+# nr_scope <dir> <lightweight|canonical|none>: an opted-in scope with a queue,
+# a _memory/, and the CLAUDE.md mode line (or none).
+nr_scope() {
+  mkdir -p "$1/_inbox" "$1/_memory"
+  case "$2" in
+    lightweight) printf '# Scope\n\n> **Memory mode:** lightweight (Decision, Context, PolicyRule).\n' >"$1/CLAUDE.md" ;;
+    canonical) printf '# Scope\n\n> **Memory mode:** canonical (Decision, Context, PolicyRule, Exception).\n' >"$1/CLAUDE.md" ;;
+    *) printf '# Scope\n' >"$1/CLAUDE.md" ;;
+  esac
+}
+nr_jscope() {
+  mkdir -p "$1/_inbox" "$1/entries"
+}
+
+nr_front() { # file key
+  yq --front-matter=extract ".$2" "$1"
+}
+
+# A refusal writes nothing: no file, no directory, and no changed byte.
+# nr_refuse <label> <scope> <call args...>
+nr_refuse() {
+  local label="$1" scope="$2" before_f before_d before_c
+  shift 2
+  # Reseed so a refusal can't pass by running the shim dry; the id cases set their own.
+  [[ -n "${nr_keep_ids:-}" ]] || nr_ids Nr4Refus01
+  before_f="$(find "$scope" -type f | sort)"
+  before_d="$(find "$scope" | sort)"
+  before_c="$(find "$scope" -type f -exec cksum {} + | sort)"
+  nr_call "$scope" "$@"
+  [[ "$nr_rc" -ne 0 ]] || nr_fail "$label: exited 0"
+  [[ -z "$nr_out" ]] || nr_fail "$label: printed '$nr_out' on a refusal"
+  [[ "$(find "$scope" -type f | sort)" == "$before_f" ]] || nr_fail "$label: the file listing changed"
+  [[ "$(find "$scope" | sort)" == "$before_d" ]] || nr_fail "$label: a directory appeared"
+  [[ "$(find "$scope" -type f -exec cksum {} + | sort)" == "$before_c" ]] || nr_fail "$label: a file's bytes changed"
+}
+
+# The four placeholders the script owns never survive into a record.
+nr_no_placeholders() {
+  local f="$1" p
+  for p in '{{nanoid}}' '{{YYYY-MM-DD}}' '{{note-id}}' '{{proposed | accepted}}' '{{scope path from vault root}}'; do
+    (refute_text "$f" "$p") 2>/dev/null || nr_fail "$f still holds $p"
+  done
+}
+
+# The agent fills the title and body, so the lint runs on that state. Same
+# `failures:` line before and after means the call introduced nothing.
+nr_lint_unchanged() { # label scope before-line file
+  local label="$1" scope="$2" before="$3" f="$4" after
+  sed -e "s/{{[^}]*[Tt]itle[^}]*}}/Crystallized record/" -e "s/{{Pattern[^}]*}}/Crystallized pattern/" -e "s/{{body}}/Body text./" "$f" >"$nr_tmp/filled"
+  cat "$nr_tmp/filled" >"$f"
+  after="$(run_lint "$scope" | grep -E '^failures: ')"
+  [[ "$after" == "$before" ]] || {
+    nr_fail "$label: lint went from '$before' to '$after'"
+    run_lint "$scope" >&2
+  }
+}
+
+# --- Acceptance: lightweight scope, no bank --------------------------------
+nr_l="$nr_tmp/s/billing-ops"
+nr_scope "$nr_l" lightweight
+nr_lint_before="$(run_lint "$nr_l" | grep -E '^failures: ')"
+nr_ids Nr0-Hyph01 Nr0Secon02 Nr0Third03
+nr_call "$nr_l" --type PolicyRule --slug cap-retries --note Nr0Note001 --status accepted
+[[ "$nr_rc" == 0 ]] || nr_fail "lightweight PolicyRule exited $nr_rc"
+[[ "$nr_out" == "_memory/rules/cap-retries-Nr0-Hyph01.md" ]] || nr_fail "lightweight PolicyRule printed '$nr_out'"
+nr_rec="$nr_l/$nr_out"
+[[ -f "$nr_rec" ]] || nr_fail "lightweight PolicyRule wrote no record at $nr_out"
+[[ -f "$nr_l/memory-bank.yaml" ]] || nr_fail "no memory-bank.yaml written beside the first record"
+[[ "$(yq -o=json -I=0 '.folders' "$nr_l/memory-bank.yaml")" == '{"PolicyRule":"_memory/rules"}' ]] ||
+  nr_fail "lightweight bank folders is not {PolicyRule: _memory/rules}"
+[[ "$(yq '.name' "$nr_l/memory-bank.yaml")" == "billing-ops" ]] || nr_fail "bank name is not the scope directory's name"
+[[ "$(yq '.schema' "$nr_l/memory-bank.yaml")" == 1 ]] || nr_fail "bank schema is not 1"
+refute_text "$nr_l/memory-bank.yaml" '{{SCOPE_NAME}}'
+[[ "$(find "$nr_l" -type f | sort)" == "$(printf '%s\n' "$nr_l/CLAUDE.md" "$nr_l/memory-bank.yaml" "$nr_rec" | sort)" ]] ||
+  nr_fail "lightweight call wrote other than the bank and the record"
+nr_id="$(nr_front "$nr_rec" id)"
+[[ "$nr_id" == "Nr0-Hyph01" ]] || nr_fail "record id is '$nr_id', not the nanoid output"
+[[ "$nr_id" =~ ^[A-Za-z0-9_-]{10}$ ]] || nr_fail "record id '$nr_id' is not ten nanoid characters"
+[[ "$(basename "$nr_rec")" == *"-$nr_id.md" ]] || nr_fail "basename does not end in -<id>.md"
+[[ "$(nr_front "$nr_rec" memory_type)" == PolicyRule ]] || nr_fail "memory_type is not PolicyRule"
+[[ "$(nr_front "$nr_rec" status)" == accepted ]] || nr_fail "status is not accepted"
+[[ "$(nr_front "$nr_rec" date)" == "$nr_today" ]] || nr_fail "date is not today"
+[[ "$(nr_front "$nr_rec" last_confirmed)" == "$nr_today" ]] || nr_fail "last_confirmed is not today"
+[[ "$(nr_front "$nr_rec" 'source_refs[0]')" == Nr0Note001 ]] || nr_fail "source_refs does not hold the note id"
+[[ "$(nr_front "$nr_rec" 'source_refs | length')" == 1 ]] || nr_fail "source_refs holds other than the note id"
+nr_no_placeholders "$nr_rec"
+grep -Fq -- '{{' "$nr_rec" || nr_fail "title placeholders were filled by the script; they are the agent's"
+nr_lint_unchanged "lightweight lint" "$nr_l" "$nr_lint_before" "$nr_rec"
+nr_first_sum="$(cksum <"$nr_rec")"
+
+# A second call with the same slug lands beside the first and leaves it alone.
+nr_bank_sum="$(cksum <"$nr_l/memory-bank.yaml")"
+nr_call "$nr_l" --type PolicyRule --slug cap-retries --note Nr0Note001
+[[ "$nr_rc" == 0 ]] || nr_fail "second call with the same slug exited $nr_rc"
+[[ "$nr_out" == "_memory/rules/cap-retries-Nr0Secon02.md" ]] || nr_fail "second call printed '$nr_out'"
+[[ -f "$nr_l/$nr_out" && -f "$nr_rec" ]] || nr_fail "second call lost one of the two records"
+[[ "$(cksum <"$nr_rec")" == "$nr_first_sum" ]] || nr_fail "second call changed the first record"
+[[ "$(cksum <"$nr_l/memory-bank.yaml")" == "$nr_bank_sum" ]] || nr_fail "second call rewrote an existing bank"
+[[ "$(nr_front "$nr_l/$nr_out" status)" == proposed ]] || nr_fail "omitted --status is not proposed"
+
+# The bank is written once, so a later call into a scope that has one reads it.
+nr_call "$nr_l" --type Decision --slug use-queue --note Nr0Note001
+[[ "$nr_rc" == 0 && "$nr_out" == "_memory/decisions/use-queue-Nr0Third03.md" ]] || nr_fail "lightweight Decision printed '$nr_out' (exit $nr_rc)"
+[[ "$(cksum <"$nr_l/memory-bank.yaml")" == "$nr_bank_sum" ]] || nr_fail "a Decision call rewrote the bank"
+
+# --- Acceptance: canonical scope, no bank ----------------------------------
+nr_c="$nr_tmp/s/billing-core"
+nr_scope "$nr_c" canonical
+nr_lint_before="$(run_lint "$nr_c" | grep -E '^failures: ')"
+nr_ids Nr1Canon01 Nr1Canon02 Nr1Canon03 Nr1Canon04 Nr1Canon05
+nr_call "$nr_c" --type PolicyRule --slug cap-retries --note Nr0Note001
+[[ "$nr_rc" == 0 ]] || nr_fail "canonical PolicyRule exited $nr_rc"
+[[ "$nr_out" == "_memory/policy-rules/cap-retries-Nr1Canon01.md" ]] || nr_fail "canonical PolicyRule printed '$nr_out'"
+[[ -f "$nr_c/$nr_out" ]] || nr_fail "canonical PolicyRule wrote no record"
+[[ -f "$nr_c/memory-bank.yaml" ]] || nr_fail "canonical call wrote no bank"
+[[ "$(yq '.folders' "$nr_c/memory-bank.yaml")" == null ]] || nr_fail "canonical bank carries a folders key"
+(grep -Eq '^folders:' "$nr_c/memory-bank.yaml") && nr_fail "canonical bank still has a folders line"
+[[ "$(yq '.name' "$nr_c/memory-bank.yaml")" == "billing-core" ]] || nr_fail "canonical bank name is wrong"
+refute_text "$nr_c/memory-bank.yaml" '{{SCOPE_NAME}}'
+nr_no_placeholders "$nr_c/$nr_out"
+nr_lint_unchanged "canonical lint" "$nr_c" "$nr_lint_before" "$nr_c/$nr_out"
+
+# The Falsifier's nearest wrong key: a slug that reads like the other mode's
+# folder or template must not move the record.
+nr_call "$nr_c" --type PolicyRule --slug rule-of-thumb --note Nr0Note001
+[[ "$nr_rc" == 0 && "$nr_out" == "_memory/policy-rules/rule-of-thumb-Nr1Canon02.md" ]] ||
+  nr_fail "canonical PolicyRule with slug rule-of-thumb printed '$nr_out' (exit $nr_rc)"
+nr_ids Nr1Canon03 Nr1Canon04 Nr1Canon05
+nr_call "$nr_c" --type Exception --slug one-off --note Nr0Note001
+[[ "$nr_rc" == 0 && "$nr_out" == "_memory/exceptions/one-off-Nr1Canon03.md" ]] || nr_fail "canonical Exception printed '$nr_out' (exit $nr_rc)"
+[[ "$(nr_front "$nr_c/$nr_out" memory_type)" == Exception ]] || nr_fail "canonical Exception memory_type is wrong"
+nr_no_placeholders "$nr_c/$nr_out"
+nr_call "$nr_c" --type Decision --slug use-queue --note Nr0Note001
+[[ "$nr_rc" == 0 && "$nr_out" == "_memory/decisions/use-queue-Nr1Canon04.md" ]] || nr_fail "canonical Decision printed '$nr_out'"
+[[ "$(nr_front "$nr_c/$nr_out" memory_type)" == Decision ]] || nr_fail "canonical Decision memory_type is wrong"
+nr_no_placeholders "$nr_c/$nr_out"
+nr_call "$nr_c" --type Context --slug billing-cycle --note Nr0Note001
+[[ "$nr_rc" == 0 && "$nr_out" == "_memory/context/billing-cycle-Nr1Canon05.md" ]] || nr_fail "canonical Context printed '$nr_out'"
+[[ "$(nr_front "$nr_c/$nr_out" memory_type)" == Context ]] || nr_fail "canonical Context memory_type is wrong"
+nr_no_placeholders "$nr_c/$nr_out"
+
+# The same nearest-wrong-key run on the lightweight side: a slug naming the
+# canonical folder still lands in rules/.
+nr_ids Nr2Light01 Nr2Light02
+nr_call "$nr_l" --type PolicyRule --slug policy-rules-primer --note Nr0Note001
+[[ "$nr_rc" == 0 && "$nr_out" == "_memory/rules/policy-rules-primer-Nr2Light01.md" ]] ||
+  nr_fail "lightweight PolicyRule with slug policy-rules-primer printed '$nr_out' (exit $nr_rc)"
+nr_call "$nr_l" --type Context --slug billing-cycle --note Nr0Note001
+[[ "$nr_rc" == 0 && "$nr_out" == "_memory/context/billing-cycle-Nr2Light02.md" ]] || nr_fail "lightweight Context printed '$nr_out'"
+nr_no_placeholders "$nr_l/$nr_out"
+
+# --- The bank outranks CLAUDE.md -------------------------------------------
+nr_b="$nr_tmp/s/bank-wins-light"
+nr_scope "$nr_b" canonical
+printf 'schema: 1\nname: bank-wins-light\nfacet_prefixes: [topic]\nfolders: {PolicyRule: _memory/rules}\n' >"$nr_b/memory-bank.yaml"
+nr_bank_sum="$(cksum <"$nr_b/memory-bank.yaml")"
+nr_ids Nr3Bank001 Nr3Bank002
+nr_call "$nr_b" --type PolicyRule --slug cap-retries --note Nr0Note001
+[[ "$nr_rc" == 0 && "$nr_out" == "_memory/rules/cap-retries-Nr3Bank001.md" ]] || nr_fail "lightweight bank under a canonical CLAUDE.md printed '$nr_out' (exit $nr_rc)"
+[[ "$(cksum <"$nr_b/memory-bank.yaml")" == "$nr_bank_sum" ]] || nr_fail "an existing bank was rewritten"
+nr_b2="$nr_tmp/s/bank-wins-canon"
+nr_scope "$nr_b2" lightweight
+printf 'schema: 1\nname: bank-wins-canon\nfacet_prefixes: [topic]\n' >"$nr_b2/memory-bank.yaml"
+nr_call "$nr_b2" --type PolicyRule --slug cap-retries --note Nr0Note001
+[[ "$nr_rc" == 0 && "$nr_out" == "_memory/policy-rules/cap-retries-Nr3Bank002.md" ]] || nr_fail "canonical bank under a lightweight CLAUDE.md printed '$nr_out' (exit $nr_rc)"
+
+# A scope whose root already has a bank but no mode line still resolves.
+nr_b3="$nr_tmp/s/bank-only"
+nr_scope "$nr_b3" none
+cp "$nr_b/memory-bank.yaml" "$nr_b3/memory-bank.yaml"
+nr_ids Nr3Bank003
+nr_call "$nr_b3" --type PolicyRule --slug cap-retries --note Nr0Note001
+[[ "$nr_rc" == 0 && "$nr_out" == "_memory/rules/cap-retries-Nr3Bank003.md" ]] || nr_fail "bank with no mode line printed '$nr_out' (exit $nr_rc)"
+
+# --- Refusals write nothing ------------------------------------------------
+nr_rl="$nr_tmp/s/refuse-light"
+nr_scope "$nr_rl" lightweight
+nr_rc_scope="$nr_tmp/s/refuse-canon"
+nr_scope "$nr_rc_scope" canonical
+nr_refuse "Exception in lightweight" "$nr_rl" --type Exception --slug one-off --note Nr0Note001
+nr_refuse "unknown type" "$nr_rl" --type Policy --slug cap-retries --note Nr0Note001
+nr_refuse "journal type is no record type" "$nr_rl" --type Journal --slug cap-retries --note Nr0Note001
+nr_refuse "uppercase slug" "$nr_rl" --type Decision --slug Cap-Retries --note Nr0Note001
+nr_refuse "underscore slug" "$nr_rl" --type Decision --slug cap_retries --note Nr0Note001
+nr_refuse "leading hyphen slug" "$nr_rl" --type Decision --slug -cap --note Nr0Note001
+nr_refuse "trailing hyphen slug" "$nr_rl" --type Decision --slug cap- --note Nr0Note001
+nr_refuse "doubled hyphen slug" "$nr_rl" --type Decision --slug cap--retries --note Nr0Note001
+nr_refuse "slug with a path" "$nr_rl" --type Decision --slug ../escape --note Nr0Note001
+nr_refuse "empty slug" "$nr_rl" --type Decision --slug "" --note Nr0Note001
+nr_refuse "note id with a slash" "$nr_rl" --type Decision --slug cap-retries --note a/b
+nr_refuse "note id with a quote" "$nr_rl" --type Decision --slug cap-retries --note "a'b"
+nr_refuse "empty note id" "$nr_rl" --type Decision --slug cap-retries --note ""
+nr_refuse "bad status" "$nr_rl" --type Decision --slug cap-retries --note Nr0Note001 --status final
+nr_refuse "missing --note" "$nr_rl" --type Decision --slug cap-retries
+nr_refuse "missing --slug" "$nr_rl" --type Decision --note Nr0Note001
+nr_refuse "missing --type" "$nr_rl" --slug cap-retries --note Nr0Note001
+nr_refuse "unknown flag" "$nr_rl" --type Decision --slug cap-retries --note Nr0Note001 --force
+nr_refuse "--journal without --source-scope" "$nr_rl" --journal --slug cap-retries --note Nr0Note001
+nr_refuse "--journal with --type" "$nr_rl" --journal --type Decision --slug cap-retries --note Nr0Note001 --source-scope 'x/y'
+nr_refuse "--journal with --status" "$nr_rl" --journal --status accepted --slug cap-retries --note Nr0Note001 --source-scope 'x/y'
+[[ "$nr_rc" == 3 ]] || nr_fail "--journal with --status exited $nr_rc, not 3"
+
+# A scope with neither a bank nor a mode line has no folder to pick.
+nr_nomode="$nr_tmp/s/no-mode"
+nr_scope "$nr_nomode" none
+nr_refuse "no bank and no mode line" "$nr_nomode" --type Decision --slug cap-retries --note Nr0Note001
+# A bank whose PolicyRule folder is neither mode's.
+nr_oddbank="$nr_tmp/s/odd-bank"
+nr_scope "$nr_oddbank" lightweight
+printf 'schema: 1\nname: odd-bank\nfacet_prefixes: [topic]\nfolders: {PolicyRule: _memory/elsewhere}\n' >"$nr_oddbank/memory-bank.yaml"
+nr_refuse "bank with a foreign PolicyRule folder" "$nr_oddbank" --type PolicyRule --slug cap-retries --note Nr0Note001
+# Not opted in: no _memory/ at the root.
+nr_notopt="$nr_tmp/s/not-opted-in"
+mkdir -p "$nr_notopt/_inbox"
+printf '# Scope\n\n> **Memory mode:** lightweight (Decision, Context, PolicyRule).\n' >"$nr_notopt/CLAUDE.md"
+nr_refuse "scope with no _memory/" "$nr_notopt" --type Decision --slug cap-retries --note Nr0Note001
+# A directory name with no letters or digits leaves the bank with an empty name.
+nr_empty="$nr_tmp/s/()"
+nr_scope "$nr_empty" lightweight
+nr_refuse "scope directory with an empty bank name" "$nr_empty" --type Decision --slug cap-retries --note Nr0Note001
+# nanoid output that isn't ten nanoid characters.
+nr_keep_ids=1
+for nr_badid in short twelvechars1 'bad id!!!!' 'bad/id/123'; do
+  nr_ids "$nr_badid"
+  nr_refuse "nanoid printed '$nr_badid'" "$nr_rl" --type Decision --slug cap-retries --note Nr0Note001
+done
+nr_ids
+nr_refuse "nanoid printed nothing" "$nr_rl" --type Decision --slug cap-retries --note Nr0Note001
+nr_keep_ids=
+
+# An occupied target: the id is the one the call would draw.
+nr_occ="$nr_tmp/s/occupied"
+nr_scope "$nr_occ" lightweight
+mkdir -p "$nr_occ/_memory/decisions"
+printf 'prior bytes\n' >"$nr_occ/_memory/decisions/cap-retries-Nr5Occup01.md"
+nr_ids Nr5Occup01
+nr_keep_ids=1
+nr_refuse "existing target path" "$nr_occ" --type Decision --slug cap-retries --note Nr0Note001
+nr_keep_ids=
+[[ "$(cat "$nr_occ/_memory/decisions/cap-retries-Nr5Occup01.md")" == "prior bytes" ]] || nr_fail "an existing record was overwritten"
+
+# A record that appears after the exists check loses to noclobber. The race is
+# forced by a mkdir shim, since mkdir is the one call between the bank write and
+# the record write. A bank this call wrote is removed; one that was there stays.
+mkdir -p "$nr_tmp/racebin"
+cat >"$nr_tmp/racebin/mkdir" <<'SHIM'
+#!/usr/bin/env bash
+/bin/mkdir "$@"
+/bin/mkdir -p "$(dirname "$NR_RACE")"
+printf 'racer bytes\n' >"$NR_RACE"
+SHIM
+chmod +x "$nr_tmp/racebin/mkdir"
+nr_race() { # scope target
+  nr_rc=0
+  PATH="$nr_tmp/racebin:$nr_tmp/bin:$PATH" NR_IDS="$nr_tmp/ids" NR_RACE="$1/$2" bash "$nr" "$1" --type Decision --slug cap-retries --note Nr0Note001 >/dev/null 2>&1 || nr_rc=$?
+}
+nr_rnew="$nr_tmp/s/race-new-bank"
+nr_scope "$nr_rnew" lightweight
+nr_ids Nr5Race001
+nr_race "$nr_rnew" _memory/decisions/cap-retries-Nr5Race001.md
+[[ "$nr_rc" == 1 ]] || nr_fail "a lost record race exited $nr_rc, not 1"
+[[ ! -e "$nr_rnew/memory-bank.yaml" ]] || nr_fail "a lost record race left the bank this call wrote"
+[[ "$(cat "$nr_rnew/_memory/decisions/cap-retries-Nr5Race001.md")" == "racer bytes" ]] || nr_fail "a lost record race overwrote the other writer's record"
+nr_rold="$nr_tmp/s/race-old-bank"
+nr_scope "$nr_rold" lightweight
+printf 'schema: 1\nname: race-old-bank\nfacet_prefixes: [topic]\nfolders: {PolicyRule: _memory/rules}\n' >"$nr_rold/memory-bank.yaml"
+nr_rold_sum="$(cksum <"$nr_rold/memory-bank.yaml")"
+nr_ids Nr5Race002
+nr_race "$nr_rold" _memory/decisions/cap-retries-Nr5Race002.md
+[[ "$nr_rc" == 1 ]] || nr_fail "a lost record race beside an existing bank exited $nr_rc, not 1"
+[[ "$(cksum <"$nr_rold/memory-bank.yaml" 2>/dev/null)" == "$nr_rold_sum" ]] || nr_fail "a lost record race removed or changed a bank it did not write"
+
+# The record folder's mkdir fails under set -e after the bank is written, not
+# through the guarded record write, so only the EXIT trap removes that bank.
+nr_mkfail="$nr_tmp/s/mkdir-fails"
+nr_scope "$nr_mkfail" lightweight
+mkdir -p "$nr_mkfail/_memory"
+printf 'not a folder\n' >"$nr_mkfail/_memory/decisions"
+nr_refuse "a record folder mkdir fails after the bank write" "$nr_mkfail" --type Decision --slug cap-retries --note Nr0Note001
+
+# A symlinked folder on the way to the target would carry mkdir -p and the
+# write out of the scope (PR #494 review). nr_refuse's find doesn't follow
+# links, so the outside directory gets its own check.
+nr_out_dir="$nr_tmp/outside"
+mkdir -p "$nr_out_dir"
+nr_lnk="$nr_tmp/s/linked-type-folder"
+nr_scope "$nr_lnk" lightweight
+ln -s "$nr_out_dir" "$nr_lnk/_memory/decisions"
+nr_refuse "a type folder symlinked out of the scope" "$nr_lnk" --type Decision --slug use-queue --note Nr0Note001
+nr_lnm="$nr_tmp/s/linked-memory"
+mkdir -p "$nr_lnm/_inbox"
+printf '# Scope\n\n> **Memory mode:** lightweight (Decision, Context, PolicyRule).\n' >"$nr_lnm/CLAUDE.md"
+ln -s "$nr_out_dir" "$nr_lnm/_memory"
+nr_refuse "a _memory/ symlinked out of the scope" "$nr_lnm" --type Decision --slug use-queue --note Nr0Note001
+nr_lnj="$nr_tmp/s/linked-entries"
+mkdir -p "$nr_lnj/_inbox"
+ln -s "$nr_out_dir" "$nr_lnj/entries"
+nr_refuse "a journal entries/ symlinked out of the scope" "$nr_lnj" --journal --slug hypercare-scope --note Nr0Note001 --source-scope 'a/b'
+[[ -z "$(ls -A "$nr_out_dir")" ]] || nr_fail "a symlinked folder let a write land outside the scope: $(ls -A "$nr_out_dir")"
+# A dangling symlink at the target passes -e, and the write would follow it.
+nr_dang="$nr_tmp/s/dangling-target"
+nr_scope "$nr_dang" lightweight
+mkdir -p "$nr_dang/_memory/decisions"
+ln -s "$nr_out_dir/planted.md" "$nr_dang/_memory/decisions/cap-retries-Nr5Dangl01.md"
+nr_ids Nr5Dangl01
+nr_keep_ids=1
+nr_refuse "a dangling symlink at the target" "$nr_dang" --type Decision --slug cap-retries --note Nr0Note001
+nr_keep_ids=
+[[ ! -e "$nr_out_dir/planted.md" ]] || nr_fail "a write followed a dangling symlink out of the scope"
+# A symlinked scope root is fine: the checks compare resolved paths.
+ln -s "$nr_tmp/s/billing-ops" "$nr_tmp/s/billing-ops-link"
+nr_ids Nr5Link001
+nr_call "$nr_tmp/s/billing-ops-link" --type Decision --slug linked-root --note Nr0Note001
+[[ "$nr_rc" == 0 && -f "$nr_tmp/s/billing-ops/_memory/decisions/linked-root-Nr5Link001.md" ]] ||
+  nr_fail "a symlinked scope root printed '$nr_out' (exit $nr_rc)"
+
+# The open can succeed and the fill still fail. Under ulimit -f 0 every write
+# past byte 0 fails with EFBIG, and the ignored XFSZ keeps the shell alive to
+# see it.
+# The bank this call made is removed; a bank that was already there stays. One
+# id each, so the nanoid shim's own rewrite of the id list stays at 0 bytes.
+nr_full() { # scope
+  nr_rc=0
+  (
+    trap '' XFSZ
+    ulimit -f 0
+    PATH="$nr_tmp/bin:$PATH" NR_IDS="$nr_tmp/ids" bash "$nr" "$1" --type Decision --slug cap-retries --note Nr0Note001 >/dev/null 2>&1
+  ) || nr_rc=$?
+}
+nr_fnew="$nr_tmp/s/full-new-bank"
+nr_scope "$nr_fnew" lightweight
+nr_ids Nr5Full001
+nr_full "$nr_fnew"
+[[ "$nr_rc" != 0 ]] || nr_fail "a bank write past the file-size limit exited 0"
+[[ ! -e "$nr_fnew/memory-bank.yaml" ]] || nr_fail "a bank write past the file-size limit left $(wc -c <"$nr_fnew/memory-bank.yaml") bytes of bank behind"
+nr_fold="$nr_tmp/s/full-old-bank"
+nr_scope "$nr_fold" lightweight
+printf 'schema: 1\nname: full-old-bank\nfacet_prefixes: [topic]\nfolders: {PolicyRule: _memory/rules}\n' >"$nr_fold/memory-bank.yaml"
+nr_fold_sum="$(cksum <"$nr_fold/memory-bank.yaml")"
+nr_ids Nr5Full002
+nr_full "$nr_fold"
+[[ "$nr_rc" != 0 ]] || nr_fail "a record write past the file-size limit exited 0"
+[[ ! -e "$nr_fold/_memory/decisions/cap-retries-Nr5Full002.md" ]] || nr_fail "a record write past the file-size limit left an empty record"
+[[ "$(cksum <"$nr_fold/memory-bank.yaml" 2>/dev/null)" == "$nr_fold_sum" ]] || nr_fail "a failed record write removed or changed a bank it did not write"
+
+# No argument at all is a usage error, which is exit 3 across this repo's scripts.
+nr_rc=0
+PATH="$nr_tmp/bin:$PATH" NR_IDS="$nr_tmp/ids" bash "$nr" >/dev/null 2>&1 || nr_rc=$?
+[[ "$nr_rc" == 3 ]] || nr_fail "no arguments exited $nr_rc, not 3"
+nr_rc=0
+PATH="$nr_tmp/bin:$PATH" NR_IDS="$nr_tmp/ids" bash "$nr" "$nr_rl" --journal --type Decision --slug cap-retries --note Nr0Note001 --source-scope x >/dev/null 2>&1 || nr_rc=$?
+[[ "$nr_rc" == 3 ]] || nr_fail "--journal with --type exited $nr_rc, not 3"
+
+# --- Journal entries -------------------------------------------------------
+nr_j="$nr_tmp/s/journal"
+nr_jscope "$nr_j"
+nr_lint_before="$(run_lint "$nr_j" | grep -E '^failures: ')"
+nr_ids Nr6Journ01
+nr_vault_path='11 Clients/11.01 Acme & Co'
+nr_call "$nr_j" --journal --slug hypercare-scope --note Nr0Note001 --source-scope "$nr_vault_path"
+[[ "$nr_rc" == 0 ]] || nr_fail "journal call exited $nr_rc"
+[[ "$nr_out" == "entries/$nr_today-hypercare-scope-Nr6Journ01.md" ]] || nr_fail "journal call printed '$nr_out'"
+nr_jrec="$nr_j/$nr_out"
+[[ -f "$nr_jrec" ]] || nr_fail "journal call wrote no entry"
+[[ "$(find "$nr_j" -type f | wc -l | tr -d ' ')" == 1 ]] || nr_fail "journal call wrote other than the entry (a bank, say)"
+[[ ! -e "$nr_j/memory-bank.yaml" && ! -e "$nr_j/_memory" ]] || nr_fail "journal call wrote a bank or a _memory/"
+[[ "$(nr_front "$nr_jrec" id)" == Nr6Journ01 ]] || nr_fail "journal id is wrong"
+[[ "$(nr_front "$nr_jrec" memory_type)" == Journal ]] || nr_fail "journal memory_type is wrong"
+[[ "$(nr_front "$nr_jrec" status)" == current ]] || nr_fail "journal status is not current"
+[[ "$(nr_front "$nr_jrec" date)" == "$nr_today" ]] || nr_fail "journal date is not today"
+[[ "$(nr_front "$nr_jrec" last_confirmed)" == "$nr_today" ]] || nr_fail "journal last_confirmed is not today"
+[[ "$(nr_front "$nr_jrec" 'source_refs[0]')" == "$nr_vault_path::Nr0Note001" ]] || nr_fail "journal source_refs is '$(nr_front "$nr_jrec" 'source_refs[0]')'"
+[[ "$(nr_front "$nr_jrec" 'source_refs | length')" == 1 ]] || nr_fail "journal source_refs holds more than one entry"
+nr_no_placeholders "$nr_jrec"
+nr_lint_unchanged "journal lint" "$nr_j" "$nr_lint_before" "$nr_jrec"
+# The slug and source-scope checks hold for a journal too.
+nr_refuse "journal with a quote in --source-scope" "$nr_j" --journal --slug hypercare-scope --note Nr0Note001 --source-scope "it's/here"
+nr_refuse "journal with :: in --source-scope" "$nr_j" --journal --slug hypercare-scope --note Nr0Note001 --source-scope 'a::b'
+nr_refuse "journal with a bad slug" "$nr_j" --journal --slug Hyper_Care --note Nr0Note001 --source-scope 'a/b'
+nr_refuse "journal with an empty --source-scope" "$nr_j" --journal --slug hypercare-scope --note Nr0Note001 --source-scope ""
+nr_refuse "journal in a scope with no entries/" "$nr_rl" --journal --slug hypercare-scope --note Nr0Note001 --source-scope 'a/b'
+# A second entry with the same slug lands beside the first.
+nr_jsum="$(cksum <"$nr_jrec")"
+nr_ids Nr6Journ02
+nr_call "$nr_j" --journal --slug hypercare-scope --note Nr0Note001 --source-scope "$nr_vault_path"
+[[ "$nr_rc" == 0 && "$nr_out" == "entries/$nr_today-hypercare-scope-Nr6Journ02.md" ]] || nr_fail "second journal call printed '$nr_out' (exit $nr_rc)"
+[[ "$(cksum <"$nr_jrec")" == "$nr_jsum" ]] || nr_fail "second journal call changed the first entry"
+
+rm -rf "$nr_tmp"
+[[ "$nr_bad" == 0 ]] || exit 1
 
 echo "inbox-to-memory smoke: ok"
