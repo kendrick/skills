@@ -195,6 +195,10 @@ require_text "$skill" "Where it has none yet, run \`--extract\` on the copy, sav
 # #404: a hand-copied footprint let a missed path pass the proof until Step 5.
 require_text "$skill" "For each lane, run \`work-wave/scripts/check-footprints.py --extract PLAN[N]\` and, on exit 0 only, save its stdout to \`WAVE_DIR/footprint/issue-<N>.md\`."
 require_text "$skill" "A non-zero \`--extract\` exit stops Step 1: quote its stderr and name the plan."
+# The hand copy itself is the cut (Deliberately Not Built): both sentences that
+# asked for one, the per-lane copy and the tableless-copy derivation.
+refute_text "$skill" "For each lane, read PLAN[N] and write"
+refute_text "$skill" "from the copy's \`Files:\` lines"
 # The lane fills in pr itself, so a check on the field alone passes a lane
 # that opened a pull request and reported pr as null. gh pr list asks GitHub
 # instead (#224, ledger row 40).
