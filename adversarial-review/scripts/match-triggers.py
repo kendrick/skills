@@ -399,7 +399,7 @@ def derive_scope(rows, tiers, changed_files, file_diffs, depth_override):
         derivation.append({
             "file": path,
             "matched_rows": [r["name"] for r in hits] + ["general"],
-            # First match in table order is the whole determinism mechanism
+            # First match in table order decides ownership
             # (ledger row 21); match count never enters into it.
             "territory": hits[0]["name"] if hits else "general",
         })
