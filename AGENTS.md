@@ -13,7 +13,7 @@ Four artifacts. The first two are universal; the last two are the bar a new skil
 - `_maintenance/<skill>/RATIONALE.md` — the decision ledger. Every contested choice gets a row saying why, tiered `[E]` measured, `[P]` reasoned from prior art, `[C]` convention. Sections: Where This Came From, Decision Ledger, Deliberately Not Built, Known Limitations.
 - `tests/<skill>-smoke.sh` — the pin. Runs standalone from the repo root.
 
-`SKILL.md` and `README.md` are the only files at a skill's top level, and everything else goes in `references/`, `scripts/`, or `assets/`. `databricks-api` is the exception: it is a router, and each domain it routes to is a directory of its own.
+`SKILL.md` and `README.md` are the only files at a skill's top level, joined by an `AGENTS.md` where the skill carries its own review rules, and everything else goes in `references/`, `scripts/`, or `assets/`. `databricks-api` is the exception: it is a router, and each domain it routes to is a directory of its own.
 
 `_maintenance/<skill>/EVALS.md` joins them where a skill needs live subagents to prove it works, since a smoke test cannot. `PROVENANCE.md` joins them where a skill is derived from an upstream project, as `handoff` and `technical-writing` are.
 
@@ -29,7 +29,7 @@ A description that summarizes the workflow becomes a shortcut the model takes in
 
 ## Vendoring
 
-Shared code is copied byte-identically with a provenance comment naming the source, the date, and the rule that upstream is authoritative: fix the bug there, then re-copy. `scaffold_digest.py` lives in three skills this way, and `paths_overlap` runs in `adversarial-review`, `divvy-up`, `work-issue`, and `work-wave`.
+Shared code is copied byte-identically with a provenance comment naming the source, the date, and the rule that upstream is authoritative: fix the bug there, then re-copy. Give each contiguous range of the source its own header and `# end vendored` close, because `tests/repo-docs-smoke.sh` fails any copy whose text between header and close is not verbatim in the named source. `scaffold_digest.py` lives in three skills this way, and `paths_overlap` runs in `adversarial-review`, `divvy-up`, `work-issue`, and `work-wave`.
 
 Copy the docstrings with the code. They record the incidents that set each rule, and a reader who trims them re-introduces the bug they describe.
 
@@ -126,7 +126,7 @@ A finding you cannot reproduce is reported as unverified, with what you tried, r
 
 **A new or changed `SKILL.md`.** Frontmatter matches the invocation the body describes. Steps end on completion criteria a reader could fail the agent against. The description carries triggers rather than a summary of the steps. Every file, flag, and command it names exists at this commit.
 
-**A script.** Standard library only. A vendored block is byte-identical to its source and keeps its provenance header. A gating script exits 0/1/3. Feed it a malformed input and confirm it fails rather than passing quietly.
+**A script.** Feed it a malformed input and confirm it fails rather than passing quietly.
 
 **A smoke test.** Each refute corresponds to a real cut in Deliberately Not Built. Each assertion string is distinctive enough that it cannot pass on unrelated prose. The suite exits non-zero when the thing it pins is removed, which you can check by removing it in a scratch copy.
 
