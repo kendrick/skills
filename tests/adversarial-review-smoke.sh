@@ -232,9 +232,16 @@ require_text adversarial-review/references/trigger-table.md "A signal's punctuat
 # (RATIONALE row 41). The recipe it replaced, rebuilt by hand each run, exits 2
 # on the `round(` signal (#114), so the refutes pin that recipe's sentence and
 # the outline that sent a reader to build it.
-require_text adversarial-review/SKILL.md "adversarial-review/scripts/match-triggers.py rows"
+require_text adversarial-review/SKILL.md "adversarial-review/scripts/match-triggers.py derive <merge_base_sha> --exclude RUN_DIR/excluded.txt"
 require_text adversarial-review/references/trigger-table.md "implements these rules"
-require_text adversarial-review/references/trigger-table.md "adversarial-review/scripts/match-triggers.py rows\` for each changed file"
+require_text adversarial-review/references/trigger-table.md "adversarial-review/scripts/match-triggers.py derive <merge_base_sha>"
+# #406's four settled answers, stated where a reader derives from them. The
+# script's smoke cases pin the behavior; these pin that the prose says so.
+require_text adversarial-review/SKILL.md "more than 40 entries in \`changed_files\` after exclusions"
+require_text adversarial-review/SKILL.md "rows 1 to 3 (\`money\`, \`authz\`, \`state\`)"
+require_text adversarial-review/SKILL.md "reads the rows top-down"
+require_text adversarial-review/references/trigger-table.md "merge the territory with the highest row number into the remaining territory with the next-lower row number"
+require_text adversarial-review/references/trigger-table.md "\`classes\` holds trigger-table row names"
 refute_text adversarial-review/references/trigger-table.md "In practice, \`grep -Ei"
 refute_text adversarial-review/references/trigger-table.md "Grep the file's hunks"
 refute_text adversarial-review/SKILL.md "grep each changed file's hunks"
