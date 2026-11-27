@@ -174,14 +174,13 @@ Stop here. Show the user every groomed note and every flagged candidate, organiz
 
 For each candidate the user approves:
 
-1. **Generate a nanoid** as Filename and ID Conventions says.
-2. **Create the record file** using the matching template in [assets/records/](assets/records/):
-   - Memory record (project or client scope): `<scope-root>/_memory/<type-folder>/<slug>-<nanoid>.md`. The folder set depends on the scope's memory mode (declared at the top of its `CLAUDE.md`):
-     - Lightweight: `decisions/`, `context/`, `rules/`.
-     - Canonical: `decisions/`, `context/`, `policy-rules/`, `exceptions/`.
-     The folder must match `memory_type` in the frontmatter. Both modes write rules as `PolicyRule`; lightweight keeps them in `rules/` through `memory-bank.yaml`'s `folders` (see [references/memory-bank-schema.md](references/memory-bank-schema.md)).
-     Before the first record lands in a scope whose root has no `memory-bank.yaml`, write one from [assets/memory-bank.template.yaml](assets/memory-bank.template.yaml) as Existing-directory Regeneration step 3 does, with `{{SCOPE_NAME}}` filled and the `folders` line deleted in canonical mode; the lint fails a `schema: 1` record with no bank beside it. Every `applies_to` and `owners` facet uses a prefix that file lists under `facet_prefixes`, so add a new prefix there first. Until `--to-ltm` runs, a scope still holding `schema: 2` records fails `ltm validate`.
-   - Journal entry: `11 Clients/11.99 Journal/entries/YYYY-MM-DD-<slug>-<nanoid>.md`.
+1. **Write the file** with `new-record.sh`, which picks the template and folder from the type and the scope's memory mode, fills `id`, the dates, `source_refs` and `status`, writes `memory-bank.yaml` first when the scope root has none, and prints the new path:
+   ```bash
+   bash <skill-path>/scripts/new-record.sh <scope-root> --type <memory_type> --slug <slug> --note <note-id> [--status accepted]
+   bash <skill-path>/scripts/new-record.sh "11 Clients/11.99 Journal" --journal --slug <slug> --note <note-id> --source-scope <scope path from vault root>
+   ```
+   `--status` defaults to `proposed`. On exit 1 nothing was written: fix what each stderr line names and rerun. Every `applies_to` and `owners` facet uses a prefix `memory-bank.yaml` lists under `facet_prefixes`, so add a new prefix there first. Until `--to-ltm` runs, a scope still holding `schema: 2` records fails `ltm validate`.
+2. **Fill the title and body** at the printed path: every `{{...}}` placeholder the script left, from the approved candidate.
 3. **Rewrite the candidate line** in the source note to a wiki link:
    - `[memory candidate: <scope>] <claim>` → `[[<record-filename-without-ext>|memory]] <claim>`
    - `[memory candidate: update existing [[<target>|<name>]]] <claim>` → `[[<target>|memory — updated]] <claim>`

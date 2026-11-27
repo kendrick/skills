@@ -61,6 +61,7 @@ inbox-to-memory/
 │   ├── reflow-raw.sh       # repairs transcripts groomed before turns were blank-line separated
 │   ├── split-raw.sh        # moves a note's raw text into its notes/raw/ sidecar
 │   ├── dispose-source.sh   # writes an input's raw sidecar, then deletes or files the input once the sidecar checks out
+│   ├── new-record.sh       # writes a phase 5 record or journal entry from its template, and the scope's memory-bank.yaml when it has none
 │   ├── stale-records.sh    # lists accepted records whose last_confirmed (or date, without one) is older than N days
 │   ├── stamp-confirmed.sh  # stamps a note's date onto the records it confirms
 │   └── verify-migration.sh # checks a migration against git history: links resolve, nothing renamed or deleted
