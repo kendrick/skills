@@ -7366,6 +7366,26 @@ require_text "$tmp/s360-step-0.md" "Its Step 6 gate runs it in the deferred form
 require_text "$tmp/s360-step-2.md" "\`divvy-up\`'s Step 6 gate runs it in the deferred form Step 3's **Deferred liveness** paragraph gives."
 require_text _maintenance/work-issue/RATIONALE.md "| 225 | Every repair dispatch's verify command is the repair's verify command"
 
+# --- #363: the herdr worker starts on its routed model ---
+# A herdr start with no --model runs the task on the agent's default (sonnet for Claude), whatever its Waves row routed.
+s363_new="\`herdr agent start issue-N --kind <kind> --pane <pane> -- --model <model>\`"
+s363_old="\`herdr agent start issue-N --kind <kind> --pane <pane>\`"
+require_text work-issue/SKILL.md "$s363_new"
+require_text work-issue/SKILL.md "where \`<model>\` is the task's routed model, the Model cell of its \`## Waves\` row"
+refute_text work-issue/SKILL.md "$s363_old"
+s363_copy="$tmp/363-SKILL.md"
+python3 -c 'import sys; s=open(sys.argv[1]).read(); assert s.count(sys.argv[2]) == 1; open(sys.argv[4],"w").write(s.replace(sys.argv[2], sys.argv[3]))' \
+  work-issue/SKILL.md "$s363_new" "$s363_old" "$s363_copy"
+if (refute_text "$s363_copy" "$s363_old") 2>/dev/null; then
+  echo "#363: the old-command refute should fail on a SKILL.md copy with the old herdr start back" >&2
+  exit 1
+fi
+if (require_text "$s363_copy" "$s363_new") 2>/dev/null; then
+  echo "#363: the new-command pin should fail on a SKILL.md copy with the old herdr start back" >&2
+  exit 1
+fi
+require_text _maintenance/work-issue/RATIONALE.md "| 226 | "
+
 # --- liveness pooling at MERGE_ROWS ---
 # #436: a pool group stops taking merges at the move whose pooled rows would
 # pass MERGE_ROWS, and starts a new group there. No other model here reaches
