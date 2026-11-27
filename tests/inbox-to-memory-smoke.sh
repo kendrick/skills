@@ -5577,8 +5577,8 @@ ne_run "$ne_tmp/b2" Saatchi
 ne_run "$ne_tmp/a" Zee
 [[ "$ne_out" == "Zee" ]] || ne_fail "a table line under a later heading was read"
 
-# 3: an unedited template maps nothing. Both headings are in it, so scaffold
-# the section the way new-record would hand it over: the template verbatim.
+# 3: an unedited template maps nothing. The template's table lines sit inside
+# an HTML comment, so the whole file is copied as a user would first see it.
 mkdir -p "$ne_tmp/c"
 cp "$ne_tpl" "$ne_tmp/c/CLAUDE.md"
 ne_run "$ne_tmp/c" Saatchi NWB
@@ -5588,6 +5588,24 @@ ne_run "$ne_tmp/c" Saatchi NWB
 # key, and a substring match would map it.
 ne_run "$ne_tmp/a" saatchi "Saatchi Group" "shachi deshpande"
 [[ "$ne_out" == "Shachi Deshpande"$'\n'"Saatchi Group" ]] || ne_fail "lowercase or whole-string rule broke: '$ne_out'"
+
+# A table in a code fence whose own comment line starts with # (the checked-in
+# scope-tiers client CLAUDE.md writes its table this way) is still read.
+mkdir -p "$ne_tmp/f"
+printf '### Alias Table\n\n```\n# people\nShachi Deshpande <- [Saatchi]\n```\n' >"$ne_tmp/f/CLAUDE.md"
+ne_run "$ne_tmp/f" Saatchi
+[[ "$ne_rc" == 0 && "$ne_out" == "Shachi Deshpande" ]] || ne_fail "fenced # line ended the table: '$ne_out'"
+
+# Case-only spellings are separate inputs: each prints its own correction, the
+# canonical prints once, and an unmapped entity keeps both spellings.
+ne_run "$ne_tmp/a" saatchi SAATCHI acme Acme
+[[ "$ne_out" == "Shachi Deshpande"$'\n'"acme"$'\n'"Acme" ]] || ne_fail "case dedup is wrong: '$ne_out'"
+[[ "$ne_err" == "correction: saatchi→Shachi Deshpande"$'\n'"correction: SAATCHI→Shachi Deshpande" ]] || ne_fail "case corrections are '$ne_err'"
+
+# A scope with no CLAUDE.md contributes an empty table and exits 0.
+mkdir -p "$ne_tmp/g"
+ne_run "$ne_tmp/g" Saatchi
+[[ "$ne_rc" == 0 && "$ne_out" == "Saatchi" ]] || ne_fail "missing CLAUDE.md gave '$ne_out' (exit $ne_rc)"
 
 # A # comment tail on a table line is not part of the variants.
 ne_claude "$ne_tmp/d" "Alias Table" "Atlas <- [Atlus, ATLAS programme]   # client-level Context Abc123"
@@ -5608,6 +5626,18 @@ ne_run "$ne_client/projects/atlas" Saatchi Atlus
 ne_claude "$ne_client/pursuits/bid" "Alias Table" "Atlas <- [Atlus]"
 ne_run "$ne_client/pursuits/bid" NWB
 [[ "$ne_out" == "Northwind Billing" ]] || ne_fail "pursuit did not inherit the client table"
+
+# 4, against the checked-in fixture: claims-intake has no CLAUDE.md, and the
+# client root's fenced table supplies Kestral->Kestrel. Then the consumer, on
+# the same tree, reads the script's stdout. Output goes to the temp dir only.
+ne_fx=tests/fixtures/inbox-to-memory/evals/scope-tiers
+ne_run "$ne_fx/projects/claims-intake" Kestral
+[[ "$ne_rc" == 0 && "$ne_out" == "Kestrel" ]] || ne_fail "claims-intake gave '$ne_out' (exit $ne_rc)"
+"$ne" "$ne_fx/projects/claims-intake" --entities "$ne_tmp/ents" >"$ne_tmp/canon" 2>/dev/null
+: >"$ne_tmp/claims"
+ne_rc=0
+ne_fc="$(inbox-to-memory/scripts/find-candidates.sh "$ne_fx/projects/claims-intake" --entities "$ne_tmp/canon" --claims "$ne_tmp/claims" 2>/dev/null)" || ne_rc=$?
+[[ "$ne_rc" == 0 && "$ne_fc" == *"counts: grep="* ]] || ne_fail "find-candidates.sh rejected the normalized entities (exit $ne_rc): $ne_fc"
 
 # 5: one variant, two canonicals across the tables. Exit 1, no entity list,
 # both tables and both canonicals named.

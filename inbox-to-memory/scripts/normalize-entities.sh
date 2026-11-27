@@ -18,7 +18,7 @@
 # `correction: <variant>→<canonical>`, the shape `transcript_corrections` uses.
 # Exit 1 when one variant maps to two canonicals, naming both tables, with
 # nothing on stdout: the script won't pick a winner. Exit 2 on a usage error or
-# an unreadable entities file or scope root. This produces an artifact rather
+# an unreadable entities file, scope root, or existing CLAUDE.md. This produces an artifact rather
 # than gating a run, so it takes find-candidates.sh's 2 for usage.
 set -euo pipefail
 
@@ -48,7 +48,8 @@ def die(msg, code=2):
 def read_table(path):
     """(canonical, [variants]) pairs from one CLAUDE.md. HTML comments go first,
     so the template's commented examples never count, and a commented block can
-    hold a heading without ending the section early."""
+    hold a heading without ending the section early. A `#` line inside a code
+    fence is a fenced table's own comment, not a heading, so it ends nothing."""
     if not os.path.isfile(path):
         return []
     try:
@@ -58,11 +59,15 @@ def read_table(path):
         die("cannot read %s: %s" % (path, e))
     pairs = []
     inside = False
+    fenced = False
     for ln in COMMENT.sub("", text).splitlines():
-        if TABLE_HEADING.match(ln.strip()):
+        if ln.lstrip().startswith("```"):
+            fenced = not fenced
+            continue
+        if not fenced and TABLE_HEADING.match(ln.strip()):
             inside = True
             continue
-        if HEADING.match(ln):
+        if not fenced and HEADING.match(ln):
             inside = False
             continue
         m = LINE.match(ln) if inside else None
@@ -129,11 +134,12 @@ def main(argv):
     corrected = set()
     for ent in raw:
         canon = mapping.get(ent.lower(), (ent, None))[0]
-        if canon != ent and ent.lower() not in corrected:
-            corrected.add(ent.lower())
+        # Exact-string keys: a case-only change still prints, once per spelling.
+        if canon != ent and ent not in corrected:
+            corrected.add(ent)
             sys.stderr.write("correction: %s→%s\n" % (ent, canon))
-        if canon.lower() not in seen:
-            seen.add(canon.lower())
+        if canon not in seen:
+            seen.add(canon)
             out.append(canon)
     for canon in out:
         print(canon)
