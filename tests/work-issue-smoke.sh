@@ -7291,7 +7291,10 @@ s360_dir="$(mktemp -d "$tmp/s360.XXXXXX")"
   printf '| 0 | two | docs/ | sonnet | `bash tests/b-smoke.sh` exits 0 | none |\n'
 } >"$s360_dir/plan.md"
 printf '{"files_changed": ["a.py"]}\n' >"$s360_dir/0-one.json"
-printf 'PRIOR-MARKER-360\n' >"$s360_dir/prior.md"
+# Read out of SKILL.md so the case renders the line Step 3 actually prescribes.
+s360_override="$(grep -o '\*\*repair override\*\* line, which the template places directly above its verification paragraph: `[^`]*`' work-issue/SKILL.md | sed 's/.*paragraph: `//; s/`$//' || true)"
+[[ -n "$s360_override" ]] || { echo "#360: work-issue/SKILL.md Step 3 should quote the repair override line" >&2; exit 1; }
+printf 'PRIOR-MARKER-360\n%s\n' "$s360_override" >"$s360_dir/prior.md"
 s360_scoped="$(python3 "$run_state" scoped-cmd --plan "$s360_dir/plan.md" --report "$s360_dir/0-one.json")" \
   || { echo "#360: scoped-cmd should exit 0 on the fixture plan" >&2; exit 1; }
 [[ "$s360_scoped" == "bash tests/a-smoke.sh" ]] || { echo "#360: scoped-cmd printed '$s360_scoped', not bash tests/a-smoke.sh" >&2; exit 1; }
@@ -7311,6 +7314,28 @@ s360_block="$(s360_verify_block "$s360_scoped")"
 s360_full="$(s360_verify_block 'bash tests/a-smoke.sh && bash tests/b-smoke.sh')"
 [[ "$s360_full" == *"bash tests/b-smoke.sh"* ]] \
   || { echo "#360: the bite check should find bash tests/b-smoke.sh in a block rendered with the full VERIFY_CMD" >&2; exit 1; }
+# PR #489 r4715914195: with a.py owned in two waves, scoped-cmd prints both
+# tasks' checks, but the template tells the worker to run its own done-when's
+# command first. The override line has to land right above that instruction
+# for the worker to run the second check.
+{
+  printf '# Plan\n\n## Waves\n\n| Wave | Task | Files owned | Model | Done when | Constraints |\n|---|---|---|---|---|---|\n'
+  printf '| 0 | one | a.py | sonnet | `bash tests/a-smoke.sh` exits 0 | none |\n'
+  printf '| 1 | three | a.py | sonnet | `bash tests/c-smoke.sh` exits 0 | none |\n'
+} >"$s360_dir/plan2.md"
+s360_two="$(python3 "$run_state" scoped-cmd --plan "$s360_dir/plan2.md" --report "$s360_dir/0-one.json")" \
+  || { echo "#360: scoped-cmd should exit 0 on the two-wave plan" >&2; exit 1; }
+[[ "$s360_two" == "sh -c 'bash tests/a-smoke.sh' && sh -c 'bash tests/c-smoke.sh'" ]] \
+  || { echo "#360: scoped-cmd printed '$s360_two' on the two-wave plan" >&2; exit 1; }
+python3 divvy-up/scripts/render-prompt.py "$s360_dir/plan2.md" --wave 0 --task one \
+  --verify-cmd "$s360_two" --prior "$s360_dir/prior.md" --out "$s360_dir/fix-2.md" >/dev/null \
+  || { echo "#360: two-wave render failed" >&2; exit 1; }
+s360_above="$(awk '/^Before you report/ { print last; exit } NF { last = $0 }' "$s360_dir/fix-2.md")"
+[[ "$s360_above" == "$s360_override" ]] \
+  || { echo "#360: the line above 'Before you report' should be the repair override, got: $s360_above" >&2; exit 1; }
+s360_block2="$(awk '/^Before you report/ { on = 1 } on { print } on && /^Say in `verify_output` which of the two you ran\./ { exit }' "$s360_dir/fix-2.md")"
+[[ "$s360_block2" == *"sh -c 'bash tests/a-smoke.sh' && sh -c 'bash tests/c-smoke.sh'"* ]] \
+  || { echo "#360: the two-wave verification block should carry both checks:" >&2; echo "$s360_block2" >&2; exit 1; }
 rm -rf "$s360_dir"
 
 s360_render_new="(\`--wave\` and \`--task\` of that task), with \`--verify-cmd\` set to the repair's verify command in place of VERIFY_CMD"
@@ -7321,6 +7346,10 @@ refute_text work-issue/SKILL.md "$s360_render_old"
 require_text work-issue/SKILL.md "\`work-issue/scripts/run-state.py scoped-cmd --plan RUN_DIR/plan.md --report <scope>\`"
 require_text work-issue/SKILL.md "\`RUN_DIR/prompts/<repair>.scope.json\`"
 require_text work-issue/SKILL.md "a repair worker runs the repair's verify command plain too."
+require_text work-issue/SKILL.md "so every repair prompt, rendered or inline, ends its \`{{PRIOR}}\` with this **repair override** line"
+require_text work-issue/SKILL.md "\`This is a repair: run the command in the verification block below, not the one your definition of done names.\`"
+require_text work-issue/SKILL.md "otherwise a fresh subagent with the build report followed by the repair override line as \`{{PRIOR}}\`,"
+require_text work-issue/SKILL.md "reads \`none: an adopted pull request has no build report\`, then the repair override line Step 3 gives."
 require_text work-issue/SKILL.md "The dispatch fills \`{{VERIFY_CMD}}\` with the repair's verify command Step 3 defines, its scope file \`RUN_DIR/prompts/redteam-repair-<k>.scope.json\` listing each failed claim's \`path\`."
 require_text work-issue/SKILL.md "The dispatch fills \`{{VERIFY_CMD}}\` with the repair's verify command Step 3 defines, its scope file \`RUN_DIR/prompts/repair-<k>.scope.json\` listing each path the in-scope findings name."
 s360_copy="$tmp/360-SKILL.md"
