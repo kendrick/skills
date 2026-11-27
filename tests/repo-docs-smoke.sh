@@ -474,6 +474,15 @@ expect_clean() {
   }
 }
 
+# Check the real tree first, and run all three modes before failing on any, so
+# a real-tree problem reaches stderr even when a falsifier below exits. Real
+# drift can leave a falsifier nothing to add, or delete the falsifier's anchor,
+# and either failure names no file on its own.
+script_checks_ok=1
+for mode in imports vendored exits; do
+  check_scripts . "$mode" || script_checks_ok=0
+done
+
 added="$(falsify imports work-issue/scripts/check-plan.py $'import argparse\n' $'import argparse\nimport requests\n')"
 expect_named "import requests" "$added" work-issue/scripts/check-plan.py
 
@@ -494,11 +503,6 @@ check_scripts . covered | grep -qx "work-issue/scripts/check-plan.py" || {
   exit 1
 }
 
-# Every mode runs before the suite fails, so one run reports every problem.
-script_checks_ok=1
-for mode in imports vendored exits; do
-  check_scripts . "$mode" || script_checks_ok=0
-done
 [[ "$script_checks_ok" == 1 ]] || exit 1
 
 echo "repo-docs smoke: OK"
