@@ -735,6 +735,26 @@ expect_status 1 "--extract on an item with no span"
 expect_line "$err" "check-footprints: unparsed: - Modify: the scripts directory" "--extract on an item with no span"
 expect_out "" "--extract on an item with no span"
 
+# Self-review of e168108: each of these printed a partial footprint and exited
+# 0, so the dropped path never reached the overlap proof.
+printf '**Files:** `a.py`, src/b.py\n' >"$tmp/extract-mixed.md"
+footprints --extract "$tmp/extract-mixed.md"
+expect_status 1 "--extract on a bare path beside a backticked one"
+expect_line "$err" "check-footprints: unparsed: **Files:** \`a.py\`, src/b.py" "--extract on a bare path beside a backticked one"
+expect_out "" "--extract on a bare path beside a backticked one"
+
+printf '**Files:**\n- Modify: `a.py`\n  continuation `zzz.py`\n- Test: `t.sh`\n' >"$tmp/extract-wrapped.md"
+footprints --extract "$tmp/extract-wrapped.md"
+expect_status 1 "--extract on a wrapped list item"
+expect_line "$err" "check-footprints: unparsed: continuation \`zzz.py\`" "--extract on a wrapped list item"
+expect_out "" "--extract on a wrapped list item"
+
+printf 'Files: src/a.py.\n' >"$tmp/extract-period.md"
+footprints --extract "$tmp/extract-period.md"
+expect_status 1 "--extract on bare text ending in a period"
+expect_line "$err" "check-footprints: unparsed: Files: src/a.py." "--extract on bare text ending in a period"
+expect_out "" "--extract on bare text ending in a period"
+
 # Every wave 3 plan's task block. Read as bare text it is a path that matches
 # nothing, and the proof passes over the lane.
 printf '### Task 1\n\n**Files:** the owned files above.\n' >"$tmp/extract-prose.md"

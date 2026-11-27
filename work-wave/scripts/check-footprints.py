@@ -59,10 +59,11 @@ outside the `## Waves` table, plus the list items directly under it, and
 from the table's own entries. On each source line, split at `,` and `;`
 outside backticks and parentheses, a segment owns its backtick spans before
 its first ` (`, or, where the line has no span, its bare text if that holds
-no whitespace. A source yielding nothing that isn't `none` is `unparsed:`, a
-plan with no marker and no table is `empty:`, and every path still goes
-through owns_entry_problem as `malformed:`. It runs alone: beside --lane or
---runs it exits 3.
+no whitespace and doesn't end in `.`. A source with any segment that yields
+nothing, unless the source is `none`, is `unparsed:`, and so is an indented
+non-item line inside a block. A plan with no marker and no table is
+`empty:`, and every path still goes through owns_entry_problem as
+`malformed:`. It runs alone: beside --lane or --runs it exits 3.
 
 Exit codes: 0 pass; 1 semantic failure, with one line per problem on stderr:
 `overlap:`, `malformed:`, `empty:`, `unchecked:`, or, under --extract,
@@ -469,8 +470,7 @@ def split_segments(text):
 
     Real plans join items on one line, each with its own parenthetical, and
     the issue's literal rule (spans before the line's first ` (`) kept only
-    the first item and dropped the rest
-    without a word."""
+    the first item and dropped the rest without a word."""
     mask, segments, start, depth = tick_mask(text), [], 0, 0
     for i, ch in enumerate(text):
         if mask[i]:
@@ -502,17 +502,28 @@ def spans(text):
 
 
 def source_paths(text):
-    """The paths one source line owns, possibly none.
+    """The paths one source line owns, or None when any segment can't be read.
 
-    Bare text counts only on a line with no span at all, and only without
-    whitespace: `**Files:** the owned files above.` otherwise reads as a path
-    that owns_entry_problem accepts and that matches nothing, so the proof
+    One unreadable segment fails the whole line, because skipping it is how a
+    path goes missing: `` `a.py`, src/b.py `` once printed only a.py. On a line
+    with a span, every segment's head needs a span. On a line with none, bare
+    text counts only without whitespace and without a trailing `.`:
+    `**Files:** the owned files above.` and `Files: src/a.py.` otherwise read
+    as paths owns_entry_problem accepts and that match nothing, so the proof
     passes over a lane it never saw."""
-    segments = split_segments(text)
-    if any(spans(s) for s in segments):
-        return [p for s in segments for p in spans(head(s))]
-    bare = [head(s).strip() for s in segments]
-    return [b for b in bare if b and not any(c.isspace() for c in b)]
+    segments = [s for s in split_segments(text) if head(s).strip()]
+    paths = []
+    with_spans = any(spans(s) for s in segments)
+    for s in segments:
+        found = spans(head(s)) if with_spans else [head(s).strip()]
+        if with_spans and not found:
+            return None
+        for p in found:
+            prose = any(c.isspace() for c in p) or p.endswith(".")
+            if not with_spans and prose:
+                return None
+            paths.append(p)
+    return paths or None
 
 
 def extract(path):
@@ -521,8 +532,11 @@ def extract(path):
 
     A source block is the marker line's remainder plus the list items directly
     under it. Every source that yields no path, and isn't `none`, is a
-    problem: a skipped line is the missed path this mode exists to stop. The table's own lines are never marker lines: its header
-    reads `Files owned`, which FILES_LINE_RE matches."""
+    problem: a skipped line is the missed path this mode exists to stop. So
+    is an indented non-item line inside a block, since it's usually a wrapped
+    item, and ending the block there dropped every item below it. The table's
+    own lines are never marker lines: its header reads `Files owned`, which
+    FILES_LINE_RE matches."""
     text = read_text(path)
     table_lines = {lineno for lineno, _ in extract_table(text)[0]}
     lines = text.splitlines()
@@ -542,6 +556,10 @@ def extract(path):
             sources.append((line, rest))
         while i < len(lines):
             item = LIST_ITEM.match(lines[i])
+            if not item and lines[i][:1] in " \t" and lines[i].strip():
+                problems.append(f"unparsed: {lines[i].strip()}")
+                i += 1
+                continue
             if not item or CHECKBOX.match(item.group(1)):
                 break
             label = LABEL.match(item.group(1))
@@ -553,9 +571,10 @@ def extract(path):
             if NONE.fullmatch(source.strip()):
                 continue
             found = source_paths(source)
-            if not found:
+            if found is None:
                 problems.append(f"unparsed: {raw.strip()}")
-            paths.update(found)
+            else:
+                paths.update(found)
     if is_waves_plan(text):
         paths.update(claim.entry for claim in entries_from_waves(None, text, path))
     elif not markers:
