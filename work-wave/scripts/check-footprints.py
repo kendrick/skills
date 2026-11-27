@@ -4,6 +4,7 @@ other and from every in-flight work-issue run, before any lane is dispatched.
 
     work-wave/scripts/check-footprints.py --lane issue-N=PATH \\
         --lane issue-M=PATH [...] [--runs DIR]
+    work-wave/scripts/check-footprints.py --extract PLAN
 
 Each lane runs its own work-issue in its own worktree, and each work-issue
 runs check-inflight.py at its own gate. Those gates can't close the gap this
@@ -50,11 +51,26 @@ the same way, with `unchecked: issue-M has a malformed entry: <entry>:
 compared. Dropping only the bad entry let `` `src/a.py` `` pass beside a
 lane owning `src/a.py` (Codex finding 1 of the third review on PR #141).
 
+--extract PLAN writes the bare list for one plan, so the conductor never
+copies a footprint by hand: a path it missed never reached the proof. It
+prints the plan's paths on stdout, sorted, one per line, and only on exit 0.
+They come from every line FILES_LINE_RE marks outside a backtick span and
+outside the `## Waves` table, plus the list items directly under it, and
+from the table's own entries. On each source line, split at `,` and `;`
+outside backticks and parentheses, a segment owns its backtick spans before
+its first ` (`, or, where the line has no span, its bare text if that holds
+no whitespace and doesn't end in `.`. A source with any segment that yields
+nothing, unless the source is `none`, is `unparsed:`, and so is an indented
+non-item line inside a block. A plan with no marker and no table is
+`empty:`, and every path still goes through owns_entry_problem as
+`malformed:`. It runs alone: beside --lane or --runs it exits 3.
+
 Exit codes: 0 pass; 1 semantic failure, with one line per problem on stderr:
-`overlap:`, `malformed:`, `empty:`, or `unchecked:`; 3 usage or unreadable
-input, which covers fewer than two lanes, a lane named twice, a malformed
---lane, an unreadable PATH, and a lane plan whose `## Waves` table won't
-parse. Argparse supplies 2 for a mistyped flag.
+`overlap:`, `malformed:`, `empty:`, `unchecked:`, or, under --extract,
+`unparsed:`; 3 usage or unreadable input, which covers fewer than two lanes,
+a lane named twice, a malformed --lane, an unreadable PATH or PLAN, a lane
+plan or PLAN whose `## Waves` table won't parse, and --extract combined with
+another flag. Argparse supplies 2 for a mistyped flag.
 
 Stdlib only, so the skill stays copy-in portable.
 """
@@ -340,6 +356,18 @@ def read_rows(text):
 # End vendored block.
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Vendored verbatim from work-issue/scripts/check-plan.py (FILES_LINE_RE).
+# Vendored 2026-11-27. Upstream is authoritative: fix a bug there first, then
+# re-copy the line with sed. --extract keys on the same four markers
+# check-plan.py's ownership gate does, so a plan that gate accepts is a plan
+# this script can extract from.
+# ---------------------------------------------------------------------------
+FILES_LINE_RE = re.compile(r"Files:|\*\*Files:\*\*|owns:|Files owned")
+# ---------------------------------------------------------------------------
+# End vendored block.
+# ---------------------------------------------------------------------------
+
 LANE_NAME = re.compile(r"^issue-([0-9]+)$")
 
 Claim = collections.namedtuple("Claim", "owner entry")
@@ -402,6 +430,188 @@ def entries_from_list(lane, text):
     decoration rather than cleaning them up, so the reason it prints quotes a
     string that is really in the file."""
     return [Claim(lane, line) for line in text.splitlines() if line.strip()]
+
+
+LIST_ITEM = re.compile(r"^\s*[-*+]\s+(.*)$")
+# A checkbox item is a plan step, and a step routinely backticks paths it only
+# reads, so it ends an ownership block rather than joining it.
+CHECKBOX = re.compile(r"^\[[ xX]\]")
+LABEL = re.compile(r"^[^`]*?:\s")
+NONE = re.compile(r"none\.?", re.IGNORECASE)
+
+
+def tick_mask(text):
+    """Per character, True when it is a backtick or sits inside a span."""
+    mask, inside = [], False
+    for ch in text:
+        if ch == "`":
+            inside = not inside
+            mask.append(True)
+        else:
+            mask.append(inside)
+    return mask
+
+
+# The decoration a marker match can leave behind: `:**` after `**Files owned`,
+# `**:` after `Files owned**`. A `**` counts only beside the colon or before
+# whitespace, and nothing else is stripped, because a blanket strip of `*` ate
+# the glob in `Files: *.py`, printed `.py`, and the proof passed a lane it never
+# saw. What follows is ownership text, left for owns_entry_problem to judge.
+MARKER_CLOSE = re.compile(r"(?:\*\*(?=:))?:?(?:\*\*(?=\s|$))?[ \t]*")
+
+
+def marker_end(line):
+    """Where the first marker outside a backtick span ends, or None.
+
+    Plans quote `Files:` and `Files owned` in prose all the time, and a quoted
+    marker read as a real one starts a block mid-sentence that fails as
+    unparsed: on a plan that owns its paths correctly."""
+    mask = tick_mask(line)
+    for m in FILES_LINE_RE.finditer(line):
+        if not mask[m.start()]:
+            return m.end()
+    return None
+
+
+def split_segments(text):
+    """Split at `,` and `;` outside backticks and parentheses.
+
+    Real plans join items on one line, each with its own parenthetical, and
+    the issue's literal rule (spans before the line's first ` (`) kept only
+    the first item and dropped the rest without a word."""
+    mask, segments, start, depth = tick_mask(text), [], 0, 0
+    for i, ch in enumerate(text):
+        if mask[i]:
+            continue
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth = max(0, depth - 1)
+        elif ch in ",;" and depth == 0:
+            segments.append(text[start:i])
+            start = i + 1
+    segments.append(text[start:])
+    return segments
+
+
+def head(segment):
+    """The segment up to its first ` (` outside backticks, where the
+    parenthetical that describes the item starts."""
+    mask = tick_mask(segment)
+    for i in range(1, len(segment)):
+        if segment[i] == "(" and segment[i - 1] == " " and not mask[i]:
+            return segment[:i]
+    return segment
+
+
+def spans(text):
+    parts = text.split("`")
+    return [parts[i] for i in range(1, len(parts) - 1, 2)]
+
+
+def source_paths(text):
+    """The paths one source line owns, or None when any segment can't be read.
+
+    One unreadable segment fails the whole line, because skipping it is how a
+    path goes missing: `` `a.py`, src/b.py `` once printed only a.py. On a line
+    with a span, every segment's head needs a span. On a line with none, bare
+    text counts only without whitespace and without a trailing `.`:
+    `**Files:** the owned files above.` and `Files: src/a.py.` otherwise read
+    as paths owns_entry_problem accepts and that match nothing, so the proof
+    passes over a lane it never saw."""
+    segments = [s for s in split_segments(text) if head(s).strip()]
+    paths = []
+    with_spans = any(spans(s) for s in segments)
+    for s in segments:
+        found = spans(head(s)) if with_spans else [head(s).strip()]
+        if with_spans and not found:
+            return None
+        for p in found:
+            prose = any(c.isspace() for c in p) or p.endswith(".")
+            if not with_spans and prose:
+                return None
+            paths.append(p)
+    return paths or None
+
+
+def extract(path):
+    """(paths, problems) for a plan's footprint, read from its ownership lines
+    and its `## Waves` table.
+
+    A source block is the marker line's remainder plus the list items directly
+    under it. Every source that yields no path, and isn't `none`, is a
+    problem: a skipped line is the missed path this mode exists to stop. So
+    is an indented non-item line inside a block, since it's usually a wrapped
+    item, and ending the block there dropped every item below it. The table's
+    own lines are never marker lines: its header reads `Files owned`, which
+    FILES_LINE_RE matches."""
+    text = read_text(path)
+    table_lines = {lineno for lineno, _ in extract_table(text)[0]}
+    lines = text.splitlines()
+    paths, problems, markers, i = set(), [], 0, 0
+    while i < len(lines):
+        line = lines[i]
+        i += 1
+        if i in table_lines:
+            continue
+        end = marker_end(line)
+        if end is None:
+            continue
+        markers += 1
+        sources = []
+        rest = line[end:]
+        rest = rest[MARKER_CLOSE.match(rest).end() :]
+        if rest.strip():
+            sources.append((line, rest))
+        while i < len(lines):
+            item = LIST_ITEM.match(lines[i])
+            if not item and lines[i][:1] in " \t" and lines[i].strip():
+                problems.append(f"unparsed: {lines[i].strip()}")
+                i += 1
+                continue
+            if not item or CHECKBOX.match(item.group(1)):
+                break
+            label = LABEL.match(item.group(1))
+            sources.append((lines[i], item.group(1)[label.end() if label else 0 :]))
+            i += 1
+        if not sources:
+            problems.append(f"unparsed: {line.strip()}")
+        for raw, source in sources:
+            if NONE.fullmatch(source.strip()):
+                continue
+            found = source_paths(source)
+            if found is None:
+                problems.append(f"unparsed: {raw.strip()}")
+            else:
+                paths.update(found)
+    if is_waves_plan(text):
+        paths.update(claim.entry for claim in entries_from_waves(None, text, path))
+    elif not markers:
+        problems.append(f"empty: {path} has no ownership line and no ## Waves table")
+    for p in sorted(paths):
+        reason = owns_entry_problem(p)
+        if reason:
+            problems.append(f"malformed: {p}: {reason}")
+    return sorted(paths), problems
+
+
+def run_extract(args):
+    if args.lane or args.runs:
+        sys.stderr.write("check-footprints: --extract runs alone; drop --lane and --runs\n")
+        return 3
+    try:
+        paths, problems = extract(args.extract)
+    except UsageError as e:
+        for line in str(e).splitlines():
+            sys.stderr.write(f"check-footprints: {line}\n")
+        return 3
+    if problems:
+        for problem in problems:
+            sys.stderr.write(f"check-footprints: {problem}\n")
+        return 1
+    for p in paths:
+        print(p)
+    return 0
 
 
 def lane_entries(lane, path):
@@ -511,7 +721,10 @@ def main(argv=None):
     )
     ap.add_argument("--lane", action="append", default=[], metavar="issue-N=PATH")
     ap.add_argument("--runs", metavar="DIR")
+    ap.add_argument("--extract", metavar="PLAN")
     args = ap.parse_args(argv)
+    if args.extract is not None:
+        return run_extract(args)
 
     try:
         lanes = parse_lanes(args.lane)

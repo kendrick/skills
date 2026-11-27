@@ -74,9 +74,9 @@ require_file "$fixtures/runs-malformed/issue-6/plan.md"
 # The closed run overlaps lane-a on purpose. Without it on disk, the check that
 # closed/ is ignored passes because there is nothing to ignore.
 require_file "$fixtures/runs/closed/issue-9/plan.md"
-# The footprint Step 1 derives from runs-tableless/issue-8/plan.md's `Files:`
-# line when issue-8 is an already-started lane whose copy has no table yet.
-require_file "$fixtures/copy-issue-8.md"
+# #404: issue's task block, and excerpts of real plan shapes, for --extract.
+require_file "$fixtures/extract-files.md"
+require_file "$fixtures/extract-shapes.md"
 require_file work-wave/scripts/handback.py
 require_file "$fixtures/handback/terminal-build.txt"
 require_file "$fixtures/handback/midrun-build.txt"
@@ -191,8 +191,14 @@ require_text "$skill" "A lane already started (Step 0 item 4) is proved on its \
 # A tableless copy passed straight to the script reads as a bare path list and
 # passes a real overlap, so the instruction to pass the derived file instead is
 # the half of this rule that does the work.
-require_text "$skill" "Where it has none yet, derive \`footprint/issue-<N>.md\` from the copy's \`Files:\` lines and pass that file instead, never the tableless copy"
-
+require_text "$skill" "Where it has none yet, run \`--extract\` on the copy, save its output as \`footprint/issue-<N>.md\`, and pass that file instead, never the tableless copy"
+# #404: a hand-copied footprint let a missed path pass the proof until Step 5.
+require_text "$skill" "For each lane, run \`work-wave/scripts/check-footprints.py --extract PLAN[N]\` and, on exit 0 only, save its stdout to \`WAVE_DIR/footprint/issue-<N>.md\`."
+require_text "$skill" "A non-zero \`--extract\` exit stops Step 1: quote its stderr and name the plan."
+# The hand copy itself is the cut (Deliberately Not Built): both sentences that
+# asked for one, the per-lane copy and the tableless-copy derivation.
+refute_text "$skill" "For each lane, read PLAN[N] and write"
+refute_text "$skill" "from the copy's \`Files:\` lines"
 # The lane fills in pr itself, so a check on the field alone passes a lane
 # that opened a pull request and reported pr as null. gh pr list asks GitHub
 # instead (#224, ledger row 40).
@@ -481,6 +487,19 @@ cmp "$tmp/upstream.txt" "$tmp/vendored.txt" || {
   exit 1
 }
 
+# #404: --extract keys on check-plan.py's markers. The upstream line is read at
+# run time, so a move in either copy fails here.
+require_text "$script" "Vendored verbatim from work-issue/scripts/check-plan.py (FILES_LINE_RE)."
+upstream_files_re="$(grep '^FILES_LINE_RE = ' work-issue/scripts/check-plan.py || true)"
+[[ -n "$upstream_files_re" ]] || {
+  echo "work-issue/scripts/check-plan.py has no FILES_LINE_RE line; fix the pin's marker" >&2
+  exit 1
+}
+grep -Fqx -- "$upstream_files_re" "$script" || {
+  echo "check-footprints.py's FILES_LINE_RE has drifted from work-issue/scripts/check-plan.py" >&2
+  exit 1
+}
+
 # A SyntaxWarning prints on every invocation, as noise a caller cannot silence.
 python3 -W error::SyntaxWarning -c "import ast; ast.parse(open('$script').read())" || {
   echo "check-footprints.py raises a SyntaxWarning" >&2
@@ -517,6 +536,17 @@ expect_line() {
   local what="$3"
   grep -Fxq -- "$line" <<<"$stream" || {
     echo "$what should print the whole line '$line', got: $stream" >&2
+    exit 1
+  }
+}
+
+# --extract's stdout is saved straight to a footprint file, so it is compared
+# whole, and a failing run must print nothing a caller could save.
+expect_out() {
+  local want="$1"
+  local what="$2"
+  [[ "$out" == "$want" ]] || {
+    echo "$what should print exactly '$want' on stdout, got: '$out' (stderr: $err)" >&2
     exit 1
   }
 }
@@ -625,10 +655,15 @@ footprints --lane issue-7="$fixtures/runs/issue-7/plan.md" --lane issue-2="$fixt
 expect_status 1 "an already-started lane proved on its cached copy"
 expect_line "$err" "check-footprints: overlap: src/b.py — issue-2 owns src/b.py, issue-7 task t7 owns src/b.py" "an already-started lane proved on its cached copy"
 
-# The same lane before its copy has a table: Step 1 derives the footprint from
-# the copy's Files: line. Its tableless run dir is the lane itself, so it must
-# not also print unchecked:, which would stop the wave on a run already proved.
-footprints --lane issue-1="$fixtures/lane-a.md" --lane issue-8="$fixtures/copy-issue-8.md" --runs "$fixtures/runs-tableless"
+# The same lane before its copy has a table: Step 1 extracts the footprint
+# from the copy's Files: line. Its tableless run dir is the lane itself, so it
+# must not also print unchecked:, which would stop the wave on a run already
+# proved.
+footprints --extract "$fixtures/runs-tableless/issue-8/plan.md"
+expect_status 0 "--extract on a tableless copy"
+expect_out "src/a.py" "--extract on a tableless copy"
+printf '%s\n' "$out" >"$tmp/footprint-issue-8.md"
+footprints --lane issue-1="$fixtures/lane-a.md" --lane issue-8="$tmp/footprint-issue-8.md" --runs "$fixtures/runs-tableless"
 expect_status 1 "an already-started lane whose copy has no table"
 expect_line "$err" "check-footprints: overlap: src/a.py — issue-1 owns src/a.py, issue-8 owns src/a.py" "an already-started lane whose copy has no table"
 if grep -Fq "unchecked:" <<<"$err"; then
@@ -652,6 +687,144 @@ expect_status 3 "an unreadable lane path"
 # An unparseable table read as no entries would likewise own nothing.
 footprints --lane issue-1="$fixtures/lane-a.md" --lane issue-4="$fixtures/plan-badwaves.md"
 expect_status 3 "a lane plan whose ## Waves table will not parse"
+
+# --- #404, --extract. Step 1 once had the conductor hand-copy each plan's
+# Files lines, and a path it missed never reached the proof. ---
+
+# The issue's task block. `### Resume` sits in a parenthetical and the prose
+# paragraph's path sits outside any block, so taking every span on a line, or
+# every span in the file, would print them.
+footprints --extract "$fixtures/extract-files.md"
+expect_status 0 "--extract on the issue's task block"
+expect_out "$(printf 'tests/work-wave-smoke.sh\nwork-wave/SKILL.md\nwork-wave/scripts/wave-state.py')" "--extract on the issue's task block"
+
+# Falsifier, the key: moved into its parenthetical, a path leaves the output.
+sed -e 's#`work-wave/scripts/wave-state.py`, `tests/work-wave-smoke.sh`#`work-wave/scripts/wave-state.py` (beside `tests/work-wave-smoke.sh`)#' \
+  -e 's#^- Test: `tests/work-wave-smoke.sh`$#- Test: `work-wave/SKILL.md` (covered by `tests/work-wave-smoke.sh`)#' \
+  "$fixtures/extract-files.md" >"$tmp/extract-moved.md"
+grep -Fq '(covered by `tests/work-wave-smoke.sh`)' "$tmp/extract-moved.md" || {
+  echo "the parenthetical perturbation's sed matched nothing" >&2
+  exit 1
+}
+footprints --extract "$tmp/extract-moved.md"
+expect_status 0 "--extract with the path moved into a parenthetical"
+expect_out "$(printf 'work-wave/SKILL.md\nwork-wave/scripts/wave-state.py')" "--extract with the path moved into a parenthetical"
+
+# Falsifier, the nearest wrong key: a path-shaped span inside the
+# parenthetical, beside `### Resume`, still stays out.
+sed 's#(the Resume table and#(the Resume table, `work-wave/README.md`, and#' \
+  "$fixtures/extract-files.md" >"$tmp/extract-paren-path.md"
+grep -Fq 'table, `work-wave/README.md`, and' "$tmp/extract-paren-path.md" || {
+  echo "the parenthetical-path perturbation's sed matched nothing" >&2
+  exit 1
+}
+footprints --extract "$tmp/extract-paren-path.md"
+expect_status 0 "--extract with a path inside a parenthetical"
+expect_out "$(printf 'tests/work-wave-smoke.sh\nwork-wave/SKILL.md\nwork-wave/scripts/wave-state.py')" "--extract with a path inside a parenthetical"
+
+# Real plan shapes: one item per comma with its own parenthetical, a
+# semicolon join, a `none` item, and a marker quoted in backticks.
+footprints --extract "$fixtures/extract-shapes.md"
+expect_status 0 "--extract on real plan shapes"
+expect_out "$(printf 'shapes/README.md\nshapes/SKILL.md\nshapes/lib/core.py\nshapes/scripts/run.py\ntests/fixtures/shapes/\ntests/shapes-smoke.sh')" "--extract on real plan shapes"
+
+# The table's header reads `Files owned`, which the marker regex matches.
+footprints --extract "$fixtures/plan-waves.md"
+expect_status 0 "--extract on a plan with a table"
+expect_out "$(printf 'lib/\ntests/c.sh\ntools/run.py')" "--extract on a plan with a table"
+
+printf '**Files:**\n- Modify: the scripts directory\n' >"$tmp/extract-unparsed.md"
+footprints --extract "$tmp/extract-unparsed.md"
+expect_status 1 "--extract on an item with no span"
+expect_line "$err" "check-footprints: unparsed: - Modify: the scripts directory" "--extract on an item with no span"
+expect_out "" "--extract on an item with no span"
+
+# Self-review of e168108: each of these printed a partial footprint and exited
+# 0, so the dropped path never reached the overlap proof.
+printf '**Files:** `a.py`, src/b.py\n' >"$tmp/extract-mixed.md"
+footprints --extract "$tmp/extract-mixed.md"
+expect_status 1 "--extract on a bare path beside a backticked one"
+expect_line "$err" "check-footprints: unparsed: **Files:** \`a.py\`, src/b.py" "--extract on a bare path beside a backticked one"
+expect_out "" "--extract on a bare path beside a backticked one"
+
+printf '**Files:**\n- Modify: `a.py`\n  continuation `zzz.py`\n- Test: `t.sh`\n' >"$tmp/extract-wrapped.md"
+footprints --extract "$tmp/extract-wrapped.md"
+expect_status 1 "--extract on a wrapped list item"
+expect_line "$err" "check-footprints: unparsed: continuation \`zzz.py\`" "--extract on a wrapped list item"
+expect_out "" "--extract on a wrapped list item"
+
+printf 'Files: src/a.py.\n' >"$tmp/extract-period.md"
+footprints --extract "$tmp/extract-period.md"
+expect_status 1 "--extract on bare text ending in a period"
+expect_line "$err" "check-footprints: unparsed: Files: src/a.py." "--extract on bare text ending in a period"
+expect_out "" "--extract on bare text ending in a period"
+
+# PR #492 review: stripping every leading `*` after the marker turned the glob
+# in `Files: *.py` into `.py`, which owns_entry_problem accepts, and the proof
+# passed. Only the marker's own `**` and colon go; the bold forms still read.
+printf 'Files: *.py\n' >"$tmp/extract-glob.md"
+footprints --extract "$tmp/extract-glob.md"
+expect_status 1 "--extract on a bare glob after the marker"
+expect_line "$err" "check-footprints: malformed: *.py: glob character '*'; an entry is a literal path, and a pattern here would own nothing" "--extract on a bare glob after the marker"
+expect_out "" "--extract on a bare glob after the marker"
+
+printf '**Files:** `a.py`\n' >"$tmp/extract-bold.md"
+footprints --extract "$tmp/extract-bold.md"
+expect_status 0 "--extract after a bold marker"
+expect_out "a.py" "--extract after a bold marker"
+
+printf 'Files: src/a.py\n' >"$tmp/extract-bare.md"
+footprints --extract "$tmp/extract-bare.md"
+expect_status 0 "--extract on a bare path"
+expect_out "src/a.py" "--extract on a bare path"
+
+printf '**Files owned:** `b.py`\n' >"$tmp/extract-bold-owned.md"
+footprints --extract "$tmp/extract-bold-owned.md"
+expect_status 0 "--extract after a bold Files owned marker"
+expect_out "b.py" "--extract after a bold Files owned marker"
+
+# Every wave 3 plan's task block. Read as bare text it is a path that matches
+# nothing, and the proof passes over the lane.
+printf '### Task 1\n\n**Files:** the owned files above.\n' >"$tmp/extract-prose.md"
+footprints --extract "$tmp/extract-prose.md"
+expect_status 1 "--extract on a prose Files line"
+expect_line "$err" "check-footprints: unparsed: **Files:** the owned files above." "--extract on a prose Files line"
+expect_out "" "--extract on a prose Files line"
+
+# A blank line between a marker and its list ends the block, so the marker
+# owns nothing and fails closed.
+printf '**Files:**\n\n- Modify: `src/a.py`\n' >"$tmp/extract-gap.md"
+footprints --extract "$tmp/extract-gap.md"
+expect_status 1 "--extract on a marker with no items"
+expect_line "$err" "check-footprints: unparsed: **Files:**" "--extract on a marker with no items"
+expect_out "" "--extract on a marker with no items"
+
+printf '# Plan\n\nProse naming `src/a.py`.\n' >"$tmp/extract-none.md"
+footprints --extract "$tmp/extract-none.md"
+expect_status 1 "--extract on a plan with no marker and no table"
+expect_line "$err" "check-footprints: empty: $tmp/extract-none.md has no ownership line and no ## Waves table" "--extract on a plan with no marker and no table"
+expect_out "" "--extract on a plan with no marker and no table"
+
+# Both bad paths in one run: every problem is named before the exit.
+printf '**Files:**\n- Modify: `src/*.py`\n- Create: `./src/b.py`\n' >"$tmp/extract-malformed.md"
+footprints --extract "$tmp/extract-malformed.md"
+expect_status 1 "--extract on a glob and a ./ path"
+expect_line "$err" "check-footprints: malformed: src/*.py: glob character '*'; an entry is a literal path, and a pattern here would own nothing" "--extract on a glob"
+expect_line "$err" "check-footprints: malformed: ./src/b.py: '.' segment; write the path without './'" "--extract on a ./ path"
+expect_out "" "--extract on a glob and a ./ path"
+
+footprints --extract "$fixtures/extract-files.md" --lane issue-1="$fixtures/lane-a.md"
+expect_status 3 "--extract beside --lane"
+expect_line "$err" "check-footprints: --extract runs alone; drop --lane and --runs" "--extract beside --lane"
+
+footprints --extract "$fixtures/extract-files.md" --runs "$fixtures/runs"
+expect_status 3 "--extract beside --runs"
+
+footprints --extract "$tmp/does-not-exist.md"
+expect_status 3 "--extract on an unreadable plan"
+
+footprints --extract "$fixtures/plan-badwaves.md"
+expect_status 3 "--extract on a plan whose ## Waves table will not parse"
 
 footprints --lanes issue-1="$fixtures/lane-a.md"
 expect_status 2 "a mistyped flag"
