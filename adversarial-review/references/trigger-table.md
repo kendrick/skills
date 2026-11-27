@@ -47,7 +47,7 @@ Set each territory's `model_tier` from its highest-priority class, then let dept
 | schema, budget, representation | sonnet |
 | general alone | haiku |
 
-Depth 0 caps every territory at sonnet. Depth 2 raises money, authz, and state to opus and leaves the rest. `derive` reads this table at run time, so its shape is load-bearing: a row missing from it, or the table itself, makes `derive` exit 1. A territory takes the tier of its highest-priority class, the one with the lowest row number. The reason for tiering at all is that a full opus fan-out is genuinely expensive, and a docs-and-types diff does not earn one.
+Depth 0 caps every territory at sonnet. Depth 2 raises money, authz, and state to opus and leaves the rest. `derive` reads this table at run time, so its shape matters: a missing row or a missing table makes `derive` exit 1. A territory takes the tier of its highest-priority class, the one with the lowest row number. The reason for tiering at all is that a full opus fan-out is genuinely expensive, and a docs-and-types diff does not earn one.
 
 ## Adding a row
 
