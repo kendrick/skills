@@ -16,6 +16,9 @@
 # The only bash here is 3.2.57, Apple's: no associative arrays, no mapfile,
 # no ${x,,}.
 set -euo pipefail
+# A set CDPATH makes cd print the directory, which $(cd ... && pwd -P) captures,
+# so the containment check below would refuse every relative scope.
+unset CDPATH
 
 usage() {
   cat >&2 <<'USAGE'
@@ -182,7 +185,24 @@ else
   rel="_memory/$folder/$slug-$id.md"
 fi
 target="$scope/$rel"
-[[ ! -e "$target" ]] || refuse "already exists, refusing to overwrite: $target"
+# mkdir -p and the redirect both follow a symlinked _memory/, type folder or
+# entries/ out of the scope, and noclobber guards only the last path part. So
+# every directory on the way that already exists has to resolve to its own
+# place under the resolved root, and mkdir -p makes the missing ones under a
+# parent that passed.
+root="$(cd "$scope" && pwd -P)"
+sub="${rel%/*}"
+while :; do
+  if [[ -L "$scope/$sub" || -d "$scope/$sub" ]] &&
+    [[ "$(cd "$scope/$sub" 2>/dev/null && pwd -P)" != "$root/$sub" ]]; then
+    refuse "$sub resolves outside $scope or to another folder in it, refusing to write through it"
+    break
+  fi
+  [[ "$sub" == */* ]] || break
+  sub="${sub%/*}"
+done
+# -e misses a dangling symlink, which a write would follow.
+[[ ! -e "$target" && ! -L "$target" ]] || refuse "already exists, refusing to overwrite: $target"
 stop_if_refused
 
 # Read with a sentinel so $(...) keeps the template's trailing newline.
@@ -200,8 +220,15 @@ else
   fill "{{proposed | accepted}}" "$status"
 fi
 
-# noclobber, so a file another writer created after the exists check is never overwritten.
+# noclobber, so a file another writer created after the exists check is never
+# overwritten. The script opens each file empty and fills it after, because
+# only the open fails on a file that is already there, and then nothing is
+# ours to remove. A fill that fails after the open (full disk, ulimit -f)
+# leaves a file this call made, and the EXIT trap removes it, so exit 1 still
+# means nothing was written. The trap never holds a bank that predates the call.
 set -o noclobber
+new_bank="" new_record=""
+trap 'rm -f ${new_bank:+"$new_bank"} ${new_record:+"$new_record"}' EXIT
 if [[ $journal -eq 0 && ! -f "$bank" ]]; then
   bank_text="$(
     if [[ "$mode" == canonical ]]; then
@@ -215,20 +242,27 @@ if [[ $journal -eq 0 && ! -f "$bank" ]]; then
     fi
   )"
   bank_text=${bank_text//"{{SCOPE_NAME}}"/"$bank_name"}
-  if ! printf '%s\n' "$bank_text" >"$bank" 2>/dev/null; then
+  if ! : >"$bank" 2>/dev/null; then
     echo "memory-bank.yaml appeared while writing, refusing to overwrite: $bank" >&2
     exit 1
   fi
-  # Exit 1 promises that nothing was written, so any exit before the record
-  # lands deletes the bank, including one that set -e forces. The trap is set
-  # only after this call's noclobber write succeeds, so a bank that was
-  # already there survives.
-  trap 'rm -f "$bank"' EXIT
+  new_bank="$bank"
+  # Write through cat, because bash 3.2's printf keeps the bytes of a failed
+  # write in its buffer and later prints them on stdout, where the path goes.
+  printf '%s\n' "$bank_text" | cat >>"$bank" 2>/dev/null || {
+    echo "could not write $bank, removed it" >&2
+    exit 1
+  }
 fi
 mkdir -p "$(dirname "$target")"
-if ! printf '%s' "$content" >"$target" 2>/dev/null; then
+if ! : >"$target" 2>/dev/null; then
   echo "already exists, refusing to overwrite: $target" >&2
   exit 1
 fi
+new_record="$target"
+printf '%s' "$content" | cat >>"$target" 2>/dev/null || {
+  echo "could not write $target, removed it" >&2
+  exit 1
+}
 trap - EXIT
 printf '%s\n' "$rel"

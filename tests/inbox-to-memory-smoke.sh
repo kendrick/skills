@@ -5420,6 +5420,71 @@ mkdir -p "$nr_mkfail/_memory"
 printf 'not a folder\n' >"$nr_mkfail/_memory/decisions"
 nr_refuse "a record folder mkdir fails after the bank write" "$nr_mkfail" --type Decision --slug cap-retries --note Nr0Note001
 
+# A symlinked folder on the way to the target would carry mkdir -p and the
+# write out of the scope (PR #494 review). nr_refuse's find doesn't follow
+# links, so the outside directory gets its own check.
+nr_out_dir="$nr_tmp/outside"
+mkdir -p "$nr_out_dir"
+nr_lnk="$nr_tmp/s/linked-type-folder"
+nr_scope "$nr_lnk" lightweight
+ln -s "$nr_out_dir" "$nr_lnk/_memory/decisions"
+nr_refuse "a type folder symlinked out of the scope" "$nr_lnk" --type Decision --slug use-queue --note Nr0Note001
+nr_lnm="$nr_tmp/s/linked-memory"
+mkdir -p "$nr_lnm/_inbox"
+printf '# Scope\n\n> **Memory mode:** lightweight (Decision, Context, PolicyRule).\n' >"$nr_lnm/CLAUDE.md"
+ln -s "$nr_out_dir" "$nr_lnm/_memory"
+nr_refuse "a _memory/ symlinked out of the scope" "$nr_lnm" --type Decision --slug use-queue --note Nr0Note001
+nr_lnj="$nr_tmp/s/linked-entries"
+mkdir -p "$nr_lnj/_inbox"
+ln -s "$nr_out_dir" "$nr_lnj/entries"
+nr_refuse "a journal entries/ symlinked out of the scope" "$nr_lnj" --journal --slug hypercare-scope --note Nr0Note001 --source-scope 'a/b'
+[[ -z "$(ls -A "$nr_out_dir")" ]] || nr_fail "a symlinked folder let a write land outside the scope: $(ls -A "$nr_out_dir")"
+# A dangling symlink at the target passes -e, and the write would follow it.
+nr_dang="$nr_tmp/s/dangling-target"
+nr_scope "$nr_dang" lightweight
+mkdir -p "$nr_dang/_memory/decisions"
+ln -s "$nr_out_dir/planted.md" "$nr_dang/_memory/decisions/cap-retries-Nr5Dangl01.md"
+nr_ids Nr5Dangl01
+nr_keep_ids=1
+nr_refuse "a dangling symlink at the target" "$nr_dang" --type Decision --slug cap-retries --note Nr0Note001
+nr_keep_ids=
+[[ ! -e "$nr_out_dir/planted.md" ]] || nr_fail "a write followed a dangling symlink out of the scope"
+# A symlinked scope root is fine: the checks compare resolved paths.
+ln -s "$nr_tmp/s/billing-ops" "$nr_tmp/s/billing-ops-link"
+nr_ids Nr5Link001
+nr_call "$nr_tmp/s/billing-ops-link" --type Decision --slug linked-root --note Nr0Note001
+[[ "$nr_rc" == 0 && -f "$nr_tmp/s/billing-ops/_memory/decisions/linked-root-Nr5Link001.md" ]] ||
+  nr_fail "a symlinked scope root printed '$nr_out' (exit $nr_rc)"
+
+# The open can succeed and the fill still fail. Under ulimit -f 0 every write
+# past byte 0 fails with EFBIG, and the ignored XFSZ keeps the shell alive to
+# see it.
+# The bank this call made is removed; a bank that was already there stays. One
+# id each, so the nanoid shim's own rewrite of the id list stays at 0 bytes.
+nr_full() { # scope
+  nr_rc=0
+  (
+    trap '' XFSZ
+    ulimit -f 0
+    PATH="$nr_tmp/bin:$PATH" NR_IDS="$nr_tmp/ids" bash "$nr" "$1" --type Decision --slug cap-retries --note Nr0Note001 >/dev/null 2>&1
+  ) || nr_rc=$?
+}
+nr_fnew="$nr_tmp/s/full-new-bank"
+nr_scope "$nr_fnew" lightweight
+nr_ids Nr5Full001
+nr_full "$nr_fnew"
+[[ "$nr_rc" != 0 ]] || nr_fail "a bank write past the file-size limit exited 0"
+[[ ! -e "$nr_fnew/memory-bank.yaml" ]] || nr_fail "a bank write past the file-size limit left $(wc -c <"$nr_fnew/memory-bank.yaml") bytes of bank behind"
+nr_fold="$nr_tmp/s/full-old-bank"
+nr_scope "$nr_fold" lightweight
+printf 'schema: 1\nname: full-old-bank\nfacet_prefixes: [topic]\nfolders: {PolicyRule: _memory/rules}\n' >"$nr_fold/memory-bank.yaml"
+nr_fold_sum="$(cksum <"$nr_fold/memory-bank.yaml")"
+nr_ids Nr5Full002
+nr_full "$nr_fold"
+[[ "$nr_rc" != 0 ]] || nr_fail "a record write past the file-size limit exited 0"
+[[ ! -e "$nr_fold/_memory/decisions/cap-retries-Nr5Full002.md" ]] || nr_fail "a record write past the file-size limit left an empty record"
+[[ "$(cksum <"$nr_fold/memory-bank.yaml" 2>/dev/null)" == "$nr_fold_sum" ]] || nr_fail "a failed record write removed or changed a bank it did not write"
+
 # No argument at all is a usage error, which is exit 3 across this repo's scripts.
 nr_rc=0
 PATH="$nr_tmp/bin:$PATH" NR_IDS="$nr_tmp/ids" bash "$nr" >/dev/null 2>&1 || nr_rc=$?
