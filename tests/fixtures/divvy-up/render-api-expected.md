@@ -78,16 +78,20 @@ and the orchestrator reads your report against it.
 
 
 
-Before you report, run the repo's verification command and record what it
+Before you report, run the command your definition of done names and
+record what it actually prints. Where your definition of done names no
+command, run the repo's verification command and record what it
 actually prints:
 
     bash t.sh
+
+Say in `verify_output` which of the two you ran.
 
 Where that command reads `absent`, this repo has no verification command:
 run nothing, write `absent` in `verify_output`, and set `status` by the
 task's done-when alone.
 
-If that command writes files—a format or `--fix` step chained ahead of its
+If the command you run writes files—a format or `--fix` step chained ahead of its
 checks—the rule against writing outside your own files wins. Run its
 check-only form, or its checks without the fix step, and say which you ran
 in `verify_output`. Where the formatter takes paths, run it on your own
