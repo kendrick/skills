@@ -5655,6 +5655,13 @@ ne_rc=0
 ne_rc=0
 "$ne" "$ne_tmp/a" --entities "$ne_tmp/nope" >/dev/null 2>&1 || ne_rc=$?
 [[ "$ne_rc" == 2 ]] || ne_fail "unreadable entities file exited $ne_rc"
+printf 'Saatchi\n' >"$ne_tmp/ents"
+ne_rc=0
+"$ne" "$ne_tmp/a" extra --entities "$ne_tmp/ents" >/dev/null 2>&1 || ne_rc=$?
+[[ "$ne_rc" == 2 ]] || ne_fail "a second positional exited $ne_rc"
+ne_rc=0
+"$ne" "$ne_tmp/a" --bogus --entities "$ne_tmp/ents" >/dev/null 2>&1 || ne_rc=$?
+[[ "$ne_rc" == 2 ]] || ne_fail "an unknown flag exited $ne_rc"
 
 rm -rf "$ne_tmp"
 
