@@ -234,6 +234,13 @@ require_text adversarial-review/references/trigger-table.md "A signal's punctuat
 # the outline that sent a reader to build it.
 require_text adversarial-review/SKILL.md "adversarial-review/scripts/match-triggers.py derive <merge_base_sha> --exclude RUN_DIR/excluded.txt"
 require_text adversarial-review/references/trigger-table.md "implements these rules"
+# #406 (RATIONALE row 56): derive is a subcommand, not its own script. A
+# sibling would reach the matcher through importlib and could drift from `rows`.
+refute_text adversarial-review/README.md "derive-scope.py"
+[ ! -e adversarial-review/scripts/derive-scope.py ] || {
+  echo "derive-scope.py must not exist: derive lives in match-triggers.py" >&2
+  exit 1
+}
 require_text adversarial-review/references/trigger-table.md "adversarial-review/scripts/match-triggers.py derive <merge_base_sha>"
 # #406's four settled answers, stated where a reader derives from them. The
 # script's smoke cases pin the behavior; these pin that the prose says so.

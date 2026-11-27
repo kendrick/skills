@@ -19,10 +19,11 @@ to it shares one matcher.
 
 `rows` prints `<n> <name>` once per matched row. `lines` prints the evidence
 behind it, one `<n> <name>\t<path>\t<signal>\t<sign><body>` line per matched
-row per changed line, for a caller that has to read each match (#120). `derive`, run from the
-repo's work tree, prints the `changed_files`, `depth`, `territories`, and
-`derivation` fields of adversarial-review's scope.json as one JSON object
-(#406): Step 2's territories, computed once instead of by hand each run.
+row per changed line, for a caller that has to read each match (#120).
+`derive`, run from the repo's work tree, prints the `changed_files`, `depth`,
+`territories`, and `derivation` fields of adversarial-review's scope.json as
+one JSON object (#406): Step 2's territories, computed once instead of by hand
+each run.
 
 Exit codes: 0 with matches printed (possibly none), 1 on a table it can't
 parse, 3 on usage or unreadable input—the convention check-territories.py
