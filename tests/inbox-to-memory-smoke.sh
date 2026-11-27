@@ -3575,6 +3575,7 @@ refute_text "$fc" 'collection add'
 refute_text "$fc" '"embed"'
 require_text "$fc" '"qmd", "vsearch"'
 
+require_text inbox-to-memory/SKILL.md 'scripts/normalize-entities.sh <scope-root> --entities <file>'
 require_text inbox-to-memory/SKILL.md 'scripts/find-candidates.sh <scope-root> --entities <file> --claims <file>'
 require_text inbox-to-memory/SKILL.md 'A `superseded` or `deprecated` record leaves at the header read and never costs a body read, whichever lookup found it.'
 require_text inbox-to-memory/SKILL.md 'A qmd query is not a body read, and a vec hit draws on the same five reads as a grep hit.'
