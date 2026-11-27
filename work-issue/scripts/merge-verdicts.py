@@ -54,8 +54,7 @@ os.replace: the resume probe counts any `round-*.json` it finds, so a
 half-written file must never carry that name.
 
 Exit codes: 0 pass; 1 semantic failure (something uncovered) with one line per
-problem on stderr; 3 usage, missing or unreadable input. Argparse supplies 2
-for a mistyped flag.
+problem on stderr; 3 usage, missing or unreadable input.
 
 Stdlib only, so the skill stays copy-in portable.
 """
@@ -168,8 +167,16 @@ def read_lines(files, entries, covered, rejected):
                 covered[got[0]][got[1]] = obj
 
 
+class Parser(argparse.ArgumentParser):
+    # argparse exits 2 on bad usage; the repo's validator convention is 3.
+    def error(self, message):
+        self.print_usage(sys.stderr)
+        print(f"{self.prog}: error: {message}", file=sys.stderr)
+        sys.exit(3)
+
+
 def main():
-    ap = argparse.ArgumentParser(description="merge per-claim verdict lines into a round file")
+    ap = Parser(description="merge per-claim verdict lines into a round file")
     ap.add_argument("--claims", required=True)
     ap.add_argument("--parts", required=True)
     ap.add_argument("--round", required=True, type=int)

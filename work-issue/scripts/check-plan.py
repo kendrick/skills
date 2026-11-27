@@ -51,7 +51,7 @@ rather than becoming a heuristic this script gets blamed for guessing wrong.
 Exit codes: 0 pass, printing `OK: plan cites #N, <k> tasks with files, 0
 open markers, <c>/<c> criteria covered`; 1 semantic failure (any D-rule hit)
 with one line per problem on stderr; 3 usage, missing file, unreadable
-input. Argparse supplies 2 for a mistyped flag.
+input.
 
 Stdlib only, so the skill stays copy-in portable.
 """
@@ -421,8 +421,16 @@ def check_d6(criteria_path, criteria_text, plan_text):
     return problems, covered, len(criteria)
 
 
+class Parser(argparse.ArgumentParser):
+    # argparse exits 2 on bad usage; the repo's validator convention is 3.
+    def error(self, message):
+        self.print_usage(sys.stderr)
+        print(f"{self.prog}: error: {message}", file=sys.stderr)
+        sys.exit(3)
+
+
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="Gate a plan before work-issue dispatches it.")
+    ap = Parser(description="Gate a plan before work-issue dispatches it.")
     ap.add_argument("plan", metavar="PLAN.md")
     ap.add_argument("--issue", type=int, required=True, metavar="N")
     ap.add_argument("--criteria", metavar="ISSUE.md")

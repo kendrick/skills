@@ -88,9 +88,7 @@ Exit codes: 0 with an answer on stdout; 1 only from `adopt`, `reuse-baseline`,
 path, a `reuse-baseline` --out with no directory, or input this script cannot
 read (an unparseable bundle, a bundle missing a top-level key, a probe missing
 a field, a wave baseline, plan or report that cannot be read, or a report that is not JSON once one
-enclosing fence is stripped). Argparse supplies 2 for a
-mistyped flag, except under `probe` and `adopt`, where it is 3 too,
-because the issue that asked for `probe` asked for the validator convention.
+enclosing fence is stripped), in every subcommand.
 
 Stdlib only, so the skill stays copy-in portable.
 """
@@ -3180,8 +3178,8 @@ def cmd_reuse_baseline(args):
     still the truth about that SHA, so it is copied as it is.
 
     Exits 0 on a match, 1 with one stderr line per mismatch, 3 on an unreadable
-    wave file or a missing --out directory, and argparse's 2 on a mistyped
-    flag. Step 1 runs VERIFY_CMD on any non-zero exit.
+    wave file, a missing --out directory, or a mistyped flag. Step 1 runs
+    VERIFY_CMD on any non-zero exit.
     """
     out = Path(args.out)
     if not out.parent.is_dir():
@@ -3352,8 +3350,16 @@ def cmd_scoped_cmd(args):
     return 0
 
 
+class Parser(argparse.ArgumentParser):
+    # argparse exits 2 on bad usage; the repo's validator convention is 3.
+    def error(self, message):
+        self.print_usage(sys.stderr)
+        print(f"{self.prog}: error: {message}", file=sys.stderr)
+        sys.exit(3)
+
+
 def parse_args(argv=None):
-    ap = argparse.ArgumentParser(
+    ap = Parser(
         description="Read a PR's review state, or map a resume probe to a phase."
     )
     sub = ap.add_subparsers(dest="command", required=True)
@@ -3434,15 +3440,7 @@ def parse_args(argv=None):
 
 
 def main(argv=None):
-    argv = sys.argv[1:] if argv is None else list(argv)
-    try:
-        args = parse_args(argv)
-    except SystemExit as e:
-        # probe and adopt follow the validator convention's 3 for usage; the
-        # other subcommands keep argparse's 2, which this docstring has always said.
-        if e.code == 2 and argv[:1] in (["probe"], ["adopt"]):
-            return 3
-        raise
+    args = parse_args(argv)
     return args.func(args)
 
 
