@@ -30,7 +30,7 @@ Exit codes: 0 pass; 1 semantic failure (overlap, malformed entry, unowned or
 multiply-owned path, a wrong, missing, or duplicate derivation record) with one
 line per problem on stderr; 3 usage, missing file,
 unreadable JSON. A missing `--exclude` file is the exception: it excludes
-nothing, the way an empty one does, and an unreadable one exits 3. Argparse supplies 2 for a mistyped flag.
+nothing, the way an empty one does, and an unreadable one exits 3.
 
 Stdlib only, so the skill stays copy-in portable.
 """
@@ -178,7 +178,7 @@ def path_within(path, prefix):
 
 
 # ---------------------------------------------------------------------------
-# End vendored block.
+# end vendored
 # ---------------------------------------------------------------------------
 
 
@@ -443,8 +443,18 @@ def cmd_intersect(args):
     return 0
 
 
+class Parser(argparse.ArgumentParser):
+    # argparse exits 2 on bad usage; the repo's validator convention is 3.
+    # add_subparsers builds subparsers from type(self), so every subcommand
+    # inherits this.
+    def error(self, message):
+        self.print_usage(sys.stderr)
+        print(f"{self.prog}: error: {message}", file=sys.stderr)
+        sys.exit(3)
+
+
 def parse_args(argv=None):
-    ap = argparse.ArgumentParser(
+    ap = Parser(
         description="Validate territory disjointness, or intersect a fix diff."
     )
     sub = ap.add_subparsers(dest="command", required=True)

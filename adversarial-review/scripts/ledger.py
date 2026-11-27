@@ -33,12 +33,11 @@ unparseable lines rather than failing on them, because an event pointing at
 nothing is a worse outcome than a tolerated bad line.
 
 Exit codes: 0 success; 1 invalid input, unknown finding id, or a corrupt line
-where reading matters — stderr names it as `ledger: <detail>`, ledger untouched.
-Argparse supplies 2 for a mistyped flag. The three later subcommands,
-import-findings, verifier-input, and report, follow the validator convention
-instead: 1 for a semantic failure with one `ledger:` line per problem, 3 for a
-usage error or input that can't be read. The first four keep 2 because
-#385 left them and their output unchanged; work-issue calls only `state`.
+where reading matters — stderr names it as `ledger: <detail>`, ledger untouched;
+3 for a usage error in every subcommand, a mistyped flag included. The three
+later subcommands, import-findings, verifier-input, and report, also give 3 for
+input that can't be read, and 1 for a semantic failure with one `ledger:` line
+per problem.
 
 Stdlib only, so the skill stays copy-in portable.
 """
@@ -832,8 +831,18 @@ def cmd_report(args):
     return 0
 
 
+class Parser(argparse.ArgumentParser):
+    # argparse exits 2 on bad usage; the repo's validator convention is 3.
+    # add_subparsers builds subparsers from type(self), so every subcommand
+    # inherits this.
+    def error(self, message):
+        self.print_usage(sys.stderr)
+        print(f"{self.prog}: error: {message}", file=sys.stderr)
+        sys.exit(3)
+
+
 def parse_args(argv=None):
-    ap = argparse.ArgumentParser(description="Append to and read the finding ledger.")
+    ap = Parser(description="Append to and read the finding ledger.")
     sub = ap.add_subparsers(dest="command", required=True)
 
     f = sub.add_parser("append-finding", help="record one hypothesis")
@@ -915,21 +924,8 @@ def parse_args(argv=None):
     return ap.parse_args(argv)
 
 
-VALIDATOR_COMMANDS = ("import-findings", "verifier-input", "report")
-
-
 def main(argv=None):
-    argv = sys.argv[1:] if argv is None else argv
-    validator = bool(argv) and argv[0] in VALIDATOR_COMMANDS
-    try:
-        args = parse_args(argv)
-    except SystemExit as e:
-        # Only the later subcommands move argparse's 2 to 3. The first four
-        # keep 2, which existing callers such as work-issue's
-        # `ledger.py state` already handle.
-        if validator and e.code == 2:
-            raise SystemExit(3)
-        raise
+    args = parse_args(argv)
     try:
         return args.func(args)
     except Unreadable as e:
