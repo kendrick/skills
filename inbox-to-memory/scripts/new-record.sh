@@ -129,7 +129,7 @@ else
       refuse "yq could not parse $bank"
     elif [[ "$folders" == null ]]; then
       mode=canonical
-    # The second string mirrors lint-scope.sh's single ${folder%/} strip; a prefix match or strip-all loop would also pass `//` and `_memory/rule/`.
+    # Mirrors lint-scope.sh's single ${folder%/} strip, so `//` stays refused (#496, ledger row 100).
     elif [[ "$folders" == '{"PolicyRule":"_memory/rules"}' || "$folders" == '{"PolicyRule":"_memory/rules/"}' ]]; then
       mode=lightweight
     else
