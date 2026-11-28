@@ -61,7 +61,13 @@ This phase carries a half number on purpose. Phases 3 through 6 keep the numbers
 For each inbox file, in order:
 
 1. **Extract the named entities.** People, systems, vendors, regions, anything a record might be about.
-2. **Normalize them through the scope's alias table** before any lookup. Grep matching happens on canonical forms only. Skip this and "Shachi" and "Saatchi" search as two people, which produces a clean no-conflict report on a scope that has the conflict.
+2. **Normalize them through the scope's alias table** before any lookup. Skip this and "Shachi" and "Saatchi" search as two people, which produces a clean no-conflict report on a scope that has the conflict. Write the entities to one file, one per line, in a `mktemp -d` outside the scope, then run:
+
+   ```bash
+   bash <skill-path>/scripts/normalize-entities.sh <scope-root> --entities <file>
+   ```
+
+   Stdout is the canonical list step 3 writes out. The script reads the `### Alias table` and `### Transcription-error mapping` sections of the scope's `CLAUDE.md`, and of the client root's for a project scope, matching whole strings and ignoring case. Each mapping it applies prints `correction: <variant>→<canonical>` on stderr; keep those lines for `transcript_corrections`. Exit 1 means one variant maps to two canonicals: stdout is empty, so show the user the conflict line and stop until they fix the table. Exit 2 is a usage or unreadable-file error.
 3. **Run the candidate lookup.** Write the step 2 canonical entities to one file and the input's claim sentences (the Notable Quotes and Tensions candidates phase 2 pulled) to another, one per line, both in a `mktemp -d` outside the scope. Then run:
 
    ```bash

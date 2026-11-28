@@ -3575,6 +3575,7 @@ refute_text "$fc" 'collection add'
 refute_text "$fc" '"embed"'
 require_text "$fc" '"qmd", "vsearch"'
 
+require_text inbox-to-memory/SKILL.md 'scripts/normalize-entities.sh <scope-root> --entities <file>'
 require_text inbox-to-memory/SKILL.md 'scripts/find-candidates.sh <scope-root> --entities <file> --claims <file>'
 require_text inbox-to-memory/SKILL.md 'A `superseded` or `deprecated` record leaves at the header read and never costs a body read, whichever lookup found it.'
 require_text inbox-to-memory/SKILL.md 'A qmd query is not a body read, and a vec hit draws on the same five reads as a grep hit.'
@@ -5530,5 +5531,138 @@ nr_call "$nr_j" --journal --slug hypercare-scope --note Nr0Note001 --source-scop
 
 rm -rf "$nr_tmp"
 [[ "$nr_bad" == 0 ]] || exit 1
+
+
+# ---------------------------------------------------------------------------
+# normalize-entities.sh (#419)
+# ---------------------------------------------------------------------------
+
+ne=inbox-to-memory/scripts/normalize-entities.sh
+ne_tpl=inbox-to-memory/assets/claude-md/client.template.md
+require_file "$ne"
+[[ -x "$ne" ]] || { echo "$ne must be executable" >&2; exit 1; }
+
+ne_tmp="$(mktemp -d)"
+ne_fail() { echo "normalize-entities: $1" >&2; exit 1; }
+# The table comes from the template itself, so a template edit that moves it
+# fails here rather than leaving a hand-copied table passing.
+ne_table="$(sed -n 130,131p "$ne_tpl")"
+[[ "$ne_table" == "Shachi Deshpande <- [Saatchi, Sachi, S. Deshpande]"$'\n'"Northwind Billing <- [NWB, North Wind, Northwlnd]" ]] || ne_fail "client.template.md:130-131 is no longer the alias table"
+ne_claude() { # <dir> <heading> <body>
+  mkdir -p "$1"
+  printf '# Client\n\n### %s\n\nprose line\n\n%s\n\n### Next Section\n\nZed <- [Zee]\n' "$2" "$3" >"$1/CLAUDE.md"
+}
+# Runs the script; sets ne_out, ne_err, ne_rc.
+ne_run() { # <scope> <entities...>
+  local scope="$1"
+  shift
+  printf '%s\n' "$@" >"$ne_tmp/ents"
+  ne_rc=0
+  ne_out="$("$ne" "$scope" --entities "$ne_tmp/ents" 2>"$ne_tmp/err")" || ne_rc=$?
+  ne_err="$(cat "$ne_tmp/err")"
+}
+ne_want="Shachi Deshpande"$'\n'"Northwind Billing"$'\n'"Marcus Dell"
+
+# 1 and 2: the template's table, under either heading.
+ne_claude "$ne_tmp/a" "Alias Table" "$ne_table"
+ne_run "$ne_tmp/a" Saatchi NWB "Marcus Dell"
+[[ "$ne_rc" == 0 && "$ne_out" == "$ne_want" ]] || ne_fail "alias table gave '$ne_out' (exit $ne_rc)"
+ne_claude "$ne_tmp/b" "Transcription-error mapping" "$ne_table"
+ne_run "$ne_tmp/b" Saatchi NWB "Marcus Dell"
+[[ "$ne_rc" == 0 && "$ne_out" == "$ne_want" ]] || ne_fail "legacy heading gave '$ne_out' (exit $ne_rc)"
+ne_claude "$ne_tmp/b2" "ALIAS TABLE" "$ne_table"
+ne_run "$ne_tmp/b2" Saatchi
+[[ "$ne_out" == "Shachi Deshpande" ]] || ne_fail "heading text matched case-sensitively"
+# The mapping stops at the next heading: Zed's line sits under another one.
+ne_run "$ne_tmp/a" Zee
+[[ "$ne_out" == "Zee" ]] || ne_fail "a table line under a later heading was read"
+
+# 3: an unedited template maps nothing. The template's table lines sit inside
+# an HTML comment, so the whole file is copied as a user would first see it.
+mkdir -p "$ne_tmp/c"
+cp "$ne_tpl" "$ne_tmp/c/CLAUDE.md"
+ne_run "$ne_tmp/c" Saatchi NWB
+[[ "$ne_rc" == 0 && "$ne_out" == "Saatchi"$'\n'"NWB" && -z "$ne_err" ]] || ne_fail "unedited template mapped something: '$ne_out' / '$ne_err'"
+
+# Falsifier: whole string, ignoring case. "Saatchi Group" is the nearest wrong
+# key, and a substring match would map it.
+ne_run "$ne_tmp/a" saatchi "Saatchi Group" "shachi deshpande"
+[[ "$ne_out" == "Shachi Deshpande"$'\n'"Saatchi Group" ]] || ne_fail "lowercase or whole-string rule broke: '$ne_out'"
+
+# A table in a code fence whose own comment line starts with # (the checked-in
+# scope-tiers client CLAUDE.md writes its table this way) is still read.
+mkdir -p "$ne_tmp/f"
+printf '### Alias Table\n\n```\n# people\nShachi Deshpande <- [Saatchi]\n```\n' >"$ne_tmp/f/CLAUDE.md"
+ne_run "$ne_tmp/f" Saatchi
+[[ "$ne_rc" == 0 && "$ne_out" == "Shachi Deshpande" ]] || ne_fail "fenced # line ended the table: '$ne_out'"
+
+# Case-only spellings are separate inputs: each prints its own correction, the
+# canonical prints once, and an unmapped entity keeps both spellings.
+ne_run "$ne_tmp/a" saatchi SAATCHI acme Acme
+[[ "$ne_out" == "Shachi Deshpande"$'\n'"acme"$'\n'"Acme" ]] || ne_fail "case dedup is wrong: '$ne_out'"
+[[ "$ne_err" == "correction: saatchi→Shachi Deshpande"$'\n'"correction: SAATCHI→Shachi Deshpande" ]] || ne_fail "case corrections are '$ne_err'"
+
+# A scope with no CLAUDE.md contributes an empty table and exits 0.
+mkdir -p "$ne_tmp/g"
+ne_run "$ne_tmp/g" Saatchi
+[[ "$ne_rc" == 0 && "$ne_out" == "Saatchi" ]] || ne_fail "missing CLAUDE.md gave '$ne_out' (exit $ne_rc)"
+
+# A # comment tail on a table line is not part of the variants.
+ne_claude "$ne_tmp/d" "Alias Table" "Atlas <- [Atlus, ATLAS programme]   # client-level Context Abc123"
+ne_run "$ne_tmp/d" Atlus "ATLAS programme"
+[[ "$ne_rc" == 0 && "$ne_out" == "Atlas" ]] || ne_fail "comment tail broke the line: '$ne_out'"
+
+# Dedup in input order, and one correction line per variant applied.
+ne_run "$ne_tmp/a" Saatchi Sachi "Marcus Dell" "Shachi Deshpande" Saatchi
+[[ "$ne_out" == "Shachi Deshpande"$'\n'"Marcus Dell" ]] || ne_fail "dedup or order is wrong: '$ne_out'"
+[[ "$ne_err" == "correction: Saatchi→Shachi Deshpande"$'\n'"correction: Sachi→Shachi Deshpande" ]] || ne_fail "correction lines are '$ne_err'"
+
+# 4: a project scope inherits a variant defined only in its client root.
+ne_client="$ne_tmp/client"
+ne_claude "$ne_client" "Alias Table" "$ne_table"
+ne_claude "$ne_client/projects/atlas" "Alias Table" "Atlas <- [Atlus]"
+ne_run "$ne_client/projects/atlas" Saatchi Atlus
+[[ "$ne_rc" == 0 && "$ne_out" == "Shachi Deshpande"$'\n'"Atlas" ]] || ne_fail "client table not inherited: '$ne_out' (exit $ne_rc)"
+ne_claude "$ne_client/pursuits/bid" "Alias Table" "Atlas <- [Atlus]"
+ne_run "$ne_client/pursuits/bid" NWB
+[[ "$ne_out" == "Northwind Billing" ]] || ne_fail "pursuit did not inherit the client table"
+
+# 4, against the checked-in fixture: claims-intake has no CLAUDE.md, and the
+# client root's fenced table supplies Kestral->Kestrel. Then the consumer, on
+# the same tree, reads the script's stdout. Output goes to the temp dir only.
+ne_fx=tests/fixtures/inbox-to-memory/evals/scope-tiers
+ne_run "$ne_fx/projects/claims-intake" Kestral
+[[ "$ne_rc" == 0 && "$ne_out" == "Kestrel" ]] || ne_fail "claims-intake gave '$ne_out' (exit $ne_rc)"
+"$ne" "$ne_fx/projects/claims-intake" --entities "$ne_tmp/ents" >"$ne_tmp/canon" 2>/dev/null
+: >"$ne_tmp/claims"
+ne_rc=0
+ne_fc="$(inbox-to-memory/scripts/find-candidates.sh "$ne_fx/projects/claims-intake" --entities "$ne_tmp/canon" --claims "$ne_tmp/claims" 2>/dev/null)" || ne_rc=$?
+[[ "$ne_rc" == 0 && "$ne_fc" == *"counts: grep="* ]] || ne_fail "find-candidates.sh rejected the normalized entities (exit $ne_rc): $ne_fc"
+
+# 5: one variant, two canonicals across the tables. Exit 1, no entity list,
+# both tables and both canonicals named.
+ne_claude "$ne_client/projects/clash" "Alias Table" "Sachi Patel <- [Saatchi]"
+ne_run "$ne_client/projects/clash" Saatchi NWB
+[[ "$ne_rc" == 1 && -z "$ne_out" ]] || ne_fail "conflict gave exit $ne_rc and stdout '$ne_out'"
+for ne_needle in "Shachi Deshpande" "Sachi Patel" "$ne_client/CLAUDE.md" "$ne_client/projects/clash/CLAUDE.md"; do
+  [[ "$ne_err" == *"$ne_needle"* ]] || ne_fail "conflict message omits '$ne_needle': $ne_err"
+done
+
+# Exit 2: usage and unreadable input.
+ne_rc=0
+"$ne" "$ne_tmp/a" >/dev/null 2>&1 || ne_rc=$?
+[[ "$ne_rc" == 2 ]] || ne_fail "missing --entities exited $ne_rc"
+ne_rc=0
+"$ne" "$ne_tmp/a" --entities "$ne_tmp/nope" >/dev/null 2>&1 || ne_rc=$?
+[[ "$ne_rc" == 2 ]] || ne_fail "unreadable entities file exited $ne_rc"
+printf 'Saatchi\n' >"$ne_tmp/ents"
+ne_rc=0
+"$ne" "$ne_tmp/a" extra --entities "$ne_tmp/ents" >/dev/null 2>&1 || ne_rc=$?
+[[ "$ne_rc" == 2 ]] || ne_fail "a second positional exited $ne_rc"
+ne_rc=0
+"$ne" "$ne_tmp/a" --bogus --entities "$ne_tmp/ents" >/dev/null 2>&1 || ne_rc=$?
+[[ "$ne_rc" == 2 ]] || ne_fail "an unknown flag exited $ne_rc"
+
+rm -rf "$ne_tmp"
 
 echo "inbox-to-memory smoke: ok"
