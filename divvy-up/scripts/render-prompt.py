@@ -41,8 +41,7 @@ become a blank line in the prompt.
 Exit codes: 0 rendered; 1 semantic failure (malformed Waves table, task absent
 from or repeated in the wave, no Template block between '## Template' and
 '## Placeholders', unfilled placeholder, --out inside the work tree) with one
-line per problem on stderr; 3 usage, missing or unreadable input.
-Argparse supplies 2 for a mistyped flag.
+line per problem on stderr; 3 usage (a mistyped flag included), missing or unreadable input.
 
 Stdlib only, so the skill stays copy-in portable. check-waves.py is loaded by
 path rather than imported, because it lives in this skill and its name has a
@@ -113,8 +112,16 @@ def refuse_in_tree_out(out):
         fail(1, f"--out {out} is inside the work tree; Step 6 would count it as an unowned write")
 
 
+class Parser(argparse.ArgumentParser):
+    # argparse exits 2 on bad usage; the repo's validator convention is 3.
+    def error(self, message):
+        self.print_usage(sys.stderr)
+        print(f"{self.prog}: error: {message}", file=sys.stderr)
+        sys.exit(3)
+
+
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="Render one task's worker prompt to a file.")
+    ap = Parser(description="Render one task's worker prompt to a file.")
     ap.add_argument("plan", metavar="PLAN_MD")
     ap.add_argument("--wave", type=int, required=True, metavar="N")
     ap.add_argument("--task", required=True, metavar="LABEL")

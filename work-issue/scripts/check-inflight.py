@@ -15,9 +15,9 @@ testing ownership pairwise.
 Exit codes: 0 pass, printing `OK: no in-flight run owns a path this plan
 owns (checked <n> runs)` (a missing --runs directory counts as 0 runs and
 still passes); 1 an owned path overlaps a sibling run's, printing `overlap:
-<path> — issue-N task <a>, issue-M task <b>` one line per pair; 3 PLAN is
-unreadable or has no parseable `## Waves` table. A sibling run whose own
-plan has no parseable table does not fail the check: it is reported on
+<path> — issue-N task <a>, issue-M task <b>` one line per pair; 3 usage,
+or PLAN is unreadable or has no parseable `## Waves` table. A sibling run
+whose own plan has no parseable table does not fail the check: it is reported on
 stderr as `skipped: issue-M has no ## Waves table` and excluded from
 comparison, because a plan that has not reached its own Waves table yet is
 not a plan this script can test.
@@ -31,9 +31,9 @@ import re
 import sys
 
 # ---------------------------------------------------------------------------
-# Vendored verbatim from divvy-up/scripts/check-waves.py (lines 48-167:
-# paths_overlap, owns_entry_problem, path_within; lines 175-178: COLUMNS,
-# SEPARATOR_CELL, Row; lines 198-321: split_row, extract_table, read_rows),
+# Vendored verbatim from divvy-up/scripts/check-waves.py (paths_overlap,
+# owns_entry_problem, path_within; COLUMNS, SEPARATOR_CELL, Row; split_row,
+# extract_table, read_rows, each range its own block below),
 # itself vendored from adversarial-review/scripts/check-territories.py,
 # itself vendored from agent-guild's check-diff-scope.py. Vendored
 # 2026-09-17. Upstream is authoritative: fix a bug there first, then
@@ -167,12 +167,18 @@ def path_within(path, prefix):
     return path.startswith(prefix)
 
 
+# end vendored
+
+# Vendored verbatim from divvy-up/scripts/check-waves.py: COLUMNS, SEPARATOR_CELL, Row.
 COLUMNS = ("Wave", "Task", "Files owned", "Model", "Done when", "Constraints")
 SEPARATOR_CELL = re.compile(r"^:?-+:?$")
 
 Row = collections.namedtuple("Row", "lineno wave task entries model done constraints")
 
 
+# end vendored
+
+# Vendored verbatim from divvy-up/scripts/check-waves.py: split_row, extract_table, read_rows.
 def split_row(line):
     r"""Cells of one pipe-table row, stripped, honouring Markdown's `\|` escape.
 
@@ -300,7 +306,7 @@ def read_rows(text):
 
 
 # ---------------------------------------------------------------------------
-# End vendored block.
+# end vendored
 # ---------------------------------------------------------------------------
 
 
@@ -344,8 +350,16 @@ def owned_entries(rows):
     ]
 
 
+class Parser(argparse.ArgumentParser):
+    # argparse exits 2 on bad usage; the repo's validator convention is 3.
+    def error(self, message):
+        self.print_usage(sys.stderr)
+        print(f"{self.prog}: error: {message}", file=sys.stderr)
+        sys.exit(3)
+
+
 def main(argv=None):
-    ap = argparse.ArgumentParser(
+    ap = Parser(
         description="Refuse a plan whose owned paths overlap an in-flight work-issue run."
     )
     ap.add_argument("plan", metavar="PLAN.md")

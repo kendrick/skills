@@ -69,8 +69,8 @@ Exit codes: 0 pass; 1 semantic failure, with one line per problem on stderr:
 `overlap:`, `malformed:`, `empty:`, `unchecked:`, or, under --extract,
 `unparsed:`; 3 usage or unreadable input, which covers fewer than two lanes,
 a lane named twice, a malformed --lane, an unreadable PATH or PLAN, a lane
-plan or PLAN whose `## Waves` table won't parse, and --extract combined with
-another flag. Argparse supplies 2 for a mistyped flag.
+plan or PLAN whose `## Waves` table won't parse, --extract combined with
+another flag, and a mistyped flag.
 
 Stdlib only, so the skill stays copy-in portable.
 """
@@ -81,9 +81,9 @@ import re
 import sys
 
 # ---------------------------------------------------------------------------
-# Vendored verbatim from work-issue/scripts/check-inflight.py (lines 48-167:
-# paths_overlap, owns_entry_problem, path_within; lines 170-173: COLUMNS,
-# SEPARATOR_CELL, Row; lines 176-299: split_row, extract_table, read_rows),
+# Vendored verbatim from work-issue/scripts/check-inflight.py (paths_overlap,
+# owns_entry_problem, path_within here; COLUMNS, SEPARATOR_CELL, Row and
+# split_row, extract_table, read_rows in the two blocks below it),
 # itself vendored from divvy-up/scripts/check-waves.py, itself vendored from
 # adversarial-review/scripts/check-territories.py, itself vendored from
 # agent-guild's check-diff-scope.py. Vendored 2026-09-24. Upstream is
@@ -219,13 +219,21 @@ def path_within(path, prefix):
     symmetric predicate here let exactly that through."""
     return path.startswith(prefix)
 
+# end vendored
 
+
+# Vendored verbatim from work-issue/scripts/check-inflight.py: COLUMNS,
+# SEPARATOR_CELL, Row.
 COLUMNS = ("Wave", "Task", "Files owned", "Model", "Done when", "Constraints")
 SEPARATOR_CELL = re.compile(r"^:?-+:?$")
 
 Row = collections.namedtuple("Row", "lineno wave task entries model done constraints")
 
+# end vendored
 
+
+# Vendored verbatim from work-issue/scripts/check-inflight.py: split_row,
+# extract_table, read_rows.
 def split_row(line):
     r"""Cells of one pipe-table row, stripped, honouring Markdown's `\|` escape.
 
@@ -353,7 +361,7 @@ def read_rows(text):
 
 
 # ---------------------------------------------------------------------------
-# End vendored block.
+# end vendored
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
@@ -365,7 +373,7 @@ def read_rows(text):
 # ---------------------------------------------------------------------------
 FILES_LINE_RE = re.compile(r"Files:|\*\*Files:\*\*|owns:|Files owned")
 # ---------------------------------------------------------------------------
-# End vendored block.
+# end vendored
 # ---------------------------------------------------------------------------
 
 LANE_NAME = re.compile(r"^issue-([0-9]+)$")
@@ -715,8 +723,16 @@ def parse_lanes(specs):
     return {name: lanes[name] for name in ordered}
 
 
+class Parser(argparse.ArgumentParser):
+    # argparse exits 2 on bad usage; the repo's validator convention is 3.
+    def error(self, message):
+        self.print_usage(sys.stderr)
+        print(f"{self.prog}: error: {message}", file=sys.stderr)
+        sys.exit(3)
+
+
 def main(argv=None):
-    ap = argparse.ArgumentParser(
+    ap = Parser(
         description="Prove a wave's lanes own disjoint paths, and list the pairs."
     )
     ap.add_argument("--lane", action="append", default=[], metavar="issue-N=PATH")

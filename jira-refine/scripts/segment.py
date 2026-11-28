@@ -53,7 +53,6 @@ config missing `projects`, or a Python below the 3.11 floor `tomllib`
 needs; 4 the transcript names no ticket key at all, typed or spoken. A
 planning session exits 4 only when nobody reads the new keys aloud; one
 that speaks each key as it files it stages under the trailing reading.
-Argparse supplies 2 for a mistyped flag.
 
 Stdlib only, so the skill stays copy-in portable.
 """
@@ -1195,8 +1194,16 @@ SESSION_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 ATOM_LOOKUP = []
 
 
+class Parser(argparse.ArgumentParser):
+    # argparse exits 2 on bad usage; the repo's validator convention is 3.
+    def error(self, message):
+        self.print_usage(sys.stderr)
+        print(f"{self.prog}: error: {message}", file=sys.stderr)
+        sys.exit(3)
+
+
 def parse_args(argv=None):
-    ap = argparse.ArgumentParser(
+    ap = Parser(
         description="Segment a refinement-session transcript into a jira-refine staging skeleton."
     )
     ap.add_argument("transcript", metavar="TRANSCRIPT")

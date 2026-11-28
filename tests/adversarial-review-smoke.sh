@@ -1409,7 +1409,7 @@ ar_case_report_listed() {
 }
 
 # 0 success, 1 semantic with one stderr line per problem, 3 usage or
-# unreadable input. The first four subcommands keep argparse's 2.
+# unreadable input.
 ar_case_exit_codes() {
   local d="$tmp/ar385-exit" got err
   ar_report_run "$d"
@@ -1450,8 +1450,8 @@ PY
   python3 "$ledger_py" state --ledger "$d/l.jsonl" --bogus >/dev/null 2>&1
   got+="state-usage=$?"
   set -e
-  [[ "$got" == "import-semantic=1/2 import-unreadable=3 import-usage=3 verifier-semantic=1/1 verifier-unreadable=3 verifier-usage=3 report-ok=0 report-semantic=1/1 report-unreadable=3 report-usage=3 state-usage=2" ]] || {
-    echo "new subcommands must exit 0/1/3 with one stderr line per problem, and state keeps 2: $got" >&2
+  [[ "$got" == "import-semantic=1/2 import-unreadable=3 import-usage=3 verifier-semantic=1/1 verifier-unreadable=3 verifier-usage=3 report-ok=0 report-semantic=1/1 report-unreadable=3 report-usage=3 state-usage=3" ]] || {
+    echo "new subcommands must exit 0/1/3 with one stderr line per problem, and state exits 3 on a usage error: $got" >&2
     exit 1
   }
 }

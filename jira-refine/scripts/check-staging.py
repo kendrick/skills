@@ -27,8 +27,7 @@ Exit codes, shared by both commands: 0 pass; 1 semantic failure (a rule in the
 grammar is broken), one line per problem on stderr and, for `entries`, no JSON
 emitted; 3 usage, missing file, unreadable input, not valid UTF-8, or no
 frontmatter fences at all — the last case means the file cannot be parsed as a
-staging file, as opposed to being one with rule violations. Argparse supplies
-2 for a mistyped flag.
+staging file, as opposed to being one with rule violations.
 
 Schema 2 adds a `### Labels` section between Goal and Open questions, and
 only a schema-2 file makes this script read the `config:` TOML, for its
@@ -295,6 +294,7 @@ def load_label_families(raw, prog, path="config"):
         families.append((fam, cap, norm))
     return families
 # end shared: label-family loader
+# end vendored
 
 
 def load_config_families(path):
@@ -1080,8 +1080,16 @@ def cmd_entries(args):
     return 0
 
 
+class Parser(argparse.ArgumentParser):
+    # argparse exits 2 on bad usage; the repo's validator convention is 3.
+    def error(self, message):
+        self.print_usage(sys.stderr)
+        print(f"{self.prog}: error: {message}", file=sys.stderr)
+        sys.exit(3)
+
+
 def parse_args(argv=None):
-    ap = argparse.ArgumentParser(
+    ap = Parser(
         description="Validate a jira-refine staging file, or emit its entries as JSON."
     )
     sub = ap.add_subparsers(dest="command", required=True)

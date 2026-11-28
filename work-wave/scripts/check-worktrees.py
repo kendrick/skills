@@ -65,7 +65,10 @@ from pathlib import Path
 
 GIT_TIMEOUT = 60
 
+# end vendored
 
+
+# Vendored verbatim from work-issue/scripts/run-state.py: run_git, git_failure.
 def run_git(tree, *args):
     # No prompt: a credential helper waiting on a terminal would hang the
     # probe past its timeout instead of answering null.
@@ -85,17 +88,27 @@ def git_failure(args, done):
     why = " ".join((done.stderr or "").split())[:200]
     return f"git {' '.join(args)}: exit {done.returncode}" + (f": {why}" if why else "")
 
+# end vendored
 
+
+# Vendored verbatim from work-issue/scripts/run-state.py: read_text.
 def read_text(path):
     with open(path, encoding="utf-8", errors="surrogateescape") as handle:
         return handle.read()
 
+# end vendored
 
+
+# Vendored verbatim from work-issue/scripts/run-state.py: chomp.
 def chomp(text):
     """What `$(cat FILE)` gives: trailing newlines gone, nothing else."""
     return text.rstrip("\n")
 
+# end vendored
 
+
+# Vendored verbatim from work-issue/scripts/run-state.py: rebasing_branch,
+# find_tree.
 def rebasing_branch(tree):
     """The ref a rebase in `tree` is rewriting, else None. A tree git cannot
     read, or one with no rebase, answers None, which leaves `find_tree` to
@@ -158,7 +171,7 @@ def find_tree(root, branch, terminal=False):
 
 
 # ---------------------------------------------------------------------------
-# End vendored block.
+# end vendored
 # ---------------------------------------------------------------------------
 
 LANE_NAME = re.compile(r"^issue-([0-9]+)$")

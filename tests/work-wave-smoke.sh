@@ -827,7 +827,7 @@ footprints --extract "$fixtures/plan-badwaves.md"
 expect_status 3 "--extract on a plan whose ## Waves table will not parse"
 
 footprints --lanes issue-1="$fixtures/lane-a.md"
-expect_status 2 "a mistyped flag"
+expect_status 3 "a mistyped flag"
 
 # --- wave-state.py. The Resume table is executable through probe and phase,
 # and RESUME_ROWS is the table's copy, so the prose and the script can't drift
