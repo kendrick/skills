@@ -129,7 +129,8 @@ else
       refuse "yq could not parse $bank"
     elif [[ "$folders" == null ]]; then
       mode=canonical
-    elif [[ "$folders" == '{"PolicyRule":"_memory/rules"}' ]]; then
+    # Mirrors lint-scope.sh's single ${folder%/} strip, so `//` stays refused (#496, ledger row 100).
+    elif [[ "$folders" == '{"PolicyRule":"_memory/rules"}' || "$folders" == '{"PolicyRule":"_memory/rules/"}' ]]; then
       mode=lightweight
     else
       refuse "memory-bank.yaml's folders is neither absent nor {PolicyRule: _memory/rules}: $folders"
