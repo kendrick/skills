@@ -483,7 +483,7 @@ for mode in imports vendored exits; do
   check_scripts . "$mode" || script_checks_ok=0
 done
 
-# Docs call six of these scripts directly (./scripts/x.py), and git keeps the
+# Docs call some of these scripts directly (./scripts/x.py), and git keeps the
 # mode it was handed: a shebang script committed at 100644 exits 126 on a fresh
 # clone (#495). The index is the source of truth, since that is what a clone
 # gets, and the blob's first bytes keep the check off the working tree.
@@ -493,8 +493,11 @@ mode_problems() {
   GIT_INDEX_FILE="$index" git ls-files -s -- '*/scripts/*.py' '*/scripts/*.sh' |
     while IFS=$' \t' read -r mode sha _ path; do
       [[ "$mode" == 100644 ]] || continue
-      [[ "$(git cat-file blob "$sha" | head -c 2)" == '#!' ]] &&
+      # if, not &&: a false test on the last entry would end the loop at rc 1
+      # and pipefail would abort the suite with no message.
+      if [[ "$(git cat-file blob "$sha" | head -c 2)" == '#!' ]]; then
         echo "modes: $path: starts with #! but is mode 100644; run git update-index --chmod=+x $path"
+      fi
     done | sort
 }
 
@@ -527,14 +530,18 @@ check_scripts . covered | grep -qx "work-issue/scripts/check-plan.py" || {
 
 # Falsifiers run on a copy of the index. --cacheinfo reuses an existing blob, so
 # the real index, object store, and working tree are never written.
-cp "$real_index" "$tmp/index"
-GIT_INDEX_FILE="$tmp/index" git update-index --chmod=-x work-issue/scripts/policy.py
-added="$(comm -13 <(printf '%s\n' "$mode_real") <(mode_problems "$tmp/index"))"
+# One falsifier on a fresh copy of the index; stdout is the problems it added.
+falsify_mode() {
+  cp "$real_index" "$tmp/index"
+  GIT_INDEX_FILE="$tmp/index" git update-index "$@"
+  comm -13 <(printf '%s\n' "$mode_real") <(mode_problems "$tmp/index")
+}
+
+added="$(falsify_mode --chmod=-x work-issue/scripts/policy.py)"
 expect_named "chmod -x on a shebang script" "$added" work-issue/scripts/policy.py
 
-cp "$real_index" "$tmp/index"
-GIT_INDEX_FILE="$tmp/index" git update-index --add --cacheinfo 100644,"$(git rev-parse :README.md)",work-issue/scripts/zz-no-shebang.py
-added="$(comm -13 <(printf '%s\n' "$mode_real") <(mode_problems "$tmp/index"))"
+# The path sorts last, so the no-shebang entry is the loop's final iteration.
+added="$(falsify_mode --add --cacheinfo 100644,"$(git rev-parse :README.md)",zzz/scripts/zzz.py)"
 expect_clean "a 100644 script with no shebang" "$added"
 
 [[ "$script_checks_ok" == 1 ]] || exit 1
