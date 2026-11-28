@@ -483,6 +483,28 @@ for mode in imports vendored exits; do
   check_scripts . "$mode" || script_checks_ok=0
 done
 
+# Docs call six of these scripts directly (./scripts/x.py), and git keeps the
+# mode it was handed: a shebang script committed at 100644 exits 126 on a fresh
+# clone (#495). The index is the source of truth, since that is what a clone
+# gets, and the blob's first bytes keep the check off the working tree.
+# Problems go to stdout, sorted, one per line, so new_problems-style diffing works.
+mode_problems() {
+  local index="$1" mode sha path
+  GIT_INDEX_FILE="$index" git ls-files -s -- '*/scripts/*.py' '*/scripts/*.sh' |
+    while IFS=$' \t' read -r mode sha _ path; do
+      [[ "$mode" == 100644 ]] || continue
+      [[ "$(git cat-file blob "$sha" | head -c 2)" == '#!' ]] &&
+        echo "modes: $path: starts with #! but is mode 100644; run git update-index --chmod=+x $path"
+    done | sort
+}
+
+real_index="$(git rev-parse --git-path index)"
+mode_real="$(mode_problems "$real_index")"
+[[ -z "$mode_real" ]] || {
+  printf '%s\n' "$mode_real" >&2
+  script_checks_ok=0
+}
+
 added="$(falsify imports work-issue/scripts/check-plan.py $'import argparse\n' $'import argparse\nimport requests\n')"
 expect_named "import requests" "$added" work-issue/scripts/check-plan.py
 
@@ -502,6 +524,18 @@ check_scripts . covered | grep -qx "work-issue/scripts/check-plan.py" || {
   echo "the exit check's coverage rule no longer covers work-issue/scripts/check-plan.py" >&2
   exit 1
 }
+
+# Falsifiers run on a copy of the index. --cacheinfo reuses an existing blob, so
+# the real index, object store, and working tree are never written.
+cp "$real_index" "$tmp/index"
+GIT_INDEX_FILE="$tmp/index" git update-index --chmod=-x work-issue/scripts/policy.py
+added="$(comm -13 <(printf '%s\n' "$mode_real") <(mode_problems "$tmp/index"))"
+expect_named "chmod -x on a shebang script" "$added" work-issue/scripts/policy.py
+
+cp "$real_index" "$tmp/index"
+GIT_INDEX_FILE="$tmp/index" git update-index --add --cacheinfo 100644,"$(git rev-parse :README.md)",work-issue/scripts/zz-no-shebang.py
+added="$(comm -13 <(printf '%s\n' "$mode_real") <(mode_problems "$tmp/index"))"
+expect_clean "a 100644 script with no shebang" "$added"
 
 [[ "$script_checks_ok" == 1 ]] || exit 1
 
