@@ -5315,6 +5315,31 @@ nr_ids Nr3Bank003
 nr_call "$nr_b3" --type PolicyRule --slug cap-retries --note Nr0Note001
 [[ "$nr_rc" == 0 && "$nr_out" == "_memory/rules/cap-retries-Nr3Bank003.md" ]] || nr_fail "bank with no mode line printed '$nr_out' (exit $nr_rc)"
 
+# lint-scope.sh strips one trailing slash from the folder, so a bank saying
+# `_memory/rules/` is lightweight to it, and phase 5 has to agree (#496).
+nr_slash="$nr_tmp/s/bank-slash"
+nr_scope "$nr_slash" lightweight
+printf 'schema: 1\nname: bank-slash\nfacet_prefixes: [topic]\nfolders: {PolicyRule: _memory/rules/}\n' >"$nr_slash/memory-bank.yaml"
+nr_slash_sum="$(cksum <"$nr_slash/memory-bank.yaml")"
+nr_ids Nr3Slash01
+nr_call "$nr_slash" --type PolicyRule --slug x --note Nr0Note001
+[[ "$nr_rc" == 0 && "$nr_out" == "_memory/rules/x-Nr3Slash01.md" ]] || nr_fail "one-slash rules bank printed '$nr_out' (exit $nr_rc)"
+[[ -f "$nr_slash/_memory/rules/x-Nr3Slash01.md" ]] || nr_fail "one-slash rules bank wrote no record"
+[[ "$(cksum <"$nr_slash/memory-bank.yaml")" == "$nr_slash_sum" ]] || nr_fail "one-slash rules bank was rewritten"
+
+# Two slashes and a near-miss name stay refused with the original line: a
+# prefix match or a strip-every-slash loop would let both through.
+for nr_odd in '_memory/rules//' '_memory/rule/'; do
+  nr_os="$nr_tmp/s/bank-odd-$(printf '%s' "$nr_odd" | tr -c 'a-z' '_')"
+  nr_scope "$nr_os" lightweight
+  printf 'schema: 1\nname: odd\nfacet_prefixes: [topic]\nfolders: {PolicyRule: %s}\n' "$nr_odd" >"$nr_os/memory-bank.yaml"
+  nr_refuse "bank folders $nr_odd" "$nr_os" --type PolicyRule --slug x --note Nr0Note001
+  nr_rc=0
+  nr_err="$(PATH="$nr_tmp/bin:$PATH" NR_IDS="$nr_tmp/ids" bash "$nr" "$nr_os" --type PolicyRule --slug x --note Nr0Note001 2>&1 >/dev/null)" || nr_rc=$?
+  [[ "$nr_rc" == 1 ]] || nr_fail "bank folders $nr_odd exited $nr_rc, not 1"
+  [[ "$nr_err" == *"memory-bank.yaml's folders is neither absent nor {PolicyRule: _memory/rules}"* ]] || nr_fail "bank folders $nr_odd refused with '$nr_err'"
+done
+
 # --- Refusals write nothing ------------------------------------------------
 nr_rl="$nr_tmp/s/refuse-light"
 nr_scope "$nr_rl" lightweight
